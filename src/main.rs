@@ -177,7 +177,13 @@ fn paint_file_icon(ui: &mut egui::Ui, size: f32) {
     );
     painter.line_segment([body.left_top(), body.left_bottom()], stroke);
     painter.line_segment([body.left_bottom(), body.right_bottom()], stroke);
-    painter.line_segment([body.right_bottom(), body.right_top() + egui::vec2(0.0, fold)], stroke);
+    painter.line_segment(
+        [
+            body.right_bottom(),
+            body.right_top() + egui::vec2(0.0, fold),
+        ],
+        stroke,
+    );
 }
 
 /// Draw a small vector folder icon for directory rows in the explorer.
@@ -1179,8 +1185,7 @@ impl Tab {
         } else {
             // Leaving edit: first-frame estimate for the view; the
             // renderer's own correctives refine it after.
-            self.pending_scroll_offset =
-                Some(ratio * self.pre_edit_view_content_height.max(1.0));
+            self.pending_scroll_offset = Some(ratio * self.pre_edit_view_content_height.max(1.0));
         }
         self.is_editing = to_edit;
         self.cache.clear_scrollable();
@@ -2323,15 +2328,7 @@ impl MarkdownApp {
         let persisted: PersistedState = cc
             .storage
             .and_then(|s| eframe::get_value(s, APP_KEY))
-            .unwrap_or_else(|| PersistedState {
-                // First-run reading defaults: light paper theme, serif body
-                // at a generous size. Only fires when nothing is persisted
-                // yet; in-app changes are respected afterwards.
-                dark_mode: Some(false),
-                selected_font_family: Some("Iowan Old Style".to_owned()),
-                text_size_class: Some(TextSizeClass::Large),
-                ..Default::default()
-            });
+            .unwrap_or_default();
         let selected_font_family = persisted.selected_font_family;
         let font_preset = persisted.font_preset.unwrap_or_default();
         let text_size_class = persisted.text_size_class.unwrap_or_default();
@@ -3217,7 +3214,6 @@ impl MarkdownApp {
 
         egui::TopBottomPanel::top("search_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-
                 let text_edit = egui::TextEdit::singleline(&mut self.search.query)
                     .id(input_id)
                     .hint_text("Find in document")
@@ -3549,15 +3545,10 @@ impl MarkdownApp {
                                     };
                                     let response = ui.add(
                                         egui::Button::new(
-                                            egui::RichText::new(label)
-                                                .small()
-                                                .color(text_color),
+                                            egui::RichText::new(label).small().color(text_color),
                                         )
                                         .fill(if active {
-                                            ui.visuals()
-                                                .widgets
-                                                .inactive
-                                                .weak_bg_fill
+                                            ui.visuals().widgets.inactive.weak_bg_fill
                                         } else {
                                             egui::Color32::TRANSPARENT
                                         })
@@ -4083,54 +4074,57 @@ impl MarkdownApp {
                         ui.ctx().request_repaint();
                     }
                 } else {
-                let force_full_render =
-                    tab.pending_header_click_key.is_some() || correct_search_this_frame;
-                let pending = tab.pending_scroll_offset.take();
-                let default_width = content_default_width(self.full_width_content);
-                let content_width =
-                    content_width_limit(self.full_width_content, content_rect.width());
-                // Line heights follow the emulated viewer (GitHub 1.5/1.45,
-                // VS Code preview 1.6/1.36); the font preset owns the metrics.
-                let (preset_line_height, preset_code_line_height) = self.font_preset.line_heights();
-                scroll_output = Some(CommonMarkViewer::new()
-                    .default_implicit_uri_scheme(&tab.base_uri)
-                    .max_image_width(Some(800))
-                    .default_width(default_width)
-                    // Full Width governs the complete document layout. With
-                    // the reading cap active, tables reflow within it; their
-                    // horizontal scroller still handles minimum-width or
-                    // user-resized overflow (#110).
-                    .table_max_width(Some(content_width))
-                    .indentation_spaces(2)
-                    .use_strong_font_family(true)
-                    // Frontmatter is metadata, not prose: show it as a
-                    // key/value table rather than a thematic break plus a
-                    // paragraph of raw `key: value` lines (#117).
-                    .render_frontmatter(true)
-                    .math_scale(self.math_scale)
-                    .show_alt_text_on_hover(true)
-                    .syntax_theme_dark("base16-ocean.dark")
-                    .syntax_theme_light("InspiredGitHub")
-                    .line_height(preset_line_height)
-                    .code_line_height(preset_code_line_height)
-                    .paragraph_spacing(2.0)
-                    .heading_spacing_above(2.0)
-                    .heading_spacing_below(0.75)
-                    .content_version(tab.content_version)
-                    .pending_scroll_offset(pending)
-                    .force_full_render(force_full_render)
-                    .scroll_source(egui::scroll_area::ScrollSource {
-                        scroll_bar: true,
-                        drag: false,
-                        mouse_wheel: true,
-                    })
-                    .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content));
+                    let force_full_render =
+                        tab.pending_header_click_key.is_some() || correct_search_this_frame;
+                    let pending = tab.pending_scroll_offset.take();
+                    let default_width = content_default_width(self.full_width_content);
+                    let content_width =
+                        content_width_limit(self.full_width_content, content_rect.width());
+                    // Line heights follow the emulated viewer (GitHub 1.5/1.45,
+                    // VS Code preview 1.6/1.36); the font preset owns the metrics.
+                    let (preset_line_height, preset_code_line_height) =
+                        self.font_preset.line_heights();
+                    scroll_output = Some(
+                        CommonMarkViewer::new()
+                            .default_implicit_uri_scheme(&tab.base_uri)
+                            .max_image_width(Some(800))
+                            .default_width(default_width)
+                            // Full Width governs the complete document layout. With
+                            // the reading cap active, tables reflow within it; their
+                            // horizontal scroller still handles minimum-width or
+                            // user-resized overflow (#110).
+                            .table_max_width(Some(content_width))
+                            .indentation_spaces(2)
+                            .use_strong_font_family(true)
+                            // Frontmatter is metadata, not prose: show it as a
+                            // key/value table rather than a thematic break plus a
+                            // paragraph of raw `key: value` lines (#117).
+                            .render_frontmatter(true)
+                            .math_scale(self.math_scale)
+                            .show_alt_text_on_hover(true)
+                            .syntax_theme_dark("base16-ocean.dark")
+                            .syntax_theme_light("base16-ocean.light")
+                            .line_height(preset_line_height)
+                            .code_line_height(preset_code_line_height)
+                            .paragraph_spacing(2.0)
+                            .heading_spacing_above(2.0)
+                            .heading_spacing_below(0.75)
+                            .content_version(tab.content_version)
+                            .pending_scroll_offset(pending)
+                            .force_full_render(force_full_render)
+                            .scroll_source(egui::scroll_area::ScrollSource {
+                                scroll_bar: true,
+                                drag: false,
+                                mouse_wheel: true,
+                            })
+                            .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content),
+                    );
 
-                if let Some(so) = scroll_output.as_ref() {
-                    tab.scroll_offset = so.state.offset.y;
-                    tab.last_viewport_height = so.inner_rect.height();
-                    tab.last_content_height = so.content_size.y;
-                }
+                    if let Some(so) = scroll_output.as_ref() {
+                        tab.scroll_offset = so.state.offset.y;
+                        tab.last_viewport_height = so.inner_rect.height();
+                        tab.last_content_height = so.content_size.y;
+                    }
                 }
 
                 // If the renderer recorded an exact y for the active match, check
@@ -4778,7 +4772,8 @@ impl MarkdownApp {
                 // One canonical name per body-capable family, scanned once in
                 // the background at startup. While the scan is running, only
                 // "System Default" is offered.
-                if self.available_font_families.is_empty() && self.pending_font_family_scan.is_some()
+                if self.available_font_families.is_empty()
+                    && self.pending_font_family_scan.is_some()
                 {
                     ui.horizontal(|ui| {
                         ui.spinner();
@@ -4815,39 +4810,39 @@ impl MarkdownApp {
                     .auto_shrink([false, true])
                     .max_height(300.0)
                     .show_rows(
-                    ui,
-                    row_height,
-                    match_count + 1, // + 1 for the pinned "System Default" row
-                    |ui, rows| {
-                        for row in rows {
-                            if row == 0 {
-                                let default_selected = self.selected_font_family.is_none();
-                                let default_btn =
-                                    ui.selectable_label(default_selected, "System Default");
-                                #[cfg(feature = "mcp")]
-                                self.mcp_bridge.register_widget(
-                                    "Font Dialog: System Default",
-                                    "button",
-                                    &default_btn,
-                                    Some(if default_selected { "selected" } else { "" }),
-                                );
-                                if default_btn.clicked() {
-                                    new_selection = Some(None);
+                        ui,
+                        row_height,
+                        match_count + 1, // + 1 for the pinned "System Default" row
+                        |ui, rows| {
+                            for row in rows {
+                                if row == 0 {
+                                    let default_selected = self.selected_font_family.is_none();
+                                    let default_btn =
+                                        ui.selectable_label(default_selected, "System Default");
+                                    #[cfg(feature = "mcp")]
+                                    self.mcp_bridge.register_widget(
+                                        "Font Dialog: System Default",
+                                        "button",
+                                        &default_btn,
+                                        Some(if default_selected { "selected" } else { "" }),
+                                    );
+                                    if default_btn.clicked() {
+                                        new_selection = Some(None);
+                                    }
+                                    continue;
                                 }
-                                continue;
+                                let font_index = filtered_indices
+                                    .as_ref()
+                                    .map_or(row - 1, |indices| indices[row - 1]);
+                                let name = &self.available_font_families[font_index];
+                                let is_selected =
+                                    self.selected_font_family.as_deref() == Some(name.as_str());
+                                if ui.selectable_label(is_selected, name).clicked() {
+                                    new_selection = Some(Some(name.clone()));
+                                }
                             }
-                            let font_index = filtered_indices
-                                .as_ref()
-                                .map_or(row - 1, |indices| indices[row - 1]);
-                            let name = &self.available_font_families[font_index];
-                            let is_selected =
-                                self.selected_font_family.as_deref() == Some(name.as_str());
-                            if ui.selectable_label(is_selected, name).clicked() {
-                                new_selection = Some(Some(name.clone()));
-                            }
-                        }
-                    },
-                );
+                        },
+                    );
             });
 
         self.show_font_dialog = open;
@@ -5081,6 +5076,16 @@ impl MarkdownApp {
     }
 }
 
+/// Frame milestones for the `MDV_SELFTEST` harness: scroll injection and
+/// the scroll-walk start at [`SELFTEST_SETTLE_FRAME`]; the geometry dump
+/// begins (and the walk ends) at [`SELFTEST_DUMP_FRAME`]; the app exits at
+/// [`SELFTEST_EXIT_FRAME`]. The gaps between them are settle time — enough
+/// frames for fonts, panels, and async math textures to land before any
+/// scroll state is measured.
+const SELFTEST_SETTLE_FRAME: usize = 30;
+const SELFTEST_DUMP_FRAME: usize = 120;
+const SELFTEST_EXIT_FRAME: usize = 140;
+
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         #[cfg(feature = "mcp")]
@@ -5196,24 +5201,11 @@ impl eframe::App for MarkdownApp {
                 v.override_text_color = Some(egui::Color32::from_rgb(0xE0, 0xE0, 0xE0));
                 v
             } else {
-                // Instapaper "Paper" (sepia) palette:
-                // bg #f8f2e3, raised #f0eadb, border #b8b2a3, ink #3b3832,
-                // link #005f99, selection #e8e2d3.
                 let mut v = egui::Visuals::light();
-                v.panel_fill = egui::Color32::from_rgb(0xF8, 0xF2, 0xE3);
-                v.window_fill = egui::Color32::from_rgb(0xF8, 0xF2, 0xE3);
-                v.extreme_bg_color = egui::Color32::from_rgb(0xF0, 0xEA, 0xDB);
-                v.faint_bg_color = egui::Color32::from_rgb(0xF0, 0xEA, 0xDB);
-                v.override_text_color = Some(egui::Color32::from_rgb(0x3B, 0x38, 0x32));
-                v.hyperlink_color = egui::Color32::from_rgb(0x00, 0x5F, 0x99);
-                v.selection.bg_fill = egui::Color32::from_rgb(0xE8, 0xE2, 0xD3);
-                v.selection.stroke =
-                    egui::Stroke::new(1.0, egui::Color32::from_rgb(0xB8, 0xB2, 0xA3));
-                v.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(0xF0, 0xEA, 0xDB);
-                v.widgets.noninteractive.weak_bg_fill =
-                    egui::Color32::from_rgb(0xF0, 0xEA, 0xDB);
-                v.widgets.noninteractive.bg_stroke =
-                    egui::Stroke::new(1.0, egui::Color32::from_rgb(0xB8, 0xB2, 0xA3));
+                v.panel_fill = egui::Color32::from_rgb(0xF8, 0xF8, 0xF8);
+                v.window_fill = egui::Color32::from_rgb(0xF8, 0xF8, 0xF8);
+                v.extreme_bg_color = egui::Color32::from_rgb(0xF0, 0xF0, 0xF0);
+                v.override_text_color = Some(egui::Color32::from_rgb(0x33, 0x33, 0x33));
                 v
             };
             if let Some(color) = self.highlight_color {
@@ -5235,10 +5227,8 @@ impl eframe::App for MarkdownApp {
                 .map(Receiver::try_recv);
             match received {
                 Some(Ok(names)) => {
-                    self.available_font_families_lower = names
-                        .iter()
-                        .map(|name| name.to_ascii_lowercase())
-                        .collect();
+                    self.available_font_families_lower =
+                        names.iter().map(|name| name.to_ascii_lowercase()).collect();
                     self.available_font_families = names;
                     self.pending_font_family_scan = None;
                     // The list may have landed while the font dialog was
@@ -6136,33 +6126,32 @@ impl eframe::App for MarkdownApp {
 
         // Live-app self test harness. `MDV_SELFTEST=1` runs the real app —
         // real fonts, zoom, side panels, async math — for a fixed number of
-        // frames, then dumps the scroll geometry of the active tab to stderr
-        // and exits without saving state. `MDV_SELFTEST_SCROLL=<pts>` injects
-        // a pending scroll offset at frame 30 so the dump proves the offset
-        // can reach the true document bottom (and reveals any clamp that
-        // snaps it back short). `MDV_SELFTEST_SCROLLWALK=<from>:<to>:<steps>`
-        // instead walks the pending offset frame by frame from frame 30,
-        // simulating a wheel scroll across the given range — this exposes
-        // extent behavior that only appears while the viewport moves.
+        // frames (milestones: SELFTEST_SETTLE_FRAME, SELFTEST_DUMP_FRAME,
+        // SELFTEST_EXIT_FRAME), then dumps the scroll geometry of the active
+        // tab to stderr and exits without saving state.
+        // `MDV_SELFTEST_SCROLL=<pts>` injects a pending scroll offset at the
+        // settle frame so the dump proves the offset can reach the true
+        // document bottom (and reveals any clamp that snaps it back short).
+        // `MDV_SELFTEST_SCROLLWALK=<from>:<to>:<steps>` instead walks the
+        // pending offset frame by frame from the settle frame to the dump
+        // frame, simulating a wheel scroll across the given range — this
+        // exposes extent behavior that only appears while the viewport moves.
         if std::env::var("MDV_SELFTEST").is_ok() {
             self.selftest_frames += 1;
             let frame = self.selftest_frames;
             if let Ok(target) = std::env::var("MDV_SELFTEST_SCROLL") {
-                if frame == 30 {
+                if frame == SELFTEST_SETTLE_FRAME {
                     if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                         tab.pending_scroll_offset = Some(target.parse().unwrap_or(3000.0));
                     }
                 }
             }
             if let Ok(walk) = std::env::var("MDV_SELFTEST_SCROLLWALK") {
-                if frame >= 30 && frame < 120 {
-                    let parts: Vec<f32> = walk
-                        .split(':')
-                        .filter_map(|p| p.parse().ok())
-                        .collect();
+                if (SELFTEST_SETTLE_FRAME..SELFTEST_DUMP_FRAME).contains(&frame) {
+                    let parts: Vec<f32> = walk.split(':').filter_map(|p| p.parse().ok()).collect();
                     if parts.len() == 3 {
                         let (from, to, steps) = (parts[0], parts[1], parts[2].max(1.0));
-                        let t = ((frame - 30) as f32 / steps).min(1.0);
+                        let t = ((frame - SELFTEST_SETTLE_FRAME) as f32 / steps).min(1.0);
                         let offset = from + (to - from) * t;
                         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                             tab.pending_scroll_offset = Some(offset);
@@ -6170,7 +6159,7 @@ impl eframe::App for MarkdownApp {
                     }
                 }
             }
-            if frame >= 120 {
+            if frame >= SELFTEST_DUMP_FRAME {
                 if let Some(tab) = self.tabs.get(self.active_tab) {
                     eprintln!(
                         "SELFTEST f={} content={:.1} viewport={:.1} offset={:.1} max_by_content={:.1}",
@@ -6182,7 +6171,7 @@ impl eframe::App for MarkdownApp {
                     );
                 }
             }
-            if frame >= 140 {
+            if frame >= SELFTEST_EXIT_FRAME {
                 std::process::exit(0);
             }
             ctx.request_repaint();
