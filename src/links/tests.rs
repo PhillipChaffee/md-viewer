@@ -2,7 +2,7 @@ use super::*;
 
 use std::fs;
 
-use crate::recent::now_epoch_secs;
+use crate::test_support::ScratchDir;
 
 /// Characterization table for issue #141: one place that says what a
 /// Markdown destination resolves to.
@@ -142,12 +142,8 @@ fn nothing_the_gate_accepts_can_resolve_to_silence() {
 
 #[test]
 fn shared_resolver_keeps_absolute_paths_and_literal_percent_names() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-141-edges-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let home = root.join("home.md");
     let abs = root.join("absolute.md");
     // `%` not followed by two hex digits is not an escape and must survive.
@@ -170,8 +166,6 @@ fn shared_resolver_keeps_absolute_paths_and_literal_percent_names() {
 
     // an anchor-only destination is still not a path
     assert!(!tab.navigate_to_link("#section").unwrap());
-
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -180,11 +174,8 @@ fn plain_click_and_ctrl_click_resolve_the_same_link_identically() {
     // must resolve a destination identically. #78 taught percent-decoding
     // and `file://` to the former only, so an encoded space opened in a new
     // tab on ctrl+click and silently did nothing on a plain click.
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-141-baseline-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let spaced = root.join("docs with spaces");
     fs::create_dir_all(&spaced).unwrap();
     let home = root.join("home.md");
@@ -222,8 +213,6 @@ fn plain_click_and_ctrl_click_resolve_the_same_link_identically() {
         "navigate_to_link must accept file:// URIs too"
     );
     assert_eq!(tab.path, guide.canonicalize().unwrap());
-
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -294,12 +283,8 @@ fn find_fragment_target_prefers_document_title_then_outline_order() {
 
 #[test]
 fn same_document_fragment_scrolls_without_touching_history() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-141-same-doc-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let document = root.join("single.md");
     fs::write(&document, "# Title\n\ntext\n\n## A Section\n\ntext\n").unwrap();
 
@@ -326,18 +311,12 @@ fn same_document_fragment_scrolls_without_touching_history() {
     assert!(!tab.navigate_to_link("#no-such-anchor").unwrap());
     assert_eq!(tab.pending_header_click_key, key_before);
     assert_eq!(tab.path, original_path);
-
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn cross_document_fragment_opens_and_lands_on_heading() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-141-cross-doc-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let home = root.join("home.md");
     let guide = root.join("guide.md");
     fs::write(&home, "# Home\n\n[Setup](guide.md#setup)\n").unwrap();
@@ -358,17 +337,12 @@ fn cross_document_fragment_opens_and_lands_on_heading() {
     let (path, fragment) = new_tab.expect("ctrl+click resolves to a path");
     assert_eq!(path, guide.canonicalize().unwrap());
     assert_eq!(fragment.as_deref(), Some("setup"));
-
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn bare_existing_markdown_path_is_registered_as_local_link() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-auto-link-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
+    let dir = ScratchDir::new();
+    let root = dir.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     let document = root.join("index.md");
     fs::write(&document, "See docs/guide.md for details.").unwrap();
@@ -376,17 +350,12 @@ fn bare_existing_markdown_path_is_registered_as_local_link() {
 
     let links = parse_local_links("See docs/guide.md for details.", &document);
     assert_eq!(links, vec!["docs/guide.md"]);
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn inline_code_markdown_path_can_touch_chinese_prose_and_punctuation() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-inline-link-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
+    let dir = ScratchDir::new();
+    let root = dir.path();
     fs::create_dir_all(root.join("github/research/docs")).unwrap();
     let document = root.join("index.md");
     fs::write(&document, "# Index").unwrap();
@@ -397,8 +366,6 @@ fn inline_code_markdown_path_can_touch_chinese_prose_and_punctuation() {
         parse_local_links(content, &document),
         vec!["github/research/docs/audit.md"]
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -409,12 +376,8 @@ fn nonexistent_bare_markdown_path_is_not_registered() {
 
 #[test]
 fn missing_explicit_link_surfaces_errors_without_changing_tab_or_history() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-missing-link-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let document = root.join("index.md");
     fs::write(&document, "[Missing](missing.md)").unwrap();
 
@@ -445,18 +408,12 @@ fn missing_explicit_link_surfaces_errors_without_changing_tab_or_history() {
     assert_eq!(tab.path, original_path);
     assert!(tab.history_back.is_empty());
     assert!(tab.history_forward.is_empty());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn fenced_and_indented_code_never_register_bare_markdown_paths() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-fenced-link-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let dir = ScratchDir::new();
+    let root = dir.path();
     let document = root.join("index.md");
     fs::write(&document, "# Index").unwrap();
     fs::write(root.join("guide.md"), "# Guide").unwrap();
@@ -468,8 +425,6 @@ fn fenced_and_indented_code_never_register_bare_markdown_paths() {
     );
     assert!(parse_local_links(code_blocks, &document).is_empty());
     assert_eq!(parse_local_links("`guide.md`", &document), ["guide.md"]);
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -528,11 +483,8 @@ fn explicit_non_file_schemes_are_not_registered_as_link_hooks() {
 
 #[test]
 fn absolute_path_and_file_uri_are_registered_as_local_links() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-auto-link-uri-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
+    let dir = ScratchDir::new();
+    let root = dir.path();
     fs::create_dir_all(root.join("docs with spaces")).unwrap();
     let document = root.join("index.md");
     let absolute_target = root.join("guide.md");
@@ -547,16 +499,12 @@ fn absolute_path_and_file_uri_are_registered_as_local_links() {
     let links = parse_local_links(&content, &document);
 
     assert_eq!(links, vec![absolute.to_string(), file_uri]);
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn commonmark_reference_with_encoded_path_is_registered() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-reference-link-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
+    let dir = ScratchDir::new();
+    let root = dir.path();
     fs::create_dir_all(root.join("docs with spaces")).unwrap();
     let document = root.join("index.md");
     fs::write(&document, "# Index").unwrap();
@@ -568,12 +516,10 @@ fn commonmark_reference_with_encoded_path_is_registered() {
         vec!["docs%20with%20spaces/guide(1).md"]
     );
     assert!(
-        resolve_local_link_path("docs%20with%20spaces/guide(1).md", &root)
+        resolve_local_link_path("docs%20with%20spaces/guide(1).md", root)
             .unwrap()
             .is_some_and(|path| path.is_file())
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -602,7 +548,7 @@ fn colon_after_something_that_is_no_scheme_stays_in_the_file_name() {
 
 mod fragment_scroll {
     use super::*;
-    use crate::test_support::{assert_close, ScratchDir};
+    use crate::test_support::assert_close;
 
     /// Above a heading, so it does not sit flush against the top edge.
     const HEADROOM: f32 = 50.0;
