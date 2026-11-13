@@ -11,7 +11,7 @@ use egui::{self, Id, Pos2, TextStyle, Ui};
 use crate::List;
 use egui_commonmark_backend_extended::elements::{
     blockquote, footnote, footnote_start, heading_end_spacing, heading_start_spacing, newline,
-    paragraph_end_spacing, rule, soft_break, ImmutableCheckbox,
+    paragraph_end_spacing, rule_styled, soft_break, ImmutableCheckbox,
 };
 use egui_commonmark_backend_extended::misc::*;
 use egui_commonmark_backend_extended::pulldown::*;
@@ -1144,10 +1144,27 @@ fn framed_table_widths(
 
 /// Shadow the column widths `TableBuilder` resolved this frame so
 /// so layout decisions (height measurement, resets) use what rendered.
-fn store_table_column_widths(ui: &Ui, table_id: Id, widths: &[f32]) {
+fn store_table_column_widths(ui: &Ui, table_id: Id, widths: &[f32], fit_epoch: u64) {
     ui.data_mut(|data| {
         data.insert_temp(table_id.with("_column_widths"), widths.to_vec());
+        data.insert_temp(table_id.with("_column_widths_epoch"), fit_epoch);
     });
+}
+
+/// The column widths the table rendered with last, unless the caller has
+/// since asked tables to fit their columns afresh
+/// (`CommonMarkCache::refit_tables`).
+fn last_table_column_widths(ui: &Ui, table_id: Id, fit_epoch: u64) -> Option<Vec<f32>> {
+    ui.data(|data| {
+        let stored_epoch = data
+            .get_temp::<u64>(table_id.with("_column_widths_epoch"))
+            .unwrap_or(0);
+        if stored_epoch == fit_epoch {
+            data.get_temp::<Vec<f32>>(table_id.with("_column_widths"))
+        } else {
+            None
+        }
+    })
 }
 
 /// Redirect Shift+vertical-wheel over a hovered wide-table into its inner
@@ -1294,6 +1311,33 @@ sp={}{}",
 
 fn markdown_table_id(source_id: Id, source_start: usize) -> Id {
     source_id.with("_markdown_table").with(source_start)
+}
+
+/// Paint the caller's preamble at the top of the document column, then
+/// leave the wrapping row layout as a fresh ui has it, one block lower.
+///
+/// The block is placed at an explicit rect: allocating it through the
+/// row layout would bottom-align it in a row of body height.
+fn show_preamble(ui: &mut Ui, options: &CommonMarkOptions, max_width: f32) {
+    let Some(preamble) = options.preamble else {
+        return;
+    };
+    let block = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(max_width, 0.0));
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(block)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+        |ui| {
+            ui.set_width(max_width);
+            preamble(ui);
+        },
+    );
+    ui.end_row();
+    // The row the preamble ended is as tall as the preamble, and a new
+    // row inherits that height. Collapse it: a heading that opens the
+    // document ends this row before it starts, and should not push a
+    // blank line between the preamble and itself.
+    ui.set_row_height(0.0);
 }
 
 fn content_relative_y(screen_y: f32, render_origin_y: f32, slice_start_y: f32) -> f32 {
@@ -1681,13 +1725,27 @@ impl CommonMarkViewerInternal {
         // `ScrollArea::begin`). `max_rect` *is* the viewport, so cap the
         // document column at its right edge.
         let max_width = max_width.min((ui.max_rect().right() - scroll_area_left).max(0.0));
-        let re = ui.allocate_ui_with_layout(egui::vec2(max_width, 0.0), layout, |ui| {
+        // Opt-in: place the column in the middle of the viewport. The
+        // offset is recorded in `ContentGeometry` below, so viewport
+        // slices land on the same column without recomputing it.
+        let centered_column = options.block_style.center_content.then(|| {
+            let spare = ui.max_rect().right() - scroll_area_left - max_width;
+            egui::Rect::from_min_size(
+                egui::pos2(
+                    scroll_area_left + (spare / 2.0).max(0.0).floor(),
+                    ui.cursor().top(),
+                ),
+                egui::vec2(max_width, 0.0),
+            )
+        });
+        let add_contents = |ui: &mut Ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             let height = ui.text_style_height(&TextStyle::Body);
             ui.set_row_height(height);
             let content_origin_y = ui.next_widget_position().y;
             let content_origin_x = ui.max_rect().left();
             self.render_origin_y = content_origin_y;
+            show_preamble(ui, options, max_width);
 
             // Use cached events — clone the Vec reference data for iteration
             // (events are 'static so this is cheap pointer copies, not re-parsing)
@@ -1803,7 +1861,14 @@ impl CommonMarkViewerInternal {
                     left_offset: content_origin_x - scroll_area_left,
                 });
             }
-        });
+        };
+        let re = match centered_column {
+            Some(column) => ui.scope_builder(
+                egui::UiBuilder::new().max_rect(column).layout(layout),
+                add_contents,
+            ),
+            None => ui.allocate_ui_with_layout(egui::vec2(max_width, 0.0), layout, add_contents),
+        };
 
         (re, std::mem::take(&mut self.checkbox_events))
     }
@@ -2071,6 +2136,12 @@ impl CommonMarkViewerInternal {
                     self.render_origin_y = ui.min_rect().top();
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.set_row_height(ui.text_style_height(&TextStyle::Body));
+                    // The bootstrap pass painted the preamble above the
+                    // first block, so the slice that starts the document
+                    // must reserve the same space or every block shifts up.
+                    if first_event_index == 0 {
+                        show_preamble(ui, options, max_width);
+                    }
 
                     let mut events = events_range
                         .into_iter()
@@ -2274,7 +2345,11 @@ impl CommonMarkViewerInternal {
                     }
                 })
             } else {
-                blockquote(ui, ui.visuals().weak_text_color(), |ui| {
+                let bar = options
+                    .block_style
+                    .blockquote_bar
+                    .unwrap_or_else(|| ui.visuals().weak_text_color());
+                blockquote(ui, bar, |ui| {
                     self.text_style.quote = true;
                     for (event, src_span) in collected_events {
                         self.event(ui, event, src_span, cache, options, max_width);
@@ -2421,8 +2496,8 @@ impl CommonMarkViewerInternal {
             // render — last frame's — and fall back to the fresh proposal on
             // first render (or after a genuine layout change, which resets
             // below).
-            let last_widths = ui
-                .data(|data| data.get_temp::<Vec<f32>>(id.with("_column_widths")));
+            let table_fit_epoch = cache.table_fit_epoch();
+            let last_widths = last_table_column_widths(ui, id, table_fit_epoch);
             let initial_widths = last_widths.clone().unwrap_or(initial_widths);
             // Cap separator drags at the pane edge: egui_extras grows the
             // dragged column without shrinking its neighbours, so an
@@ -2555,7 +2630,7 @@ impl CommonMarkViewerInternal {
                                                 })
                                                 .collect()
                                         };
-                                        store_table_column_widths(body.ui_mut(), id, &widths);
+                                        store_table_column_widths(body.ui_mut(), id, &widths, table_fit_epoch);
                                         body.heterogeneous_rows(heights.into_iter(), |mut row_ui| {
                                             let row = &table_rows[row_ui.index()];
                                                 for col in row {
@@ -2721,7 +2796,11 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::Event::HardBreak => newline(ui),
             pulldown_cmark::Event::Rule => {
                 self.line.try_insert_start(ui);
-                rule(ui, self.line.can_insert_end());
+                rule_styled(
+                    ui,
+                    self.line.can_insert_end(),
+                    options.block_style.short_rule,
+                );
             }
             pulldown_cmark::Event::TaskListMarker(mut checkbox) => {
                 if options.mutable {
@@ -2735,7 +2814,10 @@ impl CommonMarkViewerInternal {
                         });
                     }
                 } else {
-                    ui.add(ImmutableCheckbox::without_text(&mut checkbox));
+                    ui.add(
+                        ImmutableCheckbox::without_text(&mut checkbox)
+                            .marker(options.block_style.task_marker),
+                    );
                 }
             }
             pulldown_cmark::Event::InlineMath(tex) => {
@@ -3290,7 +3372,13 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::TagEnd::HtmlBlock => {
                 if !self.html_block.is_empty() {
                     if let Some(table) = egui_commonmark_backend_extended::html_table::parse_html_table(&self.html_block) {
-                        self.render_html_table(ui, &table, options, max_width);
+                        self.render_html_table(
+                            ui,
+                            &table,
+                            options,
+                            max_width,
+                            cache.table_fit_epoch(),
+                        );
                     } else if let Some(html_fn) = options.html_fn {
                         html_fn(ui, &self.html_block);
                     } else {
@@ -3337,6 +3425,7 @@ impl CommonMarkViewerInternal {
         table: &egui_commonmark_backend_extended::html_table::HtmlTable,
         options: &CommonMarkOptions,
         max_width: f32,
+        table_fit_epoch: u64,
     ) {
         let id = ui.id().with("_html_table").with(self.curr_table);
         self.curr_table += 1;
@@ -3427,8 +3516,7 @@ impl CommonMarkViewerInternal {
             - table_frame.total_margin().sum().x
             - table_frame.stroke.width * 2.0)
             .max(0.0);
-        let last_widths = ui
-            .data(|data| data.get_temp::<Vec<f32>>(id.with("_column_widths")));
+        let last_widths = last_table_column_widths(ui, id, table_fit_epoch);
         let initial_widths = last_widths.clone().unwrap_or(initial_widths);
         let column_caps = last_widths.map(|widths| {
             let total: f32 = widths.iter().sum();
@@ -3521,7 +3609,7 @@ impl CommonMarkViewerInternal {
                                     })
                                     .collect()
                             };
-                            store_table_column_widths(body.ui_mut(), id, &widths);
+                            store_table_column_widths(body.ui_mut(), id, &widths, table_fit_epoch);
                             body.heterogeneous_rows(heights.into_iter(), |mut row_ui| {
                                 let (is_header, row) = table_rows[row_ui.index()];
                                 for cell in row {
@@ -3934,7 +4022,7 @@ mod tests {
                 );
             }
             builder.body(|body| rendered_widths = body.widths().to_vec());
-            store_table_column_widths(ui, table_id, &rendered_widths);
+            store_table_column_widths(ui, table_id, &rendered_widths, 0);
         });
         let _ = ctx.end_pass();
         rendered_widths

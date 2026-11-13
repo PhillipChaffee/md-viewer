@@ -36,7 +36,24 @@ pub fn heading_end_spacing(ui: &mut Ui, typography: &TypographyConfig) {
 
 #[inline]
 pub fn rule(ui: &mut Ui, end_line: bool) {
-    ui.add(egui::Separator::default().horizontal());
+    rule_styled(ui, end_line, false);
+}
+
+/// A thematic break. `short` draws a centered hairline a fifth of the
+/// column wide instead of a separator across the whole column.
+pub fn rule_styled(ui: &mut Ui, end_line: bool, short: bool) {
+    if short {
+        let width = ui.available_size_before_wrap().x;
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 6.0), Sense::hover());
+        let half = (width * 0.1).clamp(24.0, 60.0).min(width / 2.0);
+        ui.painter().hline(
+            (rect.center().x - half)..=(rect.center().x + half),
+            rect.center().y,
+            ui.visuals().widgets.noninteractive.bg_stroke,
+        );
+    } else {
+        ui.add(egui::Separator::default().horizontal());
+    }
     // This does not add a new line, but instead ends the separator
     if end_line {
         newline(ui);
@@ -256,10 +273,27 @@ pub fn code_block(
     ui: &mut Ui,
     text: &str,
     layout_job: egui::text::LayoutJob,
-    _max_width: f32,
+    max_width: f32,
     id: egui::Id,
 ) {
+    code_block_styled(ui, text, layout_job, max_width, id, None);
+}
+
+/// [`code_block`] with the box drawn as `style` says; `None` is the
+/// built-in box.
+pub fn code_block_styled(
+    ui: &mut Ui,
+    text: &str,
+    layout_job: egui::text::LayoutJob,
+    _max_width: f32,
+    id: egui::Id,
+    style: Option<crate::typography::CodeBlockStyle>,
+) {
     let text = text.strip_suffix('\n').unwrap_or(text);
+    let mut layout_job = layout_job;
+    if style.is_some() {
+        crate::typography::CodeBlockStyle::trim_final_newline(&mut layout_job);
+    }
 
     // Reserve space for background drawing
     let where_to_put_background = ui.painter().add(egui::Shape::Noop);
@@ -268,7 +302,7 @@ pub fn code_block(
     // All code blocks use the same width with horizontal scrolling
     // for content that exceeds it.
     let frame_response = egui::Frame::new()
-        .inner_margin(egui::Margin::same(8))
+        .inner_margin(egui::Margin::same(style.map_or(8, |style| style.padding)))
         .show(ui, |ui| {
             // Force all code blocks to fill the available width, but never
             // wider than what is visible: the CentralPanel's clip spans the
@@ -293,13 +327,22 @@ pub fn code_block(
     // Draw background color + frame
     ui.painter().set(
         where_to_put_background,
-        epaint::RectShape::new(
-            frame_rect,
-            ui.style().noninteractive().corner_radius,
-            ui.visuals().extreme_bg_color,
-            ui.visuals().widgets.noninteractive.bg_stroke,
-            egui::StrokeKind::Outside,
-        ),
+        match style {
+            Some(style) => epaint::RectShape::new(
+                frame_rect,
+                egui::CornerRadius::same(style.corner_radius),
+                style.fill,
+                style.stroke,
+                egui::StrokeKind::Outside,
+            ),
+            None => epaint::RectShape::new(
+                frame_rect,
+                ui.style().noninteractive().corner_radius,
+                ui.visuals().extreme_bg_color,
+                ui.visuals().widgets.noninteractive.bg_stroke,
+                egui::StrokeKind::Outside,
+            ),
+        },
     );
 
     // Copy icon
@@ -349,17 +392,29 @@ pub fn code_block(
 // but it makes the checkbox too grey.
 pub struct ImmutableCheckbox<'a> {
     checked: &'a mut bool,
+    /// Outline and check mark color; `None` is the widget outline color.
+    marker: Option<egui::Color32>,
 }
 
 impl<'a> ImmutableCheckbox<'a> {
     pub fn without_text(checked: &'a mut bool) -> Self {
-        ImmutableCheckbox { checked }
+        ImmutableCheckbox {
+            checked,
+            marker: None,
+        }
+    }
+
+    /// Draw the outline and the check mark in `marker` instead of the
+    /// widget outline color.
+    pub fn marker(mut self, marker: Option<egui::Color32>) -> Self {
+        self.marker = marker;
+        self
     }
 }
 
 impl egui::Widget for ImmutableCheckbox<'_> {
     fn ui(self, ui: &mut Ui) -> egui::Response {
-        let ImmutableCheckbox { checked } = self;
+        let ImmutableCheckbox { checked, marker } = self;
 
         let spacing = &ui.spacing();
         let icon_width = spacing.icon_width;
@@ -376,7 +431,7 @@ impl egui::Widget for ImmutableCheckbox<'_> {
                 big_icon_rect.expand(visuals.expansion),
                 visuals.corner_radius,
                 visuals.bg_fill,
-                visuals.bg_stroke,
+                marker.map_or(visuals.bg_stroke, |color| egui::Stroke::new(1.0_f32, color)),
                 egui::StrokeKind::Inside,
             ));
 
@@ -388,7 +443,7 @@ impl egui::Widget for ImmutableCheckbox<'_> {
                         egui::pos2(small_icon_rect.center().x, small_icon_rect.bottom()),
                         egui::pos2(small_icon_rect.right(), small_icon_rect.top()),
                     ],
-                    visuals.fg_stroke,
+                    marker.map_or(visuals.fg_stroke, |color| egui::Stroke::new(1.5_f32, color)),
                 ));
             }
         }

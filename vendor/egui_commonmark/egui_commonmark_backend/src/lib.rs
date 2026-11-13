@@ -24,7 +24,7 @@ pub use {
     // Pretty much every single element in this module is used by the proc macros
     elements::*,
     misc::{CodeBlock, CommonMarkOptions, Image, Link, prepare_show},
-    typography::{Measurement, TypographyConfig},
+    typography::{BlockStyle, CodeBlockStyle, Measurement, TypographyConfig},
 };
 
 // The only struct that is allowed to use directly. (If one does not need egui_commonmark)
@@ -40,3 +40,5 @@ pub use misc::warm_math_fonts;
 pub type RenderMathFn = dyn Fn(&mut egui::Ui, &str, bool);
 /// Takes [`egui::Ui`] and the html text to be rendered/used
 pub type RenderHtmlFn = dyn Fn(&mut egui::Ui, &str);
+/// Takes a top-down [`egui::Ui`] as wide as the document column
+pub type PreambleFn<'f> = dyn Fn(&mut egui::Ui) + 'f;

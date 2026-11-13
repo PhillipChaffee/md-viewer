@@ -68,6 +68,12 @@ pub struct CommonMarkOptions<'f> {
     /// Opt into using the named strong font family. Callers must register
     /// `STRONG_FONT_FAMILY` in egui before enabling this to avoid lookup panics.
     pub use_strong_font_family: bool,
+    /// Opt-in styling of block elements; the default keeps the built-in look.
+    pub block_style: crate::typography::BlockStyle,
+    /// Painted once at the top of the document column, before the first
+    /// block, and scrolled with the document. The callback is given a
+    /// top-down ui as wide as the column.
+    pub preamble: Option<&'f crate::PreambleFn<'f>>,
     /// Opt into parsing a leading `---` block as YAML frontmatter and rendering
     /// it as a key/value table. Off by default: enabling it changes how a
     /// document that starts with `---` is *parsed*, not just painted, so it
@@ -106,6 +112,8 @@ impl std::fmt::Debug for CommonMarkOptions<'_> {
             .field("mutable", &self.mutable)
             .field("typography", &self.typography)
             .field("use_strong_font_family", &self.use_strong_font_family)
+            .field("block_style", &self.block_style)
+            .field("preamble", &self.preamble.is_some())
             .field("render_frontmatter", &self.render_frontmatter)
             .field("math_scale", &self.math_scale)
             .finish()
@@ -132,6 +140,8 @@ impl Default for CommonMarkOptions<'_> {
             html_fn: None,
             typography: TypographyConfig::default(),
             use_strong_font_family: false,
+            block_style: crate::typography::BlockStyle::default(),
+            preamble: None,
             render_frontmatter: false,
             math_scale: 1.0,
         }
@@ -198,6 +208,7 @@ impl Style {
             text,
             Some(&options.typography),
             options.use_strong_font_family,
+            Some(&options.block_style),
         )
     }
 
@@ -209,7 +220,7 @@ impl Style {
     ) -> RichText {
         // Public low-level helper remains safe by default for library users
         // who did not register md-viewer's named strong font family.
-        self.to_richtext_internal(ui, text, typography, false)
+        self.to_richtext_internal(ui, text, typography, false, None)
     }
 
     fn to_richtext_internal(
@@ -218,8 +229,16 @@ impl Style {
         text: &str,
         typography: Option<&TypographyConfig>,
         use_strong_font_family: bool,
+        block_style: Option<&crate::typography::BlockStyle>,
     ) -> RichText {
         let mut rich_text = RichText::new(text);
+        // Inline code keeps the monospace family whatever surrounds it.
+        let heading_family = block_style
+            .and_then(|style| style.heading_font_family.as_ref())
+            .filter(|_| self.heading.is_some() && !self.code);
+        let emphasis_family = block_style
+            .and_then(|style| style.emphasis_font_family.as_ref())
+            .filter(|_| self.heading.is_none() && !self.code && !self.strong);
 
         // Get the base font size for resolving typography measurements
         let base_font_size = ui
@@ -250,6 +269,9 @@ impl Style {
             if level == 0 {
                 rich_text = rich_text.heading();
             }
+            if let Some(family) = heading_family {
+                rich_text = rich_text.family(family.clone());
+            }
 
             // Apply heading-specific line height (tighter than body per research)
             // Headings use 1.2-1.3× line height vs 1.5× for body text
@@ -258,7 +280,9 @@ impl Style {
                     let heading_line_height = match line_height {
                         crate::typography::Measurement::Multiplier(m) => {
                             // Scale down: 1.5× body → 1.3× heading
-                            let heading_multiplier = 1.0 + (m - 1.0) * 0.6;
+                            let heading_multiplier = block_style
+                                .and_then(|style| style.heading_line_height)
+                                .unwrap_or(1.0 + (m - 1.0) * 0.6);
                             crate::typography::Measurement::Multiplier(heading_multiplier)
                         }
                         crate::typography::Measurement::Pixels(p) => {
@@ -286,7 +310,8 @@ impl Style {
             // the named bold font after registering it; inline code keeps the
             // monospace family applied later by `RichText::code()`.
             rich_text = rich_text.strong();
-            if use_strong_font_family && !self.code {
+            // A heading family is already the heading's bold face.
+            if use_strong_font_family && !self.code && heading_family.is_none() {
                 rich_text = rich_text.font(egui::FontId::new(
                     selected_font_size,
                     egui::FontFamily::Name(STRONG_FONT_FAMILY.into()),
@@ -296,7 +321,11 @@ impl Style {
 
         if self.emphasis {
             // FIXME: Might want to add some space between the next text
-            rich_text = rich_text.italics();
+            rich_text = match emphasis_family {
+                // A true italic face must not be slanted a second time.
+                Some(family) => rich_text.family(family.clone()),
+                None => rich_text.italics(),
+            };
         }
 
         if self.strikethrough {
@@ -310,7 +339,10 @@ impl Style {
             // (issue #46). Pin the size to the current context (body, or the
             // heading size when code is inside a heading) so code keeps the
             // monospace family + code background but aligns with adjacent text.
-            rich_text = rich_text.code().size(selected_font_size);
+            let scale = block_style
+                .and_then(|style| style.inline_code_scale)
+                .unwrap_or(1.0);
+            rich_text = rich_text.code().size(selected_font_size * scale);
         }
 
         rich_text
@@ -796,6 +828,10 @@ impl CodeBlock {
                 self.content.hash(&mut h);
                 self.lang.hash(&mut h);
                 ui.style().visuals.dark_mode.hash(&mut h);
+                // Two light (or two dark) app themes may highlight with
+                // different syntax themes.
+                #[cfg(feature = "better_syntax_highlighting")]
+                options.curr_theme(ui).hash(&mut h);
                 mono_font_size.to_bits().hash(&mut h);
                 code_line_height.map(f32::to_bits).hash(&mut h);
                 h.finish()
@@ -828,7 +864,14 @@ impl CodeBlock {
             // Don't wrap code block text - use horizontal scroll instead
             job.wrap.max_width = f32::INFINITY;
 
-            crate::elements::code_block(ui, &self.content, job, max_width, id);
+            crate::elements::code_block_styled(
+                ui,
+                &self.content,
+                job,
+                max_width,
+                id,
+                options.block_style.code_block,
+            );
         });
     }
 }
@@ -2128,7 +2171,12 @@ impl CodeBlock {
         text: &str,
         code_line_height: Option<f32>,
     ) -> egui::text::LayoutJob {
-        if let Some(syntax) = cache.ps.find_syntax_by_extension(extension) {
+        let by_name = options.block_style.syntax_by_language_name;
+        let syntax = cache
+            .ps
+            .find_syntax_by_extension(extension)
+            .or_else(|| cache.ps.find_syntax_by_token(extension).filter(|_| by_name));
+        if let Some(syntax) = syntax {
             let mut job = egui::text::LayoutJob::default();
             let mut h = HighlightLines::new(syntax, cache.curr_theme(ui, options));
 
@@ -2242,6 +2290,10 @@ pub struct CommonMarkCache {
     /// estimates are unreliable in image-heavy documents.
     active_search_y: Option<f32>,
 
+    /// Incremented by [`Self::refit_tables`]. A table keeps the column
+    /// widths it rendered with only while this stays what it was.
+    table_fit_epoch: u64,
+
     /// Incremented whenever asynchronous content changes the document layout.
     layout_revision: u64,
 
@@ -2338,6 +2390,7 @@ impl Default for CommonMarkCache {
             search_ranges: Vec::new(),
             active_search_range: None,
             active_search_y: None,
+            table_fit_epoch: 0,
             layout_revision: 0,
             #[cfg(feature = "mermaid")]
             mermaid_states: HashMap::new(),
@@ -2607,6 +2660,21 @@ impl CommonMarkCache {
 
     pub fn mark_layout_changed(&mut self) {
         self.layout_revision = self.layout_revision.wrapping_add(1);
+    }
+
+    /// Have every table fit its columns afresh to the width it is given
+    /// next, forgetting the widths it settled on (and any the user
+    /// dragged). Call it when the document column itself changes width:
+    /// a table otherwise keeps the columns a narrower column squeezed it
+    /// into. Also marks the layout as changed.
+    pub fn refit_tables(&mut self) {
+        self.table_fit_epoch = self.table_fit_epoch.wrapping_add(1);
+        self.mark_layout_changed();
+    }
+
+    #[doc(hidden)]
+    pub fn table_fit_epoch(&self) -> u64 {
+        self.table_fit_epoch
     }
 
     fn observe_image_size(&mut self, uri: &str, size: egui::Vec2) {

@@ -92,11 +92,14 @@ mod parsers;
 
 pub use egui_commonmark_backend_extended::RenderHtmlFn;
 pub use egui_commonmark_backend_extended::RenderMathFn;
+pub use egui_commonmark_backend_extended::PreambleFn;
 pub use egui_commonmark_backend_extended::alerts::{Alert, AlertBundle};
 pub use egui_commonmark_backend_extended::misc::{
     header_position_key, CommonMarkCache, STRONG_FONT_FAMILY,
 };
-pub use egui_commonmark_backend_extended::typography::{Measurement, TypographyConfig};
+pub use egui_commonmark_backend_extended::typography::{
+    BlockStyle, CodeBlockStyle, Measurement, TypographyConfig,
+};
 #[cfg(feature = "math")]
 pub use egui_commonmark_backend_extended::{
     cached_inline_math_height, render_math, render_math_in_table,
@@ -284,6 +287,28 @@ impl<'f> CommonMarkViewer<'f> {
     /// emit an unregistered font family for `**strong**` spans.
     pub fn use_strong_font_family(mut self, enabled: bool) -> Self {
         self.options.use_strong_font_family = enabled;
+        self
+    }
+
+    /// Opt-in styling of block elements and of the document column: heading
+    /// and emphasis families, the code block box, the blockquote bar, short
+    /// thematic breaks, and a centered column.
+    ///
+    /// The default [`BlockStyle`] keeps the built-in look. Font families
+    /// named in it must be registered with egui first.
+    pub fn block_style(mut self, style: BlockStyle) -> Self {
+        self.options.block_style = style;
+        self
+    }
+
+    /// Paint `preamble` once at the top of the document column, above the
+    /// first block. It scrolls with the document.
+    ///
+    /// The callback gets a top-down ui as wide as the column. It must lay
+    /// out the same height on every frame until the content or the layout
+    /// changes: block positions are measured below it.
+    pub fn preamble(mut self, preamble: Option<&'f PreambleFn<'f>>) -> Self {
+        self.options.preamble = preamble;
         self
     }
 
