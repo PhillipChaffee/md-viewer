@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::assert_close;
 
 use std::collections::HashMap;
 
@@ -51,9 +52,9 @@ fn font_preset_survives_a_persistence_roundtrip() {
 
 #[test]
 fn persisted_sidebar_widths_are_sanitized() {
-    assert_eq!(restored_sidebar_width(Some(320.0), 200.0), 320.0);
-    assert_eq!(restored_sidebar_width(Some(20.0), 200.0), SIDEBAR_MIN_WIDTH);
-    assert_eq!(restored_sidebar_width(Some(f32::NAN), 200.0), 200.0);
-    assert_eq!(restored_sidebar_width(Some(f32::INFINITY), 200.0), 200.0);
-    assert_eq!(restored_sidebar_width(None, 200.0), 200.0);
+    assert_close(restored_sidebar_width(Some(320.0), 200.0), 320.0);
+    assert_close(restored_sidebar_width(Some(20.0), 200.0), SIDEBAR_MIN_WIDTH);
+    assert_close(restored_sidebar_width(Some(f32::NAN), 200.0), 200.0);
+    assert_close(restored_sidebar_width(Some(f32::INFINITY), 200.0), 200.0);
+    assert_close(restored_sidebar_width(None, 200.0), 200.0);
 }

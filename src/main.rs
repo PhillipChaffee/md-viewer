@@ -22,6 +22,8 @@ mod recent;
 mod search;
 mod system_fonts;
 mod tab;
+#[cfg(test)]
+mod test_support;
 mod watcher;
 
 #[global_allocator]
