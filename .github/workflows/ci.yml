@@ -68,20 +68,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/egui_commonmark -> target
+          workspaces: vendor/egui_commonmark -> target
 
       - name: Lint renderer crates
         run: |
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_extended --all-targets --features "$RENDERER_FEATURES"
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-targets --all-features
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended --all-targets
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_extended --all-targets --features "$RENDERER_FEATURES"
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-targets --all-features
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended --all-targets
 
       - name: Test renderer crates
         run: |
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_extended --features "$RENDERER_FEATURES"
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --no-default-features
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-features
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_extended --features "$RENDERER_FEATURES"
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --no-default-features
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-features
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended
 
   version-sync:
     runs-on: ubuntu-latest

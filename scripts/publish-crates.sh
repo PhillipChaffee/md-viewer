@@ -56,7 +56,7 @@ publish_dir() {
     echo "::endgroup::"
 }
 
-publish_dir crates/egui_commonmark/egui_commonmark_backend
-publish_dir crates/egui_commonmark/egui_commonmark_macros
-publish_dir crates/egui_commonmark/egui_commonmark
+publish_dir vendor/egui_commonmark/egui_commonmark_backend
+publish_dir vendor/egui_commonmark/egui_commonmark_macros
+publish_dir vendor/egui_commonmark/egui_commonmark
 publish_dir .

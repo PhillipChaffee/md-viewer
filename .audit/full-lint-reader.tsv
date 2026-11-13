@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-11-13T01:56:16Z	frame	measured the code against the cognitive gate before planning	wanted the size of the retrofit before starting	arborist --threshold 15 on src	23 functions over 15, worst is update at 422; main.rs 7384 lines against a 1000 cap
+2026-11-13T01:56:16Z	frame	treat crates/epaint and crates/egui_commonmark as vendored third-party code and move them to vendor/	they are upstream forks outside the cargo workspace; full-lint's file-length gate skips vendor/ by design; retrofitting 28.7k forked lines would triple the work	find crates -name '*.rs' | xargs wc -l	open: user can ask for the fork to be gated too

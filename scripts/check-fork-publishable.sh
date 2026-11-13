@@ -2,7 +2,7 @@
 #
 # Guard against shipping a stale crates.io build of md-viewer.
 #
-# md-viewer vendors a fork of egui_commonmark under crates/egui_commonmark/ and
+# md-viewer vendors a fork of egui_commonmark under vendor/egui_commonmark/ and
 # uses it locally via [patch.crates-io] in the root Cargo.toml. Every *source*
 # build (snap, AUR, the GitHub release binaries, local dev) therefore uses the
 # local fork regardless of version — but `cargo publish` ignores the patch and
@@ -15,7 +15,7 @@
 # already published on crates.io at the current fork version.
 #
 # To fix a failure: bump the workspace version in
-#   crates/egui_commonmark/Cargo.toml
+#   vendor/egui_commonmark/Cargo.toml
 # and the matching pin in the root Cargo.toml
 #   egui_commonmark_extended = { version = "X.Y.Z", ... }
 # then re-run. (The publish-crates job will then upload the new fork version
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 UA="md-viewer-fork-publish-check (+https://github.com/aydiler/md-viewer)"
-FORK_DIR="crates/egui_commonmark"
+FORK_DIR="vendor/egui_commonmark"
 VERSION="$(awk -F'"' '/^version[[:space:]]*=/{print $2; exit}' "$FORK_DIR/Cargo.toml")"
 echo "Vendored fork workspace version: $VERSION"
 
@@ -84,7 +84,7 @@ for entry in "${CRATES[@]}"; do
 done
 
 if [ "$stale" -eq 1 ]; then
-  echo "::error::Vendored egui_commonmark fork changed but version $VERSION is already on crates.io. Bump crates/egui_commonmark/Cargo.toml's version and the root Cargo.toml pin, or 'cargo install md-viewer' will ship stale fork code (source builds — snap/AUR/binaries — are unaffected)."
+  echo "::error::Vendored egui_commonmark fork changed but version $VERSION is already on crates.io. Bump vendor/egui_commonmark/Cargo.toml's version and the root Cargo.toml pin, or 'cargo install md-viewer' will ship stale fork code (source builds — snap/AUR/binaries — are unaffected)."
   exit 1
 fi
 

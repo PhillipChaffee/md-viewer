@@ -39,7 +39,7 @@ See `docs/LESSONS.md`, "CHANGELOG.md is hand-curated".
    `[[package]] name = "md-viewer"` is a mistake.
 
 3. **If the vendored renderer changed, bump its workspace version too**
-   (`crates/egui_commonmark/Cargo.toml`, `[workspace.package] version`). All
+   (`vendor/egui_commonmark/Cargo.toml`, `[workspace.package] version`). All
    three fork crates share it.
 
 4. **Prepend a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`,** by hand.
@@ -80,7 +80,7 @@ Pushing the tag runs `.github/workflows/release.yml`, which publishes to
 
   ```bash
   cargo test --locked                                          # the app: 65
-  cargo test --manifest-path crates/egui_commonmark/Cargo.toml  # the renderer: 148
+  cargo test --manifest-path vendor/egui_commonmark/Cargo.toml  # the renderer: 148
   ```
 
   The second command needed a feature list until #185; it no longer does.
@@ -95,7 +95,7 @@ Pushing the tag runs `.github/workflows/release.yml`, which publishes to
 
   ```bash
   RENDERER_FEATURES=better_syntax_highlighting,svg,svg_text,load-images,fetch,mermaid,math,macros
-  cargo test --manifest-path crates/egui_commonmark/Cargo.toml \
+  cargo test --manifest-path vendor/egui_commonmark/Cargo.toml \
       -p egui_commonmark_extended --features "$RENDERER_FEATURES"   # 135, 1 ignored
   ```
 

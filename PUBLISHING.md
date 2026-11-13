@@ -21,7 +21,7 @@ This document covers the **one-time setup** for each channel and the **per-relea
 
 Every `v*` tag auto-publishes via the `publish-crates` job in `release.yml`. The job is **gated on `CARGO_REGISTRY_TOKEN`** — if the secret isn't set, the job no-ops with a notice and the rest of the release still ships.
 
-The vendored fork at `crates/egui_commonmark/` is published to crates.io under renamed identifiers (`egui_commonmark_extended`, `egui_commonmark_backend_extended`, `egui_commonmark_macros_extended`) so the consumer can resolve features like `math` that don't exist upstream in `lampsitter/egui_commonmark`. `scripts/publish-crates.sh` publishes in dep order (backend → macros → extended → md-viewer) with a 45 s settle delay between each, and treats "already uploaded" as success so re-tagging the same version doesn't fail.
+The vendored fork at `vendor/egui_commonmark/` is published to crates.io under renamed identifiers (`egui_commonmark_extended`, `egui_commonmark_backend_extended`, `egui_commonmark_macros_extended`) so the consumer can resolve features like `math` that don't exist upstream in `lampsitter/egui_commonmark`. `scripts/publish-crates.sh` publishes in dep order (backend → macros → extended → md-viewer) with a 45 s settle delay between each, and treats "already uploaded" as success so re-tagging the same version doesn't fail.
 
 ### One-time setup to enable automation
 
@@ -31,9 +31,9 @@ The vendored fork at `crates/egui_commonmark/` is published to crates.io under r
 
 ### Bumping the fork
 
-When the vendored fork at `crates/egui_commonmark/` changes:
+When the vendored fork at `vendor/egui_commonmark/` changes:
 
-1. Bump the workspace version in `crates/egui_commonmark/Cargo.toml`:
+1. Bump the workspace version in `vendor/egui_commonmark/Cargo.toml`:
    ```toml
    [workspace.package]
    version = "0.NEW.0"
@@ -212,7 +212,7 @@ The repo currently ships a **placeholder** icon at `data/io.github.aydiler.md-vi
 - [ ] Update version in `Cargo.toml` (`version = "X.Y.Z"`)
 - [ ] Update version in `snap/snapcraft.yaml` (`version: 'X.Y.Z'`) — `version-sync` CI check enforces parity
 - [ ] If the vendored renderer changed, bump `[workspace.package] version` in
-      `crates/egui_commonmark/Cargo.toml` and every reference to it — the
+      `vendor/egui_commonmark/Cargo.toml` and every reference to it — the
       `Vendored fork is publishable to crates.io` release step fails otherwise
 - [ ] Bump `Cargo.lock` **surgically**, anchored on `name = "md-viewer"`. Never `sed`
       the version line: the fork lockfile carries `glam` in sixteen versions and a

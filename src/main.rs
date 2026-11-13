@@ -2029,22 +2029,12 @@ fn spawn_detached_child() -> io::Result<()> {
         .stderr(Stdio::null());
 
     #[cfg(unix)]
-    unsafe {
+    {
         use std::os::unix::process::CommandExt;
 
-        // Start a new process group/session so the child survives after the
-        // launching terminal hands control back to the shell.
-        command.pre_exec(|| {
-            extern "C" {
-                fn setsid() -> i32;
-            }
-
-            if setsid() == -1 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        });
+        // A new process group keeps the child out of the launching shell's
+        // job, so it survives after the terminal hands control back.
+        command.process_group(0);
     }
 
     command.spawn()?;

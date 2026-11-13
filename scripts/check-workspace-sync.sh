@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-renderer_manifest="crates/egui_commonmark/Cargo.toml"
+renderer_manifest="vendor/egui_commonmark/Cargo.toml"
 renderer_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$renderer_manifest" | head -n 1)
 if [[ -z "$renderer_version" ]]; then
     echo "error: could not read renderer workspace version" >&2
@@ -44,8 +44,8 @@ while read -r relative_path package_name; do
         exit 1
     fi
 done <<'EOF'
-crates/egui_commonmark/egui_commonmark egui_commonmark_extended
-crates/egui_commonmark/egui_commonmark_backend egui_commonmark_backend_extended
+vendor/egui_commonmark/egui_commonmark egui_commonmark_extended
+vendor/egui_commonmark/egui_commonmark_backend egui_commonmark_backend_extended
 EOF
 
 check_locked_metadata() {
@@ -76,8 +76,8 @@ while read -r relative_path package_name; do
         exit 1
     fi
 done <<'EOF'
-crates/egui_commonmark/egui_commonmark egui_commonmark_extended
-crates/egui_commonmark/egui_commonmark_backend egui_commonmark_backend_extended
+vendor/egui_commonmark/egui_commonmark egui_commonmark_extended
+vendor/egui_commonmark/egui_commonmark_backend egui_commonmark_backend_extended
 EOF
 
 echo "workspace dependency contract is synchronized at renderer version $renderer_version"
