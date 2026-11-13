@@ -12,7 +12,6 @@ use crate::app::content::column::{resize_strips, Column};
 use crate::app::content::look::DocumentLook;
 use crate::app::mcp;
 use crate::app::MarkdownApp;
-use crate::diagram::diagram_colors;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
 use crate::tab::{LinkTarget, Tab};
@@ -273,7 +272,7 @@ fn preview_pane(
         // paragraph of raw `key: value` lines (#117).
         .render_frontmatter(true)
         .math_scale(settings.math_scale)
-        .mermaid_colors(Some(diagram_colors(ui.visuals())))
+        .mermaid_colors(Some(look.diagrams))
         .show_alt_text_on_hover(true)
         .syntax_theme_dark(look.syntax_theme)
         .syntax_theme_light(look.syntax_theme)

@@ -81,6 +81,20 @@ fn blocks_are_drawn_in_the_themes_colors() {
 }
 
 #[test]
+fn diagrams_are_drawn_in_the_colors_of_the_style_the_look_was_built_from() {
+    let mut chrome = egui::Style::default();
+    for visuals in [egui::Visuals::light(), egui::Visuals::dark()] {
+        chrome.visuals = visuals;
+        let fonts = document_fonts(&FontConfig::default());
+
+        let look = DocumentLook::new(&chrome, ThemeId::Sepia.palette(), &fonts);
+
+        assert_eq!(look.diagrams, diagram_colors(&look.style.visuals));
+        assert_eq!(look.diagrams.page, chrome.visuals.panel_fill);
+    }
+}
+
+#[test]
 fn the_document_is_a_centered_column_with_reader_block_styling() {
     let blocks = look(ThemeId::Paper, FontPreset::Reader).blocks;
 

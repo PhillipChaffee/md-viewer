@@ -4,8 +4,11 @@
 use std::sync::Arc;
 
 use eframe::egui::{self, TextStyle};
-use egui_commonmark_extended::{BlockRhythm, BlockStyle, CodeBlockStyle, ListStyle, TableStyle};
+use egui_commonmark_extended::{
+    BlockRhythm, BlockStyle, CodeBlockStyle, ListStyle, MermaidColors, TableStyle,
+};
 
+use crate::diagram::diagram_colors;
 use crate::system_fonts::DocumentFonts;
 use crate::theme::Palette;
 
@@ -52,6 +55,8 @@ pub(crate) struct DocumentLook {
     pub(crate) syntax_theme: &'static str,
     /// Color of the meta line above the document.
     pub(crate) muted: egui::Color32,
+    /// The colors diagrams are drawn in on a page painted with `style`.
+    pub(crate) diagrams: MermaidColors,
 }
 
 impl DocumentLook {
@@ -105,6 +110,7 @@ impl DocumentLook {
             },
             syntax_theme: palette.syntax_theme,
             muted: palette.muted,
+            diagrams: diagram_colors(&chrome.visuals),
         }
     }
 }
