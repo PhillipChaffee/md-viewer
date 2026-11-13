@@ -3,12 +3,15 @@
 
 use eframe::egui::{self, Modifiers, Pos2, Rect, Vec2};
 
-use super::{LightboxState, LightboxTexture};
+use super::{LightboxState, LightboxTexture, DIAGRAM_SHEET_MARGIN};
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{click_on, frame_on, painted_text};
-use crate::test_support::assert_close;
+use crate::test_support::{assert_close, painted_shapes};
 
 const VIEWPORT: Vec2 = egui::vec2(500.0, 500.0);
+
+/// More frames than egui takes to fade a new overlay in.
+const FADE_IN_FRAMES: usize = 12;
 
 fn lightbox(base_size: Vec2, zoom: f32, scroll_offset: Vec2) -> LightboxState {
     LightboxState {
@@ -265,4 +268,56 @@ fn a_diagram_is_painted_from_the_texture_the_lightbox_owns() {
         matches!(&clipped.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == diagram_id)
     });
     assert!(painted_with_diagram);
+}
+
+/// What a lightbox paints for a 100 by 100 picture from `texture`, and the
+/// page color it was painted over.
+fn painted_with(
+    texture: impl FnOnce(&egui::Context) -> LightboxTexture,
+) -> (Vec<egui::Shape>, egui::Color32) {
+    let mut harness = Harness::with_three_docs();
+    let mut state = lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO);
+    state.texture = texture(&harness.ctx);
+    harness.app.lightbox = Some(state);
+    // A new overlay fades in over its first frames, tinting what it paints.
+    for _ in 0..FADE_IN_FRAMES {
+        harness.idle();
+    }
+    let shapes = painted_shapes(&harness.idle());
+    (shapes, harness.ctx.style().visuals.panel_fill)
+}
+
+/// Where in `shapes` a square with sides of `side` is filled with `fill`.
+fn square_at(shapes: &[egui::Shape], side: f32, fill: egui::Color32) -> Option<usize> {
+    shapes.iter().position(|shape| {
+        matches!(shape, egui::Shape::Rect(rect)
+            if rect.fill == fill && (rect.rect.size() - egui::vec2(side, side)).length() < 0.5)
+    })
+}
+
+#[test]
+fn a_diagram_lies_on_a_sheet_of_the_page_color() {
+    // A diagram is drawn for the page and has a transparent background: on
+    // the dark backdrop alone its ink would not show.
+    let (shapes, page) = painted_with(|ctx| {
+        let pixels = egui::ColorImage::filled([8, 8], egui::Color32::TRANSPARENT);
+        LightboxTexture::Owned(ctx.load_texture("diagram", pixels, egui::TextureOptions::default()))
+    });
+
+    let sheet = square_at(&shapes, 2.0f32.mul_add(DIAGRAM_SHEET_MARGIN, 100.0), page);
+    let diagram = shapes
+        .iter()
+        .position(|shape| matches!(shape, egui::Shape::Mesh(_)));
+
+    assert!(sheet.is_some(), "no sheet under the diagram");
+    assert!(sheet < diagram, "the sheet is painted over the diagram");
+}
+
+#[test]
+fn a_loaded_picture_gets_no_sheet() {
+    let (shapes, page) = painted_with(|_| LightboxTexture::Loaded(egui::TextureId::default()));
+
+    let sheet = square_at(&shapes, 2.0f32.mul_add(DIAGRAM_SHEET_MARGIN, 100.0), page);
+
+    assert_eq!(sheet, None);
 }

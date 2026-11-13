@@ -9,6 +9,7 @@ use egui_commonmark_extended::CommonMarkViewer;
 
 use crate::app::outline::HEADER_SCROLL_MARGIN;
 use crate::app::MarkdownApp;
+use crate::diagram::diagram_colors;
 use crate::layout::{content_default_width, content_width_limit, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::links::handle_local_link_click;
 use crate::search::take_search_correction_request;
@@ -205,6 +206,7 @@ fn preview_pane(
         // paragraph of raw `key: value` lines (#117).
         .render_frontmatter(true)
         .math_scale(settings.math_scale)
+        .mermaid_colors(Some(diagram_colors(ui.visuals())))
         .show_alt_text_on_hover(true)
         .syntax_theme_dark("base16-ocean.dark")
         .syntax_theme_light("base16-ocean.light")
