@@ -1,9 +1,7 @@
 //! Which heading the reader is in, for the outline to mark.
 
 use eframe::egui;
-use egui_commonmark_extended::header_position_key;
 
-use crate::layout::line_fraction;
 use crate::tab::scroll::HEADER_SCROLL_MARGIN;
 use crate::tab::Tab;
 
@@ -106,17 +104,7 @@ impl HeadingSpy {
         self.seen = Some(sighting);
 
         let headers = tab.outline.headers();
-        // Where the renderer painted the heading, or until it has, where
-        // the heading's line number suggests it is.
-        let position = |index: usize| {
-            let header = &headers[index];
-            let measured = tab
-                .cache
-                .get_header_position(&header_position_key(header.source_start));
-            measured.unwrap_or_else(|| {
-                line_fraction(header.line_number, tab.content_lines) * tab.last_content_height
-            })
-        };
+        let position = |index: usize| tab.header_y(&headers[index]).y;
         let current = heading_in_view(headers.len(), position, sighting.view);
         let moved = current != self.current;
         self.current = current;
