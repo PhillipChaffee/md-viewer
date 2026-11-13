@@ -34,6 +34,13 @@ pub(crate) struct LightboxState {
     pub(crate) scroll_offset: egui::Vec2,
 }
 
+impl LightboxState {
+    /// Multiply the zoom by `factor`, within the range the overlay supports.
+    pub(crate) fn zoom_by(&mut self, factor: f32) {
+        self.zoom = (self.zoom * factor).clamp(0.1, 10.0);
+    }
+}
+
 impl MarkdownApp {
     pub(crate) fn render_lightbox(&mut self, ctx: &egui::Context) {
         let Some(lightbox) = &mut self.lightbox else {
@@ -73,7 +80,7 @@ impl MarkdownApp {
         if self.lightbox_scroll != 0.0 {
             // ~10% per scroll notch, smooth with proportional delta
             let factor = (1.0_f32 + self.lightbox_scroll * 0.08).clamp(0.5, 2.0);
-            lightbox.zoom = (lightbox.zoom * factor).clamp(0.1, 10.0);
+            lightbox.zoom_by(factor);
         }
         let zoom_changed = (lightbox.zoom - old_zoom).abs() > f32::EPSILON;
 

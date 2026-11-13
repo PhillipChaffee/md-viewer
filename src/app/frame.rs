@@ -69,13 +69,13 @@ impl eframe::App for MarkdownApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.begin_frame(ctx);
-        let (go_back, go_forward) = self.handle_keyboard_shortcuts(ctx);
+        self.handle_keyboard_shortcuts(ctx);
         self.handle_dropped_files(ctx);
 
         // Get ctrl state for link handling
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
-        self.render_menu_bar(ctx, go_back, go_forward);
+        self.render_menu_bar(ctx);
         self.render_top_bars(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx);

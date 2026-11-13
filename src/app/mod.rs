@@ -19,6 +19,7 @@ use crate::system_fonts::{scan_pickable_font_families, setup_fonts, FontPreset, 
 use crate::tab::Tab;
 use crate::watcher::FileWatcher;
 
+mod action;
 mod content;
 mod explorer_panel;
 mod frame;
@@ -34,6 +35,15 @@ mod tabs;
 mod tests;
 mod watching;
 mod welcome;
+
+/// A zoom factor as a whole percentage, for the status readouts.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "zoom factors are clamped to at most 10, so the rounded percentage is far inside i32"
+)]
+fn zoom_percent(zoom: f32) -> i32 {
+    (zoom * 100.0).round() as i32
+}
 
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,

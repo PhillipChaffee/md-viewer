@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use eframe::egui::{self, Key, Modifiers};
 use eframe::App as _;
 
+use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
 use super::MarkdownApp;
 
@@ -87,6 +88,11 @@ impl Harness {
         self.run_frame(Modifiers::NONE, Vec::new())
     }
 
+    /// Carry out `action` between frames, as a menu pick does.
+    pub(crate) fn apply(&mut self, action: AppAction) {
+        self.app.apply_action(&self.ctx, action);
+    }
+
     fn run_frame(&mut self, modifiers: Modifiers, events: Vec<egui::Event>) -> egui::FullOutput {
         let mut raw_input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -107,6 +113,27 @@ impl Drop for Harness {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.dir);
     }
+}
+
+#[test]
+fn alt_arrow_moves_one_history_step_per_keypress() {
+    let mut harness = Harness::with_three_docs();
+    let (a, b, c) = (
+        harness.path("a.md"),
+        harness.path("b.md"),
+        harness.path("c.md"),
+    );
+    harness.app.navigate_active_tab_to(&b);
+    harness.app.navigate_active_tab_to(&c);
+
+    harness.press(Modifiers::ALT, Key::ArrowLeft);
+    assert_eq!(harness.active_path(), b);
+    harness.press(Modifiers::ALT, Key::ArrowLeft);
+    assert_eq!(harness.active_path(), a);
+    harness.press(Modifiers::ALT, Key::ArrowRight);
+    assert_eq!(harness.active_path(), b);
+    harness.press(Modifiers::ALT, Key::ArrowRight);
+    assert_eq!(harness.active_path(), c);
 }
 
 #[test]

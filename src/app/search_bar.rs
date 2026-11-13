@@ -99,6 +99,12 @@ impl MarkdownApp {
         outcome
     }
 
+    /// Show the find bar, or refocus its input when it is already open.
+    pub(crate) const fn open_search(&mut self) {
+        self.search.is_open = true;
+        self.search.focus_requested = true;
+    }
+
     /// Move the active match index forward (dir > 0) or backward (dir < 0), wrapping
     /// around, and request a scroll-to-line via `pending_scroll_offset`.
     pub(crate) fn jump_match(&mut self, dir: i32) {
