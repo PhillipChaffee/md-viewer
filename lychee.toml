@@ -1,7 +1,8 @@
 # Link-check configuration. Retry then fail: a timeout must not pass
 # silently. Exclusions carry reasons: vendor/ holds upstream READMEs whose
 # relative links resolve only in the upstream repository layout, and target/
-# is build output.
+# is build output. The Source Serif license is legal text kept verbatim; its
+# one URL (adobe.com) answers 403 to automated clients.
 max_retries = 2
 timeout = 20
-exclude_path = ["./vendor", "./target"]
+exclude_path = ["./vendor", "./target", "./assets/fonts/SourceSerif4-LICENSE.txt"]
