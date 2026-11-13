@@ -2,7 +2,7 @@ use super::*;
 
 use egui::{Color32, Pos2, Rect, Shape};
 
-use crate::test_support::painted_shapes;
+use crate::test_support::{assert_close, painted_shapes};
 
 const SCREEN: Rect = Rect::from_min_max(Pos2::ZERO, Pos2::new(800.0, 600.0));
 
@@ -119,13 +119,28 @@ fn resize_affordance_lights_up_on_hover_and_brightens_while_dragging() {
     assert_eq!(sidebar.pointer_at(edge + 40.0), Some(active));
 }
 
+/// The shapes `paint` draws alone in an empty panel.
+fn drawn_alone(paint: impl Fn(&mut egui::Ui)) -> Vec<Shape> {
+    let ctx = egui::Context::default();
+    let input = egui::RawInput {
+        screen_rect: Some(SCREEN),
+        ..Default::default()
+    };
+    let output = ctx.run(input, |ctx| {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ctx, |ui| {
+                ui.scope(&paint);
+            });
+    });
+    painted_shapes(&output)
+}
+
 const INK: Color32 = Color32::from_rgb(12, 34, 56);
 
 /// What `icon` paints into `rect`, without the panel it is painted in.
 fn marks_of(icon: Icon, rect: Rect) -> Vec<Shape> {
-    let drawn = Drawn::icon(|ui| icon.paint(ui.painter(), rect, INK));
-    drawn
-        .shapes
+    drawn_alone(|ui| icon.paint(ui.painter(), rect, INK))
         .into_iter()
         .filter(|shape| !matches!(shape, Shape::Rect(rect) if rect.stroke.is_empty()))
         .collect()
