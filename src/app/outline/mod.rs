@@ -3,6 +3,7 @@
 use eframe::egui;
 use egui_commonmark_extended::header_position_key;
 
+use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{any_header_has_children, header_has_children, header_is_hidden, Header};
@@ -25,10 +26,6 @@ pub(super) const HEADER_SCROLL_MARGIN: f32 = 50.0;
 const INDENT: f32 = 14.0;
 /// How far the fold control reaches past its chevron on each side.
 const FOLD_REACH: f32 = 3.0;
-
-/// A widget recorded for the MCP bridge: name, widget type, rect, value.
-#[cfg(feature = "mcp")]
-type McpWidget = (String, &'static str, egui::Rect, Option<String>);
 
 /// What a click in the outline asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,8 +53,7 @@ struct OutlineUi<'a> {
     /// The reader moved to another heading, so the list scrolls to show it.
     follow: bool,
     click: Option<OutlineClick>,
-    #[cfg(feature = "mcp")]
-    widgets: Vec<McpWidget>,
+    mcp: &'a Mcp,
 }
 
 /// The fold column of one outline row.
@@ -158,8 +154,7 @@ impl MarkdownApp {
             current,
             follow,
             click: None,
-            #[cfg(feature = "mcp")]
-            widgets: Vec::new(),
+            mcp: &self.mcp,
         };
 
         let margin = egui::Margin {
@@ -187,13 +182,6 @@ impl MarkdownApp {
             panel.response.rect.y_range(),
             egui::Id::new("outline"),
         );
-
-        // Register all collected widgets with MCP bridge
-        #[cfg(feature = "mcp")]
-        for (name, widget_type, rect, value) in outline.widgets {
-            self.mcp_bridge
-                .register_widget_rect(&name, widget_type, rect, value.as_deref());
-        }
 
         if let Some(click) = outline.click {
             apply_click(tab, click);
@@ -229,10 +217,13 @@ fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     let Some(more) = sidebar::header(ui, outline.palette, &header) else {
         return;
     };
-    #[cfg(feature = "mcp")]
-    outline
-        .widgets
-        .push(("Outline: Options".to_string(), "button", more.rect, None));
+    mcp::rect(
+        outline.mcp,
+        format_args!("Outline: Options"),
+        "button",
+        more.rect,
+        None,
+    );
     let picked = egui::Popup::menu(&more).show(outline_menu);
     if let Some(click) = picked.and_then(|menu| menu.inner) {
         outline.click = Some(click);
@@ -330,14 +321,13 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
     };
     let laid_out = sidebar::row(ui, outline.palette, &shown);
 
-    // Collect header for MCP
-    #[cfg(feature = "mcp")]
-    outline.widgets.push((
-        format!("Header: {}", row.header.title),
+    mcp::rect(
+        outline.mcp,
+        format_args!("Header: {}", row.header.title),
         "header",
         laid_out.response.rect,
-        Some(format!("h{}", row.header.level)),
-    ));
+        Some(&format_args!("h{}", row.header.level)),
+    );
 
     if !outline.is_dragging && laid_out.response.clicked() {
         outline.click = Some(OutlineClick::JumpTo {
@@ -372,18 +362,18 @@ fn fold_control(
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
 
-    // Collect fold indicator for MCP
-    #[cfg(feature = "mcp")]
-    outline.widgets.push((
-        format!("Toggle: {}", row.header.title),
+    let state = if row.fold == Fold::Collapsed {
+        "collapsed"
+    } else {
+        "expanded"
+    };
+    mcp::rect(
+        outline.mcp,
+        format_args!("Toggle: {}", row.header.title),
         "button",
         rect,
-        Some(if row.fold == Fold::Collapsed {
-            "collapsed".to_string()
-        } else {
-            "expanded".to_string()
-        }),
-    ));
+        Some(&state),
+    );
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));
