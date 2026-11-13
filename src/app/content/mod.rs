@@ -352,7 +352,9 @@ fn worth_scrolling(target: f32, current_scroll: f32) -> Option<f32> {
     ((target - current_scroll).abs() > 2.0).then_some(target)
 }
 
-/// Scrolls the document by the mouse wheel while the pointer is over it.
+/// Scrolls the document by the mouse wheel during a drag, which is what a
+/// text selection in progress is: the scroll area leaves the wheel alone
+/// while anything is dragged, and takes it itself at any other time.
 ///
 /// The offset is written after rendering because setting it before the
 /// renderer runs breaks an in-progress text selection.
@@ -368,7 +370,8 @@ fn wheel_scroll_during_selection(
             .hover_pos()
             .is_some_and(|pos| content_rect.contains(pos))
     });
-    if raw_scroll.abs() > 0.0 && pointer_over_content {
+    let dragging = ui.ctx().dragged_id().is_some();
+    if dragging && raw_scroll.abs() > 0.0 && pointer_over_content {
         let max_scroll = (tab.last_content_height - content_rect.height()).max(0.0);
         if let Some(new_offset) = wheel_scroll_target(scroll.state.offset.y, raw_scroll, max_scroll)
         {

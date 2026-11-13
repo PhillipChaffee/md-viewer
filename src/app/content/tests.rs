@@ -182,6 +182,35 @@ fn the_wheel_scrolls_the_document_under_the_pointer() {
 }
 
 #[test]
+fn one_wheel_step_moves_the_document_once() {
+    let mut harness = long_doc();
+
+    wheel_at(&mut harness, OVER_DOCUMENT, -120.0);
+
+    assert_close(harness.state().tabs[0].scroll_offset, 120.0);
+}
+
+#[test]
+fn one_wheel_step_moves_the_document_once_while_a_selection_is_dragged() {
+    let mut harness = long_doc();
+    let dragged_to = OVER_DOCUMENT + egui::vec2(60.0, 0.0);
+    harness.event(Event::PointerMoved(OVER_DOCUMENT));
+    harness.event(Event::PointerButton {
+        pos: OVER_DOCUMENT,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.event(Event::PointerMoved(dragged_to));
+    harness.frames(2);
+    assert!(harness.ctx.dragged_id().is_some(), "no drag is under way");
+
+    wheel_at(&mut harness, dragged_to, -120.0);
+
+    assert_close(harness.state().tabs[0].scroll_offset, 120.0);
+}
+
+#[test]
 fn the_wheel_leaves_the_document_alone_while_the_pointer_is_elsewhere() {
     let mut harness = long_doc();
 
