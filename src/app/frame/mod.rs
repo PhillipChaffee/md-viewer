@@ -8,6 +8,7 @@ use eframe::egui;
 
 use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::content::look::DocumentLook;
+use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
@@ -15,7 +16,6 @@ use crate::icons::Icon;
 use crate::persist::{PersistedState, APP_KEY};
 use crate::system_fonts::{document_fonts, setup_fonts};
 use crate::theme::{self, ColorOverrides};
-use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(test)]
 mod tests;

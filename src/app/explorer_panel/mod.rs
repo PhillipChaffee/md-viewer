@@ -15,7 +15,6 @@ use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
 use crate::theme::Palette;
-use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(kani)]
 mod proofs;
@@ -353,6 +352,9 @@ fn file_context_menu(ui: &mut egui::Ui, path: &Path) {
         ui.close();
     }
 }
+
+/// How long a changed file's highlight lasts, in milliseconds.
+pub(super) const FLASH_DURATION_MS: u64 = 600;
 
 /// Opacity of the change highlight `elapsed` after a file changed. It fades
 /// from 180 to a floor of 60 that stays visible until the flash ends, after

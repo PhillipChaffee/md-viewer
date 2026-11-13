@@ -9,6 +9,7 @@ use eframe::egui::{self, accesskit, Color32, Modifiers, PointerButton};
 use eframe::{App as _, Storage as _};
 
 use crate::app::action::AppAction;
+use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{
@@ -20,7 +21,6 @@ use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::assert_close;
 use crate::theme::{self, ThemeId};
-use crate::watcher::FLASH_DURATION_MS;
 
 const LONG_DOCUMENT_PARAGRAPHS: usize = 400;
 

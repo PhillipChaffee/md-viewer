@@ -8,12 +8,12 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, STRIP_HEIGHT};
+use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::mcp::{self, Mcp};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::tab::Tab;
 use crate::theme::Palette;
-use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(test)]
 mod tests;

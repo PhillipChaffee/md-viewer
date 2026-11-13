@@ -19,7 +19,6 @@ mod proofs;
 mod tests;
 
 pub(crate) const MAX_WATCHER_RETRIES: u32 = 3;
-pub(crate) const FLASH_DURATION_MS: u64 = 600;
 /// Quiet time after the last write before a change is reported.
 const DEBOUNCE: Duration = Duration::from_millis(200);
 /// How often GVFS documents are checked. Each check is a remote round trip.
