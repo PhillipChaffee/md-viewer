@@ -1,0 +1,77 @@
+# file	harness filter	text to replace	faulty text
+src/layout/mod.rs	reading_width_new_clamps_every_float	Self(px.clamp(Self::MIN, Self::MAX))	Self(px.max(Self::MIN))
+src/layout/mod.rs	reading_width_new_clamps_every_float	if px.is_nan() {	if px.is_nan() && px > 0.0 {
+src/layout/mod.rs	resolve_fits_the_pane	self.0.min(room).floor()	self.0.min(room)
+src/layout/mod.rs	resolve_fits_the_pane	let room = 2.0_f32.mul_add(-READING_COLUMN_MARGIN, available).max(0.0);	let room = 1.0_f32.mul_add(-READING_COLUMN_MARGIN, available).max(0.0);
+src/layout/mod.rs	column_keeps_both_margins	left + ((right - left - width) / 2.0).max(0.0).floor()	left + ((right - left - width) / 2.0).max(0.0).ceil()
+src/layout/mod.rs	centered_column_starts_inside_the_pane	left + ((right - left - width) / 2.0).max(0.0).floor()	left + ((right - left - width) / 2.0).floor()
+src/layout/mod.rs	resolve_is_monotonic_in_the_pane	let room = 2.0_f32.mul_add(-READING_COLUMN_MARGIN, available).max(0.0);	let room = 2.0_f32.mul_add(-READING_COLUMN_MARGIN, available).abs();
+src/layout/mod.rs	stepped_moves_the_way_it_was_asked	Self::new(self.resolve(available) + delta)	Self::new(self.resolve(available) - delta)
+src/layout/mod.rs	a_step_out_and_back_is_the_identity	Self::new(self.resolve(available) + delta)	Self::new(self.0 + delta)
+src/layout/mod.rs	from_edge_is_always_a_valid_width	Self::new(2.0 * (edge_x - center_x).abs())	Self(2.0 * (edge_x - center_x).abs())
+src/layout/mod.rs	restored_maps_every_saved_session_to_a_valid_width	(None, Some(true)) => Self::FIT_WINDOW,	(None, Some(true)) => Self::DEFAULT,
+src/layout/mod.rs	restored_maps_every_saved_session_to_a_valid_width	(Some(width), _) => Self::new(width),	(Some(width), _) => Self(width),
+src/layout/mod.rs	fixed_is_never_fit_window	self.0 >= Self::MAX	self.0 > Self::MAX
+src/layout/mod.rs	keyboard_scroll_stays_inside_the_document	let max_scroll = (content_height - viewport_height).max(0.0);	let max_scroll = content_height - viewport_height;
+src/layout/mod.rs	keyboard_scroll_moves_the_way_the_key_points	KeyboardScrollAction::LineUp => -KEYBOARD_LINE_SCROLL_STEP,	KeyboardScrollAction::LineUp => KEYBOARD_LINE_SCROLL_STEP,
+src/layout/mod.rs	whole_pixels_is_total	width.max(0.0) as usize	width.max(1.0) as usize
+src/layout/mod.rs	line_fraction_never_divides_by_zero	if content_lines == 0 {	if content_lines == usize::MAX {
+src/layout/mod.rs	line_fraction_is_a_fraction	line_number as f32 / content_lines as f32	(line_number + 1) as f32 / content_lines as f32
+src/layout/mod.rs	zoomed_stays_in_range	(current * factor).clamp(ZOOM_MIN, ZOOM_MAX)	(current * factor).max(ZOOM_MIN)
+src/layout/mod.rs	zoomed_moves_the_way_it_was_asked	(current * factor).clamp(ZOOM_MIN, ZOOM_MAX)	(current / factor).clamp(ZOOM_MIN, ZOOM_MAX)
+src/layout/mod.rs	a_zoom_step_in_and_out_comes_back	(current * factor).clamp(ZOOM_MIN, ZOOM_MAX)	(current * factor * 1.001).clamp(ZOOM_MIN, ZOOM_MAX)
+src/theme/mod.rs	next_cycles_through_every_theme	Self::Night => Self::Paper,	Self::Night => Self::Sepia,
+src/theme/mod.rs	restored_maps_every_saved_session_to_a_theme	Some(true) => Self::Dusk,	Some(true) => Self::Paper,
+src/theme/mod.rs	every_theme_has_its_own_palette	Self::Night => &NIGHT,	Self::Night => &DUSK,
+src/theme/mod.rs	rgb_reads_the_three_channels	let [_, r, g, b] = hex.to_be_bytes();	let [_, b, g, r] = hex.to_be_bytes();
+src/app/tabs/mod.rs	closing_a_tab_keeps_the_active_index_valid	} else if active > closed {	} else if active >= closed {
+src/app/tabs/mod.rs	closing_a_tab_is_total	} else if active >= remaining {	} else if active > remaining {
+src/app/tabs/mod.rs	next_and_previous_tab_wrap_and_invert	(active + 1) % len	(active + 1) % (len + 1)
+src/app/tabs/mod.rs	next_and_previous_tab_wrap_and_invert	        len - 1\n    } else {\n        active - 1	        len - 1\n    } else {\n        active
+src/search/mod.rs	stepping_matches_wraps_and_inverts	        count - 1\n	        count\n
+src/search/mod.rs	stepping_forward_recovers_a_stale_index	(current + 1) % count	current + 1
+src/app/startup/mod.rs	restored_active_tab_names_an_open_tab	saved.unwrap_or(0).min(tab_count.saturating_sub(1))	saved.unwrap_or(0).min(tab_count)
+src/app/startup/mod.rs	restored_zoom_is_in_range	saved.unwrap_or(1.0).clamp(0.5, 3.0)	saved.unwrap_or(1.0).clamp(0.5, 30.0)
+src/app/startup/mod.rs	restored_math_scale_is_in_range	saved.unwrap_or(1.0).clamp(1.0, 2.0)	saved.unwrap_or(0.5).max(1.0)
+src/tab/mod.rs	back_and_forward_undo_each_other	    from.pop();\n	
+src/tab/mod.rs	a_step_back_moves_exactly_one_entry	    to.push(left);\n	    to.insert(0, left);\n
+src/tab/mod.rs	a_visit_can_be_undone_and_clears_forward	    forward.clear();\n	
+src/tab/mod.rs	reading_minutes_never_overflow	words.div_ceil(WORDS_PER_MINUTE).max(1)	words.div_ceil(WORDS_PER_MINUTE)
+src/tab/mod.rs	reading_minutes_round_up	words.div_ceil(WORDS_PER_MINUTE).max(1)	(words / WORDS_PER_MINUTE).max(1)
+src/persist/mod.rs	restored_sidebar_width_is_usable	        .filter(|width| width.is_finite())\n	
+src/persist/mod.rs	restored_sidebar_width_is_usable	width.max(SIDEBAR_MIN_WIDTH)	width
+src/app/outline/room/mod.rs	the_outline_rule_survives_a_restart	Self::Reader => Some(shown),	Self::Reader => Some(!shown),
+src/app/outline/room/mod.rs	the_outline_rule_survives_a_restart	Some(_) => Self::Reader,	Some(_) => Self::Room { had_room: true },
+src/app/outline/room/mod.rs	follow_reports_each_change_of_room_once	        *had_room = has_room;\n	
+src/app/outline/room/mod.rs	the_explorer_only_takes_room	window_width - explorer_width.unwrap_or(0.0) - OUTLINE_DEFAULT_WIDTH	window_width + explorer_width.unwrap_or(0.0) - OUTLINE_DEFAULT_WIDTH
+src/app/outline/room/mod.rs	a_wider_window_keeps_its_room	pane >= 2.0_f32.mul_add(READING_COLUMN_MARGIN, column)	pane <= 2.0_f32.mul_add(READING_COLUMN_MARGIN, column)
+src/app/outline/spy/mod.rs	heading_in_view_is_the_last_one_reached	if position(middle) <= reading_line {	if position(middle) < reading_line {
+src/app/outline/spy/mod.rs	heading_in_view_names_a_heading_or_none	            reached = middle + 1;	            reached = middle + 2;
+src/app/outline/spy/mod.rs	heading_in_view_names_a_heading_or_none	            end = middle;	            end = middle + 1;
+src/app/outline/spy/mod.rs	the_end_of_the_document_is_the_last_heading	        return Some(last);	        return Some(0);
+src/app/content/mod.rs	wheel_scroll_never_stores_an_end_of_the_document	let would_hit_top = new_offset < 0.5;	let would_hit_top = new_offset < 0.0;
+src/app/content/mod.rs	corrections_never_scroll_above_the_top	let target = (header_y - HEADER_SCROLL_MARGIN).max(0.0);	let target = header_y - HEADER_SCROLL_MARGIN;
+src/app/content/mod.rs	corrections_never_scroll_above_the_top	((target - current_scroll).abs() > 2.0).then_some(target)	((target - current_scroll).abs() > 1.0).then_some(target)
+src/app/content/mod.rs	a_visible_match_is_left_alone	if visible.contains(&match_y) || viewport_height <= 0.0 {	if viewport_height <= 0.0 {
+src/app/shortcuts/mod.rs	no_key_press_fires_two_bindings	CtrlNoShift + O in Document => AppAction::OpenFile,	Ctrl + O in Document => AppAction::OpenFile,
+src/app/shortcuts/mod.rs	the_lightbox_takes_the_keyboard	(Self::Lightbox, Focus::Lightbox)	(Self::Lightbox | Self::Document, Focus::Lightbox)
+src/app/shortcuts/mod.rs	a_popup_takes_the_find_bar_and_reading_keys	| (Self::Document, Focus::Popup)	| (Self::Document | Self::FindBar, Focus::Popup)
+src/app/shortcuts/mod.rs	every_binding_can_fire	Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,	Self::AltNoCtrl => modifiers.alt && !modifiers.alt,
+src/app/mod.rs	zoom_percent_is_total_and_close	(zoom * 100.0).round() as i32	(zoom * 100.0).floor() as i32
+src/app/lightbox/mod.rs	lightbox_zoom_stays_in_range	(self.zoom * factor).clamp(0.1, 10.0)	(self.zoom * factor).clamp(0.1, 100.0)
+src/app/lightbox/mod.rs	zoom_to_cursor_never_panics_or_goes_negative	new_offset.clamp(egui::Vec2::ZERO, max_offset)	new_offset.min(max_offset)
+src/app/top_bar/mod.rs	the_title_keeps_clear_of_the_buttons	if leftmost > rightmost {	if leftmost > rightmost + 1.0 {
+src/app/chrome/mod.rs	segments_share_the_width_they_are_given	count.max(1) as f32	count as f32
+src/app/appearance/mod.rs	the_width_slider_always_has_a_range	        .max(ReadingWidth::MIN + ReadingWidth::STEP)\n	        .max(ReadingWidth::MIN)\n
+src/app/explorer_panel/mod.rs	the_flash_fades_to_its_floor_and_ends	Some(alpha.max(60))	Some(alpha)
+src/app/explorer_panel/mod.rs	the_flash_fades_to_its_floor_and_ends	        .filter(|remaining| *remaining > 0)?;	        .map(|remaining| remaining + 600)?;
+src/cli/mod.rs	only_a_terminal_launch_detaches_and_only_once	launched_from_terminal && !args.foreground && !args.no_detach	launched_from_terminal && !args.foreground
+src/cli/mod.rs	every_launch_opens_one_window_or_hands_over	            Ok(()) => return Ok(()),	            Ok(()) => {}
+src/watcher/mod.rs	watcher_retries_are_bounded	(current < MAX_WATCHER_RETRIES).then(|| current + 1)	(current <= MAX_WATCHER_RETRIES).then(|| current + 1)
+src/system_fonts/mod.rs	text_size_steps_are_ordered_and_reversible	Self::Large => Some(Self::ExtraLarge),	Self::Large => Some(Self::Huge),
+src/system_fonts/mod.rs	all_lists_the_sizes_in_step_order	Self::Huge => Some(Self::ExtraLarge),	Self::Huge => Some(Self::Large),
+src/headers/mod.rs	has_children_reads_only_the_next_heading	.is_some_and(|next| next.level > current.level)	.is_some_and(|next| next.level >= current.level)
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	    if index == 0 || index >= headers.len() {	    if index == 0 {
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	            search_level = h.level;	            search_level = search_level.min(h.level + 1);
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	        if h.level < search_level {	        if h.level <= search_level {
+src/headers/mod.rs	heading_levels_are_one_to_six	HeadingLevel::H6 => 6,	HeadingLevel::H6 => 5,
