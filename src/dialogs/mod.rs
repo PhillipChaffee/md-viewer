@@ -1,29 +1,79 @@
 //! Native file and folder pickers, with a Tk fallback when no portal is available.
 
+#[cfg(target_os = "linux")]
 use std::ffi::OsString;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 
 #[cfg(test)]
 mod tests;
 
-/// Check whether the desktop portal exposes the interface used by rfd's
-/// Linux folder picker. Calling rfd without this interface fails like a user
-/// cancellation, so checking first lets us distinguish that case and use a
-/// local fallback without opening a second dialog after a real cancellation.
+/// A program and the arguments it is always started with.
 #[cfg(target_os = "linux")]
-fn portal_file_chooser_available() -> bool {
-    Command::new("gdbus")
-        .args([
+#[derive(Clone, Copy)]
+struct CommandLine<'a> {
+    program: &'a str,
+    arguments: &'a [&'a str],
+}
+
+#[cfg(target_os = "linux")]
+impl CommandLine<'_> {
+    fn command(self) -> Command {
+        let mut command = Command::new(self.program);
+        command.args(self.arguments);
+        command
+    }
+}
+
+/// What a picker reaches outside this process: the programs it runs and the
+/// native dialogs it opens.
+struct Desktop<'a> {
+    /// Prints the D-Bus introspection of the desktop portal.
+    #[cfg(target_os = "linux")]
+    portal_probe: CommandLine<'a>,
+    /// Runs the Python source given as its next argument.
+    #[cfg(target_os = "linux")]
+    python: CommandLine<'a>,
+    /// Opens a native dialog and waits for the file the user picks.
+    show_file_dialog: &'a dyn Fn(rfd::FileDialog) -> Option<PathBuf>,
+    /// Opens a native dialog and waits for the folder the user picks.
+    show_folder_dialog: &'a dyn Fn(rfd::FileDialog) -> Option<PathBuf>,
+}
+
+/// The desktop this process runs on.
+const SYSTEM_DESKTOP: Desktop<'static> = Desktop {
+    #[cfg(target_os = "linux")]
+    portal_probe: CommandLine {
+        program: "gdbus",
+        arguments: &[
             "introspect",
             "--session",
             "--dest",
             "org.freedesktop.portal.Desktop",
             "--object-path",
             "/org/freedesktop/portal/desktop",
-        ])
+        ],
+    },
+    #[cfg(target_os = "linux")]
+    python: CommandLine {
+        program: "python3",
+        arguments: &["-c"],
+    },
+    show_file_dialog: &rfd::FileDialog::pick_file,
+    show_folder_dialog: &rfd::FileDialog::pick_folder,
+};
+
+/// Check whether the desktop portal exposes the interface used by rfd's
+/// Linux folder picker. Calling rfd without this interface fails like a user
+/// cancellation, so checking first lets us distinguish that case and use a
+/// local fallback without opening a second dialog after a real cancellation.
+#[cfg(target_os = "linux")]
+fn portal_file_chooser_available(probe: CommandLine<'_>) -> bool {
+    probe
+        .command()
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -96,17 +146,58 @@ finally:
     root.destroy()
 "#;
 
-/// Python's Tk binding as a fallback picker on Linux desktops where
-/// xdg-desktop-portal is not available.
-#[cfg(target_os = "linux")]
+/// What the user is asked to pick.
 #[derive(Clone, Copy)]
-enum TkPicker {
+enum Picker {
     File,
     Folder,
 }
 
+impl Picker {
+    /// The native dialog, opened in `initial_dir` when that is a directory.
+    fn native_dialog(self, initial_dir: Option<&Path>) -> rfd::FileDialog {
+        let dialog = match self {
+            Self::File => rfd::FileDialog::new()
+                .add_filter("Markdown", &["md", "markdown"])
+                .add_filter("Text", &["txt"])
+                .add_filter("All Files", &["*"]),
+            Self::Folder => rfd::FileDialog::new(),
+        };
+        match initial_dir.filter(|path| path.is_dir()) {
+            Some(directory) => dialog.set_directory(directory),
+            None => dialog,
+        }
+    }
+
+    /// Ask the user through `desktop`: its native dialog where the portal can
+    /// serve one, Python's Tk dialog otherwise. `Ok(None)` means the user
+    /// cancelled.
+    fn pick(
+        self,
+        initial_dir: Option<&Path>,
+        desktop: &Desktop<'_>,
+    ) -> Result<Option<PathBuf>, String> {
+        #[cfg(target_os = "linux")]
+        if !portal_file_chooser_available(desktop.portal_probe) {
+            log::info!(
+                "XDG Desktop Portal FileChooser is unavailable; using the Tkinter {} picker",
+                self.noun()
+            );
+            return self.pick_with_tk(desktop.python, initial_dir);
+        }
+
+        let show = match self {
+            Self::File => desktop.show_file_dialog,
+            Self::Folder => desktop.show_folder_dialog,
+        };
+        Ok(show(self.native_dialog(initial_dir)))
+    }
+}
+
+/// Python's Tk binding as a fallback picker on Linux desktops where
+/// xdg-desktop-portal is not available.
 #[cfg(target_os = "linux")]
-impl TkPicker {
+impl Picker {
     const fn script(self) -> &'static str {
         match self {
             Self::File => TK_FILE_PICKER_SCRIPT,
@@ -141,14 +232,17 @@ impl TkPicker {
         }
     }
 
-    /// Show the picker and wait for it. `Ok(None)` means the user cancelled.
-    /// The initial directory is passed as a process argument, never
-    /// interpolated into Python.
-    fn pick(self, initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
+    /// Show the Tk picker through the `python` interpreter and wait for it.
+    /// `Ok(None)` means the user cancelled. The initial directory is passed
+    /// as a process argument, never interpolated into Python.
+    fn pick_with_tk(
+        self,
+        python: CommandLine<'_>,
+        initial_dir: Option<&Path>,
+    ) -> Result<Option<PathBuf>, String> {
         let noun = self.noun();
-        let mut command = Command::new("python3");
+        let mut command = python.command();
         command
-            .arg("-c")
             .arg(self.script())
             .stdin(Stdio::null())
             .stderr(Stdio::piped())
@@ -178,51 +272,12 @@ impl TkPicker {
     }
 }
 
+/// Ask the user for a Markdown file to open. `Ok(None)` means they cancelled.
 pub(crate) fn pick_file(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    let mut dialog = rfd::FileDialog::new()
-        .add_filter("Markdown", &["md", "markdown"])
-        .add_filter("Text", &["txt"])
-        .add_filter("All Files", &["*"]);
-    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
-        dialog = dialog.set_directory(directory);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if portal_file_chooser_available() {
-            return Ok(dialog.pick_file());
-        }
-
-        log::info!("XDG Desktop Portal FileChooser is unavailable; using the Tkinter file picker");
-        TkPicker::File.pick(initial_dir)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(dialog.pick_file())
-    }
+    Picker::File.pick(initial_dir, &SYSTEM_DESKTOP)
 }
 
+/// Ask the user for a folder to browse. `Ok(None)` means they cancelled.
 pub(crate) fn pick_folder(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    let mut dialog = rfd::FileDialog::new();
-    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
-        dialog = dialog.set_directory(directory);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if portal_file_chooser_available() {
-            return Ok(dialog.pick_folder());
-        }
-
-        log::info!(
-            "XDG Desktop Portal FileChooser is unavailable; using the Tkinter folder picker"
-        );
-        TkPicker::Folder.pick(initial_dir)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(dialog.pick_folder())
-    }
+    Picker::Folder.pick(initial_dir, &SYSTEM_DESKTOP)
 }
