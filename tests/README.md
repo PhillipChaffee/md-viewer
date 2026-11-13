@@ -28,6 +28,10 @@ processes itself.
 
 - `reader/support/` has `Reader`: launch, click, press, type, drop a file,
   restart, and questions such as `sees`, `is_on`, `page_color`, `column`.
+  It also reads what a frame painted: the ink and coverage of a picture
+  (`picture_ink`, `picture_cover`), the lines and boxes in an area
+  (`marks_in`), and what the app asked of the desktop (`opened_in_browser`,
+  `clipboard`).
 - `e2e/support/` has `Home`, `Running`, `Screen` and `Window`.
 
 If the way the app is built or run changes, the driver changes and no test

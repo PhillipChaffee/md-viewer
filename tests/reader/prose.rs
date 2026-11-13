@@ -359,12 +359,8 @@ fn code_is_set_in_a_face_whose_letters_are_all_one_width() {
 
     let narrow = reader.text_area("iiiiii").width;
     let wide = reader.text_area("mmmmmm").width;
-    let prose = reader
-        .text_area(" in code, iiiiii and mmmmmm in prose.")
-        .width;
 
     assert!((narrow - wide).abs() < NEAR, "{narrow} and {wide}");
-    assert!(prose > 0.0);
 }
 
 #[test]

@@ -297,6 +297,27 @@ fn a_picture_that_appears_later_is_shown_once_the_page_is_reloaded() {
 }
 
 #[test]
+fn a_picture_is_loaded_over_http() {
+    let site = super::support::serve(&[("blue.png", super::pages::BLUE_PNG)]);
+    let mut reader = framed(&format!("![from the web]({site}/art/blue.png)"));
+
+    let picture = shown(&mut reader);
+
+    assert!((picture.width - 120.0).abs() < NEAR, "{picture:?}");
+    assert_color(reader.picture_ink(picture), "#3366CC");
+}
+
+#[test]
+fn a_picture_the_web_does_not_have_leaves_a_warning() {
+    let site = super::support::serve(&[]);
+    let mut reader = framed(&format!("![from the web]({site}/gone.png)"));
+
+    reader.wait_for("the warning sign", |reader| reader.sees("\u{26a0}"));
+
+    assert!(reader.pictures().is_empty());
+}
+
+#[test]
 fn many_pictures_are_all_shown() {
     let markup = "![p](blue.png)\n\n".repeat(6);
     let mut reader = illustrated(&format!("# Gallery\n\nbefore\n\n{markup}after"))

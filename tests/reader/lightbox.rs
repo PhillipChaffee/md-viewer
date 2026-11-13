@@ -43,19 +43,13 @@ fn enlarged(file: &str) -> Reader {
     reader
 }
 
-/// The enlarged picture: the last one painted, over everything else.
+/// The enlarged picture: of the two painted, the one that reaches
+/// further right than the one in the text column.
 #[track_caller]
 fn large(reader: &Reader) -> Area {
     assert_eq!(reader.count(CLOSE), 1, "nothing is enlarged");
     let pictures = reader.pictures();
-    let in_text = pictures
-        .iter()
-        .filter(|picture| picture.left < 200.0)
-        .count();
-    assert!(
-        pictures.len() > in_text,
-        "no enlarged picture in {pictures:?}"
-    );
+    assert_eq!(pictures.len(), 2, "one in the text and one enlarged");
     *pictures
         .iter()
         .max_by(|a, b| (a.left + a.width).total_cmp(&(b.left + b.width)))

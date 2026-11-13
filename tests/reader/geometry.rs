@@ -271,25 +271,27 @@ fn the_top_bar_keeps_its_buttons_inside_the_smallest_window() {
 
 #[test]
 fn the_title_stays_between_the_buttons_of_a_narrow_window() {
+    let name = "a-file-name-much-too-long-to-fit-in-the-bar-of-a-narrow-window.md";
     let reader = Reader::launch()
         .doc(
-            "page.md",
-            "# A title much too long to fit in the bar of a narrow window\n\nwords",
+            name,
+            "words under no heading, so the file name is the title",
         )
-        .args(&["page.md"])
+        .args(&[name])
         .window(480.0, 400.0)
         .open();
 
-    let names = reader.names();
-    let title = names
-        .iter()
-        .find(|name| name.starts_with("A title much"))
-        .unwrap();
-    assert_eq!(
-        title,
-        "A title much too long to fit in the bar of a narrow window"
+    let title = reader.text_area(name);
+
+    assert!(
+        title.left > reader.area_of("Go forward").right(),
+        "{title:?}"
     );
-    assert!(reader.area_of("Go forward").right() < reader.area_of("Appearance").left);
+    assert!(
+        title.right() < reader.area_of("Appearance").left,
+        "{title:?}"
+    );
+    assert!(title.width > 40.0, "some of it is still shown: {title:?}");
 }
 
 #[test]

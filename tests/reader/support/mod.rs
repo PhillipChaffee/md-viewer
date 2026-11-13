@@ -13,6 +13,7 @@ mod keys;
 mod paint;
 mod pointer;
 mod see;
+mod web;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,6 +25,7 @@ use self::folder::Folder;
 use self::paint::Pixels;
 pub(crate) use self::paint::Rgb;
 pub(crate) use self::see::Area;
+pub(crate) use self::web::serve;
 
 /// The window every launch starts with, in pixels, unless the test asks
 /// for another.
