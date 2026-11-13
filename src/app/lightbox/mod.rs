@@ -34,6 +34,13 @@ impl LightboxTexture {
             Self::Loaded(id) => *id,
         }
     }
+
+    /// Whether the picture needs a sheet of the page laid under it. A
+    /// diagram does: it is drawn for the page and has no background of its
+    /// own. Diagrams are the textures the lightbox owns.
+    const fn wants_sheet(&self) -> bool {
+        matches!(self, Self::Owned(_))
+    }
 }
 
 pub(crate) struct LightboxState {
@@ -146,7 +153,6 @@ impl LightboxState {
         zoom_offset: Option<egui::Vec2>,
     ) -> bool {
         let display_size = self.base_size * self.zoom;
-        let mut clicked_beside_image = false;
 
         egui::Area::new(egui::Id::new("lightbox_image").with(self.open_id))
             .order(egui::Order::Tooltip)
@@ -181,7 +187,6 @@ impl LightboxState {
                 let mut scroll_output =
                     scroll_area.show(ui, |ui| self.image_canvas(ui, viewport_size));
                 let clicks = scroll_output.inner;
-                clicked_beside_image = clicks.beside_image;
 
                 if clicks.reset_view {
                     // The scroll area keeps an offset of its own. Unless the
@@ -195,9 +200,9 @@ impl LightboxState {
                     // Sync tracking: captures drag-to-scroll changes on non-zoom frames
                     self.scroll_offset = scroll_output.state.offset;
                 }
-            });
-
-        clicked_beside_image
+                clicks.beside_image
+            })
+            .inner
     }
 
     /// Paint the image centered in its scrollable canvas and report the
@@ -212,9 +217,7 @@ impl LightboxState {
         // scaling, no re-rasterization
         let image_rect = egui::Rect::from_center_size(content_rect.center(), display_size);
         if ui.is_rect_visible(image_rect) {
-            if matches!(self.texture, LightboxTexture::Owned(_)) {
-                // A diagram is drawn for the page and has no background of
-                // its own: lay a sheet of the page under it.
+            if self.texture.wants_sheet() {
                 ui.painter().rect_filled(
                     image_rect.expand(DIAGRAM_SHEET_MARGIN),
                     DIAGRAM_SHEET_RADIUS,
