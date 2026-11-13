@@ -160,15 +160,10 @@ impl MarkdownApp {
                                     };
                                     let response = ui.add(
                                         egui::Button::new(
-                                            egui::RichText::new(label)
-                                                .small()
-                                                .color(text_color),
+                                            egui::RichText::new(label).small().color(text_color),
                                         )
                                         .fill(if active {
-                                            ui.visuals()
-                                                .widgets
-                                                .inactive
-                                                .weak_bg_fill
+                                            ui.visuals().widgets.inactive.weak_bg_fill
                                         } else {
                                             egui::Color32::TRANSPARENT
                                         })

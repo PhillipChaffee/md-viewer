@@ -113,54 +113,57 @@ impl MarkdownApp {
                         ui.ctx().request_repaint();
                     }
                 } else {
-                let force_full_render =
-                    tab.pending_header_click_key.is_some() || correct_search_this_frame;
-                let pending = tab.pending_scroll_offset.take();
-                let default_width = content_default_width(self.full_width_content);
-                let content_width =
-                    content_width_limit(self.full_width_content, content_rect.width());
-                // Line heights follow the emulated viewer (GitHub 1.5/1.45,
-                // VS Code preview 1.6/1.36); the font preset owns the metrics.
-                let (preset_line_height, preset_code_line_height) = self.font_preset.line_heights();
-                scroll_output = Some(CommonMarkViewer::new()
-                    .default_implicit_uri_scheme(&tab.base_uri)
-                    .max_image_width(Some(800))
-                    .default_width(default_width)
-                    // Full Width governs the complete document layout. With
-                    // the reading cap active, tables reflow within it; their
-                    // horizontal scroller still handles minimum-width or
-                    // user-resized overflow (#110).
-                    .table_max_width(Some(content_width))
-                    .indentation_spaces(2)
-                    .use_strong_font_family(true)
-                    // Frontmatter is metadata, not prose: show it as a
-                    // key/value table rather than a thematic break plus a
-                    // paragraph of raw `key: value` lines (#117).
-                    .render_frontmatter(true)
-                    .math_scale(self.math_scale)
-                    .show_alt_text_on_hover(true)
-                    .syntax_theme_dark("base16-ocean.dark")
-                    .syntax_theme_light("base16-ocean.light")
-                    .line_height(preset_line_height)
-                    .code_line_height(preset_code_line_height)
-                    .paragraph_spacing(2.0)
-                    .heading_spacing_above(2.0)
-                    .heading_spacing_below(0.75)
-                    .content_version(tab.content_version)
-                    .pending_scroll_offset(pending)
-                    .force_full_render(force_full_render)
-                    .scroll_source(egui::scroll_area::ScrollSource {
-                        scroll_bar: true,
-                        drag: false,
-                        mouse_wheel: true,
-                    })
-                    .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content));
+                    let force_full_render =
+                        tab.pending_header_click_key.is_some() || correct_search_this_frame;
+                    let pending = tab.pending_scroll_offset.take();
+                    let default_width = content_default_width(self.full_width_content);
+                    let content_width =
+                        content_width_limit(self.full_width_content, content_rect.width());
+                    // Line heights follow the emulated viewer (GitHub 1.5/1.45,
+                    // VS Code preview 1.6/1.36); the font preset owns the metrics.
+                    let (preset_line_height, preset_code_line_height) =
+                        self.font_preset.line_heights();
+                    scroll_output = Some(
+                        CommonMarkViewer::new()
+                            .default_implicit_uri_scheme(&tab.base_uri)
+                            .max_image_width(Some(800))
+                            .default_width(default_width)
+                            // Full Width governs the complete document layout. With
+                            // the reading cap active, tables reflow within it; their
+                            // horizontal scroller still handles minimum-width or
+                            // user-resized overflow (#110).
+                            .table_max_width(Some(content_width))
+                            .indentation_spaces(2)
+                            .use_strong_font_family(true)
+                            // Frontmatter is metadata, not prose: show it as a
+                            // key/value table rather than a thematic break plus a
+                            // paragraph of raw `key: value` lines (#117).
+                            .render_frontmatter(true)
+                            .math_scale(self.math_scale)
+                            .show_alt_text_on_hover(true)
+                            .syntax_theme_dark("base16-ocean.dark")
+                            .syntax_theme_light("base16-ocean.light")
+                            .line_height(preset_line_height)
+                            .code_line_height(preset_code_line_height)
+                            .paragraph_spacing(2.0)
+                            .heading_spacing_above(2.0)
+                            .heading_spacing_below(0.75)
+                            .content_version(tab.content_version)
+                            .pending_scroll_offset(pending)
+                            .force_full_render(force_full_render)
+                            .scroll_source(egui::scroll_area::ScrollSource {
+                                scroll_bar: true,
+                                drag: false,
+                                mouse_wheel: true,
+                            })
+                            .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content),
+                    );
 
-                if let Some(so) = scroll_output.as_ref() {
-                    tab.scroll_offset = so.state.offset.y;
-                    tab.last_viewport_height = so.inner_rect.height();
-                    tab.last_content_height = so.content_size.y;
-                }
+                    if let Some(so) = scroll_output.as_ref() {
+                        tab.scroll_offset = so.state.offset.y;
+                        tab.last_viewport_height = so.inner_rect.height();
+                        tab.last_content_height = so.content_size.y;
+                    }
                 }
 
                 // If the renderer recorded an exact y for the active match, check

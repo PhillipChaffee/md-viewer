@@ -6,3 +6,9 @@
 # doc comments actually carry — spelled verbatim from the code, since the
 # whole point is that prose may reference them bare.
 doc-valid-idents = ["CommonMark", "LaTeX", "KaTeX", "AccessKit", "GitHub", "GVfs", "Instapaper", ".."]
+# In a test, a failed unwrap/expect/panic IS the assertion: it names the
+# line that broke. The restriction picks target shipped code, where the
+# same call takes the window down.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

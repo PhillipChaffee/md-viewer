@@ -34,7 +34,6 @@ pub(crate) struct LightboxState {
     pub(crate) scroll_offset: egui::Vec2,
 }
 
-
 impl MarkdownApp {
     pub(crate) fn render_lightbox(&mut self, ctx: &egui::Context) {
         let Some(lightbox) = &mut self.lightbox else {

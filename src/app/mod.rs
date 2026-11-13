@@ -129,9 +129,12 @@ pub(crate) struct MarkdownApp {
     mcp_bridge: McpBridge,
 }
 
-
 impl MarkdownApp {
-    pub(crate) fn new(cc: &eframe::CreationContext<'_>, file: Option<PathBuf>, watch: bool) -> Self {
+    pub(crate) fn new(
+        cc: &eframe::CreationContext<'_>,
+        file: Option<PathBuf>,
+        watch: bool,
+    ) -> Self {
         // Load persisted state (needed before font setup, which reads the
         // persisted font family, preset, and text-size class).
         let persisted: PersistedState = cc

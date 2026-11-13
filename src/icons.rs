@@ -75,7 +75,13 @@ pub(crate) fn paint_file_icon(ui: &mut egui::Ui, size: f32) {
     );
     painter.line_segment([body.left_top(), body.left_bottom()], stroke);
     painter.line_segment([body.left_bottom(), body.right_bottom()], stroke);
-    painter.line_segment([body.right_bottom(), body.right_top() + egui::vec2(0.0, fold)], stroke);
+    painter.line_segment(
+        [
+            body.right_bottom(),
+            body.right_top() + egui::vec2(0.0, fold),
+        ],
+        stroke,
+    );
 }
 
 /// Draw a small vector folder icon for directory rows in the explorer.

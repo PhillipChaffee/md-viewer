@@ -56,7 +56,11 @@ impl MarkdownApp {
     /// Open a document in its own tab, optionally landing on the heading a
     /// `#fragment` names. An already-open document is focused *and* scrolled
     /// to the fragment — the tab-switch must not silently drop the anchor.
-    pub(crate) fn open_in_new_tab_with_fragment(&mut self, path: PathBuf, fragment: Option<String>) {
+    pub(crate) fn open_in_new_tab_with_fragment(
+        &mut self,
+        path: PathBuf,
+        fragment: Option<String>,
+    ) {
         let path = path.canonicalize().unwrap_or(path);
         // Check if already open
         if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {

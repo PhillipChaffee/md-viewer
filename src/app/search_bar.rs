@@ -23,7 +23,6 @@ impl MarkdownApp {
 
         egui::TopBottomPanel::top("search_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-
                 let text_edit = egui::TextEdit::singleline(&mut self.search.query)
                     .id(input_id)
                     .hint_text("Find in document")

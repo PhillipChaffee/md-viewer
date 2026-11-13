@@ -175,10 +175,8 @@ impl MarkdownApp {
                 .map(Receiver::try_recv);
             match received {
                 Some(Ok(names)) => {
-                    self.available_font_families_lower = names
-                        .iter()
-                        .map(|name| name.to_ascii_lowercase())
-                        .collect();
+                    self.available_font_families_lower =
+                        names.iter().map(|name| name.to_ascii_lowercase()).collect();
                     self.available_font_families = names;
                     self.pending_font_family_scan = None;
                     // The list may have landed while the font dialog was

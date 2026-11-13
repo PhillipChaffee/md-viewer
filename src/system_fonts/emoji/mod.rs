@@ -12,8 +12,10 @@ mod tests;
 /// the color font lacks. Appended last so it only supplies glyphs nothing
 /// else covers.
 /// (See docs/devlog/014-font-fallback.md.)
-const EMOJI_FONT_PATH: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts/NotoEmoji-Regular.ttf");
+const EMOJI_FONT_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/fonts/NotoEmoji-Regular.ttf"
+);
 
 /// System color-emoji face (CBDT/CBLC bitmap font), appended after the
 /// regular system fallbacks but before the monochrome emoji face.
@@ -39,10 +41,7 @@ pub(crate) fn install_emoji_fonts(definitions: &mut FontDefinitions) {
                 definitions
                     .font_data
                     .insert("ColorEmoji".to_owned(), data.into());
-                for family in [
-                    FontFamily::Proportional,
-                    FontFamily::Monospace,
-                ] {
+                for family in [FontFamily::Proportional, FontFamily::Monospace] {
                     if let Some(chain) = definitions.families.get_mut(&family) {
                         // Insert ahead of epaint's built-in monochrome emoji
                         // faces, which would otherwise claim the glyph first.

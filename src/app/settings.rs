@@ -187,7 +187,8 @@ impl MarkdownApp {
                 // One canonical name per body-capable family, scanned once in
                 // the background at startup. While the scan is running, only
                 // "System Default" is offered.
-                if self.available_font_families.is_empty() && self.pending_font_family_scan.is_some()
+                if self.available_font_families.is_empty()
+                    && self.pending_font_family_scan.is_some()
                 {
                     ui.horizontal(|ui| {
                         ui.spinner();
@@ -224,39 +225,39 @@ impl MarkdownApp {
                     .auto_shrink([false, true])
                     .max_height(300.0)
                     .show_rows(
-                    ui,
-                    row_height,
-                    match_count + 1, // + 1 for the pinned "System Default" row
-                    |ui, rows| {
-                        for row in rows {
-                            if row == 0 {
-                                let default_selected = self.selected_font_family.is_none();
-                                let default_btn =
-                                    ui.selectable_label(default_selected, "System Default");
-                                #[cfg(feature = "mcp")]
-                                self.mcp_bridge.register_widget(
-                                    "Font Dialog: System Default",
-                                    "button",
-                                    &default_btn,
-                                    Some(if default_selected { "selected" } else { "" }),
-                                );
-                                if default_btn.clicked() {
-                                    new_selection = Some(None);
+                        ui,
+                        row_height,
+                        match_count + 1, // + 1 for the pinned "System Default" row
+                        |ui, rows| {
+                            for row in rows {
+                                if row == 0 {
+                                    let default_selected = self.selected_font_family.is_none();
+                                    let default_btn =
+                                        ui.selectable_label(default_selected, "System Default");
+                                    #[cfg(feature = "mcp")]
+                                    self.mcp_bridge.register_widget(
+                                        "Font Dialog: System Default",
+                                        "button",
+                                        &default_btn,
+                                        Some(if default_selected { "selected" } else { "" }),
+                                    );
+                                    if default_btn.clicked() {
+                                        new_selection = Some(None);
+                                    }
+                                    continue;
                                 }
-                                continue;
+                                let font_index = filtered_indices
+                                    .as_ref()
+                                    .map_or(row - 1, |indices| indices[row - 1]);
+                                let name = &self.available_font_families[font_index];
+                                let is_selected =
+                                    self.selected_font_family.as_deref() == Some(name.as_str());
+                                if ui.selectable_label(is_selected, name).clicked() {
+                                    new_selection = Some(Some(name.clone()));
+                                }
                             }
-                            let font_index = filtered_indices
-                                .as_ref()
-                                .map_or(row - 1, |indices| indices[row - 1]);
-                            let name = &self.available_font_families[font_index];
-                            let is_selected =
-                                self.selected_font_family.as_deref() == Some(name.as_str());
-                            if ui.selectable_label(is_selected, name).clicked() {
-                                new_selection = Some(Some(name.clone()));
-                            }
-                        }
-                    },
-                );
+                        },
+                    );
             });
 
         self.show_font_dialog = open;

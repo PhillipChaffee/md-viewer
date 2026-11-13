@@ -107,7 +107,11 @@ pub(crate) fn parse_headers(content: &str) -> ParsedHeaders {
 }
 
 /// Check if header at `index` should be hidden because an ancestor is collapsed
-pub(crate) fn header_is_hidden(headers: &[Header], index: usize, collapsed: &HashSet<usize>) -> bool {
+pub(crate) fn header_is_hidden(
+    headers: &[Header],
+    index: usize,
+    collapsed: &HashSet<usize>,
+) -> bool {
     if index == 0 || index >= headers.len() {
         return false;
     }

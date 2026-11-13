@@ -108,6 +108,16 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }   # experimental; the toolchain pin makes its emission deterministic
 cargo = { level = "warn", priority = -1 }     # lints the manifest itself
 
+# --- group exceptions, one reason each
+# nursery's redundant_pub_crate contradicts rustc's unreachable_pub: one
+# wants `pub` inside a private module, the other forbids it. The rustc lint
+# wins; `pub(crate)` states the real reach of an item.
+redundant_pub_crate = "allow"
+# The eframe/winit/wayland graph pins several generations of the same
+# foundational crates; this manifest cannot converge versions it does not
+# choose. cargo-deny's bans check owns the duplicate list, with reasons.
+multiple_crate_versions = "allow"
+
 # --- restriction picks, one reason each
 unwrap_used = "warn"                  # a panic in a desktop viewer loses the user's open tabs and unsaved edits
 expect_used = "warn"                  # same failure as unwrap, with a message nobody sees in a detached GUI

@@ -562,8 +562,7 @@ fn commonmark_reference_with_encoded_path_is_registered() {
     fs::write(&document, "# Index").unwrap();
     fs::write(root.join("docs with spaces/guide(1).md"), "# Guide").unwrap();
 
-    let content =
-        "Read [the guide][guide].\n\n[guide]: docs%20with%20spaces/guide(1).md \"Title\"";
+    let content = "Read [the guide][guide].\n\n[guide]: docs%20with%20spaces/guide(1).md \"Title\"";
     assert_eq!(
         parse_local_links(content, &document),
         vec!["docs%20with%20spaces/guide(1).md"]

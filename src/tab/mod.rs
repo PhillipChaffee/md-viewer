@@ -142,8 +142,7 @@ impl Tab {
         } else {
             // Leaving edit: first-frame estimate for the view; the
             // renderer's own correctives refine it after.
-            self.pending_scroll_offset =
-                Some(ratio * self.pre_edit_view_content_height.max(1.0));
+            self.pending_scroll_offset = Some(ratio * self.pre_edit_view_content_height.max(1.0));
         }
         self.is_editing = to_edit;
         self.cache.clear_scrollable();

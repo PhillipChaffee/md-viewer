@@ -15,12 +15,18 @@ fn emoji_fallback_face_resolves_for_doc_emoji() {
     // Debug: font_data keys and family list as egui sees them.
     ctx.fonts(|f| {
         let defs = f.definitions();
-        eprintln!("font_data keys: {:?}", defs.font_data.keys().collect::<Vec<_>>());
+        eprintln!(
+            "font_data keys: {:?}",
+            defs.font_data.keys().collect::<Vec<_>>()
+        );
         eprintln!(
             "Proportional chain: {:?}",
             defs.families.get(&FontFamily::Proportional)
         );
-        eprintln!("Monospace chain: {:?}", defs.families.get(&FontFamily::Monospace));
+        eprintln!(
+            "Monospace chain: {:?}",
+            defs.families.get(&FontFamily::Monospace)
+        );
     });
     // Isolate which individual face supplies each glyph: one font per chain.
     let defaults = FontDefinitions::default();
@@ -39,15 +45,27 @@ fn emoji_fallback_face_resolves_for_doc_emoji() {
         ctx2.run(egui::RawInput::default(), |_ctx| {});
         let font_id = egui::FontId::proportional(16.0);
         let results: Vec<bool> = ctx2.fonts_mut(|f| {
-            ['\u{1F7E2}', '\u{1F534}', '\u{1F535}', '\u{26AA}', '\u{2705}']
-                .iter()
-                .map(|&ch| f.has_glyph(&font_id, ch))
-                .collect()
+            [
+                '\u{1F7E2}',
+                '\u{1F534}',
+                '\u{1F535}',
+                '\u{26AA}',
+                '\u{2705}',
+            ]
+            .iter()
+            .map(|&ch| f.has_glyph(&font_id, ch))
+            .collect()
         });
         eprintln!("face {label}: 🟢🔴🔵⚪✅ = {results:?}");
     }
 
-    for ch in ['\u{1F7E2}', '\u{1F534}', '\u{1F535}', '\u{26AA}', '\u{2705}'] {
+    for ch in [
+        '\u{1F7E2}',
+        '\u{1F534}',
+        '\u{1F535}',
+        '\u{26AA}',
+        '\u{2705}',
+    ] {
         let resolved = ctx.fonts_mut(|f| f.has_glyph(&font_id, ch));
         assert!(
             resolved,
@@ -83,7 +101,10 @@ fn emoji_fallback_face_resolves_for_doc_emoji() {
             count
         });
         eprintln!("ink pixels for {ch:?}: {ink}");
-        assert!(ink > 20, "emoji {ch} rasterized blank (only {ink} ink pixels)");
+        assert!(
+            ink > 20,
+            "emoji {ch} rasterized blank (only {ink} ink pixels)"
+        );
     }
 
     // Color check (requires vendored epaint with the swash patch): each
@@ -161,8 +182,10 @@ fn color_emoji_face_never_claims_ui_symbols() {
     let mut definitions = FontDefinitions::default();
     install_emoji_fonts(&mut definitions);
     definitions.font_data.retain(|k, _| k == "ColorEmoji");
-    *definitions.families.get_mut(&FontFamily::Proportional).unwrap() =
-        vec!["ColorEmoji".to_owned()];
+    *definitions
+        .families
+        .get_mut(&FontFamily::Proportional)
+        .unwrap() = vec!["ColorEmoji".to_owned()];
     let ctx = egui::Context::default();
     ctx.set_fonts(definitions);
     ctx.run(egui::RawInput::default(), |_ctx| {});
@@ -174,7 +197,9 @@ fn color_emoji_face_never_claims_ui_symbols() {
     }
     // ...but general UI symbols must not, even though Noto Color Emoji
     // maps them — they belong to regular text faces.
-    for ch in ['\u{25B6}', '\u{25BC}', '\u{26A0}', '\u{2714}', '\u{2192}', '\u{2713}'] {
+    for ch in [
+        '\u{25B6}', '\u{25BC}', '\u{26A0}', '\u{2714}', '\u{2192}', '\u{2713}',
+    ] {
         let claimed = ctx.fonts_mut(|f| f.has_glyph(&font_id, ch));
         assert!(
             !claimed,

@@ -371,7 +371,10 @@ fn explicit_uri_scheme(destination: &str) -> Option<&str> {
 /// file that cannot be turned into a path at all, which callers must surface
 /// rather than swallow: before #141 that case returned `None` like the others,
 /// so an internal-looking link did nothing whatsoever when clicked.
-pub(crate) fn resolve_local_link_path(destination: &str, document_dir: &Path) -> io::Result<Option<PathBuf>> {
+pub(crate) fn resolve_local_link_path(
+    destination: &str,
+    document_dir: &Path,
+) -> io::Result<Option<PathBuf>> {
     match classify_destination(destination) {
         DestinationShape::Fragment | DestinationShape::External => Ok(None),
         DestinationShape::Local { raw, decoded: None } => Err(io::Error::new(
