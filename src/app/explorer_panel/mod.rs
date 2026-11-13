@@ -12,7 +12,7 @@ use crate::app::mcp;
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
-use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
+use crate::layout::EXPLORER_RIGHT_RESIZE_GUTTER;
 use crate::theme::Palette;
 
 #[cfg(kani)]
@@ -40,32 +40,21 @@ impl MarkdownApp {
         }
 
         let palette = self.theme.palette();
-        let margin = egui::Margin {
-            left: 8,
-            right: EXPLORER_RIGHT_RESIZE_GUTTER,
-            top: 8,
-            bottom: 8,
+        let panel = sidebar::Panel {
+            side: Side::Left,
+            id: "file_explorer",
+            margin: egui::Margin {
+                left: 8,
+                right: EXPLORER_RIGHT_RESIZE_GUTTER,
+                top: 8,
+                bottom: 8,
+            },
         };
-        let panel = egui::SidePanel::left("file_explorer")
-            .resizable(true)
-            .show_separator_line(false)
-            .default_width(self.explorer_width)
-            .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
-            .frame(sidebar::frame(palette, margin))
-            .show(ctx, |ui| {
-                // The header stays outside the ScrollArea.
-                self.explorer_header(ui, palette);
-                self.explorer_tree(ui, palette, &mut action);
-            });
-        self.explorer_width = panel.response.rect.width();
-        sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Left, palette);
-        // Left panel: the draggable edge is its right border.
-        sidebar::paint_resize_affordance(
-            ctx,
-            panel.response.rect.right(),
-            panel.response.rect.y_range(),
-            egui::Id::new("file_explorer"),
-        );
+        ((), self.explorer_width) = panel.show(ctx, palette, self.explorer_width, |ui| {
+            // The header stays outside the ScrollArea.
+            self.explorer_header(ui, palette);
+            self.explorer_tree(ui, palette, &mut action);
+        });
 
         action
     }

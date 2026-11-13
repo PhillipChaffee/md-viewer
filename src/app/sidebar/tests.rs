@@ -219,6 +219,54 @@ fn resize_affordance_lights_up_on_hover_and_brightens_while_dragging() {
     assert_eq!(sidebar.pointer_at(edge + 40.0), Some(active));
 }
 
+#[test]
+fn a_panel_keeps_its_width_and_marks_the_edge_it_shares_with_the_page() {
+    for (side, shared_edge, hairline) in [(Side::Left, 200.0, 199.5), (Side::Right, 600.0, 600.5)] {
+        let panel = Panel {
+            side,
+            id: "panel-under-test",
+            margin: egui::Margin::same(8),
+        };
+        let ctx = egui::Context::default();
+        let frame = |events| {
+            let input = egui::RawInput {
+                screen_rect: Some(Sidebar::SCREEN),
+                events,
+                ..Default::default()
+            };
+            let mut shown = (0.0, 0.0);
+            let output = ctx.run(input, |ctx| {
+                shown = panel.show(ctx, PALETTE, 200.0, |ui| {
+                    // A listing takes all the room, as a scroll area does.
+                    ui.allocate_space(ui.available_size()).1.width()
+                });
+            });
+            (painted_shapes(&output), shown)
+        };
+        let resting = egui::Event::PointerMoved(Pos2::new(shared_edge, 300.0));
+        frame(vec![resting]);
+        let (shapes, (listing_width, width)) = frame(Vec::new());
+
+        assert_close(width, 200.0);
+        assert_close(listing_width, 200.0 - 16.0);
+        let fills = shapes.iter().filter_map(|shape| match shape {
+            Shape::Rect(rect) if rect.rect.height() > 500.0 => Some(rect.rect),
+            _ => None,
+        });
+        let strip = fills.min_by(|a, b| a.width().total_cmp(&b.width()));
+        let strip = strip.expect("the panel paints its surface");
+        assert_close(strip.width(), 2.0);
+        assert_close(strip.center().x, shared_edge);
+        // egui draws a line of its own, in its own color, on a hovered edge.
+        let rule = egui::Stroke::new(1.0_f32, PALETTE.rule);
+        let lines = shapes.iter().filter_map(|shape| match shape {
+            Shape::LineSegment { points, stroke } if *stroke == rule => Some(points[0].x),
+            _ => None,
+        });
+        assert_eq!(lines.collect::<Vec<_>>(), [hairline]);
+    }
+}
+
 fn plain_row(text: &str, current: bool) -> Row<'_> {
     Row {
         text,

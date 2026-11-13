@@ -6,7 +6,6 @@ use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
-use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::tab::Tab;
 use crate::theme::Palette;
 
@@ -121,31 +120,20 @@ impl MarkdownApp {
             mcp: &self.mcp,
         };
 
-        let margin = egui::Margin {
-            left: 8,
-            right: 8,
-            top: 8,
-            bottom: 8,
+        let panel = sidebar::Panel {
+            side: Side::Right,
+            id: "outline",
+            margin: egui::Margin {
+                left: 8,
+                right: 8,
+                top: 8,
+                bottom: 8,
+            },
         };
-        let panel = egui::SidePanel::right("outline")
-            .resizable(true)
-            .show_separator_line(false)
-            .default_width(self.outline_width)
-            .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
-            .frame(sidebar::frame(palette, margin))
-            .show(ctx, |ui| {
-                outline_header(ui, tab, &mut outline);
-                outline_rows(ui, tab, &mut outline);
-            });
-        self.outline_width = panel.response.rect.width();
-        sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Right, palette);
-        // Right panel: the draggable edge is its left border.
-        sidebar::paint_resize_affordance(
-            ctx,
-            panel.response.rect.left(),
-            panel.response.rect.y_range(),
-            egui::Id::new("outline"),
-        );
+        ((), self.outline_width) = panel.show(ctx, palette, self.outline_width, |ui| {
+            outline_header(ui, tab, &mut outline);
+            outline_rows(ui, tab, &mut outline);
+        });
 
         if let Some(click) = outline.click {
             apply_click(tab, click);

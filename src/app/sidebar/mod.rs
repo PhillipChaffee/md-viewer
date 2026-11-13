@@ -5,6 +5,7 @@
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
+use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -39,8 +40,50 @@ pub(super) enum Side {
     Right,
 }
 
+/// One sidebar: where it sits, what egui knows it as, and the space it
+/// keeps around what it lists.
+pub(super) struct Panel {
+    pub(super) side: Side,
+    /// Names the panel to egui, which keeps its dragged width under it.
+    pub(super) id: &'static str,
+    pub(super) margin: egui::Margin,
+}
+
+impl Panel {
+    /// Show the sidebar, `width` wide until the reader drags its edge, with
+    /// its hairline and its resize affordance on the edge it shares with the
+    /// page. Returns what `add` returned and the width the sidebar took.
+    pub(super) fn show<R>(
+        &self,
+        ctx: &egui::Context,
+        palette: &Palette,
+        width: f32,
+        add: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> (R, f32) {
+        let panel = match self.side {
+            Side::Left => egui::SidePanel::left(self.id),
+            Side::Right => egui::SidePanel::right(self.id),
+        };
+        let shown = panel
+            .resizable(true)
+            .show_separator_line(false)
+            .default_width(width)
+            .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
+            .frame(frame(palette, self.margin))
+            .show(ctx, add);
+        let rect = shown.response.rect;
+        paint_inner_edge(ctx, rect, self.side, palette);
+        let shared_edge = match self.side {
+            Side::Left => rect.right(),
+            Side::Right => rect.left(),
+        };
+        paint_resize_affordance(ctx, shared_edge, rect.y_range(), egui::Id::new(self.id));
+        (shown.inner, rect.width())
+    }
+}
+
 /// The frame both sidebars sit in: the surface color and no outline.
-pub(super) fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Frame {
+fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Frame {
     egui::Frame::NONE
         .fill(palette.surface)
         .inner_margin(inner_margin)
@@ -48,12 +91,7 @@ pub(super) fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Fram
 
 /// The one line a sidebar is drawn with: a hairline down the edge it shares
 /// with the page. `panel` is the sidebar's whole rectangle.
-pub(super) fn paint_inner_edge(
-    ctx: &egui::Context,
-    panel: egui::Rect,
-    side: Side,
-    palette: &Palette,
-) {
+fn paint_inner_edge(ctx: &egui::Context, panel: egui::Rect, side: Side, palette: &Palette) {
     let x = match side {
         Side::Left => panel.right() - 0.5,
         Side::Right => panel.left() + 0.5,
@@ -74,7 +112,7 @@ pub(super) fn paint_inner_edge(
 /// sidebar resizer instead of the content, and the reflow reads as "the table
 /// slid behind the sidebar". A line that brightens on hover and while
 /// resizing makes the grab zone discoverable.
-pub(super) fn paint_resize_affordance(
+fn paint_resize_affordance(
     ctx: &egui::Context,
     boundary_x: f32,
     y_range: egui::Rangef,
