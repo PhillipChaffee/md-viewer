@@ -2801,41 +2801,57 @@ impl CommonMarkViewerInternal {
         ui: &mut Ui,
     ) {
         if self.is_blockquote {
-            let mut collected_events = delayed_events_blockquote(events);
-            self.block_start(ui, options, BlockKind::Boxed);
-
-            // Currently the blockquotes are made in such a way that they need a newline at the end
-            // and the start so when this is the first element in the markdown the newline must be
-            // manually enabled
-            self.line.should_not_start_newline_forced = false;
-            if let Some(alert) = parse_alerts(&options.alerts, &mut collected_events) {
-                egui_commonmark_backend_extended::alert_ui(alert, ui, |ui| {
-                    self.quoted_events(ui, collected_events, cache, options, max_width);
-                })
-            } else {
-                let bar = options
-                    .block_style
-                    .blockquote_bar
-                    .unwrap_or_else(|| ui.visuals().weak_text_color());
-                blockquote(ui, bar, |ui| {
-                    self.text_style.quote = true;
-                    self.quoted_events(ui, collected_events, cache, options, max_width);
-                    self.text_style.quote = false;
-                });
-            }
-
-            if events.peek().is_none() {
-                self.line.should_end_newline_forced = false;
-            }
-
-            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
-            self.block_end(ui, options, BlockKind::Boxed);
+            self.quote(events, max_width, cache, options, ui);
             self.is_blockquote = false;
         }
     }
 
+    /// Render the quote whose start tag was just consumed from `events`,
+    /// in a frame of its own.
+    fn quote<'e>(
+        &mut self,
+        events: &mut Peekable<impl Iterator<Item = EventIteratorItem<'e>>>,
+        max_width: f32,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        ui: &mut Ui,
+    ) {
+        let mut collected_events = delayed_events_blockquote(events);
+        self.block_start(ui, options, BlockKind::Boxed);
+
+        // Currently the blockquotes are made in such a way that they need a newline at the end
+        // and the start so when this is the first element in the markdown the newline must be
+        // manually enabled
+        self.line.should_not_start_newline_forced = false;
+        if let Some(alert) = parse_alerts(&options.alerts, &mut collected_events) {
+            egui_commonmark_backend_extended::alert_ui(alert, ui, |ui| {
+                self.quoted_events(ui, collected_events, cache, options, max_width);
+            })
+        } else {
+            let bar = options
+                .block_style
+                .blockquote_bar
+                .unwrap_or_else(|| ui.visuals().weak_text_color());
+            blockquote(ui, bar, |ui| {
+                // A quote inside this one ends first; the text after it
+                // is still quoted.
+                let outer = std::mem::replace(&mut self.text_style.quote, true);
+                self.quoted_events(ui, collected_events, cache, options, max_width);
+                self.text_style.quote = outer;
+            });
+        }
+
+        if events.peek().is_none() {
+            self.line.should_end_newline_forced = false;
+        }
+
+        self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
+        self.block_end(ui, options, BlockKind::Boxed);
+    }
+
     /// Render the events of a blockquote, which are not driven through
-    /// [`Self::process_event`].
+    /// [`Self::process_event`]. A quote among them is a quote of its own,
+    /// framed and stepped in from this one.
     fn quoted_events(
         &mut self,
         ui: &mut Ui,
@@ -2844,9 +2860,16 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
         max_width: f32,
     ) {
-        let mut events = events.into_iter().peekable();
-        while let Some((event, src_span)) = events.next() {
-            self.upcoming = upcoming_block(events.peek().map(|(event, _)| event));
+        let mut events = events.into_iter().enumerate().peekable();
+        while let Some((_, (event, src_span))) = events.next() {
+            if matches!(
+                event,
+                pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote(_))
+            ) {
+                self.quote(&mut events, max_width, cache, options, ui);
+                continue;
+            }
+            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
             self.event(ui, event, src_span, cache, options, max_width);
         }
     }

@@ -139,10 +139,7 @@ fn a_quote_keeps_the_lists_and_paragraphs_inside_it_together() {
     assert!((reader.text_area("after").left - edge).abs() < NEAR);
 }
 
-/// Known bug, listed in `tests/README.md`: a quote inside a quote is set
-/// at the same indent as the quote around it, so the two read as one.
 #[test]
-#[should_panic(expected = "a quote inside a quote does not step in")]
 fn a_quote_inside_a_quote_steps_in_again() {
     let reader = page("# Said\n\n> Outer quote\n>\n> > Inner quote\n\nafter");
 
