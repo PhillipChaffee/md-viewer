@@ -30,6 +30,8 @@ mod settings;
 mod shortcuts;
 mod tab_bar;
 mod tabs;
+#[cfg(test)]
+mod tests;
 mod watching;
 mod welcome;
 
