@@ -5,6 +5,7 @@
 //! No gate builds the `mcp` feature (the bridge crate is not published), so
 //! the bodies that use the bridge stay a plain list of its calls.
 
+use std::fmt;
 #[cfg(feature = "mcp")]
 use std::time::Duration;
 
@@ -34,6 +35,30 @@ impl Mcp {
     pub(super) const fn new() -> Self {
         Self {}
     }
+}
+
+/// Tell the bridge about a widget by its response. `name` is what an E2E
+/// test finds the widget by, and `value` is the state it reads from it.
+#[cfg(feature = "mcp")]
+pub(super) fn widget(
+    mcp: &Mcp,
+    name: fmt::Arguments<'_>,
+    kind: &str,
+    response: &egui::Response,
+    value: Option<&str>,
+) {
+    mcp.bridge
+        .register_widget(&name.to_string(), kind, response, value);
+}
+
+#[cfg(not(feature = "mcp"))]
+pub(super) const fn widget(
+    _mcp: &Mcp,
+    _name: fmt::Arguments<'_>,
+    _kind: &str,
+    _response: &egui::Response,
+    _value: Option<&str>,
+) {
 }
 
 /// Run the commands the bridge has received and add the input they ask

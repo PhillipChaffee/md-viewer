@@ -4,6 +4,7 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton, BAR_HEIGHT, BUTTON_SIDE};
+use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::tab::Tab;
@@ -128,27 +129,39 @@ impl MarkdownApp {
         let files = QuietButton::icon(Icon::Sidebar, "Files sidebar")
             .show(ui, palette)
             .on_hover_text("Files (Ctrl+Shift+E)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Files", "button", &files, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Top Bar: Files"),
+            "button",
+            &files,
+            None,
+        );
         pick(&files, AppAction::ToggleExplorer, picked);
 
         let back = QuietButton::icon(Icon::Back, "Go back")
             .enabled(can_back)
             .show(ui, palette)
             .on_hover_text("Back (Alt+Left)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Navigate Back", "button", &back, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Navigate Back"),
+            "button",
+            &back,
+            None,
+        );
         pick(&back, AppAction::NavigateBack, picked);
 
         let forward = QuietButton::icon(Icon::Forward, "Go forward")
             .enabled(can_forward)
             .show(ui, palette)
             .on_hover_text("Forward (Alt+Right)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Navigate Forward", "button", &forward, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Navigate Forward"),
+            "button",
+            &forward,
+            None,
+        );
         pick(&forward, AppAction::NavigateForward, picked);
     }
 
@@ -161,34 +174,50 @@ impl MarkdownApp {
             .snug()
             .lit(chrome::next_widget_popup_is_open(ui))
             .show(ui, palette);
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Appearance", "button", &appearance, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Top Bar: Appearance"),
+            "button",
+            &appearance,
+            None,
+        );
         self.appearance_popover(&appearance, picked);
         appearance.on_hover_text("Theme, text size, width and spacing");
 
         let find = QuietButton::icon(Icon::Search, "Find in document")
             .show(ui, palette)
             .on_hover_text("Find (Ctrl+F)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Find", "button", &find, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Top Bar: Find"),
+            "button",
+            &find,
+            None,
+        );
         pick(&find, AppAction::OpenSearch, picked);
 
         let contents = QuietButton::icon(Icon::Outline, "Contents sidebar")
             .show(ui, palette)
             .on_hover_text("Contents (Ctrl+Shift+O)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Contents", "button", &contents, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Top Bar: Contents"),
+            "button",
+            &contents,
+            None,
+        );
         pick(&contents, AppAction::ToggleOutline, picked);
 
         let more = QuietButton::icon(Icon::More, "More")
             .lit(chrome::next_widget_popup_is_open(ui))
             .show(ui, palette);
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: More", "button", &more, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Top Bar: More"),
+            "button",
+            &more,
+            None,
+        );
         self.overflow_menu(&more, picked);
     }
 
