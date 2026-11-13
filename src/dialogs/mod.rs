@@ -27,10 +27,9 @@ fn portal_file_chooser_available() -> bool {
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
-        .map(|output| {
+        .is_ok_and(|output| {
             output.status.success() && portal_introspection_has_file_chooser(&output.stdout)
         })
-        .unwrap_or(false)
 }
 
 #[cfg(target_os = "linux")]
@@ -49,11 +48,8 @@ fn path_from_picker_output(stdout: Vec<u8>) -> Option<PathBuf> {
     }
 }
 
-/// Use Python's Tk binding as a fallback file picker on Linux desktops where
-/// xdg-desktop-portal is not available.
 #[cfg(target_os = "linux")]
-fn pick_file_with_tkinter(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    const SCRIPT: &str = r#"
+const TK_FILE_PICKER_SCRIPT: &str = r#"
 import os
 import sys
 import tkinter as tk
@@ -80,73 +76,8 @@ finally:
     root.destroy()
 "#;
 
-    let mut command = Command::new("python3");
-    command
-        .arg("-c")
-        .arg(SCRIPT)
-        .stdin(Stdio::null())
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped());
-    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
-        command.arg(directory);
-    }
-
-    let output = command
-        .output()
-        .map_err(|error| format!("Tkinter file picker could not start: {error}"))?;
-
-    if !output.status.success() {
-        let details = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if details.is_empty() {
-            "Tkinter file picker exited with an error".to_string()
-        } else {
-            format!("Tkinter file picker failed: {details}")
-        });
-    }
-
-    let selected = path_from_picker_output(output.stdout);
-    if let Some(path) = &selected {
-        if !path.is_file() {
-            return Err(format!(
-                "File picker returned a file that does not exist: {}",
-                path.display()
-            ));
-        }
-    }
-    Ok(selected)
-}
-
-pub(crate) fn pick_file(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    let mut dialog = rfd::FileDialog::new()
-        .add_filter("Markdown", &["md", "markdown"])
-        .add_filter("Text", &["txt"])
-        .add_filter("All Files", &["*"]);
-    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
-        dialog = dialog.set_directory(directory);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if portal_file_chooser_available() {
-            return Ok(dialog.pick_file());
-        }
-
-        log::info!("XDG Desktop Portal FileChooser is unavailable; using the Tkinter file picker");
-        pick_file_with_tkinter(initial_dir)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(dialog.pick_file())
-    }
-}
-
-/// Use Python's Tk binding as a fallback folder picker on Linux desktops where
-/// xdg-desktop-portal is not available. The initial directory is passed as a
-/// process argument, never interpolated into Python.
 #[cfg(target_os = "linux")]
-fn pick_folder_with_tkinter(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    const SCRIPT: &str = r#"
+const TK_FOLDER_PICKER_SCRIPT: &str = r#"
 import os
 import sys
 import tkinter as tk
@@ -165,40 +96,111 @@ finally:
     root.destroy()
 "#;
 
-    let mut command = Command::new("python3");
-    command
-        .arg("-c")
-        .arg(SCRIPT)
-        .stdin(Stdio::null())
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped());
-    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
-        command.arg(directory);
-    }
+/// Python's Tk binding as a fallback picker on Linux desktops where
+/// xdg-desktop-portal is not available.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum TkPicker {
+    File,
+    Folder,
+}
 
-    let output = command
-        .output()
-        .map_err(|error| format!("Tkinter folder picker could not start: {error}"))?;
-
-    if !output.status.success() {
-        let details = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if details.is_empty() {
-            "Tkinter folder picker exited with an error".to_string()
-        } else {
-            format!("Tkinter folder picker failed: {details}")
-        });
-    }
-
-    let selected = path_from_picker_output(output.stdout);
-    if let Some(path) = &selected {
-        if !path.is_dir() {
-            return Err(format!(
-                "Folder picker returned a directory that does not exist: {}",
-                path.display()
-            ));
+#[cfg(target_os = "linux")]
+impl TkPicker {
+    const fn script(self) -> &'static str {
+        match self {
+            Self::File => TK_FILE_PICKER_SCRIPT,
+            Self::Folder => TK_FOLDER_PICKER_SCRIPT,
         }
     }
-    Ok(selected)
+
+    /// What the picker selects, as its error messages name it.
+    const fn noun(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Folder => "folder",
+        }
+    }
+
+    /// Reject a selection that is not on disk as the kind this picker hands out.
+    fn check_selection(self, path: &Path) -> Result<(), String> {
+        let (exists, complaint) = match self {
+            Self::File => (
+                path.is_file(),
+                "File picker returned a file that does not exist",
+            ),
+            Self::Folder => (
+                path.is_dir(),
+                "Folder picker returned a directory that does not exist",
+            ),
+        };
+        if exists {
+            Ok(())
+        } else {
+            Err(format!("{complaint}: {}", path.display()))
+        }
+    }
+
+    /// Show the picker and wait for it. `Ok(None)` means the user cancelled.
+    /// The initial directory is passed as a process argument, never
+    /// interpolated into Python.
+    fn pick(self, initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
+        let noun = self.noun();
+        let mut command = Command::new("python3");
+        command
+            .arg("-c")
+            .arg(self.script())
+            .stdin(Stdio::null())
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped());
+        if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
+            command.arg(directory);
+        }
+
+        let output = command
+            .output()
+            .map_err(|error| format!("Tkinter {noun} picker could not start: {error}"))?;
+
+        if !output.status.success() {
+            let details = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if details.is_empty() {
+                format!("Tkinter {noun} picker exited with an error")
+            } else {
+                format!("Tkinter {noun} picker failed: {details}")
+            });
+        }
+
+        let selected = path_from_picker_output(output.stdout);
+        if let Some(path) = &selected {
+            self.check_selection(path)?;
+        }
+        Ok(selected)
+    }
+}
+
+pub(crate) fn pick_file(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
+    let mut dialog = rfd::FileDialog::new()
+        .add_filter("Markdown", &["md", "markdown"])
+        .add_filter("Text", &["txt"])
+        .add_filter("All Files", &["*"]);
+    if let Some(directory) = initial_dir.filter(|path| path.is_dir()) {
+        dialog = dialog.set_directory(directory);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if portal_file_chooser_available() {
+            return Ok(dialog.pick_file());
+        }
+
+        log::info!("XDG Desktop Portal FileChooser is unavailable; using the Tkinter file picker");
+        TkPicker::File.pick(initial_dir)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(dialog.pick_file())
+    }
 }
 
 pub(crate) fn pick_folder(initial_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
@@ -216,7 +218,7 @@ pub(crate) fn pick_folder(initial_dir: Option<&Path>) -> Result<Option<PathBuf>,
         log::info!(
             "XDG Desktop Portal FileChooser is unavailable; using the Tkinter folder picker"
         );
-        pick_folder_with_tkinter(initial_dir)
+        TkPicker::Folder.pick(initial_dir)
     }
 
     #[cfg(not(target_os = "linux"))]

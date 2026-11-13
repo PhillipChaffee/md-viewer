@@ -1,5 +1,6 @@
 //! Local link classification, resolution, and fragment navigation.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -7,6 +8,7 @@ use std::path::{Path, PathBuf};
 use egui_commonmark_extended::header_position_key;
 
 use crate::headers::Header;
+use crate::layout::line_fraction;
 use crate::tab::Tab;
 
 #[cfg(test)]
@@ -73,8 +75,7 @@ fn find_fragment_target<'a>(
     headers
         .iter()
         .find(|header| slugify_heading(&header.title) == wanted)
-        .map(FragmentTarget::Header)
-        .unwrap_or(FragmentTarget::Missing)
+        .map_or(FragmentTarget::Missing, FragmentTarget::Header)
 }
 
 /// Point a tab at the heading a `#fragment` names, mirroring the outline-click
@@ -97,8 +98,8 @@ pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
             if let Some(y_pos) = tab.cache.get_header_position(&key) {
                 tab.pending_scroll_offset = Some((y_pos - 50.0).max(0.0));
             } else if tab.last_content_height > 0.0 && tab.content_lines > 0 {
-                let estimated_y = (header.line_number as f32 / tab.content_lines as f32)
-                    * tab.last_content_height;
+                let estimated_y =
+                    line_fraction(header.line_number, tab.content_lines) * tab.last_content_height;
                 tab.pending_scroll_offset = Some((estimated_y - 50.0).max(0.0));
                 // The estimate only gets us near the target; one full paint
                 // records the exact position for the corrective pass.
@@ -263,7 +264,7 @@ enum DestinationShape<'a> {
     /// wrote; `decoded` is `None` when the percent escapes are not UTF-8.
     Local {
         raw: &'a str,
-        decoded: Option<std::borrow::Cow<'a, str>>,
+        decoded: Option<Cow<'a, str>>,
     },
 }
 
@@ -288,15 +289,9 @@ fn classify_destination(destination: &str) -> DestinationShape<'_> {
         else {
             return DestinationShape::External;
         };
-        return match path.into_os_string().into_string() {
-            Ok(decoded) => DestinationShape::Local {
-                raw: destination,
-                decoded: Some(std::borrow::Cow::Owned(decoded)),
-            },
-            Err(_) => DestinationShape::Local {
-                raw: destination,
-                decoded: None,
-            },
+        return DestinationShape::Local {
+            raw: destination,
+            decoded: path.into_os_string().into_string().ok().map(Cow::Owned),
         };
     }
     // Fragment first, then query: `guide.md?v=2#s` names `guide.md`. Stripping
@@ -318,13 +313,13 @@ fn classify_destination(destination: &str) -> DestinationShape<'_> {
     }
 }
 
-fn has_markdown_extension(path: &Path) -> bool {
-    path.extension()
-        .map(|ext| {
-            let ext = ext.to_string_lossy().to_lowercase();
-            ext == "md" || ext == "markdown" || ext == "txt"
-        })
-        .unwrap_or(false)
+/// Whether `path` carries one of the extensions this viewer opens as a
+/// document (`md`, `markdown`, `txt`, in any letter case).
+pub(crate) fn has_markdown_extension(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| {
+        let ext = ext.to_string_lossy().to_lowercase();
+        ext == "md" || ext == "markdown" || ext == "txt"
+    })
 }
 
 /// Check if a link destination points to a local markdown file.

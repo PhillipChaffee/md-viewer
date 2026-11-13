@@ -36,15 +36,7 @@ fn pickable_family_list_is_deduplicated_and_body_capable() {
             "{name:?} is an alias, not the family's canonical name"
         );
         assert!(
-            select_from_families(
-                &mut collection,
-                &mut source_cache,
-                &[id],
-                FontWeight::NORMAL,
-                "Aa",
-                false,
-            )
-            .is_some(),
+            select_body_font(&mut collection, &mut source_cache, &[id]).is_some(),
             "listed family {name:?} cannot serve as a body font"
         );
     }
@@ -66,7 +58,7 @@ fn installed_fonts_cover_reported_scripts() {
         FontPreset::default(),
         TextSizeClass::default(),
     );
-    context.begin_pass(Default::default());
+    context.begin_pass(egui::RawInput::default());
     let regular = egui::FontId::proportional(16.0);
     let strong = egui::FontId::new(16.0, FontFamily::Name(STRONG_FONT_FAMILY.into()));
     let samples = [

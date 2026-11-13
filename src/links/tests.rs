@@ -14,12 +14,12 @@ use crate::recent::now_epoch_secs;
 #[test]
 #[cfg(unix)]
 fn local_destination_resolution_is_characterized_for_every_uri_shape() {
-    let dir = Path::new("/base/doc");
     // (destination, is_local_markdown_link, resolve_local_link_path)
     // Err(()) = reports rather than resolving; Ok(None) = nothing to open.
     // One row: the destination, whether the gate accepts it, and what the
     // resolver answers.
     type Row<'a> = (&'a str, bool, Result<Option<&'a str>, ()>);
+    let dir = Path::new("/base/doc");
     let table: &[Row<'_>] = &[
         // 1. relative destinations resolve against the containing document
         ("guide.md", true, Ok(Some("/base/doc/guide.md"))),
@@ -156,7 +156,7 @@ fn shared_resolver_keeps_absolute_paths_and_literal_percent_names() {
     fs::write(&abs, "# Abs").unwrap();
     fs::write(&literal, "# Literal").unwrap();
 
-    let mut tab = Tab::new(home.clone()).unwrap();
+    let mut tab = Tab::new(home).unwrap();
 
     let abs_link = abs.to_string_lossy().to_string();
     assert!(tab.navigate_to_link(&abs_link).unwrap(), "absolute path");
@@ -303,7 +303,7 @@ fn same_document_fragment_scrolls_without_touching_history() {
     let document = root.join("single.md");
     fs::write(&document, "# Title\n\ntext\n\n## A Section\n\ntext\n").unwrap();
 
-    let mut tab = Tab::new(document.clone()).unwrap();
+    let mut tab = Tab::new(document).unwrap();
     let original_path = tab.path.clone();
 
     assert!(
@@ -343,7 +343,7 @@ fn cross_document_fragment_opens_and_lands_on_heading() {
     fs::write(&home, "# Home\n\n[Setup](guide.md#setup)\n").unwrap();
     fs::write(&guide, "# Guide\n\nintro\n\n## Setup\n\nsteps\n").unwrap();
 
-    let mut tab = Tab::new(home.clone()).unwrap();
+    let mut tab = Tab::new(home).unwrap();
     assert!(tab.navigate_to_link("guide.md#setup").unwrap());
     assert_eq!(tab.path, guide.canonicalize().unwrap());
     assert!(
@@ -423,7 +423,7 @@ fn missing_explicit_link_surfaces_errors_without_changing_tab_or_history() {
         ["missing.md"]
     );
 
-    let mut tab = Tab::new(document.clone()).unwrap();
+    let mut tab = Tab::new(document).unwrap();
     let original_path = tab.path.clone();
     let canonicalize_error = root.join("missing.md").canonicalize().unwrap_err();
     let expected_error = format!("Unable to open missing.md: {canonicalize_error}");

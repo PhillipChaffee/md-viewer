@@ -1,11 +1,14 @@
 //! Find-in-document state and match scanning.
 
+use std::ops::Range;
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 #[cfg(test)]
 mod tests;
 
-/// A single match in a tab's content, identified by byte range and 1-based line number
+/// A single match in a tab's content, identified by byte range and 1-based line number.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SearchMatch {
     pub(crate) byte_start: usize,
@@ -13,7 +16,7 @@ pub(crate) struct SearchMatch {
     pub(crate) line_number: usize,
 }
 
-/// Per-frame return from `render_search_bar`
+/// Per-frame return from `render_search_bar`.
 #[derive(Default)]
 pub(crate) struct SearchBarOutcome {
     pub(crate) close_requested: bool,
@@ -21,18 +24,18 @@ pub(crate) struct SearchBarOutcome {
     pub(crate) next_clicked: bool,
 }
 
-/// App-level search state — only one find bar is visible at a time
+/// App-level search state — only one find bar is visible at a time.
 #[derive(Default)]
 pub(crate) struct SearchState {
     pub(crate) is_open: bool,
     pub(crate) query: String,
-    /// Shadow copy of `query` used to detect changes across frames
+    /// Shadow copy of `query` used to detect changes across frames.
     pub(crate) last_query: String,
-    /// Tab index the cached matches were built for; `None` forces rebuild
+    /// Tab index the cached matches were built for; `None` forces rebuild.
     pub(crate) last_tab: Option<usize>,
-    /// Set after Ctrl+F so the text input is focused next frame
+    /// Set after Ctrl+F so the text input is focused next frame.
     pub(crate) focus_requested: bool,
-    /// Index into the active tab's `search_matches`
+    /// Index into the active tab's `search_matches`.
     pub(crate) active_match_index: usize,
 }
 
@@ -61,37 +64,7 @@ pub(crate) fn find_matches(content: &str, query: &str) -> Vec<SearchMatch> {
     let content_lc = content.to_ascii_lowercase();
     let query_lc = query.to_ascii_lowercase();
     let query_len = query_lc.len();
-
-    // Identify byte ranges of non-renderable markdown parts so we can skip matches
-    // inside them. Pattern: `(!?)[alt-or-text](url)`.
-    // - Group 1 = `!` for images, empty for links
-    // - Group 2 = alt (image) or text (link); exclude only if image (group 1 = `!`)
-    // - Group 3 = url; always exclude (URLs are never visible inline)
-    let skip_spans: Vec<std::ops::Range<usize>> = {
-        static MD_LINK_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        let re = MD_LINK_RE.get_or_init(|| {
-            Regex::new(r"(!?)\[([^\]]*)\]\(([^)]*)\)").expect("static regex must compile")
-        });
-        let mut spans = Vec::new();
-        for cap in re.captures_iter(content) {
-            let is_image = cap.get(1).map(|m| !m.as_str().is_empty()).unwrap_or(false);
-            // Always exclude URL (group 3)
-            if let Some(url) = cap.get(3) {
-                spans.push(url.start()..url.end());
-            }
-            // For images, also exclude alt (group 2)
-            if is_image {
-                if let Some(alt) = cap.get(2) {
-                    spans.push(alt.start()..alt.end());
-                }
-            }
-        }
-        spans
-    };
-
-    let in_skip = |start: usize, end: usize| -> bool {
-        skip_spans.iter().any(|s| start >= s.start && end <= s.end)
-    };
+    let hidden_spans = non_rendered_spans(content);
 
     let mut matches = Vec::new();
     let mut line_number = 1usize;
@@ -106,11 +79,12 @@ pub(crate) fn find_matches(content: &str, query: &str) -> Vec<SearchMatch> {
         cursor = byte_start;
 
         let byte_end = byte_start + query_len;
-        if content[byte_start..byte_end].contains('\n') {
-            continue; // Skip matches that cross line boundaries
-        }
-        if in_skip(byte_start, byte_end) {
-            continue; // Skip matches inside image alt-text or URL portions of links/images
+        let crosses_line_boundary = content[byte_start..byte_end].contains('\n');
+        let hidden = hidden_spans
+            .iter()
+            .any(|span| byte_start >= span.start && byte_end <= span.end);
+        if crosses_line_boundary || hidden {
+            continue;
         }
 
         matches.push(SearchMatch {
@@ -121,6 +95,34 @@ pub(crate) fn find_matches(content: &str, query: &str) -> Vec<SearchMatch> {
     }
 
     matches
+}
+
+/// `(!?)[alt-or-text](url)`: group 1 is `!` for an image and empty for a link,
+/// group 2 the alt text or link text, group 3 the URL. `None` only if the
+/// pattern itself is rejected, which is logged once.
+fn markdown_link_pattern() -> Option<&'static Regex> {
+    static PATTERN: LazyLock<Option<Regex>> = LazyLock::new(|| {
+        Regex::new(r"(!?)\[([^\]]*)\]\(([^)]*)\)")
+            .inspect_err(|error| log::error!("Markdown link pattern does not compile: {error}"))
+            .ok()
+    });
+    PATTERN.as_ref()
+}
+
+/// Byte ranges of `content` that are markdown source but never shown as text:
+/// every link or image URL, and the alt text of images.
+fn non_rendered_spans(content: &str) -> Vec<Range<usize>> {
+    let Some(pattern) = markdown_link_pattern() else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    for capture in pattern.captures_iter(content) {
+        let is_image = capture.get(1).is_some_and(|bang| !bang.as_str().is_empty());
+        let alt = capture.get(2).filter(|_| is_image);
+        let url = capture.get(3);
+        spans.extend(url.into_iter().chain(alt).map(|part| part.range()));
+    }
+    spans
 }
 
 pub(crate) fn take_search_correction_request(pending: &mut bool) -> bool {

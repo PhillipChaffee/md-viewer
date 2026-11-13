@@ -88,7 +88,7 @@ fn find_matches_skips_image_alt_text() {
     let content = "See ![Syntax docs](pic.png) and the syntax guide.";
     let m = find_matches(content, "syntax");
     let starts: Vec<_> = m.iter().map(|sm| sm.byte_start).collect();
-    assert_eq!(m.len(), 1, "got {:?}", m);
+    assert_eq!(m.len(), 1, "got {m:?}");
     // The surviving match is "syntax" in "the syntax guide", not "Syntax" in alt
     assert_eq!(&content[starts[0]..starts[0] + 6], "syntax");
 }
@@ -98,7 +98,7 @@ fn find_matches_skips_image_url() {
     // Image URL isn't visibly rendered — exclude matches inside.
     let content = "![ok](path/syntax.png) more text";
     let m = find_matches(content, "syntax");
-    assert_eq!(m.len(), 0, "URL match should be filtered: {:?}", m);
+    assert_eq!(m.len(), 0, "URL match should be filtered: {m:?}");
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn find_matches_skips_link_url_keeps_link_text() {
     let content = "Click [syntax docs](https://example.com/syntax.html) here";
     let m = find_matches(content, "syntax");
     // Two raw matches: "syntax" in link text (visible) + "syntax" in URL (invisible)
-    assert_eq!(m.len(), 1, "should keep link text, drop URL: {:?}", m);
+    assert_eq!(m.len(), 1, "should keep link text, drop URL: {m:?}");
     let s = m[0].byte_start;
     // The kept match is "syntax" in "[syntax docs]" (visible link text)
     assert_eq!(&content[s..s + 6], "syntax");

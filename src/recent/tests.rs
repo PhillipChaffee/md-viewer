@@ -37,3 +37,22 @@ fn relative_time_buckets() {
     // Clock skew (future timestamp) must not underflow.
     assert_eq!(format_relative_time(now + 500, now), "just now");
 }
+
+#[test]
+fn relative_time_switches_unit_exactly_at_each_boundary() {
+    let now = 10_000_000u64;
+    let ago = |seconds: u64| format_relative_time(now - seconds, now);
+    assert_eq!(ago(59), "just now");
+    assert_eq!(ago(60), "1m ago");
+    assert_eq!(ago(3_599), "59m ago");
+    assert_eq!(ago(3_600), "1h ago");
+    assert_eq!(ago(86_399), "23h ago");
+    assert_eq!(ago(86_400), "yesterday");
+    assert_eq!(ago(172_799), "yesterday");
+    assert_eq!(ago(172_800), "2d ago");
+    assert_eq!(ago(604_799), "6d ago");
+    assert_eq!(ago(604_800), "1w ago");
+    assert_eq!(ago(2_591_999), "4w ago");
+    assert_eq!(ago(2_592_000), "1mo ago");
+    assert_eq!(ago(9_000_000), "3mo ago");
+}

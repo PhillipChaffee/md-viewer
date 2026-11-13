@@ -45,6 +45,22 @@ fn full_width_tables_use_the_available_content_width() {
 }
 
 #[test]
+fn whole_pixels_drops_the_fraction_and_floors_at_zero() {
+    assert_eq!(whole_pixels(599.9), 599);
+    assert_eq!(whole_pixels(0.0), 0);
+    assert_eq!(whole_pixels(-12.5), 0);
+    assert_eq!(whole_pixels(f32::NAN), 0);
+}
+
+#[test]
+fn line_fraction_is_the_share_of_lines_above() {
+    assert_eq!(line_fraction(0, 200), 0.0);
+    assert_eq!(line_fraction(50, 200), 0.25);
+    assert_eq!(line_fraction(200, 200), 1.0);
+    assert_eq!(line_fraction(3, 0), 0.0);
+}
+
+#[test]
 fn keyboard_scroll_target_moves_by_line_step() {
     assert_eq!(
         keyboard_scroll_target(100.0, 500.0, 2_000.0, KeyboardScrollAction::LineDown),

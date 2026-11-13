@@ -48,3 +48,22 @@ fn heading_parser_uses_commonmark_for_formatting_links_and_setext() {
         markdown.find("Setext").unwrap()
     );
 }
+
+#[test]
+fn heading_title_joins_math_footnote_labels_and_line_breaks_as_text() {
+    let markdown = "Alpha\nbeta $x$[^note]\n=====\n\n[^note]: Footnote text.\n";
+    let parsed = parse_headers(markdown);
+
+    assert_eq!(parsed.outline_headers.len(), 1);
+    assert_eq!(parsed.outline_headers[0].title, "Alpha beta x[note]");
+    assert_eq!(parsed.document_title.as_deref(), Some("Alpha beta x[note]"));
+}
+
+#[test]
+fn heading_without_visible_text_is_left_out_of_the_outline() {
+    let parsed = parse_headers("# \n\n## ![](logo.png)\n\n## Kept\n");
+
+    assert_eq!(parsed.outline_headers.len(), 1);
+    assert_eq!(parsed.outline_headers[0].title, "Kept");
+    assert_eq!(parsed.document_title, None);
+}
