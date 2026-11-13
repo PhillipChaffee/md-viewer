@@ -327,6 +327,73 @@ fn root_scan_restores_expanded_folders_at_every_depth() {
     assert!(lists(&explorer, &folder, "deepest.md"));
 }
 
+/// How expanded folders were loaded before one walk did it: shallowest
+/// first, each found by its own search from the top of the tree.
+fn load_by_search(tree: &mut [FileTreeNode], expanded: &HashSet<PathBuf>, order: SortOrder) {
+    let mut paths: Vec<&PathBuf> = expanded.iter().collect();
+    paths.sort_by_key(|path| path.components().count());
+    for path in paths {
+        if let Some(children) = FileExplorer::children_slot_mut(tree, path) {
+            children.get_or_insert_with(|| FileExplorer::scan_directory_shallow(path, order));
+        }
+    }
+}
+
+/// Every node in display order, with whether it is a loaded folder.
+fn shape(nodes: &[FileTreeNode]) -> Vec<(PathBuf, bool)> {
+    let mut rows = Vec::new();
+    for node in nodes {
+        match node {
+            FileTreeNode::File { path, .. } => rows.push((path.clone(), false)),
+            FileTreeNode::Directory { path, children, .. } => {
+                rows.push((path.clone(), children.is_some()));
+                rows.extend(shape(children.as_deref().unwrap_or_default()));
+            }
+        }
+    }
+    rows
+}
+
+#[test]
+fn one_walk_loads_the_same_folders_as_a_search_for_each_expanded_path() {
+    let dir = ScratchDir::new();
+    let nested = dir.dir("open/nested");
+    let below_closed = dir.dir("open/nested/closed/deeper");
+    let loaded_not_expanded = dir.dir("loaded");
+    let below_loaded = dir.dir("loaded/inner");
+    let below_unloaded = dir.dir("unloaded/inner");
+    for name in [
+        "open/b.md",
+        "open/a.md",
+        "open/nested/c.md",
+        "loaded/inner/d.md",
+    ] {
+        dir.file(name, "text");
+    }
+    let expanded = HashSet::from([
+        dir.path().join("open"),
+        nested.clone(),
+        below_closed.clone(),
+        below_loaded.clone(),
+        below_unloaded.clone(),
+        PathBuf::from("/md-viewer/not/in/the/tree"),
+    ]);
+    let order = SortOrder::NameDesc;
+    let mut searched = FileExplorer::scan_directory_shallow(dir.path(), order);
+    *FileExplorer::children_slot_mut(&mut searched, &loaded_not_expanded).unwrap() = Some(
+        FileExplorer::scan_directory_shallow(&loaded_not_expanded, order),
+    );
+    let mut walked = searched.clone();
+
+    load_by_search(&mut searched, &expanded, order);
+    FileExplorer::load_expanded(&mut walked, &expanded, order);
+
+    assert_eq!(shape(&walked), shape(&searched));
+    let loaded = |path: &Path| shape(&walked).contains(&(path.to_path_buf(), true));
+    assert!(loaded(&nested) && loaded(&below_loaded));
+    assert!(!loaded(&below_closed) && !loaded(&below_unloaded));
+}
+
 #[test]
 fn root_is_scanned_in_place_when_no_thread_can_be_started() {
     let dir = ScratchDir::new();

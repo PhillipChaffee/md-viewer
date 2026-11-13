@@ -103,7 +103,7 @@ struct RootScan {
 impl RootScan {
     fn run(self) -> ExplorerScanResult {
         let mut tree = FileExplorer::scan_directory_shallow(&self.root, self.sort_order);
-        FileExplorer::restore_expanded_children(&mut tree, &self.expanded_dirs, self.sort_order);
+        FileExplorer::load_expanded(&mut tree, &self.expanded_dirs, self.sort_order);
         ExplorerScanResult {
             root: self.root,
             sort_order: self.sort_order,
@@ -270,7 +270,7 @@ impl FileExplorer {
         }
         // Expansion can change while the worker is running. Reuse its snapshot
         // and load any directories expanded after it started.
-        Self::restore_expanded_children(&mut result.tree, &self.expanded_dirs, self.sort_order);
+        Self::load_expanded(&mut result.tree, &self.expanded_dirs, self.sort_order);
         self.tree = result.tree;
         true
     }
@@ -282,17 +282,24 @@ impl FileExplorer {
         }
     }
 
-    fn restore_expanded_children(
-        tree: &mut [FileTreeNode],
+    /// Load every expanded directory that can be reached through loaded
+    /// ones. A directory is loaded before the walk goes into it, so an
+    /// expanded directory below it is found in the same pass.
+    fn load_expanded(
+        nodes: &mut [FileTreeNode],
         expanded_dirs: &HashSet<PathBuf>,
         sort_order: SortOrder,
     ) {
-        // Parents must be loaded before their expanded descendants can be
-        // found in the lazy tree.
-        let mut expanded: Vec<&PathBuf> = expanded_dirs.iter().collect();
-        expanded.sort_by_key(|path| path.components().count());
-        for path in expanded {
-            Self::load_children_in_tree(tree, path, sort_order);
+        for node in nodes {
+            let FileTreeNode::Directory { path, children, .. } = node else {
+                continue;
+            };
+            if expanded_dirs.contains(path) {
+                children.get_or_insert_with(|| Self::scan_directory_shallow(path, sort_order));
+            }
+            if let Some(loaded) = children {
+                Self::load_expanded(loaded, expanded_dirs, sort_order);
+            }
         }
     }
 
@@ -309,30 +316,14 @@ impl FileExplorer {
             };
             *children = Some(Self::scan_directory_shallow(directory, self.sort_order));
         }
-
-        // Restore expanded descendants from shallowest to deepest so their
-        // parents exist before lazy children are loaded.
-        let mut expanded: Vec<PathBuf> = self.expanded_dirs.iter().cloned().collect();
-        expanded.sort_by_key(|path| path.components().count());
-        for path in expanded {
-            self.load_children(&path);
-        }
+        Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
     }
 
     /// Load children for a specific directory (lazy loading).
     pub(crate) fn load_children(&mut self, dir_path: &Path) {
-        Self::load_children_in_tree(&mut self.tree, dir_path, self.sort_order);
-    }
-
-    /// Load the children of `target_path` if it is in the loaded tree and
-    /// has not been scanned yet.
-    fn load_children_in_tree(
-        nodes: &mut [FileTreeNode],
-        target_path: &Path,
-        sort_order: SortOrder,
-    ) {
-        if let Some(children) = Self::children_slot_mut(nodes, target_path) {
-            children.get_or_insert_with(|| Self::scan_directory_shallow(target_path, sort_order));
+        let sort_order = self.sort_order;
+        if let Some(children) = Self::children_slot_mut(&mut self.tree, dir_path) {
+            children.get_or_insert_with(|| Self::scan_directory_shallow(dir_path, sort_order));
         }
     }
 
