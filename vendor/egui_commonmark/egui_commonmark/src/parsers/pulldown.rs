@@ -2079,6 +2079,10 @@ fn is_likely_currency(tex: &str) -> bool {
         return false;
     }
 
+    if is_plain_arithmetic(trimmed) {
+        return false;
+    }
+
     // For ^ and _, only trust them as math if the content is short and
     // doesn't look like English prose. Long text with underscores from
     // identifiers (total_usd, miss_cost) is a false positive.
@@ -2095,6 +2099,23 @@ fn is_likely_currency(tex: &str) -> bool {
 
     // No math syntax found — this is almost certainly a currency/misparse
     true
+}
+
+/// Whether `tex` is arithmetic on numbers and one-letter variables and
+/// nothing else: `b + c`, `2x - 1`, `a / b`.
+///
+/// Prose caught between two dollar signs has words in it (`5/mo and 6`) or
+/// stops at an operator (`3,000-`). An expression of single letters and
+/// numbers that ends in an operand has neither.
+fn is_plain_arithmetic(tex: &str) -> bool {
+    let is_operator = |c: char| matches!(c, '+' | '-' | '*' | '/');
+    let is_word = |pair: &[u8]| pair.iter().all(u8::is_ascii_alphabetic);
+    tex.contains(is_operator)
+        && !tex.ends_with(is_operator)
+        && tex.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == ' ' || c == '.' || c == ',' || is_operator(c)
+        })
+        && !tex.as_bytes().windows(2).any(is_word)
 }
 
 /// Find source-visible references that the host registered as local links.
@@ -3497,8 +3518,9 @@ impl CommonMarkViewerInternal {
             }
             pulldown_cmark::Event::InlineMath(tex) => {
                 if is_likely_currency(&tex) {
-                    // Render as plain text with $ prefix instead of math
-                    let text: CowStr = format!("${tex}").into();
+                    // Render as plain text instead of math, between the two
+                    // dollar signs the parser took for its delimiters.
+                    let text: CowStr = format!("${tex}$").into();
                     self.event_text(text, ui, options);
                 } else {
                     #[cfg(feature = "math")]
@@ -5917,6 +5939,36 @@ mod tests {
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn arithmetic_on_letters_and_numbers_is_a_formula() {
+        for formula in ["b + c", "2x - 1", "a / b", "1 + 2", "a*b", "x_i", "8.5", "f(x)"] {
+            assert!(!is_likely_currency(formula), "{formula:?} is a formula");
+        }
+        for prose in ["5/mo and 6", "3,000-", "20 to 30", "5 or so, then 6"] {
+            assert!(is_likely_currency(prose), "{prose:?} is prose");
+        }
+    }
+
+    #[test]
+    fn prose_between_dollar_signs_keeps_both_of_them() {
+        egui::__run_test_ui(|ui| {
+            let mut renderer = CommonMarkViewerInternal::new();
+            let mut cache = CommonMarkCache::default();
+            renderer.text_style.heading = Some(1);
+
+            renderer.event(
+                ui,
+                Event::InlineMath("5 or so, then 6".into()),
+                0..17,
+                &mut cache,
+                &CommonMarkOptions::default(),
+                540.0,
+            );
+
+            assert_eq!(heading_display(&renderer), ["$5 or so, then 6$"]);
+        });
     }
 
     #[test]
