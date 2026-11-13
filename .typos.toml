@@ -1,0 +1,14 @@
+# Spell-check configuration for this bootstrapped repository. Default
+# dictionary on; the two seeded-proof quote words the folder READMEs
+# carry are the only allowances a fresh repo needs.
+[default.extend-identifiers]
+recieve = "recieve"
+calender = "calender"
+# the pane image handle in the scroll-regression script's embedded python
+pn = "pn"
+# the `writeable` crate (ICU), named in deny.toml's duplicate list
+writeable = "writeable"
+
+[files]
+# vendored upstream sources keep upstream's spelling; fixes go upstream
+extend-exclude = ["vendor/"]

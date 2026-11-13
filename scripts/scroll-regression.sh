@@ -77,8 +77,8 @@ TAG="scrollreg"
 DISPLAY_NUM="${MDV_DISPLAY:-99}"
 
 if [ ! -x "$BIN" ]; then
-    echo "error: $BIN is not an executable — build it first (cargo build)" >&2
-    exit 2
+	echo "error: $BIN is not an executable — build it first (cargo build)" >&2
+	exit 2
 fi
 
 # A document with several tables taller than the viewport, separated by prose.
@@ -86,54 +86,54 @@ fi
 # event, so a split point after it has to be recorded from the Start event —
 # get that wrong and the slice after a table has no anchor and paints nothing.
 if [ -z "$DOC" ]; then
-    DOC="$(mktemp /tmp/mdv-scrollreg-XXXXXX.md)"
-    # Shaped after the document from #121: twenty tables between 4 and 51 rows,
-    # cell text of varying length so row heights differ, and a nested index list
-    # at the top. Both properties are load-bearing — a fixture of five identical
-    # 40-row tables reaches the bottom three times sooner and never goes blank
-    # on a build that is visibly broken. See docs/LESSONS.md.
-    SIZES=(6 23 11 4 51 9 5 7 30 4 38 18 4 12 26 4 33 8 15 44)
-    {
-        echo "# Scroll regression fixture"
-        echo
-        echo "## Index"
-        echo
-        for group in Assets Globals Levels Miscellaneous; do
-            echo "- $group"
-            for sub in 1 2 3 4 5 6; do echo "  - ${group}Entry$sub"; done
-        done
-        echo
-        n=0
-        for size in "${SIZES[@]}"; do
-            n=$((n + 1))
-            echo "## Section $n"
-            echo
-            echo "### Attributes"
-            echo
-            echo "A short prose line introducing section $n."
-            echo
-            echo "| Name | Description | Type | Required | Games |"
-            echo "| - | - | - | - | - |"
-            for i in $(seq 1 "$size"); do
-                case $((i % 4)) in
-                    0) desc="*Not yet documented.*" ;;
-                    1) desc="A considerably longer description cell for row $i that has to wrap across several lines inside its column, which makes this row taller than its neighbours." ;;
-                    2) desc="Short." ;;
-                    3) desc="A medium length description for row $i covering roughly two lines of text." ;;
-                esac
-                echo "| entry_${n}_$i | $desc | Collection | Yes | RAC/GC/UYA/DL |"
-            done
-            echo
-            echo "### Children"
-            echo
-            echo "No children."
-            echo
-        done
-        echo "## End marker"
-        echo
-        echo "SCROLL_REGRESSION_END_MARKER"
-    } > "$DOC"
-    echo "using generated fixture: $DOC"
+	DOC="$(mktemp /tmp/mdv-scrollreg-XXXXXX.md)"
+	# Shaped after the document from #121: twenty tables between 4 and 51 rows,
+	# cell text of varying length so row heights differ, and a nested index list
+	# at the top. Both properties are load-bearing — a fixture of five identical
+	# 40-row tables reaches the bottom three times sooner and never goes blank
+	# on a build that is visibly broken.
+	SIZES=(6 23 11 4 51 9 5 7 30 4 38 18 4 12 26 4 33 8 15 44)
+	{
+		echo "# Scroll regression fixture"
+		echo
+		echo "## Index"
+		echo
+		for group in Assets Globals Levels Miscellaneous; do
+			echo "- $group"
+			for sub in 1 2 3 4 5 6; do echo "  - ${group}Entry$sub"; done
+		done
+		echo
+		n=0
+		for size in "${SIZES[@]}"; do
+			n=$((n + 1))
+			echo "## Section $n"
+			echo
+			echo "### Attributes"
+			echo
+			echo "A short prose line introducing section $n."
+			echo
+			echo "| Name | Description | Type | Required | Games |"
+			echo "| - | - | - | - | - |"
+			for i in $(seq 1 "$size"); do
+				case $((i % 4)) in
+				0) desc="*Not yet documented.*" ;;
+				1) desc="A considerably longer description cell for row $i that has to wrap across several lines inside its column, which makes this row taller than its neighbours." ;;
+				2) desc="Short." ;;
+				3) desc="A medium length description for row $i covering roughly two lines of text." ;;
+				esac
+				echo "| entry_${n}_$i | $desc | Collection | Yes | RAC/GC/UYA/DL |"
+			done
+			echo
+			echo "### Children"
+			echo
+			echo "No children."
+			echo
+		done
+		echo "## End marker"
+		echo
+		echo "SCROLL_REGRESSION_END_MARKER"
+	} >"$DOC"
+	echo "using generated fixture: $DOC"
 fi
 
 export DISPLAY=":$DISPLAY_NUM" WINIT_UNIX_BACKEND=x11 WAYLAND_DISPLAY=
@@ -147,24 +147,25 @@ APP_PID=""
 XVFB_PID=""
 # Safe to call mid-run: touches only the application.
 kill_app() {
-    # Kill by recorded PID. Matching by name does not work reliably: Linux
-    # truncates a process's comm to 15 characters, so `pkill -x` misses any
-    # binary with a longer name (a copy called `mdv-main-7a6346c` shows up as
-    # `mdv-main-7a6346`), and `pkill -f` would match this script's own command
-    # line and kill the run itself.
-    [ -n "$APP_PID" ] && kill -9 "$APP_PID" 2>/dev/null
-    true
+	# Kill by recorded PID. Matching by name does not work reliably: Linux
+	# truncates a process's comm to 15 characters, so `pkill -x` misses any
+	# binary with a longer name (a copy called `mdv-main-7a6346c` shows up as
+	# `mdv-main-7a6346`), and `pkill -f` would match this script's own command
+	# line and kill the run itself.
+	[ -n "$APP_PID" ] && kill -9 "$APP_PID" 2>/dev/null
+	true
 }
 
 # EXIT trap only — never call this while the run still needs the display.
+# shellcheck disable=SC2329  # invoked through the EXIT trap below
 cleanup() {
-    kill_app
-    # Kill the Xvfb this run started, by PID. Leaving it behind means the
-    # next run's blunt `pkill -9 Xvfb` has to clean up after us — which
-    # also kills any unrelated Xvfb on the machine, and races with a
-    # concurrent guard run.
-    [ -n "$XVFB_PID" ] && kill -9 "$XVFB_PID" 2>/dev/null
-    true
+	kill_app
+	# Kill the Xvfb this run started, by PID. Leaving it behind means the
+	# next run's blunt `pkill -9 Xvfb` has to clean up after us — which
+	# also kills any unrelated Xvfb on the machine, and races with a
+	# concurrent guard run.
+	[ -n "$XVFB_PID" ] && kill -9 "$XVFB_PID" 2>/dev/null
+	true
 }
 trap cleanup EXIT
 
@@ -176,7 +177,7 @@ echo "== starting Xvfb on :$DISPLAY_NUM =="
 # is safe here because this pattern cannot match the script's own
 # command line.
 for pid in $(pgrep -f "Xvfb :$DISPLAY_NUM " 2>/dev/null); do
-    kill -9 "$pid" 2>/dev/null
+	kill -9 "$pid" 2>/dev/null
 done
 rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
 # Redirect: a backgrounded process that inherits stdout holds the pipe open,
@@ -185,8 +186,8 @@ Xvfb ":$DISPLAY_NUM" -screen 0 1920x1080x24 >/dev/null 2>&1 &
 XVFB_PID=$!
 sleep 2
 if ! xdpyinfo >/dev/null 2>&1; then
-    echo "error: Xvfb is not responding on :$DISPLAY_NUM" >&2
-    exit 2
+	echo "error: Xvfb is not responding on :$DISPLAY_NUM" >&2
+	exit 2
 fi
 
 kill_app
@@ -198,8 +199,8 @@ mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$FRAMES"
 # exactly one window.
 STALE=$(xdotool search --name "Markdown Viewer" 2>/dev/null | wc -l)
 if [ "$STALE" -ne 0 ]; then
-    echo "error: $STALE stale md-viewer windows remain on :$DISPLAY_NUM" >&2
-    exit 2
+	echo "error: $STALE stale md-viewer windows remain on :$DISPLAY_NUM" >&2
+	exit 2
 fi
 
 echo "== launching $BIN =="
@@ -210,8 +211,8 @@ sleep 5
 WINDOWS=$(xdotool search --name "Markdown Viewer" 2>/dev/null)
 COUNT=$(echo "$WINDOWS" | grep -c .)
 if [ "$COUNT" -ne 1 ]; then
-    echo "error: expected exactly 1 window, found $COUNT" >&2
-    exit 2
+	echo "error: expected exactly 1 window, found $COUNT" >&2
+	exit 2
 fi
 WID=$(echo "$WINDOWS" | head -1)
 xdotool windowsize "$WID" 1200 800
@@ -221,11 +222,14 @@ sleep 0.5
 
 echo "== capturing $((STEPS + 1)) frames ($CLICKS wheel clicks per step) =="
 for step in $(seq 0 "$STEPS"); do
-    if [ "$step" -gt 0 ]; then
-        for _ in $(seq 1 "$CLICKS"); do xdotool click 5; sleep 0.03; done
-        sleep 0.45
-    fi
-    import -window "$WID" "$FRAMES/$(printf 'f%03d' "$step").png" 2>/dev/null
+	if [ "$step" -gt 0 ]; then
+		for _ in $(seq 1 "$CLICKS"); do
+			xdotool click 5
+			sleep 0.03
+		done
+		sleep 0.45
+	fi
+	import -window "$WID" "$FRAMES/$(printf 'f%03d' "$step").png" 2>/dev/null
 done
 
 echo "== analysing =="

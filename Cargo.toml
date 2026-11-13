@@ -5,18 +5,16 @@ edition = "2021"
 rust-version = "1.89"
 description = "Fast, lightweight markdown viewer for Linux with tabs, file explorer, and live reload"
 license = "MIT"
-repository = "https://github.com/aydiler/md-viewer"
-homepage = "https://github.com/aydiler/md-viewer"
-documentation = "https://github.com/aydiler/md-viewer#readme"
+repository = "https://github.com/PhillipChaffee/md-viewer"
+homepage = "https://github.com/PhillipChaffee/md-viewer"
+documentation = "https://github.com/PhillipChaffee/md-viewer#readme"
 readme = "README.md"
 keywords = ["markdown", "viewer", "egui", "linux", "desktop"]
 categories = ["command-line-utilities", "gui", "visualization"]
 exclude = [
-    "docs/devlog/*",
-    "docs/superpowers/*",
     "screenshots/*",
     ".claude/*",
-    "crates/*",
+    "vendor/*",
 ]
 
 [dependencies]
@@ -65,18 +63,82 @@ env_logger = "0.11"
 log = "0.4"
 regex = "1.12.2"
 pulldown-cmark = { version = "0.13", default-features = false }
-fontique = { version = "0.11.1", features = ["fontconfig-dlopen"] }
+fontique = { version = "0.12.0", features = ["fontconfig-dlopen"] }
 sys-locale = "0.3.2"
 ttf-parser = "0.25"
 url = "2.5"
 percent-encoding = "2.3"
 
+# cargo-shear cannot see a crate that is used only for its features: `image`
+# is never imported, but its png/jpeg/gif features switch on the decoders
+# egui_extras needs to show images in documents.
+[package.metadata.cargo-shear]
+ignored = ["image"]
+
 [features]
 default = []
 # mcp = ["dep:egui-mcp-bridge"]
 
-[lints.rust]
+# The lint tables below are the full-lint Rust baseline
+# (github.com/PhillipChaffee/full-lint, rust/Cargo.toml.example). CI turns
+# every warn level into an error through -D warnings.
+[workspace]
+# The vendored forks keep their own manifests and are not gated here: they
+# are upstream code this repository patches in, reviewed against upstream.
+exclude = ["vendor"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"                # this binary needs no unsafe; a use of it is a design change to review
+missing_docs = "deny"                 # an undocumented public item is an error to fix, not a taste
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_qualifications = "warn"
+# The `mcp` feature is declared only on machines that have the local
+# egui-mcp-bridge checkout; the cfg name must stay known everywhere else.
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("mcp"))'] }
+
+[workspace.lints.rustdoc]
+# The whole stable group in one entry, so lints rustdoc gains stay owned by
+# the group by default.
+all = "deny"
+
+[workspace.lints.clippy]
+# Individual entries at priority 0 override these groups because the groups
+# sit at priority -1.
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }   # experimental; the toolchain pin makes its emission deterministic
+cargo = { level = "warn", priority = -1 }     # lints the manifest itself
+
+# --- group exceptions, one reason each
+# nursery's redundant_pub_crate contradicts rustc's unreachable_pub: one
+# wants `pub` inside a private module, the other forbids it. The rustc lint
+# wins; `pub(crate)` states the real reach of an item.
+redundant_pub_crate = "allow"
+# The eframe/winit/wayland graph pins several generations of the same
+# foundational crates; this manifest cannot converge versions it does not
+# choose. cargo-deny's bans check owns the duplicate list, with reasons.
+multiple_crate_versions = "allow"
+
+# --- restriction picks, one reason each
+unwrap_used = "warn"                  # a panic in a desktop viewer loses the user's open tabs and unsaved edits
+expect_used = "warn"                  # same failure as unwrap, with a message nobody sees in a detached GUI
+panic = "warn"                        # same: the window vanishes with no dialog
+todo = "warn"                         # unfinished code must not ship
+unimplemented = "warn"                # same
+dbg_macro = "warn"                    # debug output left behind
+print_stdout = "warn"                 # the app detaches from the terminal; output goes through `log`
+print_stderr = "warn"                 # same
+# An allow without a why outlives its reason. The suppression path is
+# `#[expect(..., reason = "...")]`, which fails the build once it stops firing.
+allow_attributes_without_reason = "warn"
+# Each paragraph of a doc comment ends in punctuation.
+doc_paragraphs_missing_punctuation = "warn"
+
+[lints]
+workspace = true
 
 [profile.release]
 opt-level = "z"
@@ -92,6 +154,9 @@ lto = "thin"
 codegen-units = 4
 
 [patch.crates-io]
-epaint = { path = "crates/epaint", version = "0.33.3" }
-egui_commonmark_extended = { path = "crates/egui_commonmark/egui_commonmark", version = "0.28.3" }
-egui_commonmark_backend_extended = { path = "crates/egui_commonmark/egui_commonmark_backend", version = "0.28.3" }
+epaint = { path = "vendor/epaint", version = "0.33.3" }
+egui_commonmark_extended = { path = "vendor/egui_commonmark/egui_commonmark", version = "0.28.3" }
+egui_commonmark_backend_extended = { path = "vendor/egui_commonmark/egui_commonmark_backend", version = "0.28.3" }
+
+[dev-dependencies]
+egui_kittest = { version = "0.33.3", default-features = false, features = ["eframe"] }

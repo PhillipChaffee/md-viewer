@@ -7,24 +7,26 @@ These rules ensure Claude has accurate context before modifying code, preventing
 When the user asks to implement a feature or fix a bug, **automatically perform these checks before writing any code**:
 
 1. **Check branch and status:**
+
    ```bash
    git branch --show-current
    git status --short
    ```
 
 2. **Verify branch is fresh** (critical for feature branches):
+
    ```bash
    git fetch origin 2>/dev/null
    git log --oneline HEAD..origin/main 2>/dev/null | head -5
    ```
+
    If output is not empty, warn: "Branch may be stale. Consider rebasing on main first."
 
 3. **Show recent commits** for context:
+
    ```bash
    git log --oneline -5
    ```
-
-4. **Search LESSONS.md** for keywords related to the task.
 
 Report findings briefly before proceeding. Use `/session-start` to run this explicitly if needed.
 
@@ -54,22 +56,12 @@ ALWAYS use the Read tool on files you plan to modify:
 
 **Never rely on memory or assumptions about file contents.**
 
-### 3. Check LESSONS.md
-
-Before debugging or implementing in an area:
-
-```bash
-grep -i "keyword" docs/LESSONS.md
-```
-
-LESSONS.md contains hard-won fixes and gotchas. Ignoring it wastes time re-discovering solved problems.
-
-### 4. Preserve Patterns You See
+### 3. Preserve Patterns You See
 
 If existing code uses a pattern, new code must follow it:
 
 | If You See | New Code Must |
-|------------|---------------|
+| ------------ | --------------- |
 | `.scroll_source(...)` on ScrollArea | Include scroll_source config |
 | `.auto_shrink([false, false])` | Maintain same shrink behavior |
 | Error handling with `if let Some(...)` | Use same error pattern |
@@ -92,36 +84,32 @@ git log --oneline HEAD..origin/main
 git rebase origin/main
 ```
 
-### Read Architecture Docs
-
-Skim these before major changes:
-
-- `docs/ARCHITECTURE.md` - understand component structure
-- `docs/LESSONS.md` - know the gotchas
-- Recent devlogs in `docs/devlog/` - understand recent changes
-
 ## Red Flags - You're Missing Context
 
 ### "I'll just rewrite this part"
+
 Stop. Read the existing code first. Understand WHY it's structured that way.
 
 ### "This code seems unnecessary"
+
 It probably isn't. Check git blame to see when/why it was added:
+
 ```bash
 git blame -L 100,120 src/main.rs
 git show <commit-hash>  # Read the commit message
 ```
 
 ### "I remember the code does X"
+
 Don't trust memory. Use Read tool to verify current state.
 
 ### Copy-pasting from earlier in conversation
+
 Conversation context may be stale. Re-read the actual file.
 
 ## Checklist Before Modifying Code
 
 - [ ] Read the file(s) I'm about to modify
 - [ ] Checked `git log -5` for recent changes
-- [ ] Searched LESSONS.md for relevant gotchas
 - [ ] Identified patterns in existing code to preserve
 - [ ] Verified my branch is based on latest main

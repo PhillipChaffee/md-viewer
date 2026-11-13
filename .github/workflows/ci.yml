@@ -1,48 +1,212 @@
+# The CI gates from the full-lint Rust baseline
+# (github.com/PhillipChaffee/full-lint, rust/ci.yml): the same commands
+# run-gates.sh runs. The `renderer` job at the end is this repository's own:
+# it lints and tests the vendored egui_commonmark fork under its own manifest.
+permissions:
+  contents: read  # least privilege: no step in this workflow writes to the repo (GitHub secure-use reference)
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
+    timeout-minutes: 40  # a cold eframe build plus the instrumented test build; GitHub's default is 360
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-test
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      # eframe links the GTK, xcb and fontconfig stacks; the doc job needs
+      # them too because dependency build scripts still run under --no-deps.
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang pkg-config libxcb1-dev libxcb-render0-dev \
             libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev \
             libgtk-3-dev libfontconfig1-dev libdbus-1-dev
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Remove local-only MCP dependency
+      # rustup reads rust-toolchain.toml (channel, components incl.
+      # llvm-tools-preview) on the first cargo call; no toolchain step needed.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # Gate AND report in one pass: llvm-cov writes the report before it
+      # evaluates the fail-under switches (lines, regions, functions), so the
+      # upload below can still run on a gate failure (measured: exit 1 with
+      # lcov.info on disk).
+      - name: Install cargo-llvm-cov 0.9.0
+        run: cargo install --locked --version 0.9.0 cargo-llvm-cov
+      - name: Coverage gate (lines, regions, functions — 95 each)
+        run: cargo llvm-cov --workspace --fail-under-lines 95 --fail-under-regions 95 --fail-under-functions 95 --lcov --output-path lcov.info
+      # Cognitive complexity is the only complexity metric this stack gates
+      # (the consolidation decision). Threshold 15 is Sonar's S3776 default,
+      # the parity anchor every language in this baseline gates at. arborist
+      # has no config file, so the threshold lives in this step and
+      # run-gates.sh; raise it only with a written reason here. Measured
+      # divergences from the SonarSource whitepaper (full list in
+      # rust/README.md): flat else-if chains inflate (a 4-way chain scores 9
+      # where the spec counts 4 — the conservative direction), labeled breaks
+      # under-count by one, and a nested fn's body scores inside its
+      # enclosing function at nesting 0. The tool is pinned --locked and its
+      # self-updater is dormant: the analysis path never touches the network.
+      # Scope is src/: arborist has no exclude switch, and vendor/ holds
+      # upstream forks this repository does not restructure.
+      - name: Cognitive-complexity gate (arborist-cli 0.2.1 --locked, threshold 15)
         run: |
-          # Remove the path dependency line but keep the feature (as empty)
-          # First, change the mcp feature to empty (must do before removing dep line)
-          sed -i 's/mcp = \["dep:egui-mcp-bridge"\]/mcp = []/' Cargo.toml
-          # Then remove the optional dependency line
-          sed -i '/^egui-mcp-bridge = /d' Cargo.toml
+          cargo install --locked --version 0.2.1 arborist-cli
+          arborist --threshold 15 --exceeds-only --gitignore --languages rust src
+      - name: Effective-lines gate (max 1000, from effective-lines-gate.sh)
+        run: ./effective-lines-gate.sh
+      # Free for public repositories, no account and no secret: the action
+      # takes the built-in GITHUB_TOKEN. Pinned action version. The lcov
+      # format is Coveralls' native one.
+      # The badge is not a gate: a coveralls.io flake must not redden an
+      # otherwise-green build.
+      - name: Upload coverage to Coveralls
+        if: always()
+        continue-on-error: true
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329  # v2
+        with:
+          file: lcov.info
 
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo build --release
-      - run: cargo test
+  doc-comments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20  # bounds a hung network gate; GitHub's default is 360
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-doc-comments
+      cancel-in-progress: true
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      # eframe links the GTK, xcb and fontconfig stacks; the doc job needs
+      # them too because dependency build scripts still run under --no-deps.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang pkg-config libxcb1-dev libxcb-render0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev \
+            libgtk-3-dev libfontconfig1-dev libdbus-1-dev
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
+      # The doc-quality lints are rustdoc's and fire under no other step.
+      - run: cargo doc --workspace --no-deps
+
+  hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20  # bounds a hung network gate; GitHub's default is 360
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-hygiene
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+      - name: Install pinned hygiene tools
+        run: |
+          # Pinned hygiene tools: one download per tool, no installer actions.
+          # Every download's sha256 digest is embedded in this file (computed
+          # from the exact release asset at pin time and checked on download),
+          # the same trust-anchor model as the python lockfile's --require-hashes:
+          # a re-uploaded or retargeted upstream asset fails the gate instead of
+          # executing. Registry installs (npm global, pip) are version-pinned,
+          # run with --ignore-scripts where npm is involved, and resolve their
+          # transitive trees from the registry — recorded residual. yamllint is
+          # the one license exception: GPL-3.0-or-later, deliberately excluded
+          # from the permissive-only lockfile, installed by exact pin.
+          TYPOS_VERSION=1.50.1
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/typos.tar.gz
+          echo "edf0545109aee6a22751d04ddecb97c45be47d3aa0409564fb895eeeace91b1e  /tmp/typos.tar.gz" | sha256sum --check --status
+          mkdir /tmp/typosx && tar xz -C /tmp/typosx -f /tmp/typos.tar.gz
+          sudo mv /tmp/typosx/typos /usr/local/bin/
+          npm install -g --ignore-scripts markdownlint-cli2@0.23.2
+          LYCHEE_VERSION=0.24.2
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/lychee.tar.gz
+          echo "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a  /tmp/lychee.tar.gz" | sha256sum --check --status
+          mkdir /tmp/lycheex && tar xz -C /tmp/lycheex -f /tmp/lychee.tar.gz
+          sudo mv /tmp/lycheex/lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/
+          GITLEAKS_VERSION=8.30.1
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check --status
+          mkdir /tmp/gitleaksx && tar xz -C /tmp/gitleaksx -f /tmp/gitleaks.tar.gz
+          sudo mv /tmp/gitleaksx/gitleaks /usr/local/bin/
+          npm install -g --ignore-scripts jscpd@5.2.0
+          SHELLCHECK_VERSION=0.11.0
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" -o /tmp/shellcheck.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  /tmp/shellcheck.tar.xz" | sha256sum --check --status
+          mkdir /tmp/shellcheckx && tar xJ -C /tmp/shellcheckx -f /tmp/shellcheck.tar.xz
+          sudo mv /tmp/shellcheckx/shellcheck-v${SHELLCHECK_VERSION}/shellcheck /usr/local/bin/
+          SHFMT_VERSION=3.14.0
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" -o /tmp/shfmt
+          echo "fe42021c7272ef2d67ea36cbc3031683c625d0badec733ef3a57b567246a0b66  /tmp/shfmt" | sha256sum --check --status
+          sudo mv /tmp/shfmt /usr/local/bin/
+          sudo chmod +x /usr/local/bin/shfmt
+          # yamllint is the one license exception: GPL-3.0-or-later, deliberately
+          # excluded from the permissive-only lockfile, installed by exact pin.
+          python3 -m pip install --quiet yamllint==1.38.0
+          ACTIONLINT_VERSION=1.7.12
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum --check --status
+          mkdir /tmp/actionlintx && tar xz -C /tmp/actionlintx -f /tmp/actionlint.tar.gz
+          sudo mv /tmp/actionlintx/actionlint /usr/local/bin/
+          # cargo-deny ships prebuilt musl binaries inside a release subdirectory
+          DENY_VERSION=0.20.2
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/EmbarkStudios/cargo-deny/releases/download/${DENY_VERSION}/cargo-deny-${DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/deny.tar.gz
+          echo "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  /tmp/deny.tar.gz" | sha256sum --check --status
+          mkdir /tmp/denyx && tar xz -C /tmp/denyx -f /tmp/deny.tar.gz
+          sudo mv /tmp/denyx/cargo-deny-${DENY_VERSION}-x86_64-unknown-linux-musl/cargo-deny /usr/local/bin/
+          # cargo-shear ships prebuilt musl binaries; digest embedded like the rest
+          SHEAR_VERSION=1.13.4
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/Boshen/cargo-shear/releases/download/v${SHEAR_VERSION}/cargo-shear-x86_64-unknown-linux-musl.tar.gz" -o /tmp/shear.tar.gz
+          echo "eb0efdfb7bd95433b5e8b9d0759a7463a30ada2bf9d54a386e2ba7d74b533d09  /tmp/shear.tar.gz" | sha256sum --check --status
+          mkdir /tmp/shearx && tar xz -C /tmp/shearx -f /tmp/shear.tar.gz
+          sudo mv /tmp/shearx/cargo-shear /usr/local/bin/
+          OSV_VERSION=2.5.1
+          curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          echo "f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be  /tmp/osv-scanner" | sha256sum --check --status
+          sudo mv /tmp/osv-scanner /usr/local/bin/
+          sudo chmod +x /usr/local/bin/osv-scanner
+      - name: Spell check (typos v1.50.1)
+        run: typos
+      - name: Markdown lint (markdownlint-cli2 v0.23.2)
+        run: markdownlint-cli2 "**/*.md"
+      - name: Link check (lychee v0.24.2)
+        run: lychee --no-progress .
+      - name: Secret scan (gitleaks v8.30.1)
+        run: gitleaks detect --source . --redact
+      - name: Copy-paste detection (jscpd v5.2.0)
+        run: jscpd
+      # Both osv-scanner steps read the root Cargo.lock, the one that ships.
+      # The lockfiles under vendor/ belong to the forks' own dev workspaces
+      # and resolve crates this binary never links. The license list is the
+      # shared house list plus the five licenses deny.toml allows with reasons.
+      - name: Dependency advisories (osv-scanner v2.5.1)
+        run: osv-scanner scan --lockfile Cargo.lock
+      - name: License check (osv-scanner v2.5.1)
+        run: osv-scanner scan --lockfile Cargo.lock --licenses="MIT,Apache-2.0,ISC,BSD-3-Clause,BSD-2-Clause,MPL-2.0,PSF-2.0,Unicode-3.0,Python-2.0,Unlicense,CC0-1.0,0BSD,Apache-1.1,BSD-3-Clause-Clear,LGPL-3.0-only,BlueOak-1.0.0,CC-BY-3.0,Zlib,BSL-1.0,CDLA-Permissive-2.0,OFL-1.1,Ubuntu-font-1.0"
+      - name: RustSec advisories (cargo-deny v0.20.2)
+        run: cargo deny check advisories
+      - name: License policy (cargo-deny v0.20.2)
+        run: cargo deny check licenses
+      - name: Dependency bans and duplicates (cargo-deny v0.20.2)
+        run: cargo deny check bans
+      - name: Unused dependencies (cargo-shear v1.13.4)
+        run: cargo shear --deny-warnings
+      # vendor/ is excluded: upstream's markers are upstream's to resolve.
+      - name: TODO policy (no TODO/FIXME markers in Rust source)
+        run: "rc=0; git grep --untracked --no-recurse-submodules -nE 'TODO|FIXME' -- '*.rs' ':!vendor' || rc=$?; test \"$rc\" -eq 1"
+      - name: Shell lint (shellcheck v0.11.0)
+        run: for sh in $(git ls-files "*.sh"); do shellcheck "$sh"; done
+      - name: Shell format (shfmt v3.14.0)
+        run: for sh in $(git ls-files "*.sh"); do shfmt -d "$sh"; done
+      - name: Workflow YAML lint (yamllint v1.38.0)
+        # Initialized-repo layout: every workflow lives in .github/workflows/.
+        run: yamllint ./.github/workflows/*.yml
+      - name: Workflow lint (actionlint v1.7.12)
+        run: actionlint ./.github/workflows/*.yml
 
   renderer:
     runs-on: ubuntu-latest
@@ -68,20 +232,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/egui_commonmark -> target
+          workspaces: vendor/egui_commonmark -> target
 
       - name: Lint renderer crates
         run: |
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_extended --all-targets --features "$RENDERER_FEATURES"
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-targets --all-features
-          cargo clippy --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended --all-targets
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_extended --all-targets --features "$RENDERER_FEATURES"
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-targets --all-features
+          cargo clippy --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended --all-targets
 
       - name: Test renderer crates
         run: |
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_extended --features "$RENDERER_FEATURES"
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --no-default-features
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-features
-          cargo test --manifest-path crates/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_extended --features "$RENDERER_FEATURES"
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --no-default-features
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-features
+          cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended
 
   version-sync:
     runs-on: ubuntu-latest
@@ -93,16 +257,3 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check app/renderer workspace dependency contract
         run: bash scripts/check-workspace-sync.sh
-      - name: Check versions match
-        run: |
-          # Robust extraction tolerating quotes and spacing
-          CARGO_VER=$(awk -F'"' '/^version[[:space:]]*=[[:space:]]*"/{print $2; exit}' Cargo.toml)
-          SNAP_VER=$(sed -n "s/^version:[[:space:]]*['\"]\\?\\([0-9]\\+\\.[0-9]\\+\\.[0-9]\\+\\)['\"]\\?/\\1/p" snap/snapcraft.yaml)
-
-          echo "Cargo.toml: $CARGO_VER"
-          echo "snapcraft.yaml: $SNAP_VER"
-
-          if [ "$CARGO_VER" != "$SNAP_VER" ]; then
-            echo "::error::Version mismatch! Cargo=$CARGO_VER Snap=$SNAP_VER"
-            exit 1
-          fi

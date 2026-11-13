@@ -1,0 +1,13 @@
+# gitleaks configuration. The default ruleset runs as-is; this repository has
+# no allowlist entries. Add one only with a reason (for example, a test
+# fixture that carries a fake credential on purpose).
+[extend]
+useDefault = true
+
+# target/ is build output and never committed. The local runner scans the
+# working tree (--no-git), where rustdoc's generated search index trips the
+# token rules on random-looking identifiers; CI scans git history, which
+# cannot contain it.
+[allowlist]
+description = "build output"
+paths = ['''^target/''']

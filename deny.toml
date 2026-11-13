@@ -1,0 +1,178 @@
+# The supply-chain gate configuration for a strict Rust workspace.
+#
+# Rule of the house: every non-default setting carries its reason. An entry
+# without a reason gets deleted on the next review. CI runs one labeled step
+# per check (advisories, licenses, bans) so a failure names its gate; see
+# ci.yml for the step names.
+#
+# Install: cargo install cargo-deny --locked --version 0.20.2
+
+[graph]
+# Audit every feature path the build can take, so a vulnerable dependency
+# hidden behind an off-by-default feature cannot pass the gate.
+all-features = true
+
+[advisories]
+# A yanked release is a recalled release: the author pulled it for a defect
+# or a breach. Nothing in a strict workspace may resolve to one.
+yanked = "deny"
+# An unmaintained crate the workspace asks for directly is a choice the owner
+# can act on (bump or replace); a transitive one is out of this workspace's
+# hands today, so only direct dependencies fail the gate.
+unmaintained = "workspace"
+# Unsound advisories fail the same way as unmaintained: a direct dependency
+# on a release with a known soundness defect is a choice, not an accident.
+unsound = "workspace"
+# Ignore only with a parsed advisory id and a reason that carries the review
+# date; an entry without a reason gets deleted on the next review.
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "reviewed 2026-11-13: quick-xml 0.38 enters only through typst's bibliography stack (citationberg), which parses CSL styles compiled into the binary; no document text reaches it. Drops out when typst moves to quick-xml >= 0.41." },
+    { id = "RUSTSEC-2026-0195", reason = "reviewed 2026-11-13: same path as RUSTSEC-2026-0194; the NsReader input is the embedded CSL data, never user input." },
+    { id = "RUSTSEC-2026-0235", reason = "reviewed 2026-11-13: rkyv 0.7 enters through mitex-spec, which reads the LaTeX command table archived into the crate at build time; the archive is not attacker-controlled. Drops out when mitex moves to rkyv >= 0.8.17." },
+    { id = "RUSTSEC-2026-0192", reason = "reviewed 2026-11-13: ttf-parser is unmaintained with no successor release; this crate uses it read-only to inspect installed font tables, and typst, fontdb and rustybuzz pin it regardless. Replace with skrifa when the font stack below moves." },
+]
+# The advisory database refreshes on every run; when fetching is disabled and
+# the cached database is older than this, the gate fails instead of scanning
+# with stale data (fail-closed).
+maximum-db-staleness = "P90D"
+
+[licenses]
+# Licenses inferred from text must reach this confidence, or the gate fails;
+# 0.93 is the value the cargo-deny authors recommend.
+confidence-threshold = 0.93
+# The allow-list is the policy: a permissive license a strict workspace may
+# carry. Every entry below names why it is allowed; add a new entry only with
+# its reason.
+allow = [
+    # Permissive; the default choice for new code in this workspace.
+    "MIT",
+    # Permissive with a patent grant; the other default choice for new code.
+    "Apache-2.0",
+    # Apache-2.0 plus the LLVM redistribution terms that llvm-tools data
+    # carries.
+    "Apache-2.0 WITH LLVM-exception",
+    # The 2- and 3-clause BSD pair; both are permissive with attribution.
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    # ISC: permissive, the license small utility crates have settled on.
+    "ISC",
+    # The unicode-* crates moved to this license when Unicode took over
+    # their maintenance.
+    "Unicode-3.0",
+    # miniz_oxide and friends ship under Zlib.
+    "Zlib",
+    # Public-domain-equivalent; a few small utility crates use it.
+    "CC0-1.0",
+    # File-level copyleft: obligations stop at the modified file, and this
+    # workspace modifies none of them (cssparser, selectors, option-ext).
+    "MPL-2.0",
+    # Boost: permissive, no attribution needed for binaries (clipboard-win,
+    # error-code).
+    "BSL-1.0",
+    # The Mozilla root-certificate data in webpki-roots ships under this
+    # permissive data license.
+    "CDLA-Permissive-2.0",
+    # egui's built-in fonts (epaint_default_fonts) and the bundled reading
+    # fonts: free to embed and redistribute with the license text.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+
+[bans]
+# Multiple versions of one crate in the graph are a version-conflict trap and
+# a build-time tax. The graph must converge; if two versions are truly
+# unavoidable, record a skip with its reason and revisit it, never widen the
+# gate for the whole workspace.
+multiple-versions = "deny"
+# Each banned crate names what to use instead, so the error carries the fix.
+deny = [
+    { crate = "openssl", use-instead = "rustls", reason = "the OpenSSL bindings drag libssl into the build; rustls is the maintained pure-Rust TLS stack" },
+    { crate = "openssl-sys", use-instead = "rustls", reason = "the FFI layer under openssl; banned with it" },
+]
+# Windows-only foundational crates enter the graph on every target and bump
+# too often to ever share one version, so the whole tree is skipped.
+# Three upstream stacks meet in this binary and each pins its own generation
+# of the shared foundation crates: the eframe/winit/wayland GUI stack, the
+# typst math renderer, and the merman/resvg diagram and SVG stack. None of
+# the versions below is chosen by this manifest, so none can be converged
+# here. The list is exact on purpose: a NEW duplicate still fails the gate,
+# and cargo-deny reports an entry that stops being needed.
+skip = [
+    { crate = "ahash", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "bit-set", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "bit-vec", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "bitflags", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "block2", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "calloop", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "calloop-wayland-source", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "foldhash", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "font-types", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "getrandom", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "gif", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "hashbrown", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "icu_collections", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "icu_properties", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "icu_properties_data", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "icu_provider", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "jni-sys", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "kurbo", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "linux-raw-sys", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "litemap", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "logos", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "logos-codegen", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "logos-derive", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "moxcms", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "objc2", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "objc2-app-kit", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "objc2-foundation", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "phf", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "phf_shared", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "png", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "pulldown-cmark", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "quick-xml", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "r-efi", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "read-fonts", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "redox_syscall", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "redox_users", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "regex-syntax", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "roxmltree", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "rustc-hash", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "rustix", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "siphasher", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "smithay-client-toolkit", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "svgtypes", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "syn", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "thiserror", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "thiserror-impl", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "tinystr", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "toml_datetime", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "toml_edit", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-collections", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-core", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-future", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-numerics", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-result", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-strings", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "windows-threading", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "winnow", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "writeable", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "yoke", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "yoke-derive", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "zerotrie", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "zerovec", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "zerovec-derive", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "zune-core", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+    { crate = "zune-jpeg", reason = "pinned at different versions by the eframe, typst and merman/resvg stacks; not selectable from this manifest" },
+]
+skip-tree = [
+    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
+]
+
+[sources]
+# A dependency may come from crates.io and nothing else: any other registry
+# fails the gate.
+unknown-registry = "deny"
+# Git-sourced dependencies bypass review and lockfile integrity, so they fail
+# the gate too.
+unknown-git = "deny"
