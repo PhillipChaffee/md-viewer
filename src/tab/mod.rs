@@ -108,9 +108,9 @@ pub(crate) struct Tab {
     pub(crate) content_version: u64,
     /// When true, the content area shows a `TextEdit` instead of `CommonMarkViewer`.
     pub(crate) is_editing: bool,
-    /// Snapshot of the on-disk content at last load/save. The edit buffer is
-    /// dirty when `content != saved_content`.
-    pub(crate) saved_content: String,
+    /// Snapshot of the on-disk content at last load/save. `is_dirty`
+    /// compares the edit buffer with it.
+    saved_content: String,
     /// "Saved ✓" / "Save failed" flash trigger for the edit toolbar
     /// (true = success, false = failure).
     pub(crate) save_flash: Option<(bool, Instant)>,
@@ -185,6 +185,12 @@ impl Tab {
         self.is_editing = to_edit;
         self.cache.clear_scrollable();
         self.content_version = self.content_version.wrapping_add(1);
+    }
+
+    /// Whether the text differs from what was last loaded or saved. Text
+    /// typed back to what is on disk is not dirty.
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.content != self.saved_content
     }
 
     pub(crate) fn title(&self) -> String {

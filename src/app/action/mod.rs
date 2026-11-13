@@ -166,7 +166,7 @@ impl MarkdownApp {
         let Some(tab) = self.tabs.get_mut(self.active_tab) else {
             return;
         };
-        if tab.content == tab.saved_content {
+        if !tab.is_dirty() {
             return;
         }
         match tab.save_to_disk() {

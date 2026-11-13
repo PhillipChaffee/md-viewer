@@ -95,7 +95,7 @@ fn unsaved_edits_are_saved_from_the_preview_as_from_the_editor() {
     harness.apply(AppAction::Save);
 
     assert_eq!(on_disk(&harness), "edited");
-    assert_eq!(harness.app.tabs[0].saved_content, "edited");
+    assert!(!harness.app.tabs[0].is_dirty());
     assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
 }
 

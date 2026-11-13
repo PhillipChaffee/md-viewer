@@ -55,7 +55,7 @@ struct TabLabel<'a> {
 /// is the only tab: an edit in progress, unsaved changes, or a save's
 /// outcome.
 fn has_edit_state(tab: &Tab) -> bool {
-    tab.is_editing || tab.content != tab.saved_content || tab.save_flash.is_some()
+    tab.is_editing || tab.is_dirty() || tab.save_flash.is_some()
 }
 
 impl MarkdownApp {
@@ -348,7 +348,7 @@ fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
     if let Some(to_edit) = chrome::segmented(ui, palette, &modes, tab.is_editing, false) {
         tab.set_edit_mode(to_edit);
     }
-    if tab.content != tab.saved_content {
+    if tab.is_dirty() {
         let (dot, response) =
             ui.allocate_exact_size(egui::Vec2::splat(UNSAVED_DOT), egui::Sense::hover());
         response.widget_info(|| {

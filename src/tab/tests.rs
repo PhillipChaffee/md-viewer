@@ -211,6 +211,22 @@ mod editing {
     }
 
     #[test]
+    fn a_tab_is_dirty_while_its_text_differs_from_the_file() {
+        let (_dir, mut tab) = tab_with("# Notes");
+        assert!(!tab.is_dirty());
+
+        tab.content.push('!');
+        assert!(tab.is_dirty());
+
+        tab.content.pop();
+        assert!(!tab.is_dirty(), "typed back to what is on disk");
+
+        tab.content.push('!');
+        tab.save_to_disk().unwrap();
+        assert!(!tab.is_dirty());
+    }
+
+    #[test]
     fn save_writes_the_buffer_and_leaves_no_temporary_file() {
         let (dir, mut tab) = tab_with("# Notes");
         tab.content = "# Notes\n\nEdited.\n".to_owned();

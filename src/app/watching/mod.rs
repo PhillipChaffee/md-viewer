@@ -274,7 +274,7 @@ impl MarkdownApp {
             // tab shows the editor or the preview of what was typed. A
             // reload of identical content (e.g. our own save echoing back
             // through the watcher) still proceeds.
-            if tab.content != tab.saved_content {
+            if tab.is_dirty() {
                 log::info!("Skipping reload of unsaved tab: {}", path.display());
                 continue;
             }
