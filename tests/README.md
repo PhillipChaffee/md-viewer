@@ -75,7 +75,7 @@ thread, use `reader.wait_for(...)` and never a fixed sleep.
 
 ## Known bugs
 
-Three tests state behavior the app does not have yet. Each is marked
+The tests in this table state behavior the app does not have yet. Each is marked
 `#[should_panic(expected = "...")]`, so it passes while the bug exists and
 fails on the day the bug is fixed. Remove the marker then.
 
@@ -84,3 +84,11 @@ fails on the day the bug is fixed. Remove the marker then.
 | `opening::a_file_that_could_not_be_opened_is_not_listed_as_read` | `md-viewer missing.md` puts the missing file on the recently read list |
 | `editing::the_contents_follow_what_was_typed` | After an edit, the preview shows a new heading and the contents sidebar does not |
 | `themes::a_shortcut_tapped_inside_one_frame_still_counts` | A shortcut whose modifier is released in the same frame as the key is ignored |
+| `prose::a_quote_inside_a_quote_steps_in_again` | A quote inside a quote is set at the same indent as the quote around it |
+| `prose::a_list_after_a_quote_inside_a_quote_is_set_straight` | The first item of a list that follows a quote inside a quote is pushed far to the right |
+| `links::a_link_in_a_heading_can_be_followed` | A link written in a heading is drawn over the start of the heading and does nothing when clicked |
+| `pictures::a_gif_is_shown` | A GIF is looked for under its name with `#0` on the end, is not found, and a warning sign is shown instead |
+| `pictures::a_picture_that_appears_later_is_shown_once_the_page_is_reloaded` | A picture that failed to load once is not tried again when the page reloads |
+| `lightbox::the_buttons_of_the_top_bar_do_not_act_while_a_picture_is_enlarged` | The enlarged view does not cover the top bar, so its buttons act on the window behind the picture |
+| `math::a_plain_sum_between_dollar_signs_is_a_formula` | `$b + c$` is taken for prose and shown as typed, less its closing dollar sign |
+| `diagrams::a_diagram_too_large_for_the_screen_does_not_stop_the_app` | A diagram drawn larger than the graphics card's biggest texture makes the app panic |

@@ -7,9 +7,11 @@
 //! function inside the app, so the tests keep compiling when those change.
 
 mod act;
+mod figures;
 mod folder;
 mod keys;
 mod paint;
+mod pointer;
 mod see;
 
 use std::collections::HashMap;
@@ -19,11 +21,17 @@ use std::time::Duration;
 use eframe::egui;
 
 use self::folder::Folder;
+use self::paint::Pixels;
 pub(crate) use self::paint::Rgb;
+pub(crate) use self::see::Area;
 
 /// The window every launch starts with, in pixels, unless the test asks
 /// for another.
 const WINDOW: (f32, f32) = (1200.0, 800.0);
+
+/// The largest picture, in pixels a side, the screen can be handed: what
+/// an ordinary graphics card takes.
+const MAX_PICTURE_SIDE: usize = 16_384;
 
 /// The frames an action gets to come to rest before the driver starts
 /// waiting on the clock for the app's background work.
@@ -163,6 +171,10 @@ impl Launch {
             window,
             title: None,
             quit_asked: false,
+            pixels: Pixels::default(),
+            opened: Vec::new(),
+            copied: None,
+            held: None,
         };
         reader.kit.state_mut().shown = true;
         reader.settle();
@@ -187,6 +199,14 @@ pub(crate) struct Reader {
     /// The last title the app gave its window.
     title: Option<String>,
     quit_asked: bool,
+    /// The pictures the app has handed to the screen.
+    pixels: Pixels,
+    /// The addresses the app has asked the desktop to open, oldest first.
+    opened: Vec<String>,
+    /// What the app last put on the clipboard.
+    copied: Option<String>,
+    /// Where the pointer is while a mouse button is held down, in points.
+    held: Option<egui::Pos2>,
 }
 
 impl Reader {
@@ -289,6 +309,7 @@ impl Reader {
         // fewer points to lay out in, as it does on a real screen.
         let size = egui::vec2(self.window.0, self.window.1) / self.scale();
         input.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size));
+        input.max_texture_side = Some(MAX_PICTURE_SIDE);
         input.modifiers = modifiers;
         input.events = events;
         let ctx = self.kit.ctx.clone();
@@ -298,9 +319,18 @@ impl Reader {
         self.note_window_requests();
     }
 
-    /// Remember what the last frame asked of the window.
+    /// Remember what the last frame asked of the window and the desktop.
     fn note_window_requests(&mut self) {
-        for viewport in self.kit.output().viewport_output.values() {
+        let output = self.kit.output();
+        self.pixels.note(&output.textures_delta);
+        for command in &output.platform_output.commands {
+            match command {
+                egui::OutputCommand::OpenUrl(open) => self.opened.push(open.url.clone()),
+                egui::OutputCommand::CopyText(text) => self.copied = Some(text.clone()),
+                egui::OutputCommand::CopyImage(_) => {}
+            }
+        }
+        for viewport in output.viewport_output.values() {
             for command in &viewport.commands {
                 match command {
                     egui::ViewportCommand::Title(title) => self.title = Some(title.clone()),

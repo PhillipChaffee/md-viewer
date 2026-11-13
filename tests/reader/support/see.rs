@@ -141,13 +141,13 @@ impl Reader {
     }
 
     /// What the last frame painted, without the clipping.
-    fn shapes(&self) -> Vec<egui::Shape> {
+    pub(super) fn shapes(&self) -> Vec<egui::Shape> {
         let shapes = self.kit.output().shapes.iter();
         shapes.map(|clipped| clipped.shape.clone()).collect()
     }
 
     /// Every text the last frame painted.
-    fn painted(&self) -> Vec<Painted> {
+    pub(super) fn painted(&self) -> Vec<Painted> {
         painted_text(&self.shapes())
     }
 
@@ -181,7 +181,7 @@ impl Reader {
         let scale = self.scale();
         let mut found: Vec<Area> = pictures(&self.shapes())
             .into_iter()
-            .map(|rect| rect * scale)
+            .map(|picture| picture.rect * scale)
             .map(|rect| Area {
                 left: rect.left(),
                 top: rect.top(),

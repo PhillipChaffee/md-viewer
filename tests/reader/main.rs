@@ -10,6 +10,10 @@ mod support;
 #[cfg(test)]
 mod appearance;
 #[cfg(test)]
+mod code;
+#[cfg(test)]
+mod diagrams;
+#[cfg(test)]
 mod docs;
 #[cfg(test)]
 mod editing;
@@ -20,15 +24,29 @@ mod history;
 #[cfg(test)]
 mod home;
 #[cfg(test)]
+mod lightbox;
+#[cfg(test)]
+mod links;
+#[cfg(test)]
 mod live_reload;
 #[cfg(test)]
+mod math;
+#[cfg(test)]
 mod opening;
+#[cfg(test)]
+mod pages;
+#[cfg(test)]
+mod pictures;
+#[cfg(test)]
+mod prose;
 #[cfg(test)]
 mod rendering;
 #[cfg(test)]
 mod session;
 #[cfg(test)]
 mod sidebars;
+#[cfg(test)]
+mod tables;
 #[cfg(test)]
 mod tabs;
 #[cfg(test)]
