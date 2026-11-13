@@ -51,6 +51,9 @@ impl Chord {
 enum Focus {
     /// The lightbox is open; it suppresses everything but its own zoom keys.
     Lightbox,
+    /// A menu or popover is open; it takes the keys the find bar and the
+    /// document would, and Escape closes it alone.
+    Popup,
     /// The find bar is open over the document.
     FindBar,
     /// The document, with no overlay taking keys.
@@ -61,7 +64,7 @@ enum Focus {
 #[derive(Clone, Copy, Debug)]
 enum Scope {
     Lightbox,
-    /// The document, with or without the find bar.
+    /// The document, with or without the find bar or a menu over it.
     Document,
     FindBar,
     Reading,
@@ -72,6 +75,7 @@ impl Scope {
         matches!(
             (self, focus),
             (Self::Lightbox, Focus::Lightbox)
+                | (Self::Document, Focus::Popup)
                 | (Self::Document | Self::FindBar, Focus::FindBar)
                 | (Self::Document | Self::Reading, Focus::Reading)
         )
@@ -194,6 +198,8 @@ impl MarkdownApp {
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         let focus = if self.lightbox.is_some() {
             Focus::Lightbox
+        } else if egui::Popup::is_any_open(ctx) {
+            Focus::Popup
         } else if self.search.is_open {
             Focus::FindBar
         } else {

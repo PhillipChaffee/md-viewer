@@ -5,7 +5,7 @@ use eframe::egui::Modifiers;
 use super::*;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_on, frame_with};
+use crate::app::ui_harness::{frame_on, frame_with, UiHarness};
 use crate::test_support::assert_close;
 
 const CTRL_SHIFT: Modifiers = Modifiers {
@@ -204,4 +204,34 @@ fn ctrl_e_edits_the_document_and_shift_makes_it_the_explorer_toggle() {
 
     let under_a_lightbox = actions_for(Modifiers::CTRL, &[Key::E], Focus::Lightbox);
     assert!(under_a_lightbox.is_empty());
+}
+
+#[test]
+fn a_menu_takes_the_keys_the_find_bar_and_the_document_would() {
+    let escape = actions_for(Modifiers::NONE, &[Key::Escape], Focus::Popup);
+    assert!(escape.is_empty(), "Escape only closes the menu");
+    let enter = actions_for(Modifiers::NONE, &[Key::Enter], Focus::Popup);
+    assert!(enter.is_empty(), "Enter only presses the menu's control");
+    let arrow = actions_for(Modifiers::NONE, &[Key::ArrowDown], Focus::Popup);
+    assert!(arrow.is_empty());
+
+    let theme = actions_for(Modifiers::CTRL, &[Key::D], Focus::Popup);
+    assert!(matches!(theme[..], [AppAction::NextTheme]));
+}
+
+#[test]
+fn escape_closes_an_open_menu_first_and_the_find_bar_on_the_next_press() {
+    for (button, row) in [("Appearance", "Line spacing"), ("More", "Quit")] {
+        let mut harness = UiHarness::with_three_docs();
+        harness.press(Modifiers::CTRL, Key::F);
+        harness.click_exact(button);
+        assert!(harness.shows(row) && harness.shows("Close find bar"));
+
+        harness.press(Modifiers::NONE, Key::Escape);
+        assert!(!harness.shows(row), "Escape closes the {button} menu");
+        assert!(harness.shows("Close find bar"), "{button}: the bar stays");
+
+        harness.press(Modifiers::NONE, Key::Escape);
+        assert!(!harness.shows("Close find bar"));
+    }
 }
