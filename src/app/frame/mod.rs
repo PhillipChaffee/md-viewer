@@ -55,7 +55,7 @@ impl eframe::App for MarkdownApp {
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
         self.render_top_bar(ctx);
-        self.render_top_bars(ctx);
+        self.render_strips(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx, files_hover);
 
@@ -196,7 +196,7 @@ impl MarkdownApp {
     }
 
     /// The error bar, the find bar, and the tab strip.
-    fn render_top_bars(&mut self, ctx: &egui::Context) {
+    fn render_strips(&mut self, ctx: &egui::Context) {
         self.render_error_bar(ctx);
 
         // Find bar (conditional, between error bar and tab bar)
