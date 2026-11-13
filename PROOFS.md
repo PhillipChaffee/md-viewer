@@ -134,6 +134,11 @@ the two halves of a step. That wiring is tested only.
 | `headers::heading_levels_are_one_to_six` | H1 to H6 map to 1 to 6. | All 6 | Proven |
 | `spy::heading_in_view_names_a_heading_or_none` | The binary search ends, never overflows, and returns a valid index or none, sorted input or not. | Up to 6 headings, any `f32` positions, finite view | Bounded |
 | `spy::heading_in_view_is_the_last_one_reached` | With headings in order, the result is the last one at or above the reading line. | Same, positions ascending | Bounded |
+| `spy::the_end_of_the_document_is_the_last_heading` | At the end of the document the last heading is current. | Same | Bounded |
+| `room::the_outline_rule_survives_a_restart` | What a session saves about the outline restores to the same rule. | Every rule × shown | Proven |
+| `room::follow_reports_each_change_of_room_once` | The window never overrides a reader's choice; a change of room is reported once. | Every rule × room | Proven |
+| `room::a_wider_window_keeps_its_room` | Widening the window never loses the outline. | Finite widths | Proven |
+| `room::the_explorer_only_takes_room` | Opening the explorer never makes room for the outline. | Finite widths | Proven |
 
 The first harness holds shipped code to a specification that is not
 shipped. The app folds the outline with `headers::visible_rows`, one pass
@@ -147,16 +152,6 @@ against the parent rule, written a third way, on every outline of up to
 6 headings over four levels. `headers::Outline`, which keeps the folds in
 a `HashSet` and runs the pass when a fold or the document changes, is
 tested only.
-
-| `spy::the_end_of_the_document_is_the_last_heading` | At the end of the document the last heading is current. | Same | Bounded |
-| `room::the_outline_rule_survives_a_restart` | What a session saves about the outline restores to the same rule. | Every rule × shown | Proven |
-| `room::follow_reports_each_change_of_room_once` | The window never overrides a reader's choice; a change of room is reported once. | Every rule × room | Proven |
-| `room::a_wider_window_keeps_its_room` | Widening the window never loses the outline. | Finite widths | Proven |
-| `room::the_explorer_only_takes_room` | Opening the explorer never makes room for the outline. | Finite widths | Proven |
-
-`header_is_hidden` looks collapsed headings up in a `HashSet`, which Kani
-cannot run. The proof runs `has_collapsed_ancestor`, the function
-`header_is_hidden` hands that lookup to.
 
 ### Document pane, lightbox, chrome
 
