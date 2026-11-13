@@ -253,7 +253,6 @@ Two things to know before you rely on those gates:
 - Color emoji fonts are drawn in one color.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
-- A mouse wheel step scrolls farther than in most apps.
 
 ## Credits
 

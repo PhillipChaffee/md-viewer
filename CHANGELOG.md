@@ -26,6 +26,10 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
 - **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
+- **One mouse wheel step scrolled the page twice.** A notch now moves the document once, also while text is being selected.
+- **Escape closed an open menu and the find bar together.** It now closes the menu first and the find bar on the next press.
+- **Entering edit mode with one document open moved the page down.** The Preview and Edit switch for a lone document is now in the top bar.
+- **The app aborted at startup on a machine where fontconfig lists no fonts.** Fixed by fontique 0.12.
 - **Live reload switched itself off** when a remote folder was open with no document.
 - **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
 - **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**
