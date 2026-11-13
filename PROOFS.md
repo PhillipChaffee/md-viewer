@@ -47,9 +47,10 @@ cargo kani setup
 `cargo kani setup` downloads Kani's own nightly toolchain and CBMC. The
 first run compiles every dependency under Kani (about 4 minutes on 4
 cores, 1.3 GB in `target/kani`). After that the 67 harnesses take about
-18 minutes one at a time: 1,060 s of solver time, measured on a shared
-4-core machine. Six harnesses take 825 s of that, and 49 take under a
-second each. `./run-proofs.sh --harness layout::proofs` runs one module.
+22 minutes one at a time (`PROOF_JOBS=1`): 1,305 s on the last full run,
+on a shared 4-core machine, of which 1,164 s is solver time. Two
+harnesses take 458 s of that (`the_title_keeps_clear_of_the_buttons`,
+`heading_in_view_is_the_last_one_reached`), and most take under a second. `./run-proofs.sh --harness layout::proofs` runs one module.
 
 `run-proofs.sh` fails when a harness does not verify, when a
 `kani::cover!` check is not reached, or when the number of harnesses
@@ -222,8 +223,9 @@ behavior.
 
 Two checks say no.
 
-- **Cover checks.** Every harness has `kani::cover!` statements for its
-  interesting cases, and `run-proofs.sh` fails if one is unreachable.
+- **Cover checks.** Every harness with symbolic inputs has `kani::cover!`
+  statements for its interesting cases (157 in all), and `run-proofs.sh`
+  fails if one is unreachable.
 - **Mutants.** `scripts/proof-mutants.tsv` lists 76 one-line faults in the
   shipped code, at least one for each harness but the one that pins
   finding 1. `scripts/kill-proof-mutants.sh` plants each and expects Kani
