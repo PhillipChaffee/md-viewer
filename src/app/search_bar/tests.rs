@@ -85,8 +85,9 @@ fn searching_measured(content_height: f32, viewport_height: f32) -> Harness {
     harness
 }
 
-fn pending_scroll(harness: &Harness) -> Option<f32> {
-    harness.app.tabs[0].pending_scroll_offset
+/// Where the document is to scroll to, as the pane will be told once.
+fn pending_scroll(harness: &mut Harness) -> Option<f32> {
+    harness.app.tabs[0].take_pending_scroll()
 }
 
 #[test]
@@ -94,7 +95,7 @@ fn a_new_query_scrolls_its_first_match_a_third_of_the_way_down_the_pane() {
     let mut harness = searching_measured(1000.0, 400.0);
 
     // Line 5 of 10 sits at 500; 35% of the 400 pane stays above it.
-    assert_close(pending_scroll(&harness).unwrap(), 360.0);
+    assert_close(pending_scroll(&mut harness).unwrap(), 360.0);
     assert!(harness.app.tabs[0].take_corrections().search);
 }
 
@@ -105,29 +106,29 @@ fn stepping_to_the_next_match_scrolls_to_it() {
     harness.app.jump_match(1);
 
     // Line 10 of 10 sits at 1000.
-    assert_close(pending_scroll(&harness).unwrap(), 860.0);
+    assert_close(pending_scroll(&mut harness).unwrap(), 860.0);
 }
 
 #[test]
 fn before_the_pane_is_measured_a_fixed_margin_stays_above_the_match() {
-    let harness = searching_measured(1000.0, 0.0);
+    let mut harness = searching_measured(1000.0, 0.0);
 
-    assert_close(pending_scroll(&harness).unwrap(), 400.0);
+    assert_close(pending_scroll(&mut harness).unwrap(), 400.0);
 }
 
 #[test]
 fn a_match_near_the_top_scrolls_to_the_top_not_above_it() {
-    let harness = searching_measured(100.0, 400.0);
+    let mut harness = searching_measured(100.0, 400.0);
 
     // Line 5 of 10 sits at 50, less than the margin kept above a match.
-    assert_close(pending_scroll(&harness).unwrap(), 0.0);
+    assert_close(pending_scroll(&mut harness).unwrap(), 0.0);
 }
 
 #[test]
 fn a_document_not_yet_laid_out_is_left_where_it_is() {
-    let harness = searching_measured(0.0, 400.0);
+    let mut harness = searching_measured(0.0, 400.0);
 
-    assert_eq!(pending_scroll(&harness), None);
+    assert_eq!(pending_scroll(&mut harness), None);
     assert_eq!(harness.app.tabs[0].search_matches.len(), 2);
 }
 

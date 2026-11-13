@@ -114,8 +114,8 @@ impl MarkdownApp {
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
-                    if corrected.is_some() {
-                        tab.pending_scroll_offset = corrected;
+                    if let Some(offset) = corrected {
+                        tab.scroll_to(offset);
                     }
                     wheel_scroll_during_selection(ui, tab, &mut scroll, raw_scroll, content_rect);
                 }
@@ -212,9 +212,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
     if edited {
         tab.content_edited();
     }
-    tab.scroll_offset = edit_out.state.offset.y;
-    tab.last_viewport_height = edit_out.inner_rect.height();
-    tab.last_content_height = edit_out.content_size.y;
+    tab.measured(&edit_out);
     if let Some(ratio) = pending_edit {
         let mut state = edit_out.state;
         state.offset.y = ratio * edit_out.content_size.y.max(1.0);
@@ -248,7 +246,7 @@ fn preview_pane(
     settings: &PreviewSettings<'_>,
     column: Column,
 ) -> ScrollAreaOutput<()> {
-    let pending = tab.pending_scroll_offset.take();
+    let pending = tab.take_pending_scroll();
     let look = settings.look;
     // The document's fonts, for everything the renderer lays out below.
     ui.set_style(Arc::clone(&look.style));
@@ -290,9 +288,7 @@ fn preview_pane(
         })
         .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content);
 
-    tab.scroll_offset = output.state.offset.y;
-    tab.last_viewport_height = output.inner_rect.height();
-    tab.last_content_height = output.content_size.y;
+    tab.measured(&output);
     output
 }
 

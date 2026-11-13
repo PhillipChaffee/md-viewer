@@ -5,9 +5,7 @@ use std::time::Instant;
 use eframe::egui;
 
 use crate::app::MarkdownApp;
-use crate::layout::{
-    keyboard_scroll_target, zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth,
-};
+use crate::layout::{zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth};
 use crate::system_fonts::TextSizeClass;
 use crate::theme::ThemeId;
 
@@ -188,14 +186,8 @@ impl MarkdownApp {
     /// Queue a keyboard scroll step through the pending-scroll pipeline the
     /// outline and search jumps use.
     fn scroll_active_tab(&mut self, step: KeyboardScrollAction) {
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
-            return;
-        };
-        tab.pending_scroll_offset = Some(keyboard_scroll_target(
-            tab.scroll_offset,
-            tab.last_viewport_height,
-            tab.last_content_height,
-            step,
-        ));
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            tab.scroll_by_key(step);
+        }
     }
 }

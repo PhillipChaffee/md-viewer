@@ -269,7 +269,7 @@ fn scrolling_the_document_moves_the_mark_to_the_heading_in_view() {
     let palette = harness.state().theme.palette();
     let beta = heading_position(&harness, "Beta");
 
-    harness.state_mut().tabs[0].pending_scroll_offset = Some(beta + 300.0);
+    harness.state_mut().tabs[0].scroll_to(beta + 300.0);
     harness.frames(4);
 
     assert_eq!(ink_and_left(&harness, "Beta").0, palette.text);
@@ -302,7 +302,7 @@ fn a_long_outline_scrolls_to_keep_the_heading_being_read_on_screen() {
     assert!(!has_entry(&harness, "Section 70"), "below the fold");
     let target = heading_position(&harness, "Section 70");
 
-    harness.state_mut().tabs[0].pending_scroll_offset = Some(target);
+    harness.state_mut().tabs[0].scroll_to(target);
     harness.frames(8);
 
     assert!(has_entry(&harness, "Section 70"));

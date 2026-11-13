@@ -6,9 +6,7 @@ use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::layout::line_fraction;
 use crate::search::{stepped_match_index, SearchBarOutcome};
-use crate::tab::scroll::MATCH_INSET;
 
 #[cfg(test)]
 mod tests;
@@ -152,7 +150,7 @@ impl MarkdownApp {
     }
 
     /// Move the active match index forward (dir > 0) or backward (dir < 0), wrapping
-    /// around, and request a scroll-to-line via `pending_scroll_offset`.
+    /// around, and request a scroll to the match it lands on.
     pub(crate) fn jump_match(&mut self, dir: i32) {
         let n = self.active_tab_match_count();
         if n == 0 {
@@ -169,30 +167,10 @@ impl MarkdownApp {
     /// fresh query or switching tabs lands the view on the first match instead of
     /// leaving the view at wherever the user previously scrolled).
     fn scroll_to_active_match(&mut self) {
-        let idx = self.search.active_match_index;
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
-            return;
-        };
-        let Some(m) = tab.search_matches.get(idx) else {
-            return;
-        };
-        if tab.last_content_height <= 0.0 || tab.content_lines == 0 {
-            return;
+        let index = self.search.active_match_index;
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            tab.jump_to_match(index);
         }
-        // Line-ratio estimate gets the view roughly in the right area. The renderer
-        // records the actual y of the active match during paint; render_tab_content
-        // schedules a corrective scroll next frame if this estimate was off.
-        let estimated_y = line_fraction(m.line_number, tab.content_lines) * tab.last_content_height;
-        let margin = if tab.last_viewport_height > 0.0 {
-            tab.last_viewport_height * MATCH_INSET
-        } else {
-            100.0
-        };
-        tab.pending_scroll_offset = Some((estimated_y - margin).max(0.0));
-        // Grant the next render one full-paint attempt to record an exact Y.
-        // The request is consumed before that render even when the source
-        // match has no visible glyph, so later frames return to clipping.
-        tab.corrections.search = true;
     }
 
     /// Rebuild the active tab's search matches if the query or active tab has changed.
