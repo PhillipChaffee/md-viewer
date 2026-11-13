@@ -5,7 +5,7 @@
 //! `MAX_HEADERS` headings with any level a `u8` can hold, and any set of
 //! collapsed headings. They are bounded proofs: a longer outline is not
 //! covered. The set is a table of flags here, because the verifier cannot
-//! run a `HashSet`; `visible_headers` only looks the index up in one.
+//! run a `HashSet`; `Outline` only looks the index up in one.
 //!
 //! The app folds the outline with `visible_rows`, one pass over the
 //! headings. What that pass must compute is written here a second way,

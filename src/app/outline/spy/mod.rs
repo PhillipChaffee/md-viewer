@@ -105,7 +105,7 @@ impl HeadingSpy {
         }
         self.seen = Some(sighting);
 
-        let headers = &tab.outline_headers;
+        let headers = tab.outline.headers();
         // Where the renderer painted the heading, or until it has, where
         // the heading's line number suggests it is.
         let position = |index: usize| {

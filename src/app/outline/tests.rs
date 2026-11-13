@@ -76,7 +76,7 @@ fn pick(harness: &mut LabelHarness, item: &str) {
 /// the document.
 fn heading_position(harness: &LabelHarness, title: &str) -> f32 {
     let tab = &harness.state().tabs[0];
-    let headers = &tab.outline_headers;
+    let headers = tab.outline.headers();
     let header = headers.iter().find(|header| header.title == title);
     let key = header_position_key(header.unwrap().source_start);
     tab.cache.get_header_position(&key).unwrap()

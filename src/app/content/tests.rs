@@ -132,7 +132,8 @@ fn a_heading_typed_in_the_editor_is_in_the_contents_at_once() {
 
     let tab = &harness.state().tabs[0];
     let titles: Vec<&str> = tab
-        .outline_headers
+        .outline
+        .headers()
         .iter()
         .map(|header| header.title.as_str())
         .collect();

@@ -563,7 +563,7 @@ mod fragment_scroll {
     }
 
     fn deep_section_key(tab: &Tab) -> String {
-        header_position_key(tab.outline_headers[1].source_start)
+        header_position_key(tab.outline.headers()[1].source_start)
     }
 
     #[test]

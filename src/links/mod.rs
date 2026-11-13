@@ -85,7 +85,7 @@ fn find_fragment_target<'a>(
 pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
     match find_fragment_target(
         tab.document_title.as_deref(),
-        &tab.outline_headers,
+        tab.outline.headers(),
         fragment,
     ) {
         FragmentTarget::DocumentTop => {

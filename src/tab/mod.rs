@@ -1,6 +1,5 @@
 //! Per-tab document state: content, caches, scroll position, and navigation history.
 
-use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,7 @@ use std::time::Instant;
 use eframe::egui;
 use egui_commonmark_extended::CommonMarkCache;
 
-use crate::headers::{parse_headers, Header};
+use crate::headers::{parse_headers, Outline};
 use crate::links::{
     apply_fragment_navigation, parse_local_links, resolve_local_link_path, split_link_fragment,
 };
@@ -83,9 +82,8 @@ pub(crate) struct Tab {
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
-    pub(crate) outline_headers: Vec<Header>,
-    /// Set of header indices that are collapsed in the outline.
-    pub(crate) collapsed_headers: HashSet<usize>,
+    /// The headings of the document and which of them are folded.
+    pub(crate) outline: Outline,
     pub(crate) scroll_offset: f32,
     pub(crate) pending_scroll_offset: Option<f32>,
     /// Composite header-position key (see `header_position_key`) waiting for
@@ -154,8 +152,7 @@ impl Tab {
             cache: CommonMarkCache::default(),
             document_title: None,
             kicker: String::new(),
-            outline_headers: Vec::new(),
-            collapsed_headers: HashSet::new(),
+            outline: Outline::default(),
             scroll_offset: 0.0,
             pending_scroll_offset: None,
             pending_header_click_key: None,
@@ -173,7 +170,7 @@ impl Tab {
             pending_edit_scroll: None,
             pre_edit_view_content_height: 0.0,
         };
-        tab.index_content();
+        tab.index_content(false);
         Ok(tab)
     }
 
@@ -250,8 +247,7 @@ impl Tab {
         self.cache = CommonMarkCache::default();
         self.content_version = self.content_version.wrapping_add(1);
         self.base_uri = Self::compute_base_uri(&self.path);
-        self.index_content();
-        self.collapsed_headers.clear();
+        self.index_content(false);
 
         // Stale byte ranges; caller rebuilds if search bar is open.
         self.search_matches.clear();
@@ -261,24 +257,20 @@ impl Tab {
     /// the editor changed it: the contents, the meta line and the links.
     /// Called once per edit, never per frame.
     pub(crate) fn content_edited(&mut self) {
-        let headings_before = self.outline_headers.len();
-        self.index_content();
-        // The folds are kept by position, which only a heading added or
-        // removed shifts.
-        if self.outline_headers.len() != headings_before {
-            self.collapsed_headers.clear();
-        }
+        self.index_content(true);
     }
 
     /// Work out everything that is read off `content`: its line count,
-    /// meta line, title, headings and local links.
-    fn index_content(&mut self) {
+    /// meta line, title, headings and local links. `keep_folds` is for
+    /// the same document after an edit; another document starts unfolded.
+    fn index_content(&mut self, keep_folds: bool) {
         self.content_lines = self.content.lines().count();
         self.kicker = kicker_line(&self.path, &self.content);
 
         let parsed = parse_headers(&self.content);
         self.document_title = parsed.document_title;
-        self.outline_headers = parsed.outline_headers;
+        self.outline
+            .replace_headers(parsed.outline_headers, keep_folds);
 
         self.local_links = parse_local_links(&self.content, &self.path);
         for link in &self.local_links {

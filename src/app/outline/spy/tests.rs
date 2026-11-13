@@ -111,7 +111,7 @@ fn a_measured_heading_is_where_the_renderer_painted_it() {
     let scratch = ScratchDir::new();
     let mut tab = tab_with(&scratch, 4);
     let mut spy = HeadingSpy::default();
-    for (header, position) in tab.outline_headers.iter().zip([0.0, 50.0, 100.0, 150.0]) {
+    for (header, position) in tab.outline.headers().iter().zip([0.0, 50.0, 100.0, 150.0]) {
         let key = header_position_key(header.source_start);
         tab.cache.record_header_content_y(&key, position);
     }

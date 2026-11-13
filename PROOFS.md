@@ -144,8 +144,9 @@ the walk does not hide it, and the walk obeys the parent rule. The second
 is a statement about the specification, not about the app. Both hold for
 outlines of up to 5 headings only. `headers/tests.rs` checks the pass
 against the parent rule, written a third way, on every outline of up to
-6 headings over four levels. `visible_headers`, which looks the folds up
-in a `HashSet` for the pass, is tested only.
+6 headings over four levels. `headers::Outline`, which keeps the folds in
+a `HashSet` and runs the pass when a fold or the document changes, is
+tested only.
 
 | `spy::the_end_of_the_document_is_the_last_heading` | At the end of the document the last heading is current. | Same | Bounded |
 | `room::the_outline_rule_survives_a_restart` | What a session saves about the outline restores to the same rule. | Every rule × shown | Proven |

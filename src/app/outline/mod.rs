@@ -6,7 +6,7 @@ use egui_commonmark_extended::header_position_key;
 use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
-use crate::headers::{any_header_has_children, header_has_children, visible_headers, Header};
+use crate::headers::Header;
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
 use crate::tab::Tab;
@@ -71,9 +71,9 @@ impl Fold {
     fn of(tab: &Tab, index: usize, show_column: bool) -> Self {
         if !show_column {
             Self::NoColumn
-        } else if !header_has_children(&tab.outline_headers, index) {
+        } else if !tab.outline.has_children(index) {
             Self::Leaf
-        } else if tab.collapsed_headers.contains(&index) {
+        } else if tab.outline.is_collapsed(index) {
             Self::Collapsed
         } else {
             Self::Expanded
@@ -142,7 +142,7 @@ impl MarkdownApp {
             return;
         };
 
-        if !self.show_outline || tab.outline_headers.is_empty() {
+        if !self.show_outline || tab.outline.headers().is_empty() {
             return;
         }
 
@@ -191,13 +191,9 @@ impl MarkdownApp {
 
 fn apply_click(tab: &mut Tab, click: OutlineClick) {
     match click {
-        OutlineClick::ToggleFold(index) => toggle_fold(tab, index),
-        OutlineClick::ExpandAll => tab.collapsed_headers.clear(),
-        OutlineClick::CollapseAll => {
-            let headers = &tab.outline_headers;
-            tab.collapsed_headers
-                .extend((0..headers.len()).filter(|&index| header_has_children(headers, index)));
-        }
+        OutlineClick::ToggleFold(index) => tab.outline.toggle(index),
+        OutlineClick::ExpandAll => tab.outline.expand_all(),
+        OutlineClick::CollapseAll => tab.outline.collapse_all(),
         OutlineClick::JumpTo {
             source_start,
             line_number,
@@ -208,7 +204,7 @@ fn apply_click(tab: &mut Tab, click: OutlineClick) {
 /// "CONTENTS", and where some header has children, the menu that folds and
 /// unfolds all of them.
 fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
-    let can_fold = any_header_has_children(&tab.outline_headers);
+    let can_fold = tab.outline.has_folds();
     let header = sidebar::Header {
         caption: "CONTENTS",
         detail: None,
@@ -266,8 +262,8 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     // O(total-headers) per frame. On a 100k-line doc with ~15k
     // headers this is the difference between visibly laggy and
     // smooth outline interactions.
-    let visible_indices = visible_headers(&tab.outline_headers, &tab.collapsed_headers);
-    let show_fold_column = any_header_has_children(&tab.outline_headers);
+    let visible_indices = tab.outline.visible();
+    let show_fold_column = tab.outline.has_folds();
     // The row that stands for the heading the reader is in: the heading
     // itself, or the folded heading that hides it.
     let current_row = outline.current.and_then(|current| {
@@ -300,7 +296,7 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
                 for &index in &visible_indices[row_range] {
                     let row = OutlineRow {
                         index,
-                        header: &tab.outline_headers[index],
+                        header: &tab.outline.headers()[index],
                         fold: Fold::of(tab, index, show_fold_column),
                     };
                     outline_row(ui, &row, outline);
@@ -375,12 +371,6 @@ fn fold_control(
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));
-    }
-}
-
-fn toggle_fold(tab: &mut Tab, index: usize) {
-    if !tab.collapsed_headers.remove(&index) {
-        tab.collapsed_headers.insert(index);
     }
 }
 

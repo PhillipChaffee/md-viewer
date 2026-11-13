@@ -90,7 +90,7 @@ mod document {
         dir.file("notes.md", "# Notes\n\n## New\n\nSee [other](other.md).\n");
         tab.reload().unwrap();
 
-        assert_eq!(tab.outline_headers[1].title, "New");
+        assert_eq!(tab.outline.headers()[1].title, "New");
         assert_eq!(tab.content_lines, 5);
         assert_eq!(tab.saved_content, tab.content);
         assert_close(tab.scroll_offset, 120.0);
@@ -142,13 +142,13 @@ mod editing {
             ("notes.md", "# Notes\n\n## One\n\n## Two\n"),
             ("other.md", "# Other"),
         ]);
-        tab.collapsed_headers.insert(1);
+        tab.outline.toggle(1);
 
         tab.content.push_str("\nA line of prose.");
         tab.content_edited();
         assert_eq!(tab.content_lines, 7);
         assert!(
-            tab.collapsed_headers.contains(&1),
+            tab.outline.is_collapsed(1),
             "typing prose folds nothing open"
         );
 
@@ -159,7 +159,8 @@ mod editing {
         tab.content_edited();
 
         let titles: Vec<&str> = tab
-            .outline_headers
+            .outline
+            .headers()
             .iter()
             .map(|header| header.title.as_str())
             .collect();
@@ -167,7 +168,7 @@ mod editing {
         assert_eq!(tab.document_title.as_deref(), Some("Renamed"));
         assert_eq!(tab.kicker, "notes.md \u{b7} 4 min read");
         assert!(
-            tab.collapsed_headers.is_empty(),
+            !tab.outline.is_collapsed(1),
             "a fold is kept by position, which a removed heading shifts"
         );
         // The new link is one the renderer reports clicks on.

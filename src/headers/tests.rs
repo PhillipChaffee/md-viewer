@@ -101,12 +101,20 @@ fn outline() -> Vec<Header> {
     parse_headers("## Setup\n### Linux\n#### Arch\n### Windows\n## Usage\n").outline_headers
 }
 
+/// That outline with the headings at `collapsed` folded.
+fn folded(collapsed: &[usize]) -> Outline {
+    let mut folded = Outline::default();
+    folded.replace_headers(outline(), false);
+    for &index in collapsed {
+        folded.toggle(index);
+    }
+    folded
+}
+
 fn hidden(collapsed: &[usize]) -> Vec<bool> {
-    let headers = outline();
-    let collapsed: HashSet<usize> = collapsed.iter().copied().collect();
-    let visible = visible_headers(&headers, &collapsed);
-    (0..headers.len())
-        .map(|index| !visible.contains(&index))
+    let folded = folded(collapsed);
+    (0..folded.headers().len())
+        .map(|index| !folded.visible().contains(&index))
         .collect()
 }
 
@@ -183,8 +191,8 @@ fn positions_outside_the_outline_are_never_hidden_or_parents() {
     let headers = outline();
     // A fold recorded for a position past the end hides nothing and is
     // never a row.
-    let all: HashSet<usize> = (0..=headers.len()).collect();
-    assert_eq!(visible_headers(&headers, &all), [0, 4]);
+    let all: Vec<usize> = (0..=headers.len()).collect();
+    assert_eq!(folded(&all).visible(), [0, 4]);
     assert!(!header_has_children(&headers, headers.len()));
 }
 
@@ -203,4 +211,68 @@ fn a_flat_outline_has_nothing_to_fold() {
     let flat = parse_headers("## One\n## Two\n## Three\n").outline_headers;
     assert!(!any_header_has_children(&flat));
     assert!(!any_header_has_children(&[]));
+}
+
+#[test]
+fn folding_a_heading_twice_shows_what_is_under_it_again() {
+    let mut outline = folded(&[0]);
+    assert!(outline.is_collapsed(0));
+    assert_eq!(outline.visible(), [0, 4]);
+
+    outline.toggle(0);
+
+    assert!(!outline.is_collapsed(0));
+    assert_eq!(outline.visible(), [0, 1, 2, 3, 4]);
+}
+
+#[test]
+fn collapse_all_folds_the_headings_with_children_and_expand_all_none() {
+    let mut outline = folded(&[]);
+
+    outline.collapse_all();
+    let collapsed: Vec<bool> = (0..5).map(|index| outline.is_collapsed(index)).collect();
+    assert_eq!(collapsed, [true, true, false, false, false]);
+    assert_eq!(outline.visible(), [0, 4]);
+
+    outline.expand_all();
+    assert!((0..5).all(|index| !outline.is_collapsed(index)));
+    assert_eq!(outline.visible(), [0, 1, 2, 3, 4]);
+}
+
+#[test]
+fn an_outline_knows_which_headings_have_children_and_whether_any_does() {
+    let mut outline = folded(&[]);
+    assert!(outline.has_folds());
+    assert!(outline.has_children(1));
+    assert!(!outline.has_children(2));
+
+    let flat = parse_headers("## One\n## Two\n").outline_headers;
+    outline.replace_headers(flat, true);
+    assert!(!outline.has_folds());
+    assert!(!Outline::default().has_folds());
+}
+
+#[test]
+fn new_headings_keep_the_folds_only_when_asked_and_as_many_as_before() {
+    let renamed =
+        || parse_headers("## Install\n### Linux\n#### Arch\n### Windows\n## Use\n").outline_headers;
+
+    let mut outline = folded(&[1]);
+    outline.replace_headers(renamed(), true);
+    assert!(outline.is_collapsed(1), "the same headings, reworded");
+    assert_eq!(outline.visible(), [0, 1, 3, 4]);
+    assert_eq!(outline.headers()[0].title, "Install");
+
+    outline.replace_headers(renamed(), false);
+    assert!(!outline.is_collapsed(1), "another document starts unfolded");
+    assert_eq!(outline.visible(), [0, 1, 2, 3, 4]);
+
+    let mut outline = folded(&[1]);
+    let shorter = parse_headers("## Setup\n### Linux\n#### Arch\n").outline_headers;
+    outline.replace_headers(shorter, true);
+    assert!(
+        !outline.is_collapsed(1),
+        "a heading removed shifts the rest"
+    );
+    assert_eq!(outline.visible(), [0, 1, 2]);
 }
