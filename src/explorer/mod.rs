@@ -73,12 +73,6 @@ impl FileTreeNode {
     }
 }
 
-pub(crate) struct ExplorerScanResult {
-    root: PathBuf,
-    sort_order: SortOrder,
-    tree: Vec<FileTreeNode>,
-}
-
 /// A scan of the explorer root, with the settings it was requested under so
 /// it can run on another thread while the explorer keeps changing.
 #[derive(Clone)]
@@ -89,14 +83,10 @@ struct RootScan {
 }
 
 impl RootScan {
-    fn run(self) -> ExplorerScanResult {
+    fn run(self) -> Vec<FileTreeNode> {
         let mut tree = FileExplorer::scan_directory_shallow(&self.root, self.sort_order);
         FileExplorer::load_expanded(&mut tree, &self.expanded_dirs, self.sort_order);
-        ExplorerScanResult {
-            root: self.root,
-            sort_order: self.sort_order,
-            tree,
-        }
+        tree
     }
 }
 
@@ -121,8 +111,10 @@ pub(crate) struct FileExplorer {
     tree: Vec<FileTreeNode>,
     expanded_dirs: HashSet<PathBuf>,
     sort_order: SortOrder,
-    /// Receiver for asynchronous root-directory scan results.
-    pending_scan: Option<Receiver<ExplorerScanResult>>,
+    /// Where the listing of the root arrives once its scan is done. Each
+    /// new scan takes the place of the one before, so what arrives is
+    /// always the listing of the root as it is now.
+    pending_scan: Option<Receiver<Vec<FileTreeNode>>>,
 }
 
 impl FileExplorer {
@@ -273,15 +265,15 @@ impl FileExplorer {
         } else {
             // An older scan still running would overwrite this newer tree.
             self.pending_scan = None;
-            self.tree = scan.run().tree;
+            self.tree = scan.run();
         }
     }
 
     /// Check if a background scan completed and apply results.
     pub(crate) fn poll_pending_scan(&mut self) -> bool {
         let received = self.pending_scan.as_ref().map(Receiver::try_recv);
-        let mut result = match received {
-            Some(Ok(result)) => result,
+        let mut tree = match received {
+            Some(Ok(tree)) => tree,
             Some(Err(TryRecvError::Empty)) | None => return false,
             Some(Err(TryRecvError::Disconnected)) => {
                 self.pending_scan = None;
@@ -289,16 +281,13 @@ impl FileExplorer {
             }
         };
         self.pending_scan = None;
-        if self.root.as_deref() != Some(result.root.as_path()) {
-            return false;
-        }
-        if result.sort_order != self.sort_order {
-            Self::resort_tree_recursive(&mut result.tree, self.sort_order);
-        }
-        // Expansion can change while the worker is running. Reuse its snapshot
-        // and load any directories expanded after it started.
-        Self::load_expanded(&mut result.tree, &self.expanded_dirs, self.sort_order);
-        self.tree = result.tree;
+        // The order and the open folders can change while the worker is
+        // running. Reuse its snapshot: put it in the order of now, which
+        // moves nothing when that is the order it was scanned in, and load
+        // any directories expanded after it started.
+        Self::resort_tree_recursive(&mut tree, self.sort_order);
+        Self::load_expanded(&mut tree, &self.expanded_dirs, self.sort_order);
+        self.tree = tree;
         true
     }
 

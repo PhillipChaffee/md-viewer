@@ -232,12 +232,8 @@ fn asynchronous_explorer_result_restores_expanded_children() {
     dir.file("docs/guide.md", "# Guide");
 
     let (tx, rx) = mpsc::channel();
-    tx.send(ExplorerScanResult {
-        root: dir.path().to_path_buf(),
-        sort_order: SortOrder::NameAsc,
-        tree: FileExplorer::scan_directory_shallow(dir.path(), SortOrder::NameAsc),
-    })
-    .unwrap();
+    let listing = FileExplorer::scan_directory_shallow(dir.path(), SortOrder::NameAsc);
+    tx.send(listing).unwrap();
     let mut explorer = FileExplorer {
         root: Some(dir.path().to_path_buf()),
         expanded_dirs: HashSet::from([expanded.clone()]),
@@ -250,7 +246,7 @@ fn asynchronous_explorer_result_restores_expanded_children() {
 }
 
 /// An explorer on `root` holding the sending end of its pending scan.
-fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<ExplorerScanResult>) {
+fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<Vec<FileTreeNode>>) {
     let (tx, rx) = mpsc::channel();
     let explorer = FileExplorer {
         root: Some(root.to_path_buf()),
@@ -261,30 +257,29 @@ fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<ExplorerSc
 }
 
 #[test]
-fn scan_result_for_a_previous_root_is_dropped() {
-    let (mut explorer, tx) = explorer_awaiting_scan(Path::new("/current"));
-    tx.send(ExplorerScanResult {
-        root: PathBuf::from("/previous"),
-        sort_order: SortOrder::NameAsc,
-        tree: vec![file_node("stale.md", None)],
-    })
-    .unwrap();
+fn a_scan_started_for_a_new_root_takes_the_place_of_the_one_before() {
+    let previous = ScratchDir::new();
+    previous.file("stale.md", "# Stale");
+    let current = ScratchDir::new();
+    current.file("fresh.md", "# Fresh");
+    let (mut explorer, older_scan) = explorer_awaiting_scan(previous.path());
 
-    assert!(!explorer.poll_pending_scan());
-    assert!(explorer.tree.is_empty());
-    assert!(explorer.pending_scan.is_none());
+    explorer.set_root(current.path().to_path_buf());
+    assert!(
+        older_scan.send(vec![file_node("stale.md", None)]).is_err(),
+        "nothing waits for the older scan any more"
+    );
+    wait_for_scan(&mut explorer);
+
+    assert_eq!(names(&explorer.tree), ["fresh.md"]);
 }
 
 #[test]
 fn scan_result_is_resorted_when_the_order_changed_while_it_ran() {
     let (mut explorer, tx) = explorer_awaiting_scan(Path::new("/current"));
     explorer.sort_order = SortOrder::NameDesc;
-    tx.send(ExplorerScanResult {
-        root: PathBuf::from("/current"),
-        sort_order: SortOrder::NameAsc,
-        tree: vec![file_node("a.md", None), file_node("b.md", None)],
-    })
-    .unwrap();
+    tx.send(vec![file_node("a.md", None), file_node("b.md", None)])
+        .unwrap();
 
     assert!(explorer.poll_pending_scan());
     assert_eq!(names(&explorer.tree), ["b.md", "a.md"]);
@@ -475,11 +470,7 @@ fn scan_in_place_is_not_overwritten_by_an_older_scan_still_running() {
         Err(io::Error::other("out of threads"))
     });
     // The older worker may already be gone by the time it reports.
-    let _ = older_scan.send(ExplorerScanResult {
-        root: dir.path().to_path_buf(),
-        sort_order: SortOrder::NameAsc,
-        tree: vec![file_node("stale.md", None)],
-    });
+    let _ = older_scan.send(vec![file_node("stale.md", None)]);
 
     assert!(!explorer.poll_pending_scan());
     assert_eq!(names(&explorer.tree), ["fresh.md"]);
