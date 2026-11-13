@@ -119,11 +119,20 @@ impl Fonts {
     }
 
     fn definitions(&mut self, preferred: Option<&str>, preset: FontPreset) -> FontDefinitions {
-        font_definitions(&mut self.system(), None, preferred, preset)
+        let config = config(preferred, preset, TextSizeClass::default());
+        font_definitions(&mut self.system(), None, &config)
     }
 
     fn pickable(&mut self) -> Vec<String> {
         pickable_family_names(&mut self.system())
+    }
+}
+
+fn config(family: Option<&str>, preset: FontPreset, size: TextSizeClass) -> FontConfig {
+    FontConfig {
+        family: family.map(str::to_owned),
+        preset,
+        size,
     }
 }
 
@@ -165,14 +174,9 @@ fn text_sizes_grow_in_order_and_are_told_apart_by_label() {
 #[test]
 fn applying_fonts_installs_the_faces_and_derives_heading_and_code_sizes() {
     let context = egui::Context::default();
-    let setup = FontSetup {
-        locale: None,
-        preferred_family: None,
-        preset: FontPreset::default(),
-        size: TextSizeClass::Large,
-    };
+    let config = config(None, FontPreset::default(), TextSizeClass::Large);
 
-    apply_fonts(&context, &mut Fonts::with_sans().collection, &setup);
+    apply_fonts(&context, &mut Fonts::with_sans().collection, None, &config);
 
     let styles = context.style().text_styles.clone();
     assert_eq!(styles[&TextStyle::Body], FontId::proportional(18.0));
@@ -230,12 +234,7 @@ fn preset_code_face_leads_the_monospace_chain_when_installed() {
 #[test]
 fn installed_fonts_cover_reported_scripts() {
     let mut fonts = Fonts::multilingual();
-    let definitions = font_definitions(
-        &mut fonts.system(),
-        Some("en-US"),
-        None,
-        FontPreset::default(),
-    );
+    let definitions = font_definitions(&mut fonts.system(), Some("en-US"), &FontConfig::default());
     let context = egui::Context::default();
     context.set_fonts(definitions);
     context.begin_pass(egui::RawInput::default());
@@ -412,7 +411,7 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
 
 #[test]
 fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller() {
-    let fonts = document_fonts(None, FontPreset::Reader, TextSizeClass::Normal);
+    let fonts = document_fonts(&FontConfig::default());
 
     assert_close(fonts.body.size, 16.0 * 1.15);
     assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
@@ -431,7 +430,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
 
     // Every size class scales the same way.
     for size in TextSizeClass::ALL {
-        let fonts = document_fonts(None, FontPreset::Reader, size);
+        let fonts = document_fonts(&config(None, FontPreset::Reader, size));
         assert_close(fonts.body.size, size.px() * 1.15);
     }
 }
@@ -439,7 +438,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
 #[test]
 fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face() {
     for preset in [FontPreset::Current, FontPreset::Github, FontPreset::Vscode] {
-        let fonts = document_fonts(None, preset, TextSizeClass::Large);
+        let fonts = document_fonts(&config(None, preset, TextSizeClass::Large));
 
         assert_close(fonts.body.size, 18.0);
         assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
@@ -451,11 +450,11 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
 
 #[test]
 fn a_picked_family_outranks_the_readers_serif() {
-    let fonts = document_fonts(
+    let fonts = document_fonts(&config(
         Some("Fixture Sans"),
         FontPreset::Reader,
         TextSizeClass::Normal,
-    );
+    ));
     // The serif's scale stays with the preset; its faces do not lead.
     assert_eq!(fonts.emphasis, None);
     assert_eq!(fonts.inline_code_scale, None);

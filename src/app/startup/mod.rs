@@ -17,7 +17,7 @@ use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
 use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::search::SearchState;
-use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
+use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts, FontConfig};
 use crate::tab::Tab;
 use crate::theme::ThemeId;
 
@@ -178,15 +178,23 @@ fn is_virtual_display(display: Option<&str>) -> bool {
 
 /// The theme of the last session, and what the document pane renders with
 /// until frame 1, which rebuilds it once the theme's visuals are applied.
-fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, DocumentLook) {
+fn restored_look(
+    ctx: &egui::Context,
+    persisted: &PersistedState,
+    fonts: &FontConfig,
+) -> (ThemeId, DocumentLook) {
     let theme = persisted.theme();
-    let fonts = document_fonts(
-        persisted.selected_font_family.as_deref(),
-        persisted.font_preset(),
-        persisted.text_size_class(),
-    );
-    let look = DocumentLook::new(&ctx.style(), theme.palette(), &fonts);
+    let look = DocumentLook::new(&ctx.style(), theme.palette(), &document_fonts(fonts));
     (theme, look)
+}
+
+/// The font choices of the last session.
+fn restored_fonts(persisted: &PersistedState) -> FontConfig {
+    FontConfig {
+        family: persisted.selected_font_family.clone(),
+        preset: persisted.font_preset(),
+        size: persisted.text_size_class(),
+    }
 }
 
 /// The tab a saved session comes back on: the one it saved, or the last
@@ -212,12 +220,7 @@ impl MarkdownApp {
         // Setup fonts with system font fallbacks for Unicode support, led by
         // the user's picked family (font picker) or the preset's emulated
         // stack; the text-size class is shared by every preset.
-        setup_fonts(
-            &cc.egui_ctx,
-            persisted.selected_font_family.as_deref(),
-            persisted.font_preset(),
-            persisted.text_size_class(),
-        );
+        setup_fonts(&cc.egui_ctx, &restored_fonts(&persisted));
         configure_context(&cc.egui_ctx);
 
         Self::from_persisted(&cc.egui_ctx, persisted, file, watch)
@@ -231,7 +234,8 @@ impl MarkdownApp {
         file: Option<PathBuf>,
         watch: bool,
     ) -> Self {
-        let (theme, document_look) = restored_look(ctx, &persisted);
+        let fonts = restored_fonts(&persisted);
+        let (theme, document_look) = restored_look(ctx, &persisted, &fonts);
         // Each setting is read here, before the paths leave `persisted`.
         let zoom_level = persisted.zoom();
         let show_outline = persisted.show_outline();
@@ -242,8 +246,6 @@ impl MarkdownApp {
         let highlight_color = persisted.highlight_color();
         let link_color = persisted.link_color();
         let smooth_text_rendering = persisted.smooth_text_rendering();
-        let font_preset = persisted.font_preset();
-        let text_size_class = persisted.text_size_class();
         let show_explorer = persisted.show_explorer();
         let explorer_width = persisted.explorer_width();
         let outline_width = persisted.outline_width();
@@ -285,20 +287,16 @@ impl MarkdownApp {
             show_color_settings_dialog: false,
             // Already applied by `new` via setup_fonts(); last_applied starts in
             // sync so update() doesn't redundantly reload fonts on frame 1.
-            last_applied_font_config: Some((
-                persisted.selected_font_family.clone(),
-                font_preset,
-                text_size_class,
-            )),
-            selected_font_family: persisted.selected_font_family,
+            last_applied_font_config: Some(fonts.clone()),
+            selected_font_family: fonts.family,
             available_font_families: Vec::new(),
             available_font_families_lower: Vec::new(),
             pending_font_family_scan: spawn_font_family_scan(),
             show_font_dialog: false,
             font_filter: String::new(),
             smooth_text_rendering,
-            font_preset,
-            text_size_class,
+            font_preset: fonts.preset,
+            text_size_class: fonts.size,
             file_picker: Box::new(pick_file),
             folder_picker: Box::new(pick_folder),
             live_reload: LiveReload::new(watch),

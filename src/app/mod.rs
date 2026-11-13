@@ -17,7 +17,7 @@ use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::recent::RecentEntry;
 use crate::search::SearchState;
-use crate::system_fonts::{FontPreset, TextSizeClass};
+use crate::system_fonts::{FontConfig, FontPreset, TextSizeClass};
 use crate::tab::Tab;
 use crate::theme::ThemeId;
 
@@ -117,7 +117,7 @@ pub(crate) struct MarkdownApp {
     pending_font_family_scan: Option<Receiver<Vec<String>>>,
     // Mirrors the font setup inputs (picked family, preset, size class): only
     // reload fonts when this tuple changes.
-    last_applied_font_config: Option<(Option<String>, FontPreset, TextSizeClass)>,
+    last_applied_font_config: Option<FontConfig>,
     show_font_dialog: bool,
     // Transient UI-only search text for the font picker (not persisted).
     font_filter: String,

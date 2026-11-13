@@ -283,15 +283,27 @@ pub(crate) struct DocumentFonts {
     pub(crate) emphasis: Option<FontFamily>,
 }
 
+/// What the reader chose the document to be set in.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FontConfig {
+    /// The picked body and heading family. `None` is the preset's own.
+    pub(crate) family: Option<String>,
+    pub(crate) preset: FontPreset,
+    pub(crate) size: TextSizeClass,
+}
+
+impl FontConfig {
+    /// Whether the document is set in the bundled serif faces.
+    fn uses_bundled_faces(&self) -> bool {
+        self.preset.uses_bundled_faces(self.family.as_deref())
+    }
+}
+
 /// The document fonts for one font configuration. The named families are
 /// the ones [`setup_fonts`] registers for the same configuration.
-pub(crate) fn document_fonts(
-    preferred_family: Option<&str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-) -> DocumentFonts {
-    let body = size.px() * preset.body_scale();
-    let bundled = preset.uses_bundled_faces(preferred_family);
+pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
+    let body = config.size.px() * config.preset.body_scale();
+    let bundled = config.uses_bundled_faces();
     DocumentFonts {
         body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
         heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
@@ -318,46 +330,27 @@ fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     });
 }
 
-pub(crate) fn setup_fonts(
-    ctx: &egui::Context,
-    preferred_family: Option<&str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-) {
+pub(crate) fn setup_fonts(ctx: &egui::Context, config: &FontConfig) {
     let mut collection = Collection::new(CollectionOptions::default());
     let locale = sys_locale::get_locale();
-    let setup = FontSetup {
-        locale: locale.as_deref(),
-        preferred_family,
-        preset,
-        size,
-    };
-    apply_fonts(ctx, &mut collection, &setup);
+    apply_fonts(ctx, &mut collection, locale.as_deref(), config);
 }
 
-/// What the document is set in: the user's choices plus the system locale,
-/// which steers the script fallbacks.
-struct FontSetup<'a> {
-    locale: Option<&'a str>,
-    preferred_family: Option<&'a str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-}
-
-/// Give `ctx` the faces `collection` has for `setup`, at its text size.
-fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSetup<'_>) {
+/// Give `ctx` the faces `collection` has for `config`, at its text size.
+/// The system locale steers the script fallbacks.
+fn apply_fonts(
+    ctx: &egui::Context,
+    collection: &mut Collection,
+    locale: Option<&str>,
+    config: &FontConfig,
+) {
     let mut fonts = SystemFonts {
         collection,
         source_cache: &mut SourceCache::default(),
     };
-    let definitions = font_definitions(
-        &mut fonts,
-        setup.locale,
-        setup.preferred_family,
-        setup.preset,
-    );
+    let definitions = font_definitions(&mut fonts, locale, config);
     ctx.set_fonts(definitions);
-    apply_text_size_class(ctx, setup.size);
+    apply_text_size_class(ctx, config.size);
 }
 
 /// The font chains for one font configuration, with every face taken from
@@ -365,8 +358,7 @@ fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSet
 fn font_definitions(
     fonts: &mut SystemFonts<'_>,
     locale: Option<&str>,
-    preferred_family: Option<&str>,
-    preset: FontPreset,
+    config: &FontConfig,
 ) -> FontDefinitions {
     let started = std::time::Instant::now();
     let family_count = fonts.collection.family_names().count();
@@ -376,12 +368,12 @@ fn font_definitions(
         .get(&FontFamily::Proportional)
         .cloned()
         .unwrap_or_default();
-    let stack = preset.emulated_stack();
+    let stack = config.preset.emulated_stack();
     let installed = install_regular_fonts(
         fonts,
         &mut definitions,
         locale,
-        preferred_family,
+        config.family.as_deref(),
         stack.map(|stack| stack.body),
     );
     let bold_count = install_strong_font_family(fonts, &mut definitions, &installed, &defaults);
@@ -389,10 +381,7 @@ fn font_definitions(
         stack.is_some_and(|stack| install_preset_mono_font(fonts, &mut definitions, stack.mono));
     install_emoji_fonts(fonts, &mut definitions);
     // Last, so the document chains end in every fallback installed above.
-    install_document_families(
-        &mut definitions,
-        preset.uses_bundled_faces(preferred_family),
-    );
+    install_document_families(&mut definitions, config.uses_bundled_faces());
     if installed.is_empty() {
         log::warn!("No suitable system font fallbacks found; using egui defaults.");
     } else {

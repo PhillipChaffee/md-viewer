@@ -1,19 +1,26 @@
 use super::*;
-use crate::system_fonts::{document_fonts, FontPreset, TextSizeClass};
+use crate::system_fonts::{document_fonts, FontConfig, FontPreset, TextSizeClass};
 use crate::theme::ThemeId;
 
 fn look(theme: ThemeId, preset: FontPreset) -> DocumentLook {
+    let fonts = FontConfig {
+        preset,
+        ..FontConfig::default()
+    };
     DocumentLook::new(
         &egui::Style::default(),
         theme.palette(),
-        &document_fonts(None, preset, TextSizeClass::Normal),
+        &document_fonts(&fonts),
     )
 }
 
 #[test]
 fn the_document_is_laid_out_in_its_own_fonts_and_the_rest_stays_the_chromes() {
     let chrome = egui::Style::default();
-    let fonts = document_fonts(None, FontPreset::Reader, TextSizeClass::Large);
+    let fonts = document_fonts(&FontConfig {
+        size: TextSizeClass::Large,
+        ..FontConfig::default()
+    });
 
     let look = DocumentLook::new(&chrome, ThemeId::Sepia.palette(), &fonts);
 
@@ -35,7 +42,7 @@ fn the_document_is_laid_out_in_its_own_fonts_and_the_rest_stays_the_chromes() {
 
 #[test]
 fn headings_emphasis_and_inline_code_take_the_document_fonts_faces() {
-    let fonts = document_fonts(None, FontPreset::Reader, TextSizeClass::Normal);
+    let fonts = document_fonts(&FontConfig::default());
     let reader = look(ThemeId::Sepia, FontPreset::Reader).blocks;
     assert_eq!(reader.heading_font_family, Some(fonts.heading.family));
     assert!(reader.emphasis_font_family.is_some());
