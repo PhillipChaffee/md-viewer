@@ -1,6 +1,7 @@
 //! The top bar, clicked and pointed at in the running app.
 
-use eframe::egui::{self, Color32, Rangef, Shape};
+use eframe::egui::{self, Color32, Key, Modifiers, Rangef, Shape};
+use egui_kittest::kittest::Queryable as _;
 
 use super::*;
 use crate::app::ui_harness::UiHarness;
@@ -168,18 +169,27 @@ fn the_title_is_small_and_stands_in_the_middle_of_the_bar() {
     );
 }
 
+/// One document whose heading is far too long for the bar.
+fn long_heading() -> UiHarness {
+    let heading = "A heading that goes on and on ".repeat(12);
+    UiHarness::with_docs(&[("long.md", &format!("# {heading}\n\nBody."))])
+}
+
+/// The title the bar painted for [`long_heading`].
+fn long_title(harness: &UiHarness) -> egui::epaint::TextShape {
+    let mut texts = bar_shapes(harness).into_iter();
+    let title = texts.find_map(|shape| match shape {
+        Shape::Text(text) if text.galley.text().starts_with("A heading") => Some(text),
+        _ => None,
+    });
+    title.unwrap()
+}
+
 #[test]
 fn a_title_too_long_for_the_bar_is_cut_short_between_the_buttons() {
-    let heading = "A heading that goes on and on ".repeat(12);
-    let harness = UiHarness::with_docs(&[("long.md", &format!("# {heading}\n\nBody."))]);
+    let harness = long_heading();
 
-    let title = bar_shapes(&harness)
-        .into_iter()
-        .find_map(|shape| match shape {
-            Shape::Text(text) if text.galley.text().starts_with("A heading") => Some(text),
-            _ => None,
-        })
-        .unwrap();
+    let title = long_title(&harness);
     assert!(title.galley.elided, "it ends in an ellipsis");
     let half_button = BUTTON_SIDE / 2.0;
     let forward = harness.labelled("Go forward")[0].0.x + half_button;
@@ -187,6 +197,18 @@ fn a_title_too_long_for_the_bar_is_cut_short_between_the_buttons() {
     assert!(title.pos.x >= forward + TITLE_GAP - 0.5, "{}", title.pos.x);
     let right = title.pos.x + title.galley.size().x;
     assert!(right <= appearance - TITLE_GAP + 0.5, "{right}");
+}
+
+#[test]
+fn a_long_title_stops_short_of_the_edit_controls_of_a_lone_document() {
+    let mut harness = long_heading();
+    harness.press(Modifiers::CTRL, Key::E);
+
+    let title = long_title(&harness);
+    let toggle = harness.ui.get_by_label("Preview").rect();
+    let right = title.pos.x + title.galley.size().x;
+    assert!(right <= toggle.left() - TITLE_GAP + 0.5, "{right}");
+    assert!(toggle.right() < harness.labelled("Appearance")[0].0.x);
 }
 
 #[test]

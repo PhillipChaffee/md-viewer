@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::egui::accesskit::Toggled;
-use eframe::egui::{self, Event, Key, PointerButton};
+use eframe::egui::{self, Event, Key, Modifiers, PointerButton};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::{STRIP_HEIGHT, UNDERLINE};
@@ -183,18 +183,6 @@ fn close_others_stops_watching_the_closed_documents() {
     );
 }
 
-#[test]
-fn a_lone_tab_is_not_offered_close_others() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().tabs[0].set_edit_mode(true);
-    harness.frames(2);
-
-    open_context_menu(&mut harness, "a.md");
-
-    assert!(harness.query_by_label("Close").is_some());
-    assert!(harness.query_by_label("Close Others").is_none());
-}
-
 /// Whether the strip is on screen: its open-file button is.
 fn shows_strip(harness: &LabelHarness) -> bool {
     harness.query_by_label("Open file in new tab").is_some()
@@ -338,17 +326,52 @@ fn the_mode_toggle_switches_between_preview_and_edit() {
     assert!(!editing(&harness));
 }
 
+/// Where the document pane starts: the top of the contents sidebar, which
+/// stands beside the document in it.
+fn pane_top(harness: &LabelHarness) -> f32 {
+    harness.get_by_label("CONTENTS").rect().top()
+}
+
 #[test]
-fn a_lone_document_being_edited_brings_the_strip_in_for_the_way_back() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().tabs[0].set_edit_mode(true);
+fn editing_a_lone_document_leaves_the_page_where_it_is() {
+    let mut harness = one_tab("# A\n\n## B");
+    harness.state_mut().show_outline = true;
     harness.frames(2);
-    assert!(shows_strip(&harness));
+    let at_rest = pane_top(&harness);
+
+    harness.key_press_modifiers(Modifiers::CTRL, Key::E);
+    harness.frames(2);
+    assert!(harness.state().tabs[0].is_editing);
+    assert_close(pane_top(&harness), at_rest);
+
+    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
+    harness.frames(2);
+    assert!(harness.query_by_label("Unsaved changes").is_some());
+    assert_close(pane_top(&harness), at_rest);
 
     harness.click("Preview");
-
     assert!(!harness.state().tabs[0].is_editing);
+    assert_close(pane_top(&harness), at_rest);
+}
+
+#[test]
+fn a_lone_document_has_its_edit_controls_in_the_top_bar() {
+    let mut harness = one_tab("# A");
+    assert!(harness.query_by_label("Preview").is_none());
+
+    harness.state_mut().tabs[0].set_edit_mode(true);
+    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
+    harness.state_mut().tabs[0].save_flash = Some((false, Instant::now()));
+    harness.frames(2);
+
     assert!(!shows_strip(&harness));
+    let bar_bottom = crate::app::chrome::BAR_HEIGHT;
+    let appearance = harness.get_by_label("Appearance").rect();
+    for control in ["Save failed", "Unsaved changes", "Preview", "Edit"] {
+        let rect = harness.get_by_label(control).rect();
+        assert!(rect.bottom() <= bar_bottom, "{control} at {rect:?}");
+        assert!(rect.right() < appearance.left(), "{control} at {rect:?}");
+    }
 }
 
 #[test]
@@ -374,21 +397,22 @@ fn unsaved_edits_are_marked_beside_the_mode_toggle() {
 }
 
 #[test]
-fn unsaved_edits_keep_the_strip_of_a_lone_document_after_leaving_edit_mode() {
+fn unsaved_edits_of_a_lone_document_stay_marked_after_leaving_edit_mode() {
     let mut harness = one_tab("# A");
     harness.state_mut().tabs[0].content = "# A, edited".to_owned();
     harness.frames(2);
 
-    assert!(shows_strip(&harness));
+    assert!(!shows_strip(&harness));
     assert!(harness.query_by_label("Unsaved changes").is_some());
+    assert!(harness.query_by_label("Preview").is_some());
 }
 
 #[test]
 fn a_save_reports_its_outcome_beside_the_mode_toggle() {
-    let mut harness = one_tab("# A");
+    let mut harness = three_tabs();
     assert!(harness.query_by_label("Saved").is_none());
 
-    harness.state_mut().tabs[0].save_flash = Some((true, Instant::now()));
+    harness.state_mut().tabs[2].save_flash = Some((true, Instant::now()));
     harness.frames(1);
     assert!(harness.query_by_label("Saved").is_some());
     let palette = harness.state().theme.palette();
@@ -399,7 +423,7 @@ fn a_save_reports_its_outcome_beside_the_mode_toggle() {
         palette.positive
     );
 
-    harness.state_mut().tabs[0].save_flash = Some((false, Instant::now()));
+    harness.state_mut().tabs[2].save_flash = Some((false, Instant::now()));
     harness.frames(1);
     assert!(harness.query_by_label("Save failed").is_some());
     assert!(harness.query_by_label("Saved").is_none());

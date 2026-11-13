@@ -117,7 +117,7 @@ impl MarkdownApp {
                 let column = Column::in_pane(content_rect, reading_width);
                 pane_width = content_rect.width();
 
-                // (the Preview|Edit toggle lives in the tab bar)
+                // (the Preview|Edit toggle lives in the bars above)
                 if tab.is_editing {
                     edit_pane(ui, tab, column);
                 } else {

@@ -1,5 +1,6 @@
 //! The tab strip: a row of flat text tabs, shown only while there is
-//! something to choose between or an edit in progress.
+//! something to choose between. A lone document's edit controls go in the
+//! top bar instead, so starting an edit does not move the page.
 
 use std::time::Duration;
 
@@ -53,21 +54,41 @@ struct TabLabel<'a> {
     index: usize,
     title: &'a str,
     is_active: bool,
-    /// "Close Others" is offered only when there are other tabs.
-    has_siblings: bool,
 }
 
-/// Whether `tab` has something the strip must show even when it is the
-/// only tab: an edit in progress, unsaved changes, or a save's outcome.
+/// Whether `tab` has something to show beside the mode toggle even when it
+/// is the only tab: an edit in progress, unsaved changes, or a save's
+/// outcome.
 fn has_edit_state(tab: &Tab) -> bool {
     tab.is_editing || tab.content != tab.saved_content || tab.save_flash.is_some()
 }
 
 impl MarkdownApp {
-    /// Whether the strip earns its row: with one document open and nothing
-    /// being edited there is nothing to choose and nothing to report.
-    fn shows_tab_bar(&self) -> bool {
-        self.tabs.len() > 1 || self.tabs.get(self.active_tab).is_some_and(has_edit_state)
+    /// Whether the strip earns its row: with one document open there is
+    /// nothing to choose.
+    const fn shows_tab_bar(&self) -> bool {
+        self.tabs.len() > 1
+    }
+
+    /// The edit controls of a lone document, which has no strip to hold
+    /// them, laid out in the top bar from the right end of `room`. Returns
+    /// their left edge when there are any.
+    pub(crate) fn lone_document_edit_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        room: egui::Rect,
+    ) -> Option<f32> {
+        let palette = self.theme.palette();
+        let [tab] = self.tabs.as_mut_slice() else {
+            return None;
+        };
+        if !has_edit_state(tab) {
+            return None;
+        }
+        let layout = egui::Layout::right_to_left(egui::Align::Center);
+        let builder = egui::UiBuilder::new().max_rect(room).layout(layout);
+        let controls = ui.scope_builder(builder, |ui| edit_mode_controls(ui, tab, palette));
+        Some(controls.response.rect.left())
     }
 
     /// Render the tab strip when it has something to show. Returns the
@@ -88,7 +109,6 @@ impl MarkdownApp {
                     self.open_file_button(ui);
                     if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
                             edit_mode_controls(ui, tab, palette);
                         });
                     }
@@ -109,7 +129,6 @@ impl MarkdownApp {
     fn tab_strip(&self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
         let palette = self.theme.palette();
         let titles: Vec<String> = self.tabs.iter().map(Tab::title).collect();
-        let has_siblings = titles.len() > 1;
 
         egui::ScrollArea::horizontal()
             .max_width(ui.available_width() - OPEN_BUTTON_ROOM)
@@ -123,7 +142,6 @@ impl MarkdownApp {
                         index,
                         title,
                         is_active: index == self.active_tab,
-                        has_siblings,
                     };
                     tab_label(ui, &label, palette, actions);
                 }
@@ -292,11 +310,10 @@ fn tab_context_menu(
     if MenuRow::new("Close").flush().show(ui, palette).clicked() {
         actions.close = Some(label.index);
     }
-    if label.has_siblings
-        && MenuRow::new("Close Others")
-            .flush()
-            .show(ui, palette)
-            .clicked()
+    if MenuRow::new("Close Others")
+        .flush()
+        .show(ui, palette)
+        .clicked()
     {
         actions.close_others = Some(label.index);
     }
@@ -305,6 +322,7 @@ fn tab_context_menu(
 /// The Preview|Edit toggle, the unsaved-changes marker, and the outcome of
 /// the last save. The caller lays these out right to left.
 fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
+    ui.spacing_mut().item_spacing.x = 8.0;
     let modes = [(false, "Preview"), (true, "Edit")];
     if let Some(to_edit) = chrome::segmented(ui, palette, &modes, tab.is_editing, false) {
         tab.set_edit_mode(to_edit);

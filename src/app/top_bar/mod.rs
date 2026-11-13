@@ -89,13 +89,15 @@ impl MarkdownApp {
                 let trailing_width =
                     TRAILING_BUTTONS.mul_add(BUTTON_SIDE, (TRAILING_BUTTONS - 1.0) * BUTTON_GAP);
                 let trailing = bar.with_min_x(bar.right() - trailing_width);
+                let beside_trailing = bar.with_max_x(trailing.left() - BUTTON_GAP);
+                let edit_left = self.lone_document_edit_controls(ui, beside_trailing);
                 ui.scope_builder(
                     egui::UiBuilder::new()
                         .max_rect(trailing)
                         .layout(egui::Layout::left_to_right(egui::Align::Center)),
                     |ui| self.trailing_buttons(ui, &mut picked),
                 );
-                let free = egui::Rangef::new(leading.right(), trailing.left());
+                let free = egui::Rangef::new(leading.right(), edit_left.unwrap_or(trailing.min.x));
                 self.document_title(ui, bar, free);
             });
 
