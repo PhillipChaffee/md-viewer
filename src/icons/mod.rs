@@ -2,6 +2,9 @@
 
 use eframe::egui;
 
+#[cfg(test)]
+mod tests;
+
 /// Draw a visible affordance for a resizable sidebar's drag strip.
 ///
 /// egui's `SidePanel` resize interaction paints nothing — the only hint is a
