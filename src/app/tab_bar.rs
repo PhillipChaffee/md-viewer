@@ -186,26 +186,31 @@ fn tab_label(
             actions.close = Some(label.index);
         }
 
-        if label.show_close {
-            let close_btn = ui.small_button("×");
-
-            // Collect close button widget data for MCP
-            #[cfg(feature = "mcp")]
-            actions.widgets.push((
-                format!("Close Tab: {}", label.title),
-                "button",
-                close_btn.rect,
-                None,
-            ));
-
-            if close_btn.clicked() {
-                actions.close = Some(label.index);
-            }
-        }
+        tab_close_button(ui, label, actions);
 
         response.context_menu(|ui| tab_context_menu(ui, label, actions));
     })
     .response
+}
+
+fn tab_close_button(ui: &mut egui::Ui, label: &TabLabel<'_>, actions: &mut TabStripActions) {
+    if !label.show_close {
+        return;
+    }
+    let close_btn = ui.small_button("×");
+
+    // Collect close button widget data for MCP
+    #[cfg(feature = "mcp")]
+    actions.widgets.push((
+        format!("Close Tab: {}", label.title),
+        "button",
+        close_btn.rect,
+        None,
+    ));
+
+    if close_btn.clicked() {
+        actions.close = Some(label.index);
+    }
 }
 
 fn tab_context_menu(ui: &mut egui::Ui, label: &TabLabel<'_>, actions: &mut TabStripActions) {
