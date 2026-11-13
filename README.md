@@ -240,6 +240,13 @@ accessible labels. To run them alone:
 cargo test
 ```
 
+A second layer of tests, in `tests/`, is written to survive a rewrite of
+`src/`. It drives the whole app through one function and the built binary
+through its command line and a real window on a virtual display, and it
+asserts only what a user can observe. [tests/README.md](tests/README.md)
+describes the layers, the rule its tests follow, and the extra packages the
+window tests need.
+
 Two things to know before you rely on those gates:
 
 - **The vendored renderer is outside them.** `vendor/egui_commonmark` has its
