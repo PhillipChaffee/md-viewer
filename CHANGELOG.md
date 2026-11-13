@@ -49,11 +49,17 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - Ctrl+S saves unsaved edits from the preview as well as from edit mode.
 - Ctrl+W in the find bar closes the tab without also deleting the last word of the search.
 - Unsaved edits are kept when the file changes on disk while you are looking at the preview, not only in edit mode.
+- The find bar counts the matches again as you type in edit mode, and back in the preview the highlights sit on the edited text.
+- The find bar searches the document that "Close Others" keeps.
+- A document opened while the find bar holds a query, with nothing open before it, is searched at once instead of showing "0 matches".
+- After the tab in front is closed, the tab strip scrolls to the tab that takes its place.
+- A refresh of the file explorer is no longer undone by an older scan that finishes after it.
 
 ### Internals
 
 - **The crate runs under the [full-lint](https://github.com/PhillipChaffee/full-lint) Rust baseline.** `./run-gates.sh` runs 23 gates: clippy's pedantic, nursery and cargo groups as errors, denied rustdoc lints, a cognitive-complexity cap of 15, a 1000-effective-line file cap, 95% coverage on lines, regions and functions, and the dependency and hygiene checks. `src/main.rs` (7384 lines) is now modules of at most 500 effective lines, and no test shares a file with the code it tests.
 - **The vendored forks moved from `crates/` to `vendor/`.**
+- **The app's state was regrouped by owner.** Live reload, the fonts, the color overrides, the font picker, the lightbox and the window title are each one value with its own module, and the app holds 41 fields where it held 59. A document owns its scrolling, its jumps to a heading or a match, and its folded outline. The explorer keeps its open folders read by itself, and the MCP test bridge is met in one module. Nothing a reader sees changed apart from the fixes above.
 
 ## [0.3.0] - 2026-09-13
 
