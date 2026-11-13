@@ -1,0 +1,67 @@
+# osv-scanner overrides for the root Cargo.lock. Every entry carries its
+# reason and review date; the four that cargo-deny also ignores repeat the
+# reasons recorded in deny.toml. The rest are "unmaintained" notices on
+# crates this manifest does not choose: cargo-deny tolerates those when they
+# are transitive, osv-scanner reports them all.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0194"
+reason = "reviewed 2026-11-13: quick-xml 0.38 parses only the CSL styles compiled into typst's bibliography stack; no document text reaches it."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0195"
+reason = "reviewed 2026-11-13: same path as RUSTSEC-2026-0194."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0235"
+reason = "reviewed 2026-11-13: rkyv 0.7 reads the LaTeX command table archived into mitex-spec at build time; the archive is not attacker-controlled."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0192"
+reason = "reviewed 2026-11-13: ttf-parser is unmaintained with no successor release; used read-only on installed fonts and pinned by typst, fontdb and rustybuzz."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0206"
+reason = "reviewed 2026-11-13: rustybuzz is unmaintained; pinned by typst and resvg text shaping, no maintained release to move to from this manifest."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0141"
+reason = "reviewed 2026-11-13: bincode is unmaintained; syntect uses it to load the syntax definitions compiled into the binary."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0320"
+reason = "reviewed 2026-11-13: yaml-rust is unmaintained; syntect links it for its syntax-definition loader, which reads embedded data only."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0057"
+reason = "reviewed 2026-11-13: fxhash is unmaintained; a hash function pinned by the mitex lexer, no input-dependent risk."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+reason = "reviewed 2026-11-13: unsafe-libyaml is unmaintained; pinned through serde_yaml by typst's bibliography stack (hayagriva), which reads embedded data only."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "reviewed 2026-11-13: paste is unmaintained; a compile-time macro crate pinned by typst's biblatex parser, absent from the running binary."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+reason = "reviewed 2026-11-13: zvariant 5 is unmaintained in favour of a later major; pinned by accesskit_unix for the AT-SPI accessibility bus."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+reason = "reviewed 2026-11-13: zbus_names, same accesskit_unix D-Bus stack as RUSTSEC-2026-0370."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+reason = "reviewed 2026-11-13: zvariant_derive, same accesskit_unix D-Bus stack as RUSTSEC-2026-0370."
+
+# osv-scanner's allow-list takes bare SPDX identifiers only, so a license
+# with an exception clause cannot be listed. ar_archive_writer is
+# "Apache-2.0 WITH LLVM-exception": Apache-2.0 plus a grant that only widens
+# what a redistributor may do. deny.toml allows the full expression.
+[[PackageOverrides]]
+name = "ar_archive_writer"
+ecosystem = "crates.io"
+license.override = ["Apache-2.0"]
+reason = "Apache-2.0 WITH LLVM-exception: the exception only adds permissions; osv-scanner cannot express a WITH clause in its allow-list."

@@ -180,10 +180,14 @@ jobs:
         run: gitleaks detect --source . --redact
       - name: Copy-paste detection (jscpd v5.2.0)
         run: jscpd
+      # Both osv-scanner steps read the root Cargo.lock, the one that ships.
+      # The lockfiles under vendor/ belong to the forks' own dev workspaces
+      # and resolve crates this binary never links. The license list is the
+      # shared house list plus the five licenses deny.toml allows with reasons.
       - name: Dependency advisories (osv-scanner v2.5.1)
-        run: osv-scanner scan -r .
+        run: osv-scanner scan --lockfile Cargo.lock
       - name: License check (osv-scanner v2.5.1)
-        run: osv-scanner scan -r . --licenses="MIT,Apache-2.0,ISC,BSD-3-Clause,BSD-2-Clause,MPL-2.0,PSF-2.0,Unicode-3.0,Python-2.0,Unlicense,CC0-1.0,0BSD,Apache-1.1,BSD-3-Clause-Clear,LGPL-3.0-only,BlueOak-1.0.0,CC-BY-3.0"
+        run: osv-scanner scan --lockfile Cargo.lock --licenses="MIT,Apache-2.0,ISC,BSD-3-Clause,BSD-2-Clause,MPL-2.0,PSF-2.0,Unicode-3.0,Python-2.0,Unlicense,CC0-1.0,0BSD,Apache-1.1,BSD-3-Clause-Clear,LGPL-3.0-only,BlueOak-1.0.0,CC-BY-3.0,Zlib,BSL-1.0,CDLA-Permissive-2.0,OFL-1.1,Ubuntu-font-1.0"
       - name: RustSec advisories (cargo-deny v0.20.2)
         run: cargo deny check advisories
       - name: License policy (cargo-deny v0.20.2)

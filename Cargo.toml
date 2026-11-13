@@ -71,6 +71,12 @@ ttf-parser = "0.25"
 url = "2.5"
 percent-encoding = "2.3"
 
+# cargo-shear cannot see a crate that is used only for its features: `image`
+# is never imported, but its png/jpeg/gif features switch on the decoders
+# egui_extras needs to show images in documents.
+[package.metadata.cargo-shear]
+ignored = ["image"]
+
 [features]
 default = []
 # mcp = ["dep:egui-mcp-bridge"]
