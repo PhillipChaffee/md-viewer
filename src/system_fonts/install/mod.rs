@@ -114,50 +114,98 @@ fn source_description(source: &SourceKind) -> String {
     }
 }
 
-fn select_from_families(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-    family_ids: &[FamilyId],
-    weight: FontWeight,
-    required_glyphs: &str,
-    require_true_bold: bool,
-) -> Option<SelectedFont> {
-    for family_id in family_ids {
-        let Some(family) = collection.family(*family_id) else {
-            continue;
-        };
-        let mut candidates: Vec<_> = family
-            .fonts()
-            .iter()
-            .filter(|font| {
-                font.style() == FontStyle::Normal
-                    && (!require_true_bold || font.weight() >= FontWeight::BOLD)
-            })
-            .collect();
-        candidates.sort_by(|left, right| {
-            let left_distance = (left.weight().value() - weight.value()).abs();
-            let right_distance = (right.weight().value() - weight.value()).abs();
-            left_distance.total_cmp(&right_distance)
-        });
+/// Which face of a family a selection is after.
+#[derive(Clone, Copy)]
+enum Weight {
+    Regular,
+    /// A true bold face: one of weight 700 or more, so a medium or semibold
+    /// face is never taken for it.
+    Bold,
+}
 
-        for font in candidates {
-            let Some(blob) = font.load(Some(source_cache)) else {
-                continue;
-            };
-            if !font_has_glyphs(&blob, font.index(), required_glyphs) {
-                continue;
-            }
-            return Some(SelectedFont {
-                blob,
-                index: font.index(),
-                family_id: *family_id,
-                family: family.name().to_owned(),
-                source: source_description(font.source().kind()),
-                weight: font.weight(),
-            });
+impl Weight {
+    /// The weight the chosen face should be nearest to.
+    const fn target(self) -> FontWeight {
+        match self {
+            Self::Regular => FontWeight::NORMAL,
+            Self::Bold => FontWeight::BOLD,
         }
     }
-    None
+
+    fn admits(self, face: FontWeight) -> bool {
+        match self {
+            Self::Regular => true,
+            Self::Bold => face >= FontWeight::BOLD,
+        }
+    }
+}
+
+/// The fonts the platform lists, with the files loaded from them so far.
+pub(crate) struct SystemFonts<'a> {
+    pub(crate) collection: &'a mut Collection,
+    pub(crate) source_cache: &'a mut SourceCache,
+}
+
+impl SystemFonts<'_> {
+    /// The upright face nearest to `weight` that loads and covers
+    /// `required_glyphs`, from the first of `family_ids` that has one.
+    fn select(
+        &mut self,
+        family_ids: &[FamilyId],
+        weight: Weight,
+        required_glyphs: &str,
+    ) -> Option<SelectedFont> {
+        let target = weight.target().value();
+        for family_id in family_ids {
+            let Some(family) = self.collection.family(*family_id) else {
+                continue;
+            };
+            let mut candidates: Vec<_> = family
+                .fonts()
+                .iter()
+                .filter(|font| font.style() == FontStyle::Normal && weight.admits(font.weight()))
+                .collect();
+            candidates.sort_by(|left, right| {
+                let left_distance = (left.weight().value() - target).abs();
+                let right_distance = (right.weight().value() - target).abs();
+                left_distance.total_cmp(&right_distance)
+            });
+
+            for font in candidates {
+                let Some(blob) = font.load(Some(self.source_cache)) else {
+                    continue;
+                };
+                if !font_has_glyphs(&blob, font.index(), required_glyphs) {
+                    continue;
+                }
+                return Some(SelectedFont {
+                    blob,
+                    index: font.index(),
+                    family_id: *family_id,
+                    family: family.name().to_owned(),
+                    source: source_description(font.source().kind()),
+                    weight: font.weight(),
+                });
+            }
+        }
+        None
+    }
+
+    /// Best regular face among `family_ids` that covers `required_glyphs`.
+    pub(crate) fn regular(
+        &mut self,
+        family_ids: &[FamilyId],
+        required_glyphs: &str,
+    ) -> Option<SelectedFont> {
+        self.select(family_ids, Weight::Regular, required_glyphs)
+    }
+
+    /// Regular face of the installed family called `family` that covers
+    /// `required_glyphs`, wherever the platform keeps its file.
+    pub(crate) fn named(&mut self, family: &str, required_glyphs: &str) -> Option<SelectedFont> {
+        let family_id = self.collection.family_id(family)?;
+        self.regular(&[family_id], required_glyphs)
+    }
 }
 
 fn fallback_family_ids(
@@ -178,45 +226,11 @@ fn installed_fonts_cover(installed: &[InstalledFont], glyphs: &str) -> bool {
         .any(|font| font_has_glyphs(&font.selected.blob, font.selected.index, glyphs))
 }
 
-/// Glyphs a face must cover to serve as the primary sans.
-const LATIN_SAMPLE: &str = "Aa";
-
-/// Best regular face among `family_ids` that can serve as the document body
-/// font. The font picker lists a family only when this finds one, which is
-/// what guarantees that every listed name takes effect when picked.
-pub(crate) fn select_body_font(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-    family_ids: &[FamilyId],
-) -> Option<SelectedFont> {
-    select_from_families(
-        collection,
-        source_cache,
-        family_ids,
-        FontWeight::NORMAL,
-        LATIN_SAMPLE,
-        false,
-    )
-}
-
-/// Regular face of the installed family called `family` that covers
-/// `required_glyphs`, wherever the platform keeps its file.
-pub(crate) fn select_family_font(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-    family: &str,
-    required_glyphs: &str,
-) -> Option<SelectedFont> {
-    let family_id = collection.family_id(family)?;
-    select_from_families(
-        collection,
-        source_cache,
-        &[family_id],
-        FontWeight::NORMAL,
-        required_glyphs,
-        false,
-    )
-}
+/// Glyphs a face must cover to serve as the primary sans, which is the
+/// document body font. The font picker lists a family only when it has a
+/// regular face covering these, which is what guarantees that every listed
+/// name takes effect when picked.
+pub(crate) const LATIN_SAMPLE: &str = "Aa";
 
 /// Key the primary sans is installed under.
 const PRIMARY_SANS_KEY: &str = "SystemSans";
@@ -245,14 +259,11 @@ impl RegularFontInstaller<'_> {
         required_glyphs: &'static str,
         primary: bool,
     ) -> bool {
-        let Some(selected) = select_from_families(
-            self.collection,
-            self.source_cache,
-            family_ids,
-            FontWeight::NORMAL,
-            required_glyphs,
-            false,
-        ) else {
+        let mut fonts = SystemFonts {
+            collection: self.collection,
+            source_cache: self.source_cache,
+        };
+        let Some(selected) = fonts.regular(family_ids, required_glyphs) else {
             return false;
         };
         self.install(key, selected, required_glyphs, primary);
@@ -460,18 +471,19 @@ pub(crate) fn install_strong_font_family(
     let mut primary_bold = None;
     let mut fallback_bold = Vec::new();
     let mut count = 0;
+    let mut fonts = SystemFonts {
+        collection,
+        source_cache,
+    };
 
     for regular in installed {
         if regular.primary {
             primary_regular = Some(regular.key.clone());
         }
-        let Some(selected) = select_from_families(
-            collection,
-            source_cache,
+        let Some(selected) = fonts.select(
             &[regular.selected.family_id],
-            FontWeight::BOLD,
+            Weight::Bold,
             regular.required_glyphs,
-            true,
         ) else {
             continue;
         };
@@ -532,14 +544,11 @@ pub(crate) fn install_preset_mono_font(
         .iter()
         .filter_map(|name| collection.family_id(name))
         .collect();
-    let Some(selected) = select_from_families(
+    let mut fonts = SystemFonts {
         collection,
         source_cache,
-        &family_ids,
-        FontWeight::NORMAL,
-        "{}",
-        false,
-    ) else {
+    };
+    let Some(selected) = fonts.regular(&family_ids, "{}") else {
         log::warn!(
             "Preset mono families {mono_families:?} had no usable face; keeping the bundled monospace."
         );

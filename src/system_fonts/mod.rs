@@ -10,7 +10,8 @@ use crate::system_fonts::bundled::{
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
-    install_preset_mono_font, install_regular_fonts, install_strong_font_family, select_body_font,
+    install_preset_mono_font, install_regular_fonts, install_strong_font_family, SystemFonts,
+    LATIN_SAMPLE,
 };
 
 mod bundled;
@@ -449,8 +450,13 @@ fn pickable_family_names(
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup();
     names.retain(|name| {
-        canonical_family_id(collection, name)
-            .is_some_and(|id| select_body_font(collection, source_cache, &[id]).is_some())
+        canonical_family_id(collection, name).is_some_and(|id| {
+            let mut fonts = SystemFonts {
+                collection,
+                source_cache,
+            };
+            fonts.regular(&[id], LATIN_SAMPLE).is_some()
+        })
     });
     names
 }

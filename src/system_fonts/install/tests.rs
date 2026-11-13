@@ -354,12 +354,8 @@ fn body_font_selection_skips_families_the_collection_does_not_know() {
     let foreign = Fonts::none().register_latin("Elsewhere Sans");
     let known = fonts.collection.family_id("Fixture Sans").unwrap();
 
-    let none = select_body_font(&mut fonts.collection, &mut fonts.source_cache, &[foreign]);
-    let found = select_body_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &[foreign, known],
-    );
+    let none = fonts.system().regular(&[foreign], LATIN_SAMPLE);
+    let found = fonts.system().regular(&[foreign, known], LATIN_SAMPLE);
 
     assert!(none.is_none());
     assert_eq!(
@@ -396,12 +392,7 @@ impl FontFile {
     }
 
     fn select(&mut self) -> Option<SelectedFont> {
-        select_family_font(
-            &mut self.fonts.collection,
-            &mut self.fonts.source_cache,
-            &self.family,
-            "Aa",
-        )
+        self.fonts.system().named(&self.family, "Aa")
     }
 }
 
@@ -427,13 +418,10 @@ fn face_whose_file_has_vanished_is_passed_over() {
 #[test]
 fn face_registered_from_memory_says_so_in_its_source() {
     let mut fonts = Fonts::with_sans();
-    let face = select_family_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        "Fixture Sans",
-        "Aa",
-    )
-    .expect("the family is registered");
+    let face = fonts
+        .system()
+        .named("Fixture Sans", "Aa")
+        .expect("the family is registered");
     assert_eq!(face.source, "<memory>");
 }
 

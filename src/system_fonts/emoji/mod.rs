@@ -3,7 +3,7 @@
 use egui::{FontData, FontDefinitions, FontFamily};
 use fontique::{Collection, SourceCache};
 
-use crate::system_fonts::install::select_family_font;
+use crate::system_fonts::install::SystemFonts;
 
 #[cfg(test)]
 mod tests;
@@ -53,12 +53,11 @@ pub(crate) fn install_emoji_fonts(
     source_cache: &mut SourceCache,
     definitions: &mut FontDefinitions,
 ) {
-    let color_face = select_family_font(
+    let mut fonts = SystemFonts {
         collection,
         source_cache,
-        COLOR_EMOJI_FAMILY,
-        COLOR_EMOJI_SAMPLE,
-    );
+    };
+    let color_face = fonts.named(COLOR_EMOJI_FAMILY, COLOR_EMOJI_SAMPLE);
     if let Some(face) = color_face {
         log::info!("Loaded system color emoji font from {}", face.source);
         install_color_emoji_face(definitions, face.data());

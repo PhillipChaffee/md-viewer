@@ -58,6 +58,14 @@ impl Fonts {
         }
     }
 
+    /// The collection as the font code takes it.
+    pub(crate) fn system(&mut self) -> SystemFonts<'_> {
+        SystemFonts {
+            collection: &mut self.collection,
+            source_cache: &mut self.source_cache,
+        }
+    }
+
     /// Install `face` as the `weight` face of `family`.
     pub(crate) fn register(&mut self, face: &[u8], family: &str, weight: FontWeight) -> FamilyId {
         let registered = self.collection.register_fonts(
@@ -358,9 +366,14 @@ fn system_font_picker_list_is_sorted_canonical_and_body_capable() {
 
     let mut collection = Collection::new(CollectionOptions::default());
     let mut source_cache = SourceCache::default();
+    let mut fonts = SystemFonts {
+        collection: &mut collection,
+        source_cache: &mut source_cache,
+    };
     let mut seen_ids = HashSet::new();
     for name in &names {
-        let id = collection
+        let id = fonts
+            .collection
             .family_id(name)
             .unwrap_or_else(|| panic!("listed family {name:?} does not resolve"));
         assert!(
@@ -368,12 +381,16 @@ fn system_font_picker_list_is_sorted_canonical_and_body_capable() {
             "duplicate family id behind {name:?} — alias leak"
         );
         assert_eq!(
-            collection.family_name(id).map(str::to_owned).as_deref(),
+            fonts
+                .collection
+                .family_name(id)
+                .map(str::to_owned)
+                .as_deref(),
             Some(name.as_str()),
             "{name:?} is an alias, not the family's canonical name"
         );
         assert!(
-            select_body_font(&mut collection, &mut source_cache, &[id]).is_some(),
+            fonts.regular(&[id], LATIN_SAMPLE).is_some(),
             "listed family {name:?} cannot serve as a body font"
         );
     }
