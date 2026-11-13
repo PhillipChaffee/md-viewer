@@ -31,8 +31,8 @@ src/app/tabs/mod.rs	next_and_previous_tab_wrap_and_invert	        len - 1\n    }
 src/search/mod.rs	stepping_matches_wraps_and_inverts	        count - 1\n	        count\n
 src/search/mod.rs	stepping_forward_recovers_a_stale_index	(current + 1) % count	current + 1
 src/app/startup/mod.rs	restored_active_tab_names_an_open_tab	saved.unwrap_or(0).min(tab_count.saturating_sub(1))	saved.unwrap_or(0).min(tab_count)
-src/app/startup/mod.rs	restored_zoom_is_in_range	saved.unwrap_or(1.0).clamp(0.5, 3.0)	saved.unwrap_or(1.0).clamp(0.5, 30.0)
-src/app/startup/mod.rs	restored_math_scale_is_in_range	saved.unwrap_or(1.0).clamp(1.0, 2.0)	saved.unwrap_or(0.5).max(1.0)
+src/persist/mod.rs	restored_zoom_is_in_range	saved.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX)	saved.unwrap_or(1.0).clamp(ZOOM_MIN, 30.0)
+src/persist/mod.rs	restored_math_scale_is_in_range	saved.unwrap_or(1.0).clamp(MATH_SCALE_MIN, MATH_SCALE_MAX)	saved.unwrap_or(0.5).max(MATH_SCALE_MIN)
 src/tab/mod.rs	back_and_forward_undo_each_other	    from.pop();\n	
 src/tab/mod.rs	a_step_back_moves_exactly_one_entry	    to.push(left);\n	    to.insert(0, left);\n
 src/tab/mod.rs	a_visit_can_be_undone_and_clears_forward	    forward.clear();\n	

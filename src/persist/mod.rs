@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::explorer::SortOrder;
-use crate::layout::{LineSpacing, SIDEBAR_MIN_WIDTH};
+use crate::layout::{LineSpacing, SIDEBAR_MIN_WIDTH, ZOOM_MAX, ZOOM_MIN};
 use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::theme::ThemeId;
@@ -16,6 +16,10 @@ mod proofs;
 mod tests;
 
 pub(crate) const APP_KEY: &str = "md-viewer-state";
+
+/// The smallest and the largest a formula is drawn, relative to the text.
+const MATH_SCALE_MIN: f32 = 1.0;
+const MATH_SCALE_MAX: f32 = 2.0;
 
 /// Persisted state saved between sessions.
 #[derive(Serialize, Deserialize, Default)]
@@ -71,6 +75,16 @@ pub(crate) struct PersistedState {
     pub(crate) explorer_width: Option<f32>,
     pub(crate) outline_width: Option<f32>,
     pub(crate) recent_files: Option<Vec<RecentEntry>>,
+}
+
+/// The document zoom a saved session comes back at.
+pub(crate) fn restored_zoom(saved: Option<f32>) -> f32 {
+    saved.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX)
+}
+
+/// The formula size a saved session comes back at, relative to the text.
+pub(crate) fn restored_math_scale(saved: Option<f32>) -> f32 {
+    saved.unwrap_or(1.0).clamp(MATH_SCALE_MIN, MATH_SCALE_MAX)
 }
 
 pub(crate) fn restored_sidebar_width(width: Option<f32>, default: f32) -> f32 {

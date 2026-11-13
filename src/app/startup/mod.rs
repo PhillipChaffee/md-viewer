@@ -17,7 +17,9 @@ use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::{
     ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS,
 };
-use crate::persist::{restored_sidebar_width, PersistedState, APP_KEY};
+use crate::persist::{
+    restored_math_scale, restored_sidebar_width, restored_zoom, PersistedState, APP_KEY,
+};
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
 use crate::tab::Tab;
@@ -196,16 +198,6 @@ fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, D
 /// none.
 fn restored_active_tab(saved: Option<usize>, tab_count: usize) -> usize {
     saved.unwrap_or(0).min(tab_count.saturating_sub(1))
-}
-
-/// The document zoom a saved session comes back at.
-fn restored_zoom(saved: Option<f32>) -> f32 {
-    saved.unwrap_or(1.0).clamp(0.5, 3.0)
-}
-
-/// The formula size a saved session comes back at, relative to the text.
-fn restored_math_scale(saved: Option<f32>) -> f32 {
-    saved.unwrap_or(1.0).clamp(1.0, 2.0)
 }
 
 const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {

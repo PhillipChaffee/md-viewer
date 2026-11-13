@@ -115,9 +115,9 @@ compiles them. `cargo fmt` does format them.
 | `tab::reading_minutes_never_overflow` | Reading time is at least 1 minute and never overflows. | Every `usize` | Proven |
 | `tab::reading_minutes_round_up` | Reading time is the least whole number of minutes covering the words. | Up to `u32::MAX` words | Bounded |
 | `startup::restored_active_tab_names_an_open_tab` | Any saved tab index restores to an open tab, and to itself where it still exists. | Every `Option<usize>` × `usize` | Proven |
-| `startup::restored_zoom_is_in_range` | A saved zoom restores into [0.5, 3.0]. | Every `Option<f32>` but NaN | Proven |
-| `startup::restored_math_scale_is_in_range` | A saved formula size restores into [1, 2]. | Every `Option<f32>` but NaN | Proven |
-| `startup::restored_zoom_passes_nan_through` | Pins finding 1 below. | NaN | Proven |
+| `persist::restored_zoom_is_in_range` | A saved zoom restores into [0.5, 3.0]. | Every `Option<f32>` but NaN | Proven |
+| `persist::restored_math_scale_is_in_range` | A saved formula size restores into [1, 2]. | Every `Option<f32>` but NaN | Proven |
+| `persist::restored_zoom_passes_nan_through` | Pins finding 1 below. | NaN | Proven |
 | `persist::restored_sidebar_width_is_usable` | Any saved sidebar width restores finite and at least 70 px. | Every `Option<f32>`; finite default ≥ 70 | Proven |
 
 The three history harnesses run the two helpers `Tab` calls
