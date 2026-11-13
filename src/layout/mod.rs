@@ -52,16 +52,41 @@ pub(crate) fn keyboard_scroll_target(
     (current_offset + delta).clamp(0.0, max_scroll)
 }
 
-pub(crate) fn content_default_width(full_width_content: bool) -> Option<usize> {
+/// Whole pixels in `width`: the fraction is dropped, and a negative or NaN
+/// width counts as zero.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is clamped to be non-negative first and `as` saturates at usize::MAX; dropping the fraction is the point"
+)]
+pub(crate) const fn whole_pixels(width: f32) -> usize {
+    width.max(0.0) as usize
+}
+
+/// Fraction of a document that lies above `line_number`, for estimating a
+/// scroll offset before the renderer has measured the real one. An empty
+/// document has nothing above any line.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "line counts stay far below f32's 2^24 exact-integer range, and the result is only a scroll estimate"
+)]
+pub(crate) fn line_fraction(line_number: usize, content_lines: usize) -> f32 {
+    if content_lines == 0 {
+        return 0.0;
+    }
+    line_number as f32 / content_lines as f32
+}
+
+pub(crate) const fn content_default_width(full_width_content: bool) -> Option<usize> {
     if full_width_content {
         None
     } else {
-        Some(CONTENT_OPTIMAL_WIDTH as usize)
+        Some(whole_pixels(CONTENT_OPTIMAL_WIDTH))
     }
 }
 
 pub(crate) fn content_width_limit(full_width_content: bool, available_width: f32) -> usize {
-    let available_width = available_width.max(0.0) as usize;
+    let available_width = whole_pixels(available_width);
     content_default_width(full_width_content)
         .map_or(available_width, |preferred| preferred.min(available_width))
 }

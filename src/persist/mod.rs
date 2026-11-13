@@ -14,7 +14,7 @@ mod tests;
 
 pub(crate) const APP_KEY: &str = "md-viewer-state";
 
-/// Persisted state saved between sessions
+/// Persisted state saved between sessions.
 #[derive(Serialize, Deserialize, Default)]
 pub(crate) struct PersistedState {
     pub(crate) dark_mode: Option<bool>,
@@ -56,6 +56,5 @@ pub(crate) struct PersistedState {
 pub(crate) fn restored_sidebar_width(width: Option<f32>, default: f32) -> f32 {
     width
         .filter(|width| width.is_finite())
-        .map(|width| width.max(SIDEBAR_MIN_WIDTH))
-        .unwrap_or(default)
+        .map_or(default, |width| width.max(SIDEBAR_MIN_WIDTH))
 }
