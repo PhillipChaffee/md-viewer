@@ -99,6 +99,10 @@ impl MarkdownApp {
         }
         let palette = self.theme.palette();
         let mut actions = TabStripActions::default();
+        // A tab that came to the front is scrolled into the strip once.
+        // After that the strip is the reader's to scroll.
+        let reveal = self.revealed_tab != Some(self.active_tab);
+        self.revealed_tab = Some(self.active_tab);
         egui::TopBottomPanel::top("tab_bar")
             .exact_height(STRIP_HEIGHT)
             .frame(chrome::bar_frame(palette))
@@ -113,7 +117,7 @@ impl MarkdownApp {
                         // however many tabs there are.
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
-                            self.tab_strip(ui, &mut actions);
+                            self.tab_strip(ui, &mut actions, reveal);
                             self.open_file_button(ui);
                         });
                     });
@@ -130,8 +134,9 @@ impl MarkdownApp {
         self.apply_tab_strip_actions(&actions)
     }
 
-    /// The horizontally scrollable row of tabs.
-    fn tab_strip(&self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
+    /// The horizontally scrollable row of tabs, scrolled to the active one
+    /// when `reveal` is set.
+    fn tab_strip(&self, ui: &mut egui::Ui, actions: &mut TabStripActions, reveal: bool) {
         let palette = self.theme.palette();
         let titles: Vec<String> = self.tabs.iter().map(Tab::title).collect();
 
@@ -148,8 +153,12 @@ impl MarkdownApp {
                         title,
                         is_active: index == self.active_tab,
                     };
-                    tab_label(ui, &label, palette, actions);
+                    let tab = tab_label(ui, &label, palette, actions);
+                    if reveal && label.is_active {
+                        scroll_into_strip(ui, tab.rect);
+                    }
                 }
+                ui.add_space(pixel(ui));
             });
     }
 
@@ -192,14 +201,31 @@ impl MarkdownApp {
     }
 }
 
+/// One screen pixel, in points. egui sets the scrolled row on whole pixels,
+/// so a tab scrolled to an end of the strip can land up to half a pixel
+/// past it. A pixel to spare, after the last tab and around a tab that is
+/// scrolled to, keeps the tab wholly in the strip.
+fn pixel(ui: &egui::Ui) -> f32 {
+    ui.pixels_per_point().recip()
+}
+
+/// Scroll the strip the least way that brings the tab at `tab` wholly into
+/// it. egui takes a widget for in view once it is in the clip rect, which
+/// reaches past each end of the strip by the clip margin.
+fn scroll_into_strip(ui: &egui::Ui, tab: egui::Rect) {
+    let margin = ui.visuals().clip_rect_margin + pixel(ui);
+    ui.scroll_to_rect(tab.expand2(egui::vec2(margin, 0.0)), None);
+}
+
 /// Draws one tab: its title, the line under it while it is the active one,
 /// the close button while the pointer is over it, and its context menu.
+/// Returns the tab's response.
 fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
     palette: &'static Palette,
     actions: &mut TabStripActions,
-) {
+) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
         label.title.to_owned(),
         chrome::label_font(),
@@ -265,6 +291,7 @@ fn tab_label(
     egui::Popup::context_menu(&response)
         .style(chrome::popup_style(palette))
         .show(|ui| tab_context_menu(ui, label, palette, actions));
+    response
 }
 
 /// The close button in the square a tab keeps free at its right end.

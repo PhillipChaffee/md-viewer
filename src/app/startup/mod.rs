@@ -273,6 +273,7 @@ impl MarkdownApp {
         let mut app = Self {
             tabs,
             active_tab,
+            revealed_tab: None,
             theme,
             zoom_level: restored_zoom(persisted.zoom_level),
             show_outline: persisted.show_outline.unwrap_or(true),

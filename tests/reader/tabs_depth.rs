@@ -119,12 +119,7 @@ fn with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch() {
     );
 }
 
-/// Known bug, listed in `tests/README.md`: with more tabs than fit, the
-/// strip does not scroll to the tab in front, so a document just opened
-/// has no tab on screen. This test states the right behavior and is
-/// expected to fail until the app has it.
 #[test]
-#[should_panic(expected = "the tab in front is not on screen")]
 fn the_tab_in_front_is_scrolled_into_the_strip() {
     let reader = many_tabs(30);
 

@@ -337,6 +337,46 @@ fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
     );
 }
 
+/// Whether the tab named `name` is wholly on screen, before the open-file
+/// button that ends the strip.
+fn in_strip(harness: &LabelHarness, name: &str) -> bool {
+    let tab = harness.get_by_label(name).rect();
+    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    tab.left() >= 0.0 && tab.right() <= strip_end
+}
+
+#[test]
+fn a_tab_that_comes_to_the_front_is_scrolled_into_the_strip() {
+    let mut harness = many_tabs();
+    harness.frames(30);
+    assert!(in_strip(&harness, "doc-40.md"), "the document just opened");
+
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+    assert!(in_strip(&harness, "doc-01.md"), "the first, switched to");
+    assert!(!in_strip(&harness, "doc-40.md"));
+}
+
+#[test]
+fn the_strip_stays_where_the_reader_scrolled_it() {
+    let mut harness = many_tabs();
+    harness.frames(30);
+    let over_the_strip = harness.get_by_label("doc-40.md").rect().center();
+
+    harness.event(Event::PointerMoved(over_the_strip));
+    harness.event(Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(2000.0, 0.0),
+        modifiers: Modifiers::NONE,
+    });
+    harness.frames(30);
+
+    assert!(
+        !in_strip(&harness, "doc-40.md"),
+        "the tab in front is not pulled back into view"
+    );
+}
+
 #[test]
 fn the_mode_toggle_switches_between_preview_and_edit() {
     let mut harness = three_tabs();

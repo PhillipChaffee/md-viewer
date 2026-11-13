@@ -64,6 +64,9 @@ fn zoom_percent(zoom: f32) -> i32 {
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,
     active_tab: usize,
+    /// The active tab the strip last scrolled into view, so that it does
+    /// so once for each tab that comes to the front and not every frame.
+    revealed_tab: Option<usize>,
     /// The reading theme; its palette is every color the app paints.
     theme: ThemeId,
     zoom_level: f32,
