@@ -71,9 +71,14 @@ fn markup_is_rendered_and_not_shown() {
 fn front_matter_is_shown_as_fields() {
     let reader = kitchen_sink();
 
-    reader.assert_sees("title");
-    reader.assert_sees("Kitchen sink");
+    let name = reader.text_area("title");
+    let value = reader.text_area("Kitchen sink");
+
+    assert!(value.left > name.right(), "the value is beside its name");
+    assert!(value.top < name.bottom() && value.bottom() > name.top);
+    assert!(name.bottom() < reader.text_area("Lists").top);
     reader.assert_hides("---");
+    reader.assert_hides("title:");
 }
 
 #[test]
