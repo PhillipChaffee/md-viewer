@@ -11,6 +11,7 @@ use egui_commonmark_extended::CommonMarkViewer;
 use crate::app::action::AppAction;
 use crate::app::content::column::{resize_strips, Column};
 use crate::app::content::look::DocumentLook;
+use crate::app::mcp;
 use crate::app::outline::HEADER_SCROLL_MARGIN;
 use crate::app::MarkdownApp;
 use crate::diagram::diagram_colors;
@@ -101,8 +102,7 @@ impl MarkdownApp {
         let column_drag_grab = &mut self.column_drag_grab;
         let mut pane_width = self.document_pane_width;
         let mut requested_width = None;
-        #[cfg(feature = "mcp")]
-        let mut strips = None;
+        let mcp = &self.mcp;
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
@@ -132,9 +132,8 @@ impl MarkdownApp {
                 }
                 // After the document, so the strips sit on top of it.
                 requested_width = resize_strips(ui, column, column_drag_grab, palette);
-                #[cfg(feature = "mcp")]
-                {
-                    strips = Some(column.strips());
+                for (name, strip) in column.strips() {
+                    mcp::rect(mcp, format_args!("{name}"), "slider", strip, None);
                 }
 
                 // Request repaint during smooth scrolling
@@ -145,11 +144,6 @@ impl MarkdownApp {
 
         let open_in_new_tab = follow_clicked_link(tab, ctrl_held, &mut self.error_message);
         self.document_pane_width = pane_width;
-        #[cfg(feature = "mcp")]
-        for (name, rect) in strips.into_iter().flatten() {
-            self.mcp_bridge
-                .register_widget_rect(name, "slider", rect, None);
-        }
         if let Some(width) = requested_width {
             self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width.get()));
         }

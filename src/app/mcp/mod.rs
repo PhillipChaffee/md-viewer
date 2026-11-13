@@ -61,6 +61,30 @@ pub(super) const fn widget(
 ) {
 }
 
+/// Tell the bridge about a widget that is only a rectangle on screen.
+#[cfg(feature = "mcp")]
+pub(super) fn rect(
+    mcp: &Mcp,
+    name: fmt::Arguments<'_>,
+    kind: &str,
+    rect: egui::Rect,
+    value: Option<&dyn fmt::Display>,
+) {
+    let value = value.map(ToString::to_string);
+    mcp.bridge
+        .register_widget_rect(&name.to_string(), kind, rect, value.as_deref());
+}
+
+#[cfg(not(feature = "mcp"))]
+pub(super) const fn rect(
+    _mcp: &Mcp,
+    _name: fmt::Arguments<'_>,
+    _kind: &str,
+    _rect: egui::Rect,
+    _value: Option<&dyn fmt::Display>,
+) {
+}
+
 /// Run the commands the bridge has received and add the input they ask
 /// for to the frame's.
 #[cfg(feature = "mcp")]

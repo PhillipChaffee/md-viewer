@@ -81,7 +81,6 @@ impl Column {
     }
 
     /// The two strips with their names, for the MCP bridge.
-    #[cfg(feature = "mcp")]
     pub(super) fn strips(self) -> [(&'static str, egui::Rect); 2] {
         [Edge::Left, Edge::Right].map(|edge| (edge.label(), self.strip(edge)))
     }
