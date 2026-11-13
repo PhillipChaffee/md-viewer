@@ -16,6 +16,8 @@ use crate::layout::{
     PANEL_SEPARATORS,
 };
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

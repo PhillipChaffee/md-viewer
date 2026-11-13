@@ -7,6 +7,8 @@ use super::HEADER_SCROLL_MARGIN;
 use crate::layout::line_fraction;
 use crate::tab::Tab;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

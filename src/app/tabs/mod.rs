@@ -7,6 +7,8 @@ use crate::links::apply_fragment_navigation;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
 use crate::tab::Tab;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

@@ -21,6 +21,8 @@ use crate::tab::Tab;
 
 mod column;
 pub(crate) mod look;
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 pub(super) mod tests;
 

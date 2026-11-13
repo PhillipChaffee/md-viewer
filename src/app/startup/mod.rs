@@ -23,6 +23,8 @@ use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fon
 use crate::tab::Tab;
 use crate::theme::ThemeId;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

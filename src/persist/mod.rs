@@ -10,6 +10,8 @@ use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::theme::ThemeId;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

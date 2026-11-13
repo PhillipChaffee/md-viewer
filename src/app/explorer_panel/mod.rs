@@ -16,6 +16,8 @@ use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
 use crate::theme::Palette;
 use crate::watcher::FLASH_DURATION_MS;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

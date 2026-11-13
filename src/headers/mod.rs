@@ -4,6 +4,8 @@ use std::collections::HashSet;
 
 use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

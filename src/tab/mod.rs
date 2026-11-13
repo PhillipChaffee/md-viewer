@@ -15,6 +15,8 @@ use crate::links::{
 };
 use crate::search::{find_matches, SearchMatch};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

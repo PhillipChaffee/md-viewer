@@ -3,6 +3,8 @@
 
 use crate::layout::{ReadingWidth, OUTLINE_DEFAULT_WIDTH, READING_COLUMN_MARGIN};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

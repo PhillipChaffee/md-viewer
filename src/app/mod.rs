@@ -31,6 +31,8 @@ mod frame;
 mod lightbox;
 mod outline;
 mod overflow_menu;
+#[cfg(kani)]
+mod proofs;
 mod search_bar;
 mod settings;
 mod shortcuts;

@@ -9,6 +9,8 @@ use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
 use crate::layout::{KeyboardScrollAction, ReadingWidth, ZOOM_STEP};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

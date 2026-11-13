@@ -54,6 +54,25 @@ fn the_column_keeps_a_margin_on_each_side_of_the_pane() {
     );
 }
 
+/// The proofs in `proofs.rs` cover every pane width but the two
+/// infinities, which the verifier cannot model. The app does pass one:
+/// the pane is unbounded until the first frame has measured it.
+#[test]
+fn an_unbounded_pane_shows_the_whole_column_and_a_negative_one_none() {
+    assert_close(ReadingWidth::DEFAULT.resolve(f32::INFINITY), 680.0);
+    assert_close(
+        ReadingWidth::FIT_WINDOW.resolve(f32::INFINITY),
+        ReadingWidth::MAX,
+    );
+    assert_close(ReadingWidth::DEFAULT.resolve(f32::NEG_INFINITY), 0.0);
+    assert_close(
+        ReadingWidth::DEFAULT
+            .stepped(ReadingWidth::STEP, f32::INFINITY)
+            .get(),
+        680.0 + ReadingWidth::STEP,
+    );
+}
+
 #[test]
 fn only_the_widest_width_fits_the_window() {
     assert!(ReadingWidth::FIT_WINDOW.fits_window());

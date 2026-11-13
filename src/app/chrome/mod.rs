@@ -10,6 +10,8 @@ use eframe::egui::{self, Color32};
 use crate::icons::Icon;
 use crate::theme::Palette;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

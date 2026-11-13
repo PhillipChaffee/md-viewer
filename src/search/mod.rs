@@ -5,6 +5,8 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

@@ -5,6 +5,8 @@ use eframe::egui;
 use crate::app::{zoom_percent, MarkdownApp};
 use crate::theme;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 
