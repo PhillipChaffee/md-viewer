@@ -33,7 +33,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 ### Internals
 
-- **The crate runs under the [full-lint](https://github.com/PhillipChaffee/full-lint) Rust baseline.** `./run-gates.sh` runs 23 gates: clippy's pedantic, nursery and cargo groups as errors, denied rustdoc lints, a cognitive-complexity cap of 15, a 1000-effective-line file cap, 95% coverage on lines, regions and functions, and the dependency and hygiene checks. `src/main.rs` (7384 lines) is now modules of at most a few hundred lines, and no test shares a file with the code it tests.
+- **The crate runs under the [full-lint](https://github.com/PhillipChaffee/full-lint) Rust baseline.** `./run-gates.sh` runs 23 gates: clippy's pedantic, nursery and cargo groups as errors, denied rustdoc lints, a cognitive-complexity cap of 15, a 1000-effective-line file cap, 95% coverage on lines, regions and functions, and the dependency and hygiene checks. `src/main.rs` (7384 lines) is now modules of at most 500 effective lines, and no test shares a file with the code it tests.
 - **The vendored forks moved from `crates/` to `vendor/`.**
 
 ## [0.3.0] - 2026-09-13

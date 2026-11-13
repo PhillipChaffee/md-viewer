@@ -35,26 +35,40 @@ whose proxy rejects github.com pages: the remote half of the link check.
 
 ## Exceptions, each with its reason beside it
 
-- `vendor/` is outside the gates: upstream forks, reviewed against upstream.
-- `clippy.toml` allows `unwrap`, `expect` and `panic` inside tests.
-- `redundant_pub_crate` and `multiple_crate_versions` are allowed in the lint
-  table; the first contradicts `unreachable_pub`, the second duplicates
-  cargo-deny's ban check.
-- `deny.toml` and `osv-scanner.toml` list the advisories and duplicate
-  versions the GUI, math and diagram stacks pin, with review dates.
+Everything below narrows a gate. Each carries its reason in the file named.
 
-## Key Discoveries
+| Where | What it narrows |
+| --- | --- |
+| `Cargo.toml` `[workspace] exclude` | `vendor/` is outside clippy, rustdoc, tests and coverage. See the caveat below. |
+| `run-gates.sh`, `ci.yml` | The cognitive gate reads `src` (arborist has no exclude switch). The TODO grep skips `vendor`. osv-scanner reads the root `Cargo.lock` only. |
+| `clippy.toml` | `unwrap`, `expect` and `panic` are allowed inside tests. |
+| `Cargo.toml` lint table | `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed. |
+| `src/` | Seven `#[expect(..., reason)]`: five float casts on pixel math, one percentage cast, one `struct_excessive_bools` on `MarkdownApp`. No `#[allow]`. |
+| `deny.toml` | Four advisories ignored with review dates. 66 duplicate crates skipped by name, plus the template's `windows-sys` tree. Five licenses added to the allow-list. `unmaintained` and `unsound` fail for direct dependencies only (the template's setting). |
+| `osv-scanner.toml` | Thirteen advisories ignored: the same four, and nine "unmaintained" notices on transitive crates. One license override for a `WITH LLVM-exception` expression. |
+| `ci.yml`, `run-gates.sh` license list | The shared full-lint list, unchanged, plus `Zlib`, `BSL-1.0`, `CDLA-Permissive-2.0`, `OFL-1.1`, `Ubuntu-font-1.0`. |
+| `Cargo.toml` cargo-shear | `image` is ignored: used for its features only. |
+| `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/`, build output and the generated flatpak list are skipped. lychee and markdownlint also skip `docs/devlog/` and `docs/superpowers/`. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
+| `.gitleaks.toml` | `target/` is skipped in the working-tree scan. |
 
-### The vendored forks moved from `crates/` to `vendor/`
+### Caveat: the renderer fork is first-party code outside the gates
 
-The file-length gate skips `vendor/` and nothing else, so the directory name
-is the contract. The forks keep their own manifests and upstream lint setup.
+`vendor/egui_commonmark` was excluded as a fork reviewed against upstream.
+The reader redesign then added about 4,300 lines of this project's own code
+to it (block typesetting, diagram recoloring, typography hooks), because
+that is where the renderer lives. That code has the fork's own clippy run
+and its own tests (267 pass) in CI, but not the complexity cap, the
+file-length cap or the coverage gate: `parsers/pulldown.rs` is over 6,000
+lines. Bringing the fork under the gates is the largest piece of retrofit
+work left, and it is not done.
 
-### The detach path no longer needs `unsafe`
+### The detach change is weaker than what it replaced
 
-`Command::process_group(0)` replaces the `pre_exec` call to `setsid`. The
-child leaves the shell's job without an `unsafe` block, which lets
-`unsafe_code` stay at `forbid`.
+`Command::process_group(0)` puts the child in its own process group, not its
+own session. It leaves the shell's job, and a test asserts the new group,
+but it keeps the controlling terminal, which `setsid` did not. Nobody has
+closed a real terminal on it to see what happens. If that matters, `setsid`
+needs an `unsafe` block and `unsafe_code` moves from `forbid` to `deny`.
 
 ### Per-agent results do not add up to a gate
 
