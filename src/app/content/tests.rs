@@ -142,6 +142,34 @@ fn a_heading_typed_in_the_editor_is_in_the_contents_at_once() {
 }
 
 #[test]
+fn typing_in_the_editor_with_the_find_bar_open_finds_the_matches_again() {
+    let mut harness = LabelHarness::with_docs(&[("a.md", "needle")]);
+    harness.state_mut().open_search();
+    harness.state_mut().search.query = "needle".to_owned();
+    harness.click("More");
+    harness.click("Edit Document");
+    harness.get_by_role(Role::MultilineTextInput).click();
+    harness.frames(2);
+    assert!(harness.query_by_label("1 / 1").is_some());
+
+    let editor = harness.get_by_role(Role::MultilineTextInput);
+    editor.type_text("s and needle");
+    harness.frames(3);
+
+    assert_eq!(harness.state().tabs[0].content, "needles and needle");
+    assert!(
+        harness.query_by_label("1 / 2").is_some(),
+        "the count is of the text before the edit"
+    );
+    let ranges: Vec<_> = harness.state().tabs[0]
+        .search_matches
+        .iter()
+        .map(|found| found.byte_start..found.byte_end)
+        .collect();
+    assert_eq!(ranges, [0..6, 12..18]);
+}
+
+#[test]
 fn switching_to_edit_mode_keeps_the_place_in_a_long_document() {
     let mut harness = long_doc();
     harness.key_press(Key::PageDown);

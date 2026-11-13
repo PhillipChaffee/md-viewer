@@ -102,6 +102,7 @@ impl MarkdownApp {
         let column_drag_grab = &mut self.column_drag_grab;
         let mut pane_width = self.document_pane_width;
         let mut requested_width = None;
+        let mut edited = false;
         let mcp = &self.mcp;
 
         // Content area (no inner CentralPanel needed - we're already in one)
@@ -121,7 +122,7 @@ impl MarkdownApp {
 
                 // (the Preview|Edit toggle lives in the bars above)
                 if tab.is_editing {
-                    edit_pane(ui, tab, column);
+                    edited = edit_pane(ui, tab, column);
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
@@ -143,6 +144,12 @@ impl MarkdownApp {
             });
 
         let open_in_new_tab = follow_clicked_link(tab, ctrl_held, &mut self.error_message);
+        if edited {
+            // The find bar's matches are of the text before the edit. They
+            // are found again next frame and counted in the one after.
+            self.search.last_tab = None;
+            ui.ctx().request_repaint();
+        }
         self.document_pane_width = pane_width;
         if let Some(width) = requested_width {
             self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width.get()));
@@ -189,8 +196,9 @@ fn push_search_ranges(tab: &mut Tab, search_is_open: bool, active_idx: usize) {
 
 /// Edit mode: a scrollable `TextEdit` holding the raw markdown, as wide as
 /// the text column and centered like it. The `TextEdit`'s own `ScrollArea`
-/// handles the wheel natively.
-fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
+/// handles the wheel natively. Returns whether the text was edited this
+/// frame.
+fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
     let pending_edit = tab.pending_edit_scroll.take();
     let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
@@ -225,6 +233,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
         state.store(ui.ctx(), edit_out.id);
         ui.ctx().request_repaint();
     }
+    edited
 }
 
 /// The meta line above the document. It is painted inside the renderer's
