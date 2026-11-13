@@ -23,8 +23,7 @@ pub(crate) struct RecentEntry {
 pub(crate) fn now_epoch_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Push a path to the front of the recent list, deduped and capped (most-recent first).
@@ -40,22 +39,23 @@ pub(crate) fn push_recent(list: &mut Vec<RecentEntry>, path: &Path, now: u64) {
     list.truncate(RECENT_FILES_CAP);
 }
 
+const MINUTE: u64 = 60;
+const HOUR: u64 = 60 * MINUTE;
+const DAY: u64 = 24 * HOUR;
+const TWO_DAYS: u64 = 2 * DAY;
+const WEEK: u64 = 7 * DAY;
+const MONTH: u64 = 30 * DAY;
+
 /// Format an epoch-seconds timestamp as a short relative time ("3m ago").
 pub(crate) fn format_relative_time(epoch_secs: u64, now: u64) -> String {
-    let diff = now.saturating_sub(epoch_secs);
-    if diff < 60 {
-        "just now".to_string()
-    } else if diff < 3600 {
-        format!("{}m ago", diff / 60)
-    } else if diff < 86_400 {
-        format!("{}h ago", diff / 3600)
-    } else if diff < 172_800 {
-        "yesterday".to_string()
-    } else if diff < 604_800 {
-        format!("{}d ago", diff / 86_400)
-    } else if diff < 2_592_000 {
-        format!("{}w ago", diff / 604_800)
-    } else {
-        format!("{}mo ago", diff / 2_592_000)
+    let age = now.saturating_sub(epoch_secs);
+    match age {
+        ..MINUTE => "just now".to_owned(),
+        MINUTE..HOUR => format!("{}m ago", age / MINUTE),
+        HOUR..DAY => format!("{}h ago", age / HOUR),
+        DAY..TWO_DAYS => "yesterday".to_owned(),
+        TWO_DAYS..WEEK => format!("{}d ago", age / DAY),
+        WEEK..MONTH => format!("{}w ago", age / WEEK),
+        MONTH.. => format!("{}mo ago", age / MONTH),
     }
 }

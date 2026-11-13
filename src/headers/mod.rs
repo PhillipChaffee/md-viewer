@@ -2,10 +2,12 @@
 
 use std::collections::HashSet;
 
+use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
+
 #[cfg(test)]
 mod tests;
 
-/// Represents a markdown header for the outline
+/// Represents a markdown header for the outline.
 #[derive(Clone)]
 pub(crate) struct Header {
     pub(crate) level: u8,
@@ -16,34 +18,71 @@ pub(crate) struct Header {
     pub(crate) line_number: usize,
 }
 
-/// Result of parsing markdown headers
+/// Result of parsing markdown headers.
 pub(crate) struct ParsedHeaders {
-    /// Document title (first h1, if any)
+    /// Document title (first h1, if any).
     pub(crate) document_title: Option<String>,
-    /// Outline headers (excludes the first h1)
+    /// Outline headers (excludes the first h1).
     pub(crate) outline_headers: Vec<Header>,
+}
+
+const fn level_number(level: HeadingLevel) -> u8 {
+    match level {
+        HeadingLevel::H1 => 1,
+        HeadingLevel::H2 => 2,
+        HeadingLevel::H3 => 3,
+        HeadingLevel::H4 => 4,
+        HeadingLevel::H5 => 5,
+        HeadingLevel::H6 => 6,
+    }
+}
+
+/// A heading whose Start event has been seen and whose End has not, collecting
+/// the plain text of the inline events in between.
+struct OpenHeading {
+    level: u8,
+    source_start: usize,
+    line_number: usize,
+    title: String,
+}
+
+impl OpenHeading {
+    /// Append the text an inline event contributes to the heading's title.
+    fn push_inline(&mut self, event: &Event<'_>) {
+        match event {
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text) => self.title.push_str(text),
+            Event::FootnoteReference(label) => {
+                self.title.push('[');
+                self.title.push_str(label);
+                self.title.push(']');
+            }
+            Event::SoftBreak | Event::HardBreak => self.title.push(' '),
+            _ => {}
+        }
+    }
+
+    /// The finished header, or `None` for a heading with no visible text.
+    fn close(self) -> Option<Header> {
+        let title = self.title.trim();
+        (!title.is_empty()).then(|| Header {
+            level: self.level,
+            title: title.to_owned(),
+            source_start: self.source_start,
+            line_number: self.line_number,
+        })
+    }
 }
 
 /// Parse headings with the same CommonMark rules used by the renderer.
 pub(crate) fn parse_headers(content: &str) -> ParsedHeaders {
-    use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
-
-    fn level_number(level: HeadingLevel) -> u8 {
-        match level {
-            HeadingLevel::H1 => 1,
-            HeadingLevel::H2 => 2,
-            HeadingLevel::H3 => 3,
-            HeadingLevel::H4 => 4,
-            HeadingLevel::H5 => 5,
-            HeadingLevel::H6 => 6,
-        }
-    }
-
     let line_starts: Vec<usize> = std::iter::once(0)
         .chain(content.match_indices('\n').map(|(offset, _)| offset + 1))
         .collect();
-    let mut all_headers = Vec::new();
-    let mut current: Option<(u8, usize, usize, String)> = None;
+    let mut outline_headers = Vec::new();
+    let mut current: Option<OpenHeading> = None;
 
     for (event, range) in
         pulldown_cmark::Parser::new_ext(content, pulldown_cmark::Options::all()).into_offset_iter()
@@ -53,52 +92,28 @@ pub(crate) fn parse_headers(content: &str) -> ParsedHeaders {
                 let line_number = line_starts
                     .partition_point(|line_start| *line_start <= range.start)
                     .saturating_sub(1);
-                current = Some((level_number(level), range.start, line_number, String::new()));
+                current = Some(OpenHeading {
+                    level: level_number(level),
+                    source_start: range.start,
+                    line_number,
+                    title: String::new(),
+                });
             }
             Event::End(TagEnd::Heading(_)) => {
-                if let Some((level, source_start, line_number, title)) = current.take() {
-                    let title = title.trim().to_owned();
-                    if !title.is_empty() {
-                        all_headers.push(Header {
-                            level,
-                            title,
-                            source_start,
-                            line_number,
-                        });
-                    }
+                outline_headers.extend(current.take().and_then(OpenHeading::close));
+            }
+            inline => {
+                if let Some(heading) = current.as_mut() {
+                    heading.push_inline(&inline);
                 }
             }
-            Event::Text(text) | Event::Code(text) => {
-                if let Some((_, _, _, title)) = current.as_mut() {
-                    title.push_str(&text);
-                }
-            }
-            Event::InlineMath(text) | Event::DisplayMath(text) => {
-                if let Some((_, _, _, title)) = current.as_mut() {
-                    title.push_str(&text);
-                }
-            }
-            Event::FootnoteReference(label) => {
-                if let Some((_, _, _, title)) = current.as_mut() {
-                    title.push('[');
-                    title.push_str(&label);
-                    title.push(']');
-                }
-            }
-            Event::SoftBreak | Event::HardBreak => {
-                if let Some((_, _, _, title)) = current.as_mut() {
-                    title.push(' ');
-                }
-            }
-            _ => {}
         }
     }
 
-    let document_title = all_headers
+    let document_title = outline_headers
         .iter()
         .find(|h| h.level == 1)
         .map(|h| h.title.clone());
-    let outline_headers = all_headers;
 
     ParsedHeaders {
         document_title,
@@ -106,7 +121,7 @@ pub(crate) fn parse_headers(content: &str) -> ParsedHeaders {
     }
 }
 
-/// Check if header at `index` should be hidden because an ancestor is collapsed
+/// Check if header at `index` should be hidden because an ancestor is collapsed.
 pub(crate) fn header_is_hidden(
     headers: &[Header],
     index: usize,
@@ -134,22 +149,18 @@ pub(crate) fn header_is_hidden(
     false
 }
 
-/// Check if a header has any children (headers with higher level immediately following)
+/// Check if a header has any children (headers with higher level immediately following).
 pub(crate) fn header_has_children(headers: &[Header], index: usize) -> bool {
-    if index >= headers.len() {
+    let Some(current) = headers.get(index) else {
         return false;
-    }
-    let current_level = headers[index].level;
-    // Look at the next header
-    if let Some(next) = headers.get(index + 1) {
-        // A child has a higher level number (e.g., h3 is child of h2)
-        next.level > current_level
-    } else {
-        false
-    }
+    };
+    // A child has a higher level number (e.g., h3 is child of h2)
+    headers
+        .get(index + 1)
+        .is_some_and(|next| next.level > current.level)
 }
 
-/// Check if any header in the list has children
+/// Check if any header in the list has children.
 pub(crate) fn any_header_has_children(headers: &[Header]) -> bool {
     for i in 0..headers.len() {
         if header_has_children(headers, i) {
