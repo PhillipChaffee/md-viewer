@@ -98,13 +98,11 @@ pub(crate) struct InstalledFont {
 }
 
 fn font_has_glyphs(blob: &Blob<u8>, index: u32, required_glyphs: &str) -> bool {
-    ttf_parser::Face::parse(blob.data(), index)
-        .map(|face| {
-            required_glyphs
-                .chars()
-                .all(|c| face.glyph_index(c).is_some())
-        })
-        .unwrap_or(false)
+    ttf_parser::Face::parse(blob.data(), index).is_ok_and(|face| {
+        required_glyphs
+            .chars()
+            .all(|c| face.glyph_index(c).is_some())
+    })
 }
 
 fn source_description(source: &SourceKind) -> String {
@@ -114,7 +112,7 @@ fn source_description(source: &SourceKind) -> String {
     }
 }
 
-pub(crate) fn select_from_families(
+fn select_from_families(
     collection: &mut Collection,
     source_cache: &mut SourceCache,
     family_ids: &[FamilyId],
@@ -178,47 +176,198 @@ fn installed_fonts_cover(installed: &[InstalledFont], glyphs: &str) -> bool {
         .any(|font| font_has_glyphs(&font.selected.blob, font.selected.index, glyphs))
 }
 
-fn install_regular_font(
-    definitions: &mut FontDefinitions,
-    installed: &mut Vec<InstalledFont>,
-    loaded_faces: &mut HashSet<(u64, u32)>,
-    key: &'static str,
-    selected: SelectedFont,
-    required_glyphs: &'static str,
-    primary: bool,
-) {
-    if !loaded_faces.insert(selected.identity()) {
-        return;
-    }
-    log::info!(
-        "Loaded system font {} ({}, weight {}) from {} (face index {})",
-        key,
-        selected.family,
-        selected.weight.value(),
-        selected.source,
-        selected.index
-    );
-    definitions
-        .font_data
-        .insert(key.to_owned(), selected.data().into());
-    if let Some(family) = definitions.families.get_mut(&FontFamily::Proportional) {
-        if primary {
-            family.insert(0, key.to_owned())
-        } else {
-            family.push(key.to_owned())
-        }
-    }
-    if let Some(family) = definitions.families.get_mut(&FontFamily::Monospace) {
-        family.push(key.to_owned());
-    }
-    installed.push(InstalledFont {
-        key: key.to_owned(),
-        selected,
-        required_glyphs,
-        primary,
-    });
+/// Glyphs a face must cover to serve as the primary sans.
+const LATIN_SAMPLE: &str = "Aa";
+
+/// Best regular face among `family_ids` that can serve as the document body
+/// font. The font picker lists a family only when this finds one, which is
+/// what guarantees that every listed name takes effect when picked.
+pub(crate) fn select_body_font(
+    collection: &mut Collection,
+    source_cache: &mut SourceCache,
+    family_ids: &[FamilyId],
+) -> Option<SelectedFont> {
+    select_from_families(
+        collection,
+        source_cache,
+        family_ids,
+        FontWeight::NORMAL,
+        LATIN_SAMPLE,
+        false,
+    )
 }
 
+/// Key the primary sans is installed under.
+const PRIMARY_SANS_KEY: &str = "SystemSans";
+
+/// Accumulates the regular faces chosen for one `FontDefinitions`, so every
+/// selection step shares the platform collection and the set of faces
+/// already loaded.
+struct RegularFontInstaller<'fonts> {
+    collection: &'fonts mut Collection,
+    source_cache: &'fonts mut SourceCache,
+    definitions: &'fonts mut FontDefinitions,
+    installed: Vec<InstalledFont>,
+    loaded_faces: HashSet<(u64, u32)>,
+}
+
+impl RegularFontInstaller<'_> {
+    /// Install the best regular face from `family_ids` that covers
+    /// `required_glyphs`. Returns whether any face qualified; a qualifying
+    /// face that is already loaded is not installed twice.
+    fn install_from_families(
+        &mut self,
+        key: &'static str,
+        family_ids: &[FamilyId],
+        required_glyphs: &'static str,
+        primary: bool,
+    ) -> bool {
+        let Some(selected) = select_from_families(
+            self.collection,
+            self.source_cache,
+            family_ids,
+            FontWeight::NORMAL,
+            required_glyphs,
+            false,
+        ) else {
+            return false;
+        };
+        self.install(key, selected, required_glyphs, primary);
+        true
+    }
+
+    fn install(
+        &mut self,
+        key: &'static str,
+        selected: SelectedFont,
+        required_glyphs: &'static str,
+        primary: bool,
+    ) {
+        if !self.loaded_faces.insert(selected.identity()) {
+            return;
+        }
+        log::info!(
+            "Loaded system font {} ({}, weight {}) from {} (face index {})",
+            key,
+            selected.family,
+            selected.weight.value(),
+            selected.source,
+            selected.index
+        );
+        self.definitions
+            .font_data
+            .insert(key.to_owned(), selected.data().into());
+        if let Some(family) = self.definitions.families.get_mut(&FontFamily::Proportional) {
+            if primary {
+                family.insert(0, key.to_owned());
+            } else {
+                family.push(key.to_owned());
+            }
+        }
+        if let Some(family) = self.definitions.families.get_mut(&FontFamily::Monospace) {
+            family.push(key.to_owned());
+        }
+        self.installed.push(InstalledFont {
+            key: key.to_owned(),
+            selected,
+            required_glyphs,
+            primary,
+        });
+    }
+
+    /// Install the primary sans from the first source that yields a usable
+    /// face: the user's pick, then the preset's emulated stack, then the
+    /// platform's generic sans-serif.
+    fn install_primary_sans(
+        &mut self,
+        preferred_family: Option<&str>,
+        preset_body_families: Option<&'static [&'static str]>,
+    ) {
+        if preferred_family.is_some_and(|name| self.install_preferred_family(name)) {
+            return;
+        }
+        if preset_body_families.is_some_and(|names| self.install_preset_body_family(names)) {
+            return;
+        }
+        self.install_generic_sans();
+    }
+
+    fn install_preferred_family(&mut self, name: &str) -> bool {
+        let Some(family_id) = self.collection.family_id(name) else {
+            log::warn!("Preferred font '{name}' not found; falling back to system default.");
+            return false;
+        };
+        let installed =
+            self.install_from_families(PRIMARY_SANS_KEY, &[family_id], LATIN_SAMPLE, true);
+        if !installed {
+            log::warn!(
+                "Preferred font '{name}' has no usable regular face; falling back to system default."
+            );
+        }
+        installed
+    }
+
+    /// Each stack name is tried in the emulated viewer's resolution order; a
+    /// total miss falls through to the app's own auto-detection.
+    fn install_preset_body_family(&mut self, preset_families: &'static [&'static str]) -> bool {
+        let family_ids: Vec<FamilyId> = preset_families
+            .iter()
+            .filter_map(|name| self.collection.family_id(name))
+            .collect();
+        let installed =
+            self.install_from_families(PRIMARY_SANS_KEY, &family_ids, LATIN_SAMPLE, true);
+        if !installed {
+            log::warn!(
+                "Preset body families {preset_families:?} had no usable regular face; falling back to system default."
+            );
+        }
+        installed
+    }
+
+    fn install_generic_sans(&mut self) -> bool {
+        let families: Vec<_> = self
+            .collection
+            .generic_families(GenericFamily::SansSerif)
+            .collect();
+        self.install_from_families(PRIMARY_SANS_KEY, &families, LATIN_SAMPLE, true)
+    }
+
+    /// Add one fallback face per script the faces installed so far cannot
+    /// render.
+    fn install_script_fallbacks(&mut self, locale: Option<&str>) {
+        for spec in SCRIPT_FALLBACKS {
+            if installed_fonts_cover(&self.installed, spec.required_glyphs) {
+                continue;
+            }
+            let families = fallback_family_ids(self.collection, spec.script, locale);
+            self.install_from_families(spec.key, &families, spec.required_glyphs, false);
+        }
+    }
+
+    fn install_generic_fallbacks(&mut self) {
+        for &(generic, key, glyphs) in GENERIC_FALLBACKS {
+            if installed_fonts_cover(&self.installed, glyphs) {
+                continue;
+            }
+            let families: Vec<_> = self.collection.generic_families(generic).collect();
+            self.install_from_families(key, &families, glyphs, false);
+        }
+    }
+}
+
+/// Load fonts through platform generic-family and script/locale fallback rules.
+///
+/// Fontique delegates to fontconfig on Linux/FreeBSD, `DirectWrite` on Windows,
+/// `CoreText` on Apple platforms, and the system configuration on Android.
+///
+/// `preferred_family` optionally names a specific installed family (matched
+/// case-insensitively) to use as the primary proportional font instead of the
+/// auto-detected system sans-serif; an unset or unresolvable preference falls
+/// back to today's auto-detect behavior.
+///
+/// A preset's body families lead the primary sans chain when no user-picked
+/// family was installed (the picker's choice outranks the preset's emulated
+/// stack).
 pub(crate) fn install_regular_fonts(
     collection: &mut Collection,
     source_cache: &mut SourceCache,
@@ -227,154 +376,17 @@ pub(crate) fn install_regular_fonts(
     preferred_family: Option<&str>,
     preset_body_families: Option<&'static [&'static str]>,
 ) -> Vec<InstalledFont> {
-    let mut installed = Vec::new();
-    let mut loaded_faces = HashSet::new();
-
-    if let Some(name) = preferred_family {
-        match collection.family_id(name) {
-            Some(family_id) => {
-                if let Some(selected) = select_from_families(
-                    collection,
-                    source_cache,
-                    &[family_id],
-                    FontWeight::NORMAL,
-                    "Aa",
-                    false,
-                ) {
-                    install_regular_font(
-                        definitions,
-                        &mut installed,
-                        &mut loaded_faces,
-                        "SystemSans",
-                        selected,
-                        "Aa",
-                        true,
-                    );
-                } else {
-                    log::warn!(
-                        "Preferred font '{name}' has no usable regular face; falling back to system default."
-                    );
-                }
-            }
-            None => {
-                log::warn!("Preferred font '{name}' not found; falling back to system default.");
-            }
-        }
-    }
-
-    // A preset's body families lead the primary sans chain when no user-picked
-    // family was installed (the picker's choice outranks the preset's emulated
-    // stack). Each stack name is tried in the emulated viewer's resolution
-    // order; a total miss falls through to the app's own auto-detection.
-    if installed.is_empty() {
-        if let Some(preset_families) = preset_body_families {
-            let family_ids: Vec<FamilyId> = preset_families
-                .iter()
-                .filter_map(|name| collection.family_id(name))
-                .collect();
-            if let Some(selected) = select_from_families(
-                collection,
-                source_cache,
-                &family_ids,
-                FontWeight::NORMAL,
-                "Aa",
-                false,
-            ) {
-                install_regular_font(
-                    definitions,
-                    &mut installed,
-                    &mut loaded_faces,
-                    "SystemSans",
-                    selected,
-                    "Aa",
-                    true,
-                );
-            } else {
-                log::warn!(
-                    "Preset body families {preset_families:?} had no usable regular face; falling back to system default."
-                );
-            }
-        }
-    }
-
-    // Auto-detect the system sans-serif only if no preferred family was
-    // requested, or the preferred family couldn't be installed above.
-    if installed.is_empty() {
-        let families: Vec<_> = collection
-            .generic_families(GenericFamily::SansSerif)
-            .collect();
-        if let Some(selected) = select_from_families(
-            collection,
-            source_cache,
-            &families,
-            FontWeight::NORMAL,
-            "Aa",
-            false,
-        ) {
-            install_regular_font(
-                definitions,
-                &mut installed,
-                &mut loaded_faces,
-                "SystemSans",
-                selected,
-                "Aa",
-                true,
-            );
-        }
-    }
-
-    for spec in SCRIPT_FALLBACKS {
-        if installed_fonts_cover(&installed, spec.required_glyphs) {
-            continue;
-        }
-        let families = fallback_family_ids(collection, spec.script, locale);
-        let Some(selected) = select_from_families(
-            collection,
-            source_cache,
-            &families,
-            FontWeight::NORMAL,
-            spec.required_glyphs,
-            false,
-        ) else {
-            continue;
-        };
-        install_regular_font(
-            definitions,
-            &mut installed,
-            &mut loaded_faces,
-            spec.key,
-            selected,
-            spec.required_glyphs,
-            false,
-        );
-    }
-
-    for &(generic, key, glyphs) in GENERIC_FALLBACKS {
-        if installed_fonts_cover(&installed, glyphs) {
-            continue;
-        }
-        let families: Vec<_> = collection.generic_families(generic).collect();
-        let Some(selected) = select_from_families(
-            collection,
-            source_cache,
-            &families,
-            FontWeight::NORMAL,
-            glyphs,
-            false,
-        ) else {
-            continue;
-        };
-        install_regular_font(
-            definitions,
-            &mut installed,
-            &mut loaded_faces,
-            key,
-            selected,
-            glyphs,
-            false,
-        );
-    }
-    installed
+    let mut installer = RegularFontInstaller {
+        collection,
+        source_cache,
+        definitions,
+        installed: Vec::new(),
+        loaded_faces: HashSet::new(),
+    };
+    installer.install_primary_sans(preferred_family, preset_body_families);
+    installer.install_script_fallbacks(locale);
+    installer.install_generic_fallbacks();
+    installer.installed
 }
 
 fn push_unique(
@@ -384,7 +396,7 @@ fn push_unique(
 ) {
     for name in names {
         if seen.insert(name.clone()) {
-            destination.push(name)
+            destination.push(name);
         }
     }
 }
@@ -432,7 +444,7 @@ pub(crate) fn install_strong_font_family(
 
     for regular in installed {
         if regular.primary {
-            primary_regular = Some(regular.key.clone())
+            primary_regular = Some(regular.key.clone());
         }
         let Some(selected) = select_from_families(
             collection,
@@ -461,9 +473,9 @@ pub(crate) fn install_strong_font_family(
             .insert(key.clone(), selected.data().into());
         count += 1;
         if regular.primary {
-            primary_bold = Some(key)
+            primary_bold = Some(key);
         } else {
-            fallback_bold.push(key)
+            fallback_bold.push(key);
         }
     }
 
@@ -488,15 +500,6 @@ pub(crate) fn install_strong_font_family(
     count
 }
 
-/// Load fonts through platform generic-family and script/locale fallback rules.
-///
-/// Fontique delegates to fontconfig on Linux/FreeBSD, DirectWrite on Windows,
-/// CoreText on Apple platforms, and the system configuration on Android.
-///
-/// `preferred_family` optionally names a specific installed family (matched
-/// case-insensitively) to use as the primary proportional font instead of the
-/// auto-detected system sans-serif; an unset or unresolvable preference falls
-/// back to today's auto-detect behavior.
 /// Lead the monospace chain with the preset's code face, keeping egui's
 /// bundled monospace (and any installed fallbacks) as fallback. Returns
 /// whether a preset face was installed.

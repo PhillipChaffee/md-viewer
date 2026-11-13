@@ -1,13 +1,12 @@
 //! Font presets, text sizes, and system font installation for egui.
 
 use egui::{FontDefinitions, FontFamily};
-use fontique::{Collection, CollectionOptions, FontWeight, SourceCache};
+use fontique::{Collection, CollectionOptions, SourceCache};
 use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
-    install_preset_mono_font, install_regular_fonts, install_strong_font_family,
-    select_from_families,
+    install_preset_mono_font, install_regular_fonts, install_strong_font_family, select_body_font,
 };
 
 mod emoji;
@@ -23,7 +22,7 @@ mod tests;
 /// `sans-serif`, `monospace`) have no literal family behind them, so they are
 /// transcribed to the concrete faces a Linux browser resolves them to:
 /// `system-ui`/UI aliases become GNOME's Adwaita Sans / Cantarell, and generic
-/// monospace becomes Noto Sans Mono / DejaVu Sans Mono. Anything still missing
+/// monospace becomes Noto Sans Mono / `DejaVu` Sans Mono. Anything still missing
 /// falls through to the app's own fallback chain, so Unicode/CJK coverage and
 /// bold rendering never regress when switching presets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,28 +45,27 @@ pub(crate) enum FontPreset {
 }
 
 impl FontPreset {
-    pub(crate) const ALL: [FontPreset; 3] =
-        [FontPreset::Current, FontPreset::Github, FontPreset::Vscode];
+    pub(crate) const ALL: [Self; 3] = [Self::Current, Self::Github, Self::Vscode];
 
     /// Menu label for this preset.
-    pub(crate) fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
-            FontPreset::Current => "Default",
-            FontPreset::Github => "GitHub",
-            FontPreset::Vscode => "VS Code",
+            Self::Current => "Default",
+            Self::Github => "GitHub",
+            Self::Vscode => "VS Code",
         }
     }
 
     /// One-line explanation of what the preset emulates, shown as menu hover text.
-    pub(crate) fn description(self) -> &'static str {
+    pub(crate) const fn description(self) -> &'static str {
         match self {
-            FontPreset::Current => {
+            Self::Current => {
                 "This app's default: best installed sans + bundled mono code font."
             }
-            FontPreset::Github => {
+            Self::Github => {
                 "github.com style: Mona Sans / Segoe UI / Noto Sans body, SF Mono / Liberation Mono code."
             }
-            FontPreset::Vscode => {
+            Self::Vscode => {
                 "VS Code preview style: Segoe UI / system UI body, Droid Sans Mono code."
             }
         }
@@ -76,11 +74,11 @@ impl FontPreset {
     /// `(body line-height, code line-height)` multipliers fed to the renderer.
     /// GitHub: `.markdown-body{line-height:1.5}`, `pre{line-height:1.45}`.
     /// VS Code preview default: `--markdown-line-height: 1.6`, code 1.357em.
-    pub(crate) fn line_heights(self) -> (f32, f32) {
+    pub(crate) const fn line_heights(self) -> (f32, f32) {
         match self {
-            FontPreset::Current => (1.5, 1.3),
-            FontPreset::Github => (1.5, 1.45),
-            FontPreset::Vscode => (1.6, 1.36),
+            Self::Current => (1.5, 1.3),
+            Self::Github => (1.5, 1.45),
+            Self::Vscode => (1.6, 1.36),
         }
     }
 
@@ -91,26 +89,26 @@ impl FontPreset {
     /// `"Adwaita Sans"` directly follows `"Segoe UI"` because modern fontconfig
     /// setups substitute Segoe UI with GNOME's Adwaita Sans, which is what
     /// Linux browsers actually render for stacks asking for Segoe UI first.
-    fn body_families(self) -> Option<&'static [&'static str]> {
+    const fn body_families(self) -> Option<&'static [&'static str]> {
         match self {
-            FontPreset::Current => None,
-            FontPreset::Github => Some(GITHUB_BODY_FAMILIES),
-            FontPreset::Vscode => Some(VSCODE_BODY_FAMILIES),
+            Self::Current => None,
+            Self::Github => Some(GITHUB_BODY_FAMILIES),
+            Self::Vscode => Some(VSCODE_BODY_FAMILIES),
         }
     }
 
     /// Code families from the emulated viewer's monospace stack, in resolution
     /// order. Empty keeps egui's bundled monospace first.
-    fn mono_families(self) -> &'static [&'static str] {
+    const fn mono_families(self) -> &'static [&'static str] {
         match self {
             // GitHub puts ui-monospace first; on Linux browsers that resolves
             // through fontconfig's generic monospace alias before any of the
             // named proprietary faces are reached, so the Linux defaults lead.
-            FontPreset::Github => GITHUB_MONO_FAMILIES,
+            Self::Github => GITHUB_MONO_FAMILIES,
             // VS Code webviews always inject editor.fontFamily; its Linux
             // default is 'Droid Sans Mono', monospace.
-            FontPreset::Vscode => VSCODE_MONO_FAMILIES,
-            FontPreset::Current => &[],
+            Self::Vscode => VSCODE_MONO_FAMILIES,
+            Self::Current => &[],
         }
     }
 }
@@ -130,34 +128,34 @@ pub(crate) enum TextSizeClass {
 }
 
 impl TextSizeClass {
-    pub(crate) const ALL: [TextSizeClass; 5] = [
-        TextSizeClass::Small,
-        TextSizeClass::Normal,
-        TextSizeClass::Large,
-        TextSizeClass::ExtraLarge,
-        TextSizeClass::Huge,
+    pub(crate) const ALL: [Self; 5] = [
+        Self::Small,
+        Self::Normal,
+        Self::Large,
+        Self::ExtraLarge,
+        Self::Huge,
     ];
 
     /// Menu label including the concrete pixel size.
-    pub(crate) fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
-            TextSizeClass::Small => "Small (14px)",
-            TextSizeClass::Normal => "Normal (16px)",
-            TextSizeClass::Large => "Large (18px)",
-            TextSizeClass::ExtraLarge => "Extra large (20px)",
-            TextSizeClass::Huge => "Huge (24px)",
+            Self::Small => "Small (14px)",
+            Self::Normal => "Normal (16px)",
+            Self::Large => "Large (18px)",
+            Self::ExtraLarge => "Extra large (20px)",
+            Self::Huge => "Huge (24px)",
         }
     }
 
     /// Base body size in px. Headings and code cascade from this because the
     /// renderer derives every document size from `TextStyle::Body`.
-    pub(crate) fn px(self) -> f32 {
+    pub(crate) const fn px(self) -> f32 {
         match self {
-            TextSizeClass::Small => 14.0,
-            TextSizeClass::Normal => 16.0,
-            TextSizeClass::Large => 18.0,
-            TextSizeClass::ExtraLarge => 20.0,
-            TextSizeClass::Huge => 24.0,
+            Self::Small => 14.0,
+            Self::Normal => 16.0,
+            Self::Large => 18.0,
+            Self::ExtraLarge => 20.0,
+            Self::Huge => 24.0,
         }
     }
 }
@@ -327,15 +325,7 @@ fn pickable_family_names(
         if canonical.as_deref() != Some(name.as_str()) {
             return false;
         }
-        select_from_families(
-            collection,
-            source_cache,
-            &[id],
-            FontWeight::NORMAL,
-            "Aa",
-            false,
-        )
-        .is_some()
+        select_body_font(collection, source_cache, &[id]).is_some()
     });
     names
 }
