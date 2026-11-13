@@ -342,7 +342,6 @@ impl<'a> MenuRow<'a> {
     }
 
     /// The state a toggle row reports to the MCP bridge.
-    #[cfg(feature = "mcp")]
     pub(super) const fn mcp_value(&self) -> Option<&'static str> {
         match self.checked {
             Some(true) => Some("on"),

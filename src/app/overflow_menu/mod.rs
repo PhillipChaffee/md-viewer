@@ -6,6 +6,7 @@ use eframe::egui::containers::menu::SubMenu;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, BUTTON_SIDE};
+use crate::app::mcp;
 use crate::app::{zoom_percent, MarkdownApp};
 use crate::icons::Icon;
 use crate::layout::{LineSpacing, ZOOM_STEP};
@@ -81,9 +82,9 @@ impl MarkdownApp {
         picked: &mut Option<AppAction>,
     ) {
         let response = row.show(ui, self.theme.palette());
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge.register_widget(
-            &format!("Menu: {}", row.label),
+        mcp::widget(
+            &self.mcp,
+            format_args!("Menu: {}", row.label),
             "button",
             &response,
             row.mcp_value(),
@@ -97,9 +98,13 @@ impl MarkdownApp {
     /// A row that opens a submenu of `rows` beside it.
     fn submenu(&self, ui: &mut egui::Ui, label: &str, rows: impl FnOnce(&mut egui::Ui)) {
         let row = MenuRow::new(label).submenu().show(ui, self.theme.palette());
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget(&format!("Menu: {label}"), "button", &row, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Menu: {label}"),
+            "button",
+            &row,
+            None,
+        );
         SubMenu::new().show(ui, &row, |ui| {
             ui.set_width(SUBMENU_WIDTH);
             rows(ui);
@@ -212,9 +217,13 @@ impl MarkdownApp {
             let out = QuietButton::icon(Icon::Minus, "Zoom Out")
                 .show(ui, palette)
                 .on_hover_text("Zoom out (Ctrl+-)");
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Menu: Zoom Out", "button", &out, None);
+            mcp::widget(
+                &self.mcp,
+                format_args!("Menu: Zoom Out"),
+                "button",
+                &out,
+                None,
+            );
             if out.clicked() {
                 *picked = Some(AppAction::ZoomBy(1.0 / ZOOM_STEP));
             }
@@ -224,9 +233,13 @@ impl MarkdownApp {
                 .min_width(ZOOM_READOUT_WIDTH)
                 .show(ui, palette)
                 .on_hover_text("Reset zoom (Ctrl+0)");
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Menu: Reset Zoom", "button", &reset, Some(&percent));
+            mcp::widget(
+                &self.mcp,
+                format_args!("Menu: Reset Zoom"),
+                "button",
+                &reset,
+                Some(&percent),
+            );
             if reset.clicked() {
                 *picked = Some(AppAction::ResetZoom);
             }
@@ -234,9 +247,13 @@ impl MarkdownApp {
             let zoom_in = QuietButton::icon(Icon::Plus, "Zoom In")
                 .show(ui, palette)
                 .on_hover_text("Zoom in (Ctrl++)");
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Menu: Zoom In", "button", &zoom_in, None);
+            mcp::widget(
+                &self.mcp,
+                format_args!("Menu: Zoom In"),
+                "button",
+                &zoom_in,
+                None,
+            );
             if zoom_in.clicked() {
                 *picked = Some(AppAction::ZoomBy(ZOOM_STEP));
             }
