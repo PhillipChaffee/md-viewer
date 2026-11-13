@@ -119,7 +119,7 @@ impl MarkdownApp {
         let mut picked_family: Option<FamilyChoice> = None;
 
         // Single font dialog: preset, text size, and family picker in one
-        // place. Handlers only mutate state — the `last_applied_font_config`
+        // place. Handlers only mutate state — the `applied_fonts`
         // diff gate in update() rebuilds the font chains once per change.
         egui::Window::new("Fonts")
             .open(&mut open)
@@ -139,8 +139,8 @@ impl MarkdownApp {
 
         self.show_font_dialog = open;
         match picked_family {
-            Some(FamilyChoice::SystemDefault) => self.selected_font_family = None,
-            Some(FamilyChoice::Family(name)) => self.selected_font_family = Some(name),
+            Some(FamilyChoice::SystemDefault) => self.fonts.family = None,
+            Some(FamilyChoice::Family(name)) => self.fonts.family = Some(name),
             None => {}
         }
     }
@@ -151,7 +151,7 @@ impl MarkdownApp {
         ui.label("Preset");
         ui.horizontal_wrapped(|ui| {
             for preset in FontPreset::ALL {
-                let active = self.font_preset == preset;
+                let active = self.fonts.preset == preset;
                 let preset_btn = ui
                     .selectable_label(active, preset.label())
                     .on_hover_text(preset.description());
@@ -163,11 +163,11 @@ impl MarkdownApp {
                     Some(if active { "selected" } else { "" }),
                 );
                 if preset_btn.clicked() && !active {
-                    self.font_preset = preset;
+                    self.fonts.preset = preset;
                 }
             }
         });
-        if self.selected_font_family.is_some() {
+        if self.fonts.family.is_some() {
             ui.small(
                 "A picked family leads the body chain; presets still \
                  set the code font and line heights.",
@@ -181,7 +181,7 @@ impl MarkdownApp {
         ui.label("Text Size");
         ui.horizontal_wrapped(|ui| {
             for size in TextSizeClass::ALL {
-                let active = self.text_size_class == size;
+                let active = self.fonts.size == size;
                 let size_btn = ui
                     .selectable_label(active, size.label())
                     .on_hover_text("Base text size; headings and code scale with it");
@@ -193,7 +193,7 @@ impl MarkdownApp {
                     Some(if active { "selected" } else { "" }),
                 );
                 if size_btn.clicked() && !active {
-                    self.text_size_class = size;
+                    self.fonts.size = size;
                 }
             }
         });
@@ -276,8 +276,7 @@ impl MarkdownApp {
                             .as_ref()
                             .map_or(family_row, |indices| indices[family_row]);
                         let name = &self.available_font_families[font_index];
-                        let is_selected =
-                            self.selected_font_family.as_deref() == Some(name.as_str());
+                        let is_selected = self.fonts.family.as_deref() == Some(name.as_str());
                         if ui.selectable_label(is_selected, name).clicked() {
                             clicked = Some(FamilyChoice::Family(name.clone()));
                         }
@@ -289,7 +288,7 @@ impl MarkdownApp {
 
     /// The pinned first row of the family list. Returns whether it was clicked.
     fn system_default_row(&self, ui: &mut egui::Ui) -> bool {
-        let default_selected = self.selected_font_family.is_none();
+        let default_selected = self.fonts.family.is_none();
         let default_btn = ui.selectable_label(default_selected, "System Default");
         mcp::widget(
             &self.mcp,

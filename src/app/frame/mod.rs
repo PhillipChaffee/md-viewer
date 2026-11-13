@@ -13,7 +13,7 @@ use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::persist::APP_KEY;
-use crate::system_fonts::{document_fonts, setup_fonts, FontConfig};
+use crate::system_fonts::{document_fonts, setup_fonts};
 use crate::theme::{self, ColorOverrides};
 
 #[cfg(test)]
@@ -165,7 +165,7 @@ impl MarkdownApp {
     /// fonts now in force, and have every open document lay out again:
     /// a font change moves every line.
     fn rebuild_document_look(&mut self, ctx: &egui::Context) {
-        let fonts = document_fonts(&self.font_config());
+        let fonts = document_fonts(&self.fonts);
         self.document_look = DocumentLook::new(&ctx.style(), self.theme.palette(), &fonts);
         self.relayout_documents();
     }
@@ -208,21 +208,12 @@ impl MarkdownApp {
     /// frame would be expensive and is unnecessary. Returns whether it
     /// reloaded them.
     fn apply_fonts(&mut self, ctx: &egui::Context) -> bool {
-        let font_config = self.font_config();
-        if self.last_applied_font_config.as_ref() == Some(&font_config) {
+        if self.applied_fonts.as_ref() == Some(&self.fonts) {
             return false;
         }
-        setup_fonts(ctx, &font_config);
-        self.last_applied_font_config = Some(font_config);
+        setup_fonts(ctx, &self.fonts);
+        self.applied_fonts = Some(self.fonts.clone());
         true
-    }
-
-    fn font_config(&self) -> FontConfig {
-        FontConfig {
-            family: self.selected_font_family.clone(),
-            preset: self.font_preset,
-            size: self.text_size_class,
-        }
     }
 
     /// Send the window title to the viewport once a tab change made it stale.

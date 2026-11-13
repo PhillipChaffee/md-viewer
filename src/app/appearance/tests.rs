@@ -144,37 +144,37 @@ fn each_swatch_writes_aa_in_the_ink_of_its_theme() {
 #[test]
 fn the_two_letters_step_the_text_size_and_name_the_size_in_force() {
     let mut harness = popover();
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Normal);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Normal);
     assert!(harness.shows("Normal"));
 
     harness.click_exact("Larger text");
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Large);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Large);
     assert!(harness.shows("Large"));
     assert!(is_open(&harness));
 
     harness.click_exact("Smaller text");
     harness.click_exact("Smaller text");
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Small);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Small);
     assert!(harness.shows("Small"));
 }
 
 #[test]
 fn the_letters_go_dim_at_the_ends_of_the_scale() {
     let mut harness = popover();
-    harness.app_mut().text_size_class = TextSizeClass::Small;
+    harness.app_mut().fonts.size = TextSizeClass::Small;
     harness.settle();
     assert_eq!(harness.enabled("Smaller text"), [false]);
     assert_eq!(harness.enabled("Larger text"), [true]);
 
     harness.click_exact("Smaller text");
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Small);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Small);
 
-    harness.app_mut().text_size_class = TextSizeClass::Huge;
+    harness.app_mut().fonts.size = TextSizeClass::Huge;
     harness.settle();
     assert_eq!(harness.enabled("Smaller text"), [true]);
     assert_eq!(harness.enabled("Larger text"), [false]);
     harness.click_exact("Larger text");
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Huge);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Huge);
 }
 
 #[test]

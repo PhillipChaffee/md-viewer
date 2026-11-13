@@ -138,18 +138,15 @@ fn a_scan_that_dies_leaves_only_the_system_default() {
 #[test]
 fn clicking_a_family_selects_it_and_system_default_clears_it() {
     let mut harness = fonts_dialog(&["Alpha Sans", "Beta Serif"]);
-    assert_eq!(harness.app().selected_font_family, None);
+    assert_eq!(harness.app().fonts.family, None);
     assert!(!harness.shows("A picked family leads the body chain"));
 
     harness.click("Beta Serif");
-    assert_eq!(
-        harness.app().selected_font_family.as_deref(),
-        Some("Beta Serif")
-    );
+    assert_eq!(harness.app().fonts.family.as_deref(), Some("Beta Serif"));
     assert!(harness.shows("A picked family leads the body chain"));
 
     harness.click("System Default");
-    assert_eq!(harness.app().selected_font_family, None);
+    assert_eq!(harness.app().fonts.family, None);
 }
 
 #[test]
@@ -172,27 +169,24 @@ fn the_search_box_narrows_the_list_without_regard_to_case() {
     );
 
     harness.click("Gamma Beta");
-    assert_eq!(
-        harness.app().selected_font_family.as_deref(),
-        Some("Gamma Beta")
-    );
+    assert_eq!(harness.app().fonts.family.as_deref(), Some("Gamma Beta"));
 }
 
 #[test]
 fn a_preset_click_switches_the_preset() {
     let mut harness = fonts_dialog(&[]);
-    assert_eq!(harness.app().font_preset, FontPreset::Reader);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Reader);
 
     harness.click_exact("System");
-    assert_eq!(harness.app().font_preset, FontPreset::Current);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Current);
     harness.click_exact("Reader");
-    assert_eq!(harness.app().font_preset, FontPreset::Reader);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Reader);
     harness.click_exact("GitHub");
-    assert_eq!(harness.app().font_preset, FontPreset::Github);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Github);
     harness.click_exact("VS Code");
-    assert_eq!(harness.app().font_preset, FontPreset::Vscode);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Vscode);
     harness.click_exact("VS Code");
-    assert_eq!(harness.app().font_preset, FontPreset::Vscode);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Vscode);
 }
 
 #[test]
@@ -202,12 +196,12 @@ fn a_text_size_click_resizes_the_body_text() {
         let style = harness.ui.ctx.style();
         style.text_styles[&TextStyle::Body].size
     };
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Normal);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Normal);
     let normal = body_size(&harness);
 
     harness.click_exact(TextSizeClass::Large.label());
 
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Large);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Large);
     assert_close(
         body_size(&harness) / normal,
         TextSizeClass::Large.px() / TextSizeClass::Normal.px(),

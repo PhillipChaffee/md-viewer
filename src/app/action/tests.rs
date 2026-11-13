@@ -241,7 +241,7 @@ fn a_text_size_action_sets_the_size_class_the_fonts_follow() {
     let normal = body(&harness);
 
     harness.apply(AppAction::SetTextSize(TextSizeClass::Huge));
-    assert_eq!(harness.app.text_size_class, TextSizeClass::Huge);
+    assert_eq!(harness.app.fonts.size, TextSizeClass::Huge);
     harness.idle();
     harness.idle();
 

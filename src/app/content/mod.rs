@@ -80,7 +80,7 @@ impl MarkdownApp {
             // Body lines follow the reader's spacing setting; code lines
             // follow the font preset, which owns the code face's metrics.
             line_height: self.line_spacing.line_height(),
-            code_line_height: self.font_preset.code_line_height(),
+            code_line_height: self.fonts.preset.code_line_height(),
             force_full_render: corrections.header_key.is_some() || corrections.search,
         };
 

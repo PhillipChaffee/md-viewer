@@ -55,8 +55,8 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert_close(app.zoom_level, 1.0);
     assert_close(app.math_scale, 1.0);
     assert_eq!(app.highlight_color, None);
-    assert_eq!(app.font_preset, FontPreset::Reader);
-    assert_eq!(app.text_size_class, TextSizeClass::Normal);
+    assert_eq!(app.fonts.preset, FontPreset::Reader);
+    assert_eq!(app.fonts.size, TextSizeClass::Normal);
     assert!(!app.live_reload.is_live());
     assert_eq!(
         app.file_explorer.root,
@@ -202,10 +202,10 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
         app.link_color,
         Some(Color32::from_rgba_premultiplied(1, 2, 3, 4))
     );
-    assert_eq!(app.selected_font_family.as_deref(), Some("No Such Family"));
+    assert_eq!(app.fonts.family.as_deref(), Some("No Such Family"));
     assert!(app.smooth_text_rendering);
-    assert_eq!(app.font_preset, FontPreset::Github);
-    assert_eq!(app.text_size_class, TextSizeClass::Huge);
+    assert_eq!(app.fonts.preset, FontPreset::Github);
+    assert_eq!(app.fonts.size, TextSizeClass::Huge);
     assert!(!app.show_explorer);
     assert_close(app.explorer_width, 333.0);
     assert_close(app.outline_width, crate::layout::OUTLINE_DEFAULT_WIDTH);
@@ -284,7 +284,7 @@ fn a_session_saved_before_the_reader_keeps_its_light_or_dark_choice_and_its_widt
 
     // It had picked its fonts too, and keeps them.
     let own_fonts = launch_on_saved("(dark_mode: Some(true), font_preset: Some(Github))");
-    assert_eq!(own_fonts.font_preset, FontPreset::Github);
+    assert_eq!(own_fonts.fonts.preset, FontPreset::Github);
 }
 
 #[test]

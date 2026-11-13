@@ -173,7 +173,7 @@ impl MarkdownApp {
     /// use. Each steps one size class and goes dim at the end of the scale.
     fn text_size_row(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let palette = self.theme.palette();
-        let size = self.text_size_class;
+        let size = self.fonts.size;
         chrome::control_row(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             chrome::small_label(ui, palette, "Text size");

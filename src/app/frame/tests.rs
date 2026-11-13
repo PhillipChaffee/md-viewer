@@ -101,10 +101,10 @@ fn customized_session() -> Harness {
     app.math_scale = 1.5;
     app.highlight_color = Some(Color32::from_rgb(200, 30, 30));
     app.link_color = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
-    app.selected_font_family = Some("No Such Family".to_owned());
+    app.fonts.family = Some("No Such Family".to_owned());
     app.smooth_text_rendering = true;
-    app.font_preset = FontPreset::Vscode;
-    app.text_size_class = TextSizeClass::Large;
+    app.fonts.preset = FontPreset::Vscode;
+    app.fonts.size = TextSizeClass::Large;
     app.show_explorer = false;
     app.file_explorer.expanded_dirs.insert(guides);
     app.file_explorer.sort_order = SortOrder::NameDesc;
@@ -131,11 +131,7 @@ fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
             app.outline_width.to_bits(),
         ),
         (app.highlight_color, app.link_color),
-        (
-            app.selected_font_family.clone(),
-            app.font_preset,
-            app.text_size_class,
-        ),
+        (app.fonts.family.clone(), app.fonts.preset, app.fonts.size),
         (app.get_open_tab_paths(), app.active_tab),
         (
             app.file_explorer.root.clone(),
@@ -526,7 +522,7 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     assert_close(body_size(&harness), 16.0 * 1.15);
 
     let before = revision(&harness);
-    harness.app.text_size_class = TextSizeClass::Large;
+    harness.app.fonts.size = TextSizeClass::Large;
     harness.idle();
     assert_close(body_size(&harness), 18.0 * 1.15);
     assert!(revision(&harness) > before);
@@ -536,7 +532,7 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     harness.idle();
     assert_eq!(revision(&harness), settled);
 
-    harness.app.font_preset = FontPreset::Current;
+    harness.app.fonts.preset = FontPreset::Current;
     harness.idle();
     assert_close(body_size(&harness), 18.0);
     assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);

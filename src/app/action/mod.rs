@@ -105,7 +105,7 @@ impl MarkdownApp {
                 self.set_reading_width(self.reading_width.stepped(delta, shown_in));
             }
             AppAction::SetLineSpacing(spacing) => self.set_line_spacing(spacing),
-            AppAction::SetTextSize(size) => self.text_size_class = size,
+            AppAction::SetTextSize(size) => self.fonts.size = size,
             AppAction::ToggleSmoothText => {
                 self.smooth_text_rendering = !self.smooth_text_rendering;
             }

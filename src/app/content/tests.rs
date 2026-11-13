@@ -521,7 +521,7 @@ fn the_reader_sets_body_headings_emphasis_and_code_each_in_its_own_face() {
 #[test]
 fn a_font_preset_without_an_italic_face_slants_emphasis_instead() {
     let mut harness = reader("Plain *leaning* text.");
-    harness.app.font_preset = crate::system_fonts::FontPreset::Current;
+    harness.app.fonts.preset = crate::system_fonts::FontPreset::Current;
     harness.idle();
     let output = harness.idle();
 

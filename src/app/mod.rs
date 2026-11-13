@@ -17,7 +17,7 @@ use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::recent::RecentEntry;
 use crate::search::SearchState;
-use crate::system_fonts::{FontConfig, FontPreset, TextSizeClass};
+use crate::system_fonts::FontConfig;
 use crate::tab::Tab;
 use crate::theme::ThemeId;
 
@@ -102,8 +102,9 @@ pub(crate) struct MarkdownApp {
     link_color: Option<egui::Color32>,
     last_applied_link_color: Option<egui::Color32>,
     show_color_settings_dialog: bool,
-    // Document body/heading font. `None` = auto-detected system sans-serif.
-    selected_font_family: Option<String>,
+    /// The document's font family, preset and size class. Every preset
+    /// shares the one size class.
+    fonts: FontConfig,
     // Body-font families the picker offers, scanned in a background thread:
     // one canonical name per family, only families that can actually serve
     // as the body font. Empty until the scan lands (the dialog shows a
@@ -115,9 +116,8 @@ pub(crate) struct MarkdownApp {
     available_font_families_lower: Vec<String>,
     // In-flight background scan producing `available_font_families`.
     pending_font_family_scan: Option<Receiver<Vec<String>>>,
-    // Mirrors the font setup inputs (picked family, preset, size class): only
-    // reload fonts when this tuple changes.
-    last_applied_font_config: Option<FontConfig>,
+    // The `fonts` egui last loaded: fonts are reloaded only when they differ.
+    applied_fonts: Option<FontConfig>,
     show_font_dialog: bool,
     // Transient UI-only search text for the font picker (not persisted).
     font_filter: String,
@@ -125,10 +125,6 @@ pub(crate) struct MarkdownApp {
     // every frame (see ctx.set_zoom_factor below) since it's a single write
     // into egui's own memory, not worth a last-applied change-gate.
     smooth_text_rendering: bool,
-    // Which markdown viewer's font choices lead the font chains.
-    font_preset: FontPreset,
-    // Shared text-size class across all presets.
-    text_size_class: TextSizeClass,
     // The native file and folder dialogs. Fields rather than direct calls so
     // a test can answer in the user's place.
     file_picker: PathPicker,
