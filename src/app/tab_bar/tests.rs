@@ -459,6 +459,54 @@ fn a_tab_that_comes_to_the_front_is_scrolled_into_the_strip() {
 }
 
 #[test]
+fn a_tab_that_takes_the_place_of_a_closed_one_is_scrolled_into_the_strip() {
+    let mut harness = many_tabs();
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+    let over_the_strip = harness.get_by_label("doc-01.md").rect().center();
+    harness.event(Event::PointerMoved(over_the_strip));
+    harness.event(Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(-4000.0, 0.0),
+        modifiers: Modifiers::NONE,
+    });
+    harness.frames(30);
+    assert!(
+        !in_strip(&harness, "doc-02.md"),
+        "scrolled out of the strip"
+    );
+
+    harness.state_mut().close_tab(0);
+    harness.frames(30);
+
+    assert_eq!(active_path(&harness), harness.path("doc-02.md"));
+    assert!(in_strip(&harness, "doc-02.md"), "the document now in front");
+}
+
+#[test]
+fn a_second_tab_on_the_same_document_is_scrolled_into_the_strip_too() {
+    let mut harness = many_tabs();
+    let first = harness.path("doc-01.md");
+    let last = &mut harness.state_mut().tabs[39];
+    assert!(last.navigate_to_path(&first).unwrap());
+    harness.frames(30);
+
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+
+    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    let tab = harness
+        .query_all_by_label("doc-01.md")
+        .next()
+        .unwrap()
+        .rect();
+    assert!(
+        tab.left() >= 0.0 && tab.right() <= strip_end,
+        "the first tab is at {tab:?}"
+    );
+}
+
+#[test]
 fn the_strip_stays_where_the_reader_scrolled_it() {
     let mut harness = many_tabs();
     harness.frames(30);

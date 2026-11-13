@@ -62,8 +62,10 @@ impl MarkdownApp {
         let mut actions = TabStripActions::default();
         // A tab that came to the front is scrolled into the strip once.
         // After that the strip is the reader's to scroll.
-        let reveal = self.revealed_tab != Some(self.active_tab);
-        self.revealed_tab = Some(self.active_tab);
+        let front = self.tabs.get(self.active_tab);
+        let front = front.map(|tab| (self.active_tab, tab.id));
+        let reveal = self.revealed_tab != front;
+        self.revealed_tab = front;
         egui::TopBottomPanel::top("tab_bar")
             .exact_height(STRIP_HEIGHT)
             .frame(chrome::bar_frame(palette))

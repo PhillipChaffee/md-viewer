@@ -68,7 +68,9 @@ pub(crate) struct MarkdownApp {
     active_tab: usize,
     /// The active tab the strip last scrolled into view, so that it does
     /// so once for each tab that comes to the front and not every frame.
-    revealed_tab: Option<usize>,
+    /// Its place in the strip alone does not say which tab it is: a tab
+    /// that closes hands its place to the next.
+    revealed_tab: Option<(usize, egui::Id)>,
     /// The reading theme; its palette is every color the app paints.
     theme: ThemeId,
     zoom_level: f32,
