@@ -45,9 +45,9 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 - **Tab System** - Open multiple documents with tab bar (Ctrl+Click links to open in new tab)
 - **In-Document Search (Ctrl+F)** - Find bar with inline highlights, Enter/Shift+Enter to cycle matches
 - **File Explorer** - Hierarchical sidebar with lazy-loading directories and sorting options; freely resizable, width remembered
-- **Open Folder** - Use File → Open Folder… to choose and persist the file explorer root
+- **Open Folder** - Use ⋯ → Open Folder… to choose and persist the file explorer root
 - **Outline Sidebar** - Click-to-navigate table of contents from document headers; freely resizable, width remembered
-- **Navigation Buttons** - Back/forward buttons in title bar for quick history navigation
+- **Top Bar** - One quiet row of line icons around the document title: explorer, back and forward on the left; appearance (Aa), find, outline and the ⋯ menu on the right
 - **Per-Tab History** - Independent back/forward navigation within each tab (Alt+Left/Right)
 - **Internal Links** - Navigate between markdown files with relative links
 
@@ -57,20 +57,21 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 
 ### View
 
-- **Four Reading Themes** - Paper, Sepia, Dusk and Night; step through them with Ctrl+D or pick one in View → Theme
-- **Zoom** - 50% to 300% zoom (Ctrl++/-/0 or Ctrl+Scroll)
+- **Four Reading Themes** - Paper, Sepia, Dusk and Night; step through them with Ctrl+D or pick one from the swatches under **Aa**
+- **Appearance Popover (Aa)** - Theme, text size, column width (a slider, Fit window and Reset) and line spacing in one place; every control takes effect as you use it
+- **Zoom** - 50% to 300% zoom (Ctrl++/-/0, Ctrl+Scroll, or the zoom row of the ⋯ menu)
 - **Resizable Text Column** - The text sits in a centered column: drag either edge to any width, step it with Ctrl+Alt+←/→, or switch to Full Width; prose, tables and code follow it together
 - **Reader Typography** - Documents are set in the bundled Source Serif 4 by default, with three line spacings; the other font presets and any installed family remain a click away
-- **Formula Size** - Scale rendered math from 100% to 150% (View → Formula Size), independent of UI zoom
+- **Formula Size** - Scale rendered math from 100% to 150% (⋯ → Formula Size), independent of UI zoom
 - **Keyboard Scrolling** - Scroll documents with ↑/↓ by line or Page Up/Page Down by page when the find bar is closed
 - **Live Reload** - Auto-refresh on file changes (enabled by default)
-- **Custom Colors** - Customize highlight and link text colors (View → Colors…)
-- **Font Selection** - Browse and apply installed system fonts via View menu (searchable, persistent)
-- **Smooth Text Rendering** - Optional toggle (View → Smooth Text Rendering) that disables glyph pixel-snapping for less jagged-looking text at fractional zoom levels
+- **Custom Colors** - Customize highlight and link text colors (⋯ → Colors…)
+- **Font Selection** - Browse and apply installed system fonts via Fonts… in the Aa popover or the ⋯ menu (searchable, persistent)
+- **Smooth Text Rendering** - Optional toggle (⋯ → Smooth Text Rendering) that disables glyph pixel-snapping for less jagged-looking text at fractional zoom levels
 
-*Full Width, Formula Size and the colour picker all live in the View menu*
+*Everything the top bar has no button for lives in the ⋯ menu*
 
-![The View menu](screenshots/view-menu.png)
+![The ⋯ menu](screenshots/overflow-menu.png)
 
 *The same document on both themes — syntax highlighting, mermaid diagrams and both sidebars*
 

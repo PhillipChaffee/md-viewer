@@ -2014,3 +2014,18 @@ An empty first list is the assertion worth making. It also explains rises in the
 **Problem:** `setup_fonts` applies the size class to `TextStyle::Body/Heading/Monospace`; `configure_context` ran next and set them to 16/32/14 again. The last-applied gate then believed the fonts were in sync, so nothing reapplied the class.
 **Fix:** `configure_context` no longer sets those three styles. General rule: a value with a diff-gated "apply on change" path must have exactly one writer.
 **Files:** `src/app/startup/mod.rs`
+
+### A popup's own surface is a stop for the Tab key
+
+**Context:** The Aa popover had to be usable from the keyboard: Tab to the button, Enter, Tab to the first swatch.
+**Problem:** The first Tab after opening it went nowhere visible, and the second reached the swatch. `egui::Popup` gives its `Area` the sense `Sense::click()`, and `click()` is `CLICK | FOCUSABLE`, so the sheet itself registers for focus ahead of everything in it.
+**Fix:** `Popup::sense(egui::Sense::CLICK)` (`chrome::POPUP_SENSE`). The sheet still takes clicks, so they do not reach what lies under it, and is no longer a tab stop.
+**How it was found:** by a test that focuses the button through AccessKit and presses Enter, Tab, Enter. A screenshot cannot show a focus that is on nothing.
+**Files:** `src/app/chrome/mod.rs`, `src/app/appearance/mod.rs`, `src/app/overflow_menu/mod.rs`
+
+### A row inside a cross-centered row is centered at its starting height
+
+**Context:** The tab strip put its tabs in a `ui.horizontal` inside a `ScrollArea` inside `ui.horizontal_centered`. The tabs sat 8 px low and the active tab's underline was clipped off the strip.
+**Problem:** A nested row is allocated at `interact_size.y` (18 px) and centered in its parent at that height. A later `ui.set_height(34.0)` grows it downward from where it already is, not about its middle.
+**Fix:** Put widgets of the full height straight into the centered row. Where a row of its own is wanted, set its height before anything is added to it (`chrome::control_row`): the same starting-height rule is why a label beside a taller button sits above the button's middle in a plain `ui.horizontal`.
+**Files:** `src/app/tab_bar/mod.rs`, `src/app/chrome/mod.rs`

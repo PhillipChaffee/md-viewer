@@ -18,7 +18,6 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
   - `watch_enabled: bool` - file watching state
   - `watcher` + `watcher_rx` - file watching via mpsc channel
   - `watched_paths: HashSet<PathBuf>` - unified watcher for all open tabs
-  - `hovered_tab: Option<usize>` - for showing close button on hover
   - `recent_files: Vec<RecentEntry>` - recently opened files for the welcome page
   - `welcome_show_all: bool` - whether the welcome page's recent list is expanded
 
@@ -75,6 +74,8 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 
 - **Document look**: the document is laid out in its own fonts, the chrome around it in the system sans. `system_fonts::document_fonts(family, preset, size)` names them; `setup_fonts` registers the families they refer to (`MarkdownBody`, `MarkdownStrong`, `MarkdownHeading`, `MarkdownEmphasis`) for every preset. The default **Reader** preset leads those families with the bundled Source Serif 4 faces (`src/system_fonts/bundled/`, compiled in from `assets/fonts/`). `DocumentLook` (`src/app/content/look/`) holds the resulting `egui::Style` and the renderer's `BlockStyle` (heading and italic families, code block box, blockquote bar, task marker, short rules); it is built in `begin_frame` only when the theme or the font configuration changed, and `preview_pane` hands it to the renderer every frame without allocating. A `muted` meta line (`file-name · N min read`, computed in `Tab` when content loads) is painted through the renderer's `preamble` hook so it scrolls with the document.
 
+- **Chrome**: `src/app/chrome/` holds what the bars, menus and popovers are built from: `QuietButton` (an icon or a word, `muted` at rest and `text` under the pointer), `MenuRow`, `segmented`, `hairline`, `bar_frame` and `popup_style`, all in fixed sizes so the controls that change the text do not move while they are used. `src/app/top_bar/` lays out the one bar (`render_top_bar`): explorer, back and forward on the left, the document's title centered between the button groups, and Aa, find, outline and ⋯ on the right. `src/app/appearance/` is the Aa popover (theme swatches, text size, width slider, line spacing, Fonts…) and `src/app/overflow_menu/` the ⋯ menu that carries every other command. All of them only pick an `AppAction`; the bar applies it after it is laid out. Icons are vector strokes from `icons::Icon`, painted in whatever ink the caller passes.
+
 - **Global Allocator**: mimalloc for performance
 
 ## Key Libraries
@@ -94,9 +95,11 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 update() → check_file_changes() → reload affected tabs
          → request_repaint_after(100ms) if watching
          → Apply theme, zoom settings
-         → TopBottomPanel (menu bar + LIVE indicator + file path)
+         → TopBottomPanel (top bar) → render_top_bar()
+           → appearance_popover() / overflow_menu(), while open
          → TopBottomPanel (error bar, if any)
-         → TopBottomPanel (tab bar) → render_tab_bar()
+         → TopBottomPanel (find bar, while open)
+         → TopBottomPanel (tab strip, with two tabs or an edit) → render_tab_bar()
          → SidePanel::left (file explorer) → render_file_explorer()
            → render_tree_node() (recursive)
          → CentralPanel → render_tab_content()
@@ -112,8 +115,10 @@ Uses `show_viewport` for optimized rendering - egui clips content outside the vi
 
 The tab system uses a simple `Vec<Tab>` with an `active_tab` index:
 
-- Tab bar rendered using `ui.selectable_label()` in a horizontal scroll area
-- Close button (×) shown on hover or for active tab
+- The tab strip is hidden while one document is open and nothing is being edited (`shows_tab_bar`)
+- Flat text tabs in a horizontal scroll area: the active one in `text` with a 2 px `accent` underline, the others `muted`
+- Close button (×) shown while the pointer is over a tab
+- A Preview | Edit segmented control at the right end, with the unsaved dot and the save outcome beside it
 - Context menu with "Close" and "Close Others" options
 - Middle-click to close tabs
 - Ctrl+Click on links opens in a new tab

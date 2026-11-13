@@ -15,6 +15,8 @@
 | Shortcut | Action |
 | ---------- | -------- |
 | Ctrl+O | Open file in new tab |
+| Ctrl+E | Switch between the rendered document and its source (edit mode) |
+| Ctrl+S | Save the edits made in edit mode |
 | F5 | Toggle file watching |
 | Ctrl+Q | Quit application |
 
@@ -54,6 +56,11 @@ The find bar also has on-screen `↑` and `↓` buttons next to the match count 
 | Page Up / Page Down | Scroll document up/down by page |
 | Ctrl+Scroll | Zoom in/out with mouse wheel |
 | Shift+Scroll over a wide table | Scroll the table horizontally |
+
+The **Aa** button in the top bar opens the appearance popover: theme
+swatches, text size, a width slider with Fit window and Reset, and line
+spacing. It is reachable from the keyboard: Tab to the button, Enter to
+open it, Tab through its controls, Esc to close it.
 
 The text column can also be resized with the mouse: drag either edge of the
 column (a hairline and a resize cursor show where), and double-click an edge
