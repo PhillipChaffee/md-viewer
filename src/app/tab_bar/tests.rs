@@ -351,6 +351,27 @@ fn the_plus_button_opens_what_the_picker_returns_in_a_new_tab() {
 }
 
 #[test]
+fn a_frame_that_opens_a_file_and_picks_a_tab_opens_the_file_first() {
+    let mut harness = three_tabs();
+    let other = harness.dir.join("d.md");
+    std::fs::write(&other, "# D").unwrap();
+    harness.state_mut().file_picker = Box::new(move |_| Ok(Some(other.clone())));
+    let ctx = harness.ctx.clone();
+    let actions = super::TabStripActions {
+        open_file: true,
+        activate: Some(0),
+        close: Some(1),
+        close_others: None,
+    };
+
+    let to_close = harness.state_mut().apply_tab_strip_actions(&ctx, &actions);
+
+    assert_eq!(to_close, Some(1));
+    assert_eq!(open_paths(&harness).len(), 4);
+    assert_eq!(active_path(&harness), harness.path("a.md"));
+}
+
+#[test]
 fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
     let harness = many_tabs();
 

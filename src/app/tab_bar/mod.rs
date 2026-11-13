@@ -32,6 +32,7 @@ const CONTEXT_MENU_WIDTH: f32 = 140.0;
 /// middle click (close) can land in the same frame.
 #[derive(Default)]
 struct TabStripActions {
+    open_file: bool,
     activate: Option<usize>,
     close: Option<usize>,
     close_others: Option<usize>,
@@ -78,13 +79,13 @@ impl MarkdownApp {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
                             self.tab_strip(ui, &mut actions, reveal);
-                            self.open_file_button(ui);
+                            self.open_file_button(ui, &mut actions);
                         });
                     });
                 });
             });
 
-        self.apply_tab_strip_actions(&actions)
+        self.apply_tab_strip_actions(ctx, &actions)
     }
 
     /// The horizontally scrollable row of tabs, scrolled to the active one
@@ -116,7 +117,7 @@ impl MarkdownApp {
 
     /// Opening a file is what creates a new tab; there is no empty-tab
     /// state.
-    fn open_file_button(&mut self, ui: &mut egui::Ui) {
+    fn open_file_button(&self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
         let open = QuietButton::icon(Icon::Plus, "Open file in new tab")
             .show(ui, self.theme.palette())
             .on_hover_text("Open File… (Ctrl+T)");
@@ -127,14 +128,20 @@ impl MarkdownApp {
             &open,
             None,
         );
-        if open.clicked() {
-            self.apply_action(ui.ctx(), AppAction::OpenFile);
-        }
+        actions.open_file = open.clicked();
     }
 
-    /// Applies the frame's tab strip actions. Returns the tab the caller
+    /// Applies the frame's tab strip actions: a file is opened first, then
+    /// a tab comes to the front, then tabs close. Returns the tab the caller
     /// should close; "Close Others" is completed here, so it returns `None`.
-    fn apply_tab_strip_actions(&mut self, actions: &TabStripActions) -> Option<usize> {
+    fn apply_tab_strip_actions(
+        &mut self,
+        ctx: &egui::Context,
+        actions: &TabStripActions,
+    ) -> Option<usize> {
+        if actions.open_file {
+            self.apply_action(ctx, AppAction::OpenFile);
+        }
         if let Some(index) = actions.activate {
             self.focus_tab(index);
         }
