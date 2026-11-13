@@ -180,11 +180,7 @@ fn a_wide_diagram_shrinks_with_a_narrow_window() {
     );
 }
 
-/// Known bug, listed in `tests/README.md`: a diagram drawn larger than
-/// the graphics card's biggest picture is handed over whole, and the app
-/// stops with a panic instead of scaling it down or saying so.
 #[test]
-#[should_panic(expected = "maximum texture side")]
 fn a_diagram_too_large_for_the_screen_does_not_stop_the_app() {
     let mut reader = drawing(&chain(40));
 

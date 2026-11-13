@@ -19,9 +19,14 @@ fn night() -> MermaidColors {
     }
 }
 
+/// More pixels a side than any diagram here has.
+const ANY_SIDE: usize = 1 << 20;
+
 fn render(source: &str, colors: Option<&MermaidColors>) -> egui::ColorImage {
     let renderer = CommonMarkCache::default().mermaid_renderer;
-    render_mermaid_image(&renderer, source, colors).unwrap().image
+    render_mermaid_image(&renderer, source, colors, ANY_SIDE)
+        .unwrap()
+        .image
 }
 
 /// The color most of the fully opaque pixels have.
@@ -73,7 +78,32 @@ fn colors_do_not_change_the_size_of_a_diagram() {
 fn a_diagram_merman_cannot_parse_reports_the_error() {
     let renderer = CommonMarkCache::default().mermaid_renderer;
     let colors = night();
-    assert!(render_mermaid_image(&renderer, "flowchart LR\n  A[", Some(&colors)).is_err());
-    assert!(render_mermaid_image(&renderer, "not a diagram", Some(&colors)).is_err());
-    assert!(render_mermaid_image(&renderer, "not a diagram", None).is_err());
+    assert!(render_mermaid_image(&renderer, "flowchart LR\n  A[", Some(&colors), ANY_SIDE).is_err());
+    assert!(render_mermaid_image(&renderer, "not a diagram", Some(&colors), ANY_SIDE).is_err());
+    assert!(render_mermaid_image(&renderer, "not a diagram", None, ANY_SIDE).is_err());
+}
+
+#[test]
+fn a_diagram_is_rasterized_at_twice_its_size_when_the_texture_has_room() {
+    let renderer = CommonMarkCache::default().mermaid_renderer;
+    let rendered = render_mermaid_image(&renderer, FLOWCHART, None, ANY_SIDE).unwrap();
+
+    let [width, height] = rendered.image.size;
+    assert_eq!(width, (rendered.size.x * 2.0) as usize);
+    assert_eq!(height, (rendered.size.y * 2.0) as usize);
+}
+
+#[test]
+fn a_diagram_larger_than_the_biggest_texture_is_rasterized_smaller() {
+    let renderer = CommonMarkCache::default().mermaid_renderer;
+    let whole = render_mermaid_image(&renderer, FLOWCHART, None, ANY_SIDE).unwrap();
+    let longest = whole.image.size[0].max(whole.image.size[1]);
+
+    for max_side in [longest - 1, longest / 2, 64, 1] {
+        let fitted = render_mermaid_image(&renderer, FLOWCHART, None, max_side).unwrap();
+
+        let [width, height] = fitted.image.size;
+        assert_eq!(width.max(height), max_side, "it fills the texture");
+        assert_eq!(fitted.size, whole.size, "and is laid out at the same size");
+    }
 }

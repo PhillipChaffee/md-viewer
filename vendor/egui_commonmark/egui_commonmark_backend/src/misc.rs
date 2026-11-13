@@ -1007,12 +1007,14 @@ fn mermaid_usvg_options() -> resvg::usvg::Options<'static> {
     }
 }
 
-/// Render mermaid source to a raster image, in `colors` when given.
+/// Render mermaid source to a raster image, in `colors` when given, no
+/// side of it longer than `max_side` pixels.
 #[cfg(feature = "mermaid")]
 fn render_mermaid_image(
     renderer: &merman::render::HeadlessRenderer,
     content: &str,
     colors: Option<&crate::MermaidColors>,
+    max_side: usize,
 ) -> Result<MermaidRendered, String> {
     let svg = match renderer.render_svg_readable_sync(content) {
         Ok(Some(svg)) => svg,
@@ -1028,23 +1030,36 @@ fn render_mermaid_image(
             .ok_or("Failed to recolor SVG")?,
         None => svg,
     };
-    let (image, size) = rasterize_mermaid_svg(svg.as_bytes()).ok_or("Failed to rasterize SVG")?;
+    let (image, size) =
+        rasterize_mermaid_svg(svg.as_bytes(), max_side).ok_or("Failed to rasterize SVG")?;
     Ok(MermaidRendered { image, size })
 }
 
+/// The scale a diagram `width` by `height` is rasterized at: 2x for a
+/// crisp lightbox zoom, or less for a diagram that at 2x would have a side
+/// longer than `max_side` pixels, the longest the graphics card takes in a
+/// texture.
 #[cfg(feature = "mermaid")]
-fn rasterize_mermaid_svg(svg_bytes: &[u8]) -> Option<(egui::ColorImage, egui::Vec2)> {
+fn mermaid_raster_scale(width: f32, height: f32, max_side: usize) -> f32 {
+    (max_side as f32 / width.max(height)).min(2.0)
+}
+
+#[cfg(feature = "mermaid")]
+fn rasterize_mermaid_svg(
+    svg_bytes: &[u8],
+    max_side: usize,
+) -> Option<(egui::ColorImage, egui::Vec2)> {
     let opts = mermaid_usvg_options();
     let tree = resvg::usvg::Tree::from_data(svg_bytes, &opts).ok()?;
     let svg_size = tree.size();
 
-    // Rasterize at 2x for crisp lightbox zoom (matches LightboxState::new)
-    let scale = 2.0_f32;
-    let w = (svg_size.width() * scale) as u32;
-    let h = (svg_size.height() * scale) as u32;
-    if w == 0 || h == 0 {
-        return None;
-    }
+    let scale = mermaid_raster_scale(svg_size.width(), svg_size.height(), max_side);
+    // The `min` keeps a rounding error in the scale from adding a pixel to
+    // the longest side. The `max` keeps the short side of a long, thin
+    // diagram from being scaled away to nothing.
+    let side = |length: f32| ((length * scale) as usize).min(max_side).max(1) as u32;
+    let w = side(svg_size.width());
+    let h = side(svg_size.height());
 
     let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
     resvg::render(
@@ -1152,7 +1167,8 @@ impl CodeBlock {
         // Since egui processes blocks in document order, the first waiting block
         // encountered after the thread slot clears is always the topmost one.
         if waiting && cache.mermaid_rendering.is_none() {
-            Self::spawn_mermaid_render(source, key, &self.content, colors, cache);
+            let max_side = ui.ctx().input(|input| input.max_texture_side);
+            Self::spawn_mermaid_render(source, key, &self.content, colors, max_side, cache);
         }
         if waiting {
             ui.ctx()
@@ -1242,6 +1258,7 @@ impl CodeBlock {
         key: u64,
         content: &str,
         colors: Option<crate::MermaidColors>,
+        max_side: usize,
         cache: &mut CommonMarkCache,
     ) {
         cache.mermaid_rendering = Some(key);
@@ -1250,7 +1267,7 @@ impl CodeBlock {
         let renderer = cache.mermaid_renderer.clone();
 
         std::thread::spawn(move || {
-            let result = render_mermaid_image(&renderer, &content, colors.as_ref());
+            let result = render_mermaid_image(&renderer, &content, colors.as_ref(), max_side);
             let _ = tx.send(MermaidRenderResult {
                 source,
                 key,
