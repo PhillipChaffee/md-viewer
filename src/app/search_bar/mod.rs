@@ -6,7 +6,7 @@ use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::layout::line_fraction;
-use crate::search::SearchBarOutcome;
+use crate::search::{stepped_match_index, SearchBarOutcome};
 
 #[cfg(test)]
 mod tests;
@@ -146,14 +146,8 @@ impl MarkdownApp {
         if n == 0 {
             return;
         }
-        let new_idx = if dir >= 0 {
-            (self.search.active_match_index + 1) % n
-        } else if self.search.active_match_index == 0 {
-            n - 1
-        } else {
-            self.search.active_match_index - 1
-        };
-        self.search.active_match_index = new_idx;
+        self.search.active_match_index =
+            stepped_match_index(self.search.active_match_index, n, dir);
         self.scroll_to_active_match();
     }
 

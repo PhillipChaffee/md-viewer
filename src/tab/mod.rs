@@ -50,6 +50,21 @@ fn kicker_line(path: &Path, content: &str) -> String {
     )
 }
 
+/// Finish a step through history that went to the newest entry of `from`:
+/// that entry leaves `from`, and `left`, the document the step came from,
+/// becomes the newest entry of `to`.
+fn move_history_entry<T>(from: &mut Vec<T>, to: &mut Vec<T>, left: T) {
+    from.pop();
+    to.push(left);
+}
+
+/// Record a visit to a new document from `left`: `left` is where Back now
+/// goes, and there is no longer anywhere forward to go.
+fn record_visit<T>(back: &mut Vec<T>, forward: &mut Vec<T>, left: T) {
+    back.push(left);
+    forward.clear();
+}
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
@@ -287,8 +302,11 @@ impl Tab {
         if let Some(fragment) = &fragment {
             apply_fragment_navigation(self, fragment);
         }
-        self.history_back.push(previous_path);
-        self.history_forward.clear();
+        record_visit(
+            &mut self.history_back,
+            &mut self.history_forward,
+            previous_path,
+        );
         Ok(true)
     }
 
@@ -304,8 +322,11 @@ impl Tab {
 
         let previous_path = self.path.clone();
         self.load_file(&target_path)?;
-        self.history_back.push(previous_path);
-        self.history_forward.clear();
+        record_visit(
+            &mut self.history_back,
+            &mut self.history_forward,
+            previous_path,
+        );
         Ok(true)
     }
 
@@ -330,8 +351,11 @@ impl Tab {
         };
         let current_path = self.path.clone();
         self.load_file(&prev_path)?;
-        self.history_back.pop();
-        self.history_forward.push(current_path);
+        move_history_entry(
+            &mut self.history_back,
+            &mut self.history_forward,
+            current_path,
+        );
         Ok(true)
     }
 
@@ -341,8 +365,11 @@ impl Tab {
         };
         let current_path = self.path.clone();
         self.load_file(&next_path)?;
-        self.history_forward.pop();
-        self.history_back.push(current_path);
+        move_history_entry(
+            &mut self.history_forward,
+            &mut self.history_back,
+            current_path,
+        );
         Ok(true)
     }
 

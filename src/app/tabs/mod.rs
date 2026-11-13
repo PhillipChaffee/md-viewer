@@ -10,6 +10,36 @@ use crate::tab::Tab;
 #[cfg(test)]
 mod tests;
 
+/// The active tab's index once the tab at `closed` is gone and `remaining`
+/// tabs are left: the same document stays active where it can, the last
+/// tab takes over where the active one was the last, and an empty strip
+/// rests at 0.
+const fn active_after_close(active: usize, closed: usize, remaining: usize) -> usize {
+    if remaining == 0 {
+        0
+    } else if active >= remaining {
+        remaining - 1
+    } else if active > closed {
+        active - 1
+    } else {
+        active
+    }
+}
+
+/// The index after `active` among `len` tabs, wrapping to the first.
+const fn next_index(active: usize, len: usize) -> usize {
+    (active + 1) % len
+}
+
+/// The index before `active` among `len` tabs, wrapping to the last.
+const fn previous_index(active: usize, len: usize) -> usize {
+    if active == 0 {
+        len - 1
+    } else {
+        active - 1
+    }
+}
+
 /// Asks the user for a path, with the dialog starting in the given folder.
 /// `Ok(None)` means the user cancelled.
 pub(crate) type PathPicker = Box<dyn Fn(Option<&Path>) -> Result<Option<PathBuf>, String>>;
@@ -165,13 +195,7 @@ impl MarkdownApp {
 
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
         // which renders the welcome page (active_tab kept in range / at 0).
-        if self.tabs.is_empty() {
-            self.active_tab = 0;
-        } else if self.active_tab >= self.tabs.len() {
-            self.active_tab = self.tabs.len() - 1;
-        } else if self.active_tab > idx {
-            self.active_tab -= 1;
-        }
+        self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
 
         // Update watcher
         if self.watch_enabled {
@@ -185,18 +209,14 @@ impl MarkdownApp {
 
     pub(crate) const fn next_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = (self.active_tab + 1) % self.tabs.len();
+            self.active_tab = next_index(self.active_tab, self.tabs.len());
             self.title_dirty = true;
         }
     }
 
     pub(crate) const fn prev_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = if self.active_tab == 0 {
-                self.tabs.len() - 1
-            } else {
-                self.active_tab - 1
-            };
+            self.active_tab = previous_index(self.active_tab, self.tabs.len());
             self.title_dirty = true;
         }
     }
