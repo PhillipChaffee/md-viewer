@@ -144,6 +144,21 @@ CommonMarkViewer::new()
 **Fix:** Expand only eligible `Event::Text` segments inside the renderer. Each scanner segment carries rendered text, raw spelling, and its absolute original source range. Advance the cursor by raw bytes. Keep replacement segments indivisible for painting: any search-range overlap highlights the whole glyph, with Active taking precedence. Feed the rendered glyph to `current_heading_rich_texts`, but feed the raw shortcode to `current_heading_text`. Skip image alt text and code blocks; route `Event::Code` through a separate literal-only highlight path so inline code keeps both source text and search highlights. Destinations, URLs, and malformed/unknown candidates remain literal.
 **Files:** `crates/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs`, `src/main.rs`, `docs/devlog/045-emoji-shortcodes.md`
 
+### merman themes flowcharts only; recolor the SVG it produces
+
+**Context:** Mermaid diagrams had to follow the page colors, on a sepia page as well as on black.
+**Problem:** merman 0.3 applies `themeVariables` (by `%%{init}%%` directive or by `with_site_config`) to flowcharts and ignores them for sequence diagrams: the SVG is byte-identical. Other diagram kinds hard-code the default theme in their CSS too. A theme option would have fixed the first diagram someone looked at and nothing else.
+**Fix:** Let usvg resolve the SVG and write it back (`Tree::to_string` with `preserve_text: true`). Every element then carries its final `fill` and `stroke` as `#rrggbb`, text is still `<text>`, and the round trip is pixel-identical. Recolor those attributes by use (text, fill, stroke) and by the role the original color has in mermaid's default theme.
+**Gotchas:** usvg paints the root element's `background-color: white` as an opaque backdrop, so strip it from the root tag. Probe every diagram kind you care about, not only a flowchart, before trusting a theme mechanism.
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/mermaid_theme/mod.rs`, `docs/devlog/070-themed-diagrams.md`
+
+### A raster composited onto the page color is a box everywhere else
+
+**Context:** Formulas were rendered as `fg` blended over `visuals.panel_fill`.
+**Problem:** The page is not the only surface. Table rows, quotes and highlights have other fills, and each formula on them showed as a rectangle in the page color.
+**Fix:** Emit `fg` at the coverage alpha and let egui blend. Its premultiplied gamma-space blending gives the same pixels on the page as the old composite did, and correct ones on any other surface. The background then leaves the cache key as well.
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/misc.rs` (`render_math_formula`, `math_cache_hash`)
+
 ---
 
 ## egui

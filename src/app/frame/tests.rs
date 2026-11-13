@@ -461,3 +461,29 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
     assert!(matches!(lightbox.texture, LightboxTexture::Owned(_)));
     assert!(lightbox.base_size.x > 0.0 && lightbox.base_size.y > 0.0);
 }
+
+/// Click the document's diagram and take the texture the lightbox opens
+/// with, closing the lightbox again.
+fn enlarged_diagram(harness: &mut UiHarness) -> egui::TextureId {
+    let diagram = harness.centers_with_role(accesskit::Role::Image)[0];
+    harness.click_at(diagram);
+    harness.app_mut().lightbox.take().unwrap().texture.id()
+}
+
+#[test]
+fn a_diagram_is_redrawn_in_the_colors_of_the_theme_switched_to() {
+    let mut harness = UiHarness::with_docs(&[("a.md", "```mermaid\ngraph TD\n    A --> B\n```\n")]);
+    harness.wait_until("the diagram", |harness| {
+        !harness.centers_with_role(accesskit::Role::Image).is_empty()
+    });
+    let before = enlarged_diagram(&mut harness);
+    // Without a change of theme the diagram is not drawn again.
+    assert_eq!(enlarged_diagram(&mut harness), before);
+
+    harness
+        .ui
+        .key_press_modifiers(Modifiers::CTRL, egui::Key::D);
+    harness.settle();
+
+    assert_ne!(enlarged_diagram(&mut harness), before);
+}

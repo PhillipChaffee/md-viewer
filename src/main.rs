@@ -13,6 +13,7 @@ use crate::cli::{
 
 mod app;
 mod cli;
+mod diagram;
 mod dialogs;
 mod explorer;
 mod headers;

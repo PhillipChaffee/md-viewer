@@ -10,6 +10,12 @@ mod tests;
 /// Margin kept between the image viewport and the edges of the screen.
 const VIEWPORT_PADDING: f32 = 40.0;
 
+/// How far the sheet under a diagram reaches past the diagram's edges.
+const DIAGRAM_SHEET_MARGIN: f32 = 16.0;
+
+/// Corner radius of the sheet under a diagram.
+const DIAGRAM_SHEET_RADIUS: f32 = 8.0;
+
 /// Source of a lightbox texture. Mermaid pre-rasterizes its own texture so we
 /// own the handle to keep it alive; loader-managed images (`egui_extras`) just
 /// give us an id whose lifetime is governed by the loader.
@@ -19,7 +25,7 @@ pub(crate) enum LightboxTexture {
 }
 
 impl LightboxTexture {
-    fn id(&self) -> egui::TextureId {
+    pub(crate) fn id(&self) -> egui::TextureId {
         match self {
             Self::Owned(handle) => handle.id(),
             Self::Loaded(id) => *id,
@@ -159,6 +165,15 @@ impl LightboxState {
         // scaling, no re-rasterization
         let image_rect = egui::Rect::from_center_size(content_rect.center(), display_size);
         if ui.is_rect_visible(image_rect) {
+            if matches!(self.texture, LightboxTexture::Owned(_)) {
+                // A diagram is drawn for the page and has no background of
+                // its own: lay a sheet of the page under it.
+                ui.painter().rect_filled(
+                    image_rect.expand(DIAGRAM_SHEET_MARGIN),
+                    DIAGRAM_SHEET_RADIUS,
+                    ui.visuals().panel_fill,
+                );
+            }
             let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
             let mut mesh = egui::Mesh::with_texture(self.texture.id());
             mesh.add_rect_with_uv(image_rect, uv, egui::Color32::WHITE);

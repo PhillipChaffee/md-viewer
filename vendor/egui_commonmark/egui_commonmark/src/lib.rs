@@ -90,6 +90,7 @@ use egui_commonmark_backend_extended::elements::{
 mod mime_svg_loader;
 mod parsers;
 
+pub use egui_commonmark_backend_extended::MermaidColors;
 pub use egui_commonmark_backend_extended::RenderHtmlFn;
 pub use egui_commonmark_backend_extended::RenderMathFn;
 pub use egui_commonmark_backend_extended::alerts::{Alert, AlertBundle};
@@ -310,6 +311,18 @@ impl<'f> CommonMarkViewer<'f> {
     /// Values are clamped to at least 1pt.
     pub fn math_scale(mut self, scale: f32) -> Self {
         self.options.math_scale = scale;
+        self
+    }
+
+    /// Draw mermaid diagrams in the application's colors.
+    ///
+    /// `None` (the default) keeps mermaid's light theme on a white
+    /// background. With `Some`, diagrams are recolored and get a transparent
+    /// background so the page shows through. Changing the colors re-renders
+    /// each diagram; the previous render stays on screen until the new one is
+    /// ready. Has no effect without the `mermaid` feature.
+    pub fn mermaid_colors(mut self, colors: Option<MermaidColors>) -> Self {
+        self.options.mermaid_colors = colors;
         self
     }
 

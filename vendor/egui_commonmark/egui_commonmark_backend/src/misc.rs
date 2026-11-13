@@ -81,6 +81,11 @@ pub struct CommonMarkOptions<'f> {
     /// zoom is not a substitute: it scales the whole UI, leaving the formula
     /// and its surrounding text in the same ratio.
     pub math_scale: f32,
+    /// Colors to draw mermaid diagrams in. `None` keeps mermaid's default
+    /// light theme on its white background. With `Some`, diagrams are
+    /// recolored and rasterized on a transparent background, and a change of
+    /// colors re-renders them.
+    pub mermaid_colors: Option<crate::MermaidColors>,
 }
 
 impl std::fmt::Debug for CommonMarkOptions<'_> {
@@ -108,6 +113,7 @@ impl std::fmt::Debug for CommonMarkOptions<'_> {
             .field("use_strong_font_family", &self.use_strong_font_family)
             .field("render_frontmatter", &self.render_frontmatter)
             .field("math_scale", &self.math_scale)
+            .field("mermaid_colors", &self.mermaid_colors)
             .finish()
     }
 }
@@ -134,6 +140,7 @@ impl Default for CommonMarkOptions<'_> {
             use_strong_font_family: false,
             render_frontmatter: false,
             math_scale: 1.0,
+            mermaid_colors: None,
         }
     }
 }
@@ -406,14 +413,8 @@ mod tests {
         ];
 
         for latex in formulas {
-            let rendered = render_math_formula(
-                latex,
-                false,
-                egui::Color32::BLACK,
-                egui::Color32::WHITE,
-                16.0,
-            )
-            .unwrap_or_else(|error| panic!("failed to render {latex:?}: {error}"));
+            let rendered = render_math_formula(latex, false, egui::Color32::BLACK, 16.0)
+                .unwrap_or_else(|error| panic!("failed to render {latex:?}: {error}"));
 
             assert!(rendered.size.x > 0.0);
             assert!(rendered.size.y > 0.0);
@@ -422,34 +423,50 @@ mod tests {
 
     #[cfg(feature = "math")]
     #[test]
-    fn math_cache_key_includes_exact_colors() {
-        let base = math_cache_hash(
-            "x + y",
-            false,
-            egui::Color32::BLACK,
-            egui::Color32::WHITE,
-            16.0,
+    fn math_cache_key_includes_the_exact_text_color() {
+        // The background is not part of the key: formulas are rasterized
+        // transparent, so one raster serves every surface.
+        let base = math_cache_hash("x + y", false, egui::Color32::BLACK, 16.0);
+        assert_ne!(
+            base,
+            math_cache_hash("x + y", false, egui::Color32::DARK_GRAY, 16.0)
         );
         assert_ne!(
             base,
-            math_cache_hash(
-                "x + y",
-                false,
-                egui::Color32::DARK_GRAY,
-                egui::Color32::WHITE,
-                16.0,
-            )
+            math_cache_hash("x + y", false, egui::Color32::from_gray(1), 16.0)
         );
-        assert_ne!(
-            base,
-            math_cache_hash(
-                "x + y",
-                false,
-                egui::Color32::BLACK,
-                egui::Color32::LIGHT_GRAY,
-                16.0,
-            )
-        );
+    }
+
+    #[cfg(feature = "math")]
+    #[test]
+    fn a_formula_is_ink_in_the_text_color_on_a_transparent_image() {
+        // A sepia page's ink: neither black nor white, so a composite onto
+        // an assumed background would show.
+        let ink = egui::Color32::from_rgb(0x2b, 0x26, 0x22);
+        for is_inline in [true, false] {
+            let image = render_math_formula(r"\frac{a}{b} + x^2", is_inline, ink, 16.0)
+                .unwrap()
+                .image;
+
+            assert_eq!(image.pixels[0], egui::Color32::TRANSPARENT);
+            assert!(image.pixels.contains(&ink), "no fully inked pixel");
+            assert!(
+                image.pixels.iter().any(|pixel| (1..255).contains(&pixel.a())),
+                "glyph edges are not antialiased"
+            );
+            // Every pixel is the ink at some opacity, so it blends with
+            // whatever it is painted on. Premultiplication rounds a channel
+            // by at most one step.
+            for pixel in &image.pixels {
+                let expected = egui::Color32::from_rgba_unmultiplied(
+                    ink.r(),
+                    ink.g(),
+                    ink.b(),
+                    pixel.a(),
+                );
+                assert_eq!(*pixel, expected);
+            }
+        }
     }
 
     #[cfg(feature = "math")]
@@ -457,7 +474,7 @@ mod tests {
     fn math_cache_key_includes_the_point_size() {
         // Without this, the first rendered size is served for every later
         // scale and changing the setting appears to do nothing.
-        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, egui::Color32::WHITE, pt);
+        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, pt);
         assert_ne!(at(16.0), at(20.0));
         assert_ne!(at(16.0), at(16.5));
     }
@@ -468,7 +485,7 @@ mod tests {
         // The size derives from a resolved font height, which fluctuates in the
         // last float digits between frames. Re-keying on that would recompile
         // every formula through typst on every paint.
-        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, egui::Color32::WHITE, pt);
+        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, pt);
         assert_eq!(at(16.0), at(16.0001));
     }
 
@@ -485,7 +502,6 @@ mod tests {
                     latex: "x + y".to_owned(),
                     is_inline: true,
                     fg: egui::Color32::BLACK,
-                    bg: egui::Color32::WHITE,
                     size_pt: 16.0,
                     result_tx,
                 },
@@ -511,7 +527,6 @@ mod tests {
                 latex: "x + y".to_owned(),
                 is_inline: true,
                 fg: egui::Color32::BLACK,
-                bg: egui::Color32::WHITE,
                 size_pt: 16.0,
                 result_tx,
             }
@@ -538,15 +553,9 @@ mod tests {
         }
 
         let render = |latex| {
-            render_math_formula(
-                latex,
-                true,
-                egui::Color32::BLACK,
-                egui::Color32::WHITE,
-                16.0,
-            )
-            .unwrap()
-            .image
+            render_math_formula(latex, true, egui::Color32::BLACK, 16.0)
+                .unwrap()
+                .image
         };
         let first = render(r"\text{在}");
         let second = render(r"\text{中}");
@@ -559,12 +568,10 @@ mod tests {
     #[cfg(feature = "math")]
     #[test]
     fn inline_fraction_raster_keeps_vertical_ink_margin() {
-        let bg = egui::Color32::BLACK;
         let rendered = render_math_formula(
             r"-\frac15\sum_{l=1}^5 P_{a,l}",
             true,
             egui::Color32::WHITE,
-            bg,
             16.0,
         )
         .unwrap();
@@ -573,7 +580,7 @@ mod tests {
             .filter(|y| {
                 rendered.image.pixels[y * width..(y + 1) * width]
                     .iter()
-                    .any(|pixel| *pixel != bg)
+                    .any(|pixel| *pixel != egui::Color32::TRANSPARENT)
             })
             .collect();
         let top = *ink_rows.first().expect("formula has ink");
@@ -833,22 +840,39 @@ impl CodeBlock {
     }
 }
 
+#[cfg(all(test, feature = "mermaid"))]
+mod mermaid_tests;
+
 #[cfg(feature = "mermaid")]
-enum MermaidState {
-    /// Background thread is rendering this diagram
+enum MermaidStatus {
+    /// The wanted render has not arrived yet
     Rendering,
-    /// Rendered and ready to display (texture is 2x for crisp lightbox zoom)
-    Ready {
-        texture: egui::TextureHandle,
-        size: egui::Vec2,
-    },
-    /// Rendering failed
+    /// The wanted render is the one in `MermaidSlot::shown`
+    Ready,
+    /// The wanted render failed
     Error(String),
+}
+
+/// The cache entry of one diagram source. Holding a single texture per
+/// source bounds texture memory however often the colors change.
+#[cfg(feature = "mermaid")]
+struct MermaidSlot {
+    /// Key (source and colors) of the render this diagram wants.
+    wanted: u64,
+    status: MermaidStatus,
+    /// The last finished render (texture is 2x for crisp lightbox zoom).
+    /// After a change of colors it stays on screen until the wanted render
+    /// replaces it: a diagram in the previous colors for a moment is calmer
+    /// than a placeholder box that changes the layout twice.
+    shown: Option<(egui::TextureHandle, egui::Vec2)>,
 }
 
 #[cfg(feature = "mermaid")]
 struct MermaidRenderResult {
-    hash: u64,
+    /// Hash of the diagram source: the key of its `MermaidSlot`.
+    source: u64,
+    /// Hash of source and colors this render was made for.
+    key: u64,
     result: Result<MermaidRendered, String>,
 }
 
@@ -879,11 +903,41 @@ fn fix_double_escaped_xml_entities(svg: &str) -> String {
 }
 
 #[cfg(feature = "mermaid")]
-fn rasterize_mermaid_svg(svg_bytes: &[u8]) -> Option<(egui::ColorImage, egui::Vec2)> {
-    let opts = resvg::usvg::Options {
+fn mermaid_usvg_options() -> resvg::usvg::Options<'static> {
+    resvg::usvg::Options {
         fontdb: Arc::clone(&MERMAID_FONTDB),
         ..Default::default()
+    }
+}
+
+/// Render mermaid source to a raster image, in `colors` when given.
+#[cfg(feature = "mermaid")]
+fn render_mermaid_image(
+    renderer: &merman::render::HeadlessRenderer,
+    content: &str,
+    colors: Option<&crate::MermaidColors>,
+) -> Result<MermaidRendered, String> {
+    let svg = match renderer.render_svg_readable_sync(content) {
+        Ok(Some(svg)) => svg,
+        Ok(None) => return Err("Unknown diagram type".to_string()),
+        Err(e) => return Err(e.to_string()),
     };
+    let svg = fix_double_escaped_xml_entities(&svg);
+    let svg = CodeBlock::sanitize_svg_font_family(&svg);
+    let svg = CodeBlock::strip_stroke_text(&svg);
+    let svg = CodeBlock::wrap_fallback_text(&svg);
+    let svg = match colors {
+        Some(colors) => crate::mermaid_theme::themed_svg(&svg, colors, &mermaid_usvg_options())
+            .ok_or("Failed to recolor SVG")?,
+        None => svg,
+    };
+    let (image, size) = rasterize_mermaid_svg(svg.as_bytes()).ok_or("Failed to rasterize SVG")?;
+    Ok(MermaidRendered { image, size })
+}
+
+#[cfg(feature = "mermaid")]
+fn rasterize_mermaid_svg(svg_bytes: &[u8]) -> Option<(egui::ColorImage, egui::Vec2)> {
+    let opts = mermaid_usvg_options();
     let tree = resvg::usvg::Tree::from_data(svg_bytes, &opts).ok()?;
     let svg_size = tree.size();
 
@@ -933,35 +987,50 @@ impl CodeBlock {
         options: &CommonMarkOptions,
         max_width: f32,
     ) {
-        let mut hasher = DefaultHasher::new();
-        self.content.hash(&mut hasher);
-        let hash = hasher.finish();
+        let source = {
+            let mut hasher = DefaultHasher::new();
+            self.content.hash(&mut hasher);
+            hasher.finish()
+        };
+        let colors = options.mermaid_colors;
+        // The colors are part of the key, so a change of colors re-renders.
+        let key = {
+            let mut hasher = DefaultHasher::new();
+            source.hash(&mut hasher);
+            colors.hash(&mut hasher);
+            hasher.finish()
+        };
 
         // Poll for completed background renders
         let mut received_any = false;
         while let Ok(result) = cache.mermaid_rx.try_recv() {
             received_any = true;
             // Clear the rendering slot if this result is from the active thread
-            if cache.mermaid_rendering == Some(result.hash) {
+            if cache.mermaid_rendering == Some(result.key) {
                 cache.mermaid_rendering = None;
             }
+            // A render in colors that are no longer wanted is dropped.
+            let Some(slot) = cache
+                .mermaid_slots
+                .get_mut(&result.source)
+                .filter(|slot| slot.wanted == result.key)
+            else {
+                continue;
+            };
             match result.result {
                 Ok(rendered) => {
                     let texture = ui.ctx().load_texture(
-                        format!("mermaid_{}", result.hash),
+                        format!("mermaid_{}", result.key),
                         rendered.image,
                         egui::TextureOptions::LINEAR,
                     );
-                    cache.mermaid_states.insert(
-                        result.hash,
-                        MermaidState::Ready {
-                            texture,
-                            size: rendered.size,
-                        },
-                    );
+                    // Replacing the handle frees the previous colors' texture.
+                    slot.shown = Some((texture, rendered.size));
+                    slot.status = MermaidStatus::Ready;
                 }
                 Err(err) => {
-                    cache.mermaid_states.insert(result.hash, MermaidState::Error(err));
+                    slot.shown = None;
+                    slot.status = MermaidStatus::Error(err);
                 }
             }
         }
@@ -970,29 +1039,58 @@ impl CodeBlock {
             ui.ctx().request_repaint();
         }
 
-        // First encounter: insert as Rendering placeholder, spawn only if slot is free
-        if !cache.mermaid_states.contains_key(&hash) {
-            cache.mermaid_states.insert(hash, MermaidState::Rendering);
-
-            if cache.mermaid_rendering.is_none() {
-                Self::spawn_mermaid_render(hash, &self.content, cache);
-            }
+        let slot = cache.mermaid_slots.entry(source).or_insert(MermaidSlot {
+            wanted: key,
+            status: MermaidStatus::Rendering,
+            shown: None,
+        });
+        if slot.wanted != key {
+            slot.wanted = key;
+            slot.status = MermaidStatus::Rendering;
         }
+        let waiting = matches!(slot.status, MermaidStatus::Rendering);
 
-        // Promote: if this diagram is waiting and no thread is active, spawn now.
-        // Since egui processes blocks in document order, the first Rendering block
-        // encountered after the slot clears is always the topmost waiting one.
-        if matches!(cache.mermaid_states.get(&hash), Some(MermaidState::Rendering))
-            && cache.mermaid_rendering.is_none()
-        {
-            Self::spawn_mermaid_render(hash, &self.content, cache);
+        // Spawn if this diagram is waiting and no thread is active.
+        // Since egui processes blocks in document order, the first waiting block
+        // encountered after the thread slot clears is always the topmost one.
+        if waiting && cache.mermaid_rendering.is_none() {
+            Self::spawn_mermaid_render(source, key, &self.content, colors, cache);
+        }
+        if waiting {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(100));
         }
 
         // Display based on current state
         let mut clicked: Option<(egui::TextureHandle, egui::Vec2)> = None;
 
-        match cache.mermaid_states.get(&hash) {
-            Some(MermaidState::Rendering) => {
+        match cache
+            .mermaid_slots
+            .get(&source)
+            .map(|slot| (&slot.status, &slot.shown))
+        {
+            Some((MermaidStatus::Error(err_msg), _)) => {
+                ui.colored_label(
+                    ui.visuals().error_fg_color,
+                    format!("Mermaid render error: {err_msg}"),
+                );
+            }
+            Some((_, Some((texture, size)))) => {
+                let sized_texture = egui::load::SizedTexture::new(texture.id(), *size);
+                let response = ui.add(
+                    egui::Image::new(egui::ImageSource::Texture(sized_texture))
+                        .fit_to_original_size(1.0)
+                        .max_width(options.max_width(ui).min(max_width))
+                        .sense(egui::Sense::click()),
+                );
+                if response.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                if response.clicked() {
+                    clicked = Some((texture.clone(), *size));
+                }
+            }
+            Some((_, None)) => {
                 // Placeholder with loading text
                 let w = max_width.min(options.max_width(ui));
                 let (rect, _) =
@@ -1008,29 +1106,6 @@ impl CodeBlock {
                         ui.visuals().text_color().gamma_multiply(0.5),
                     );
                 }
-                ui.ctx()
-                    .request_repaint_after(std::time::Duration::from_millis(100));
-            }
-            Some(MermaidState::Ready { texture, size }) => {
-                let sized_texture = egui::load::SizedTexture::new(texture.id(), *size);
-                let response = ui.add(
-                    egui::Image::new(egui::ImageSource::Texture(sized_texture))
-                        .fit_to_original_size(1.0)
-                        .max_width(options.max_width(ui).min(max_width))
-                        .sense(egui::Sense::click()),
-                );
-                if response.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                }
-                if response.clicked() {
-                    clicked = Some((texture.clone(), *size));
-                }
-            }
-            Some(MermaidState::Error(err_msg)) => {
-                ui.colored_label(
-                    ui.visuals().error_fg_color,
-                    format!("Mermaid render error: {err_msg}"),
-                );
             }
             None => unreachable!(),
         }
@@ -1041,30 +1116,25 @@ impl CodeBlock {
     }
 
     /// Spawn a background thread to render a mermaid diagram and mark it as active.
-    fn spawn_mermaid_render(hash: u64, content: &str, cache: &mut CommonMarkCache) {
-        cache.mermaid_rendering = Some(hash);
+    fn spawn_mermaid_render(
+        source: u64,
+        key: u64,
+        content: &str,
+        colors: Option<crate::MermaidColors>,
+        cache: &mut CommonMarkCache,
+    ) {
+        cache.mermaid_rendering = Some(key);
         let content = content.to_owned();
         let tx = cache.mermaid_tx.clone();
         let renderer = cache.mermaid_renderer.clone();
 
         std::thread::spawn(move || {
-            let result = match renderer.render_svg_readable_sync(&content) {
-                Ok(Some(svg_string)) => {
-                    let svg_string = fix_double_escaped_xml_entities(&svg_string);
-                    let svg_string = CodeBlock::sanitize_svg_font_family(&svg_string);
-                    let svg_string = CodeBlock::strip_stroke_text(&svg_string);
-                    let svg_string = CodeBlock::wrap_fallback_text(&svg_string);
-                    let svg_bytes = svg_string.into_bytes();
-
-                    match rasterize_mermaid_svg(&svg_bytes) {
-                        Some((image, size)) => Ok(MermaidRendered { image, size }),
-                        None => Err("Failed to rasterize SVG".to_string()),
-                    }
-                }
-                Ok(None) => Err("Unknown diagram type".to_string()),
-                Err(e) => Err(e.to_string()),
-            };
-            let _ = tx.send(MermaidRenderResult { hash, result });
+            let result = render_mermaid_image(&renderer, &content, colors.as_ref());
+            let _ = tx.send(MermaidRenderResult {
+                source,
+                key,
+                result,
+            });
         });
     }
 
@@ -1388,7 +1458,6 @@ struct MathJob {
     latex: String,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     /// Resolved point size. Travels with the job because the worker thread has
     /// no `Ui` to ask, and must match the size that produced `hash`.
     size_pt: f32,
@@ -1419,8 +1488,7 @@ fn start_math_workers(worker_count: usize, queue_capacity: usize) -> mpsc::SyncS
                     },
                     Err(_) => break,
                 };
-                let result =
-                    render_math_formula(&job.latex, job.is_inline, job.fg, job.bg, job.size_pt);
+                let result = render_math_formula(&job.latex, job.is_inline, job.fg, job.size_pt);
                 let _ = job.result_tx.send(MathRenderResult {
                     hash: job.hash,
                     result,
@@ -1639,7 +1707,6 @@ fn render_math_formula(
     latex: &str,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     size_pt: f32,
 ) -> Result<MathRendered, String> {
     // 0. Decode common HTML entities that OCR/conversion tools may leave in math
@@ -1738,21 +1805,26 @@ fn render_math_formula(
     // Transparent background: typst-render outputs premultiplied RGBA.
     // The alpha channel cleanly separates "ink" from "no ink".
     // We boost alpha via pow(0.6) so thin strokes (like numerals) appear
-    // more solid, then composite fg over bg using the boosted alpha.
+    // more solid, then emit fg at the boosted alpha.
+    //
+    // The image stays transparent instead of being composited onto a
+    // background color here: a formula is painted on the page, but also on
+    // table rows, quotes and highlights, and an opaque image in the page
+    // color shows as a box on all of those.
     //
     // Alpha is a u8, so there are only 256 possible boosted values. Precompute
-    // the composited fg/bg color for every alpha once (a 256-entry LUT) instead
-    // of running a powf + 3 lerps per pixel — the per-pixel loop was the single
-    // largest render cost (~90 ms/formula, more on big display equations).
-    let mut lut = [bg; 256];
+    // the fg color for every alpha once (a 256-entry LUT) instead of running a
+    // powf per pixel — the per-pixel loop was the single largest render cost
+    // (~90 ms/formula, more on big display equations).
+    let mut lut = [egui::Color32::TRANSPARENT; 256];
     for (a, slot) in lut.iter_mut().enumerate() {
         if a >= 3 {
             let boosted = (a as f32 / 255.0).powf(0.6).min(1.0);
-            let inv = 1.0 - boosted;
-            *slot = egui::Color32::from_rgb(
-                (fg.r() as f32 * boosted + bg.r() as f32 * inv) as u8,
-                (fg.g() as f32 * boosted + bg.g() as f32 * inv) as u8,
-                (fg.b() as f32 * boosted + bg.b() as f32 * inv) as u8,
+            *slot = egui::Color32::from_rgba_unmultiplied(
+                fg.r(),
+                fg.g(),
+                fg.b(),
+                (boosted * 255.0).round() as u8,
             );
         }
     }
@@ -1785,13 +1857,12 @@ pub fn cached_inline_math_height(
     latex: &str,
     options: &CommonMarkOptions,
 ) -> Option<f32> {
-    // Key must match what the render pipeline stores (exact colors, like #92,
+    // Key must match what the render pipeline stores (exact color, like #92,
     // and the same point size — see `math_size_pt`).
     let hash = math_cache_hash(
         latex,
         true,
         ui.visuals().text_color(),
-        ui.visuals().panel_fill,
         math_size_pt(ui, options),
     );
     match cache.math_states.get(&hash) {
@@ -1833,11 +1904,10 @@ fn render_math_with_layout(
     align_to_text_baseline: bool,
     options: &CommonMarkOptions,
 ) {
-    let bg = ui.visuals().panel_fill;
     let fg = ui.visuals().text_color();
     let size_pt = math_size_pt(ui, options);
 
-    let hash = math_cache_hash(latex, is_inline, fg, bg, size_pt);
+    let hash = math_cache_hash(latex, is_inline, fg, size_pt);
 
     // Poll for completed background renders
     let mut received_any = false;
@@ -1884,7 +1954,7 @@ fn render_math_with_layout(
         && !cache.math_rendering.contains(&hash)
         && cache.math_rendering.len() < math_concurrency()
     {
-        if spawn_math_render(hash, latex, is_inline, fg, bg, size_pt, cache)
+        if spawn_math_render(hash, latex, is_inline, fg, size_pt, cache)
             == MathEnqueueStatus::Full
         {
             // The shared queue is bounded. Retry promptly after workers have
@@ -2005,18 +2075,11 @@ fn render_math_with_layout(
 }
 
 #[cfg(feature = "math")]
-fn math_cache_hash(
-    latex: &str,
-    is_inline: bool,
-    fg: egui::Color32,
-    bg: egui::Color32,
-    size_pt: f32,
-) -> u64 {
+fn math_cache_hash(latex: &str, is_inline: bool, fg: egui::Color32, size_pt: f32) -> u64 {
     let mut hasher = DefaultHasher::new();
     latex.hash(&mut hasher);
     is_inline.hash(&mut hasher);
     fg.hash(&mut hasher);
-    bg.hash(&mut hasher);
     // Quantized to 0.01 pt: the rendered bitmap differs at any size the eye can
     // tell apart, but per-frame float resolution of the body height must not
     // spawn a fresh typst compile every paint.
@@ -2046,7 +2109,6 @@ fn spawn_math_render(
     latex: &str,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     size_pt: f32,
     cache: &mut CommonMarkCache,
 ) -> MathEnqueueStatus {
@@ -2056,7 +2118,6 @@ fn spawn_math_render(
         is_inline,
         fg,
         size_pt,
-        bg,
         result_tx: cache.math_tx.clone(),
     };
     let status = enqueue_math_job(&MATH_JOB_TX, job);
@@ -2245,9 +2306,9 @@ pub struct CommonMarkCache {
     /// Incremented whenever asynchronous content changes the document layout.
     layout_revision: u64,
 
-    /// Mermaid diagram render states: content hash → rendering/ready/error
+    /// Mermaid diagrams: source hash → wanted render and the texture on screen
     #[cfg(feature = "mermaid")]
-    mermaid_states: HashMap<u64, MermaidState>,
+    mermaid_slots: HashMap<u64, MermaidSlot>,
 
     /// Channel sender for background mermaid render results
     #[cfg(feature = "mermaid")]
@@ -2307,7 +2368,7 @@ impl std::fmt::Debug for CommonMarkCache {
             .field("search_ranges_count", &self.search_ranges.len())
             .field("active_search_range", &self.active_search_range);
         #[cfg(feature = "mermaid")]
-        s.field("mermaid_states_count", &self.mermaid_states.len());
+        s.field("mermaid_slots_count", &self.mermaid_slots.len());
         #[cfg(feature = "mermaid")]
         s.field("clicked_mermaid", &self.clicked_mermaid.is_some());
         s.field("clicked_image", &self.clicked_image.is_some());
@@ -2340,7 +2401,7 @@ impl Default for CommonMarkCache {
             active_search_y: None,
             layout_revision: 0,
             #[cfg(feature = "mermaid")]
-            mermaid_states: HashMap::new(),
+            mermaid_slots: HashMap::new(),
             #[cfg(feature = "mermaid")]
             mermaid_tx,
             #[cfg(feature = "mermaid")]
