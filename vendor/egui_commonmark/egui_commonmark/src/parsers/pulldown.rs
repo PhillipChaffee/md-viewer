@@ -10,11 +10,13 @@ use egui::{self, Id, Pos2, TextStyle, Ui};
 
 use crate::List;
 use egui_commonmark_backend_extended::elements::{
-    blockquote, footnote, footnote_start, heading_end_spacing, heading_start_spacing, newline,
-    paragraph_end_spacing, rule_styled, soft_break, ImmutableCheckbox,
+    blockquote, body_font_size, footnote, footnote_label, footnote_start, heading_end_spacing,
+    heading_start_spacing, inline_code_label, newline, paragraph_end_spacing, row_is_fresh,
+    rule_styled, soft_break, start_row_below, ImmutableCheckbox,
 };
 use egui_commonmark_backend_extended::misc::*;
 use egui_commonmark_backend_extended::pulldown::*;
+use egui_commonmark_backend_extended::typography::{BlockKind, TableStyle};
 use pulldown_cmark::{CowStr, HeadingLevel};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -266,8 +268,6 @@ fn render_frontmatter_table(
         return;
     }
 
-    let _ = options;
-
     // Both the key gap and the value column are derived from `max_width`, never
     // from `ui.available_width()`. That is deliberate: `max_width` comes from
     // `ContentGeometry` (#96) and is identical in the bootstrap pass that
@@ -302,12 +302,20 @@ fn render_frontmatter_table(
     let value_width =
         (max_width - key_width - KEY_GAP - item_spacing - FRAME_CHROME).max(MIN_VALUE_WIDTH);
 
-    egui::Frame::group(ui.style()).show(ui, |ui| {
+    // A styled document's tables have no box and no stripes; neither has
+    // this one.
+    let plain = options.block_style.table.is_some();
+    let frame = if plain {
+        egui::Frame::NONE
+    } else {
+        egui::Frame::group(ui.style())
+    };
+    frame.show(ui, |ui| {
         ui.set_max_width(max_width);
         egui::Grid::new(ui.next_auto_id())
             .num_columns(2)
             .spacing(egui::vec2(item_spacing, 4.0))
-            .striped(true)
+            .striped(!plain)
             .show(ui, |ui| {
                 for (key, value) in pairs {
                     // The gap has to be produced *inside* the key cell: the
@@ -361,15 +369,31 @@ fn inline_code_wrap_segments(text: &str) -> Vec<String> {
 /// uses a wrapping horizontal layout: every label continues the current row,
 /// then uses the full column width for subsequent rows. Long code chunks call
 /// `ui.end_row()` in production, so they also finish a measurement row here.
+#[cfg(test)]
 fn cell_visual_lines(
     cell: &[(pulldown_cmark::Event, Range<usize>)],
     ui: &Ui,
     column_width: f32,
 ) -> usize {
+    cell_visual_lines_in(
+        cell,
+        ui,
+        column_width,
+        egui::TextStyle::Body.resolve(ui.style()),
+    )
+}
+
+/// [`cell_visual_lines`] for a cell whose text is set in `body_font`
+/// instead of the body style (a header cell in the strong face).
+fn cell_visual_lines_in(
+    cell: &[(pulldown_cmark::Event, Range<usize>)],
+    ui: &Ui,
+    column_width: f32,
+    body_font: egui::FontId,
+) -> usize {
     // `RichText::code().size(selected_font_size)` renders code with the body
     // size and monospace family, not with the (usually smaller) Monospace text
     // style. Keep measurement on that exact font-size path.
-    let body_font = egui::TextStyle::Body.resolve(ui.style());
     let code_font = egui::FontId::new(body_font.size, egui::FontFamily::Monospace);
     let wrap_width = (column_width - 8.0).max(1.0);
     let item_spacing = ui.spacing().item_spacing.x;
@@ -445,6 +469,7 @@ fn cell_visual_lines(
     (completed_lines + usize::from(remaining_width < wrap_width)).max(1)
 }
 
+#[cfg(test)]
 fn table_cell_height(
     cell: &[(pulldown_cmark::Event, Range<usize>)],
     line_height: f32,
@@ -453,9 +478,31 @@ fn table_cell_height(
     column_width: f32,
     options: &CommonMarkOptions,
 ) -> f32 {
+    table_cell_height_in(
+        cell,
+        line_height,
+        cache,
+        ui,
+        column_width,
+        options,
+        &egui::TextStyle::Body.resolve(ui.style()),
+    )
+}
+
+/// [`table_cell_height`] for a cell whose text is set in `text_font`
+/// instead of the body style (a header cell in the strong face).
+fn table_cell_height_in(
+    cell: &[(pulldown_cmark::Event, Range<usize>)],
+    line_height: f32,
+    cache: &CommonMarkCache,
+    ui: &Ui,
+    column_width: f32,
+    options: &CommonMarkOptions,
+    text_font: &egui::FontId,
+) -> f32 {
     let text = markdown_cell_text(cell);
-    let mut height = wrapped_text_height(ui, &text, column_width, line_height).max(
-        line_height * cell_visual_lines(cell, ui, column_width) as f32
+    let mut height = wrapped_text_height_in(ui, &text, column_width, line_height, text_font).max(
+        line_height * cell_visual_lines_in(cell, ui, column_width, text_font.clone()) as f32
             + ui.spacing().item_spacing.y,
     );
     let has_visible_text = cell.iter().any(|(event, _)| {
@@ -579,8 +626,13 @@ fn html_table_digest(rows: &[(bool, &[String])]) -> u64 {
     hasher.finish()
 }
 
+#[cfg(test)]
 fn natural_text_width(ui: &Ui, text: &str) -> f32 {
-    let font_id = egui::TextStyle::Body.resolve(ui.style());
+    natural_text_width_in(ui, text, &egui::TextStyle::Body.resolve(ui.style()))
+}
+
+/// [`natural_text_width`] for text set in `font_id`.
+fn natural_text_width_in(ui: &Ui, text: &str, font_id: &egui::FontId) -> f32 {
     text.lines()
         .map(|line| {
             ui.painter()
@@ -598,17 +650,30 @@ fn natural_text_width(ui: &Ui, text: &str) -> f32 {
 /// `Required` should not be forced into `Require` / `d`. Unicode word
 /// boundaries keep CJK headers breakable while treating shaped scripts and
 /// combining sequences as words rather than splitting scalar values.
+#[cfg(test)]
 fn unbreakable_text_width(ui: &Ui, text: &str) -> f32 {
+    unbreakable_text_width_in(ui, text, &egui::TextStyle::Body.resolve(ui.style()))
+}
+
+/// [`unbreakable_text_width`] for text set in `font_id`.
+fn unbreakable_text_width_in(ui: &Ui, text: &str, font_id: &egui::FontId) -> f32 {
     text.unicode_words()
-        .map(|word| natural_text_width(ui, word))
+        .map(|word| natural_text_width_in(ui, word, font_id))
         .fold(40.0, f32::max)
 }
 
-fn wrapped_text_height(ui: &Ui, text: &str, column_width: f32, line_height: f32) -> f32 {
-    let font_id = egui::TextStyle::Body.resolve(ui.style());
+/// Height of `text` wrapped into a column, in lines of `line_height`, when
+/// set in `font_id`.
+fn wrapped_text_height_in(
+    ui: &Ui,
+    text: &str,
+    column_width: f32,
+    line_height: f32,
+    font_id: &egui::FontId,
+) -> f32 {
     let galley = ui.painter().layout(
         text.to_owned(),
-        font_id,
+        font_id.clone(),
         egui::Color32::WHITE,
         (column_width - 8.0).max(1.0),
     );
@@ -1128,13 +1193,24 @@ fn cached_height_aware_widths(
 /// The group frame contributes padding and a stroke on both sides. Those are
 /// part of the table's visible width, so only the remaining space belongs to
 /// columns and their separators.
+#[cfg(test)]
 fn framed_table_widths(
     ui: &Ui,
     desired: &[f32],
     minimums: &[f32],
     table_bound: f32,
 ) -> (egui::Frame, Vec<f32>, f32) {
-    let frame = egui::Frame::group(ui.style());
+    table_widths_in_frame(ui, egui::Frame::group(ui.style()), desired, minimums, table_bound)
+}
+
+/// [`framed_table_widths`] for a table drawn in `frame`.
+fn table_widths_in_frame(
+    ui: &Ui,
+    frame: egui::Frame,
+    desired: &[f32],
+    minimums: &[f32],
+    table_bound: f32,
+) -> (egui::Frame, Vec<f32>, f32) {
     let column_space = ui.spacing().item_spacing.x * desired.len().saturating_sub(1) as f32;
     let frame_width = frame.total_margin().sum().x;
     let column_budget = (table_bound - frame_width - column_space).max(0.0);
@@ -1309,6 +1385,339 @@ sp={}{}",
     }
 }
 
+/// What an opted-in [`TableStyle`] changes about a table, resolved once
+/// per table. With no style every value reproduces the built-in table.
+struct TableLook {
+    style: Option<TableStyle>,
+    /// The box around the table; none when styled.
+    frame: egui::Frame,
+    /// Space above and below every cell's text, in whole pixels.
+    padding: f32,
+    /// The face header cells, and strong text in any cell, are set in,
+    /// for measuring them.
+    strong_font: egui::FontId,
+    body_font: egui::FontId,
+}
+
+impl TableLook {
+    fn new(ui: &Ui, options: &CommonMarkOptions) -> Self {
+        let style = options.block_style.table;
+        let body_font = egui::TextStyle::Body.resolve(ui.style());
+        // Mirrors `Style::to_richtext_with_options` for strong text.
+        let strong_font = if style.is_some() && options.use_strong_font_family {
+            egui::FontId::new(
+                body_font.size,
+                egui::FontFamily::Name(STRONG_FONT_FAMILY.into()),
+            )
+        } else {
+            body_font.clone()
+        };
+        Self {
+            style,
+            frame: if style.is_some() {
+                egui::Frame::NONE
+            } else {
+                egui::Frame::group(ui.style())
+            },
+            padding: style.map_or(0.0, |style| style.cell_padding.round().clamp(0.0, 60.0)),
+            strong_font,
+            body_font,
+        }
+    }
+
+    /// The face to measure `cell` in. A header cell is all strong; a body
+    /// cell with any strong text is measured as if all of it were, which
+    /// errs toward a wider column and a taller row, never a clipped one.
+    fn cell_font(
+        &self,
+        is_header: bool,
+        cell: &[(pulldown_cmark::Event, Range<usize>)],
+    ) -> &egui::FontId {
+        let strong = is_header
+            || cell.iter().any(|(event, _)| {
+                matches!(
+                    event,
+                    pulldown_cmark::Event::Start(pulldown_cmark::Tag::Strong)
+                )
+            });
+        if strong {
+            &self.strong_font
+        } else {
+            &self.body_font
+        }
+    }
+
+    /// [`Self::cell_margin`] for the cell of an HTML table, which keeps
+    /// more room around its text.
+    fn html_cell_margin(&self, column: usize, columns: usize) -> egui::Margin {
+        let flush = self.style.is_some();
+        egui::Margin {
+            left: if flush && column == 0 { 0 } else { 8 },
+            right: if flush && column + 1 == columns { 0 } else { 8 },
+            top: 4 + self.padding as i8,
+            bottom: 4,
+        }
+    }
+
+    /// The faces the text of a cell is painted in.
+    fn cell_fonts(&self, is_header: bool, options: &CommonMarkOptions) -> CellFonts {
+        let size = self.body_font.size;
+        CellFonts {
+            body: self.body_font.clone(),
+            strong: self.strong_font.clone(),
+            emphasis: options
+                .block_style
+                .emphasis_font_family
+                .clone()
+                .map(|family| egui::FontId::new(size, family)),
+            code: egui::FontId::new(
+                size * options.block_style.inline_code_scale.unwrap_or(1.0),
+                egui::FontFamily::Monospace,
+            ),
+            all_strong: is_header,
+        }
+    }
+
+    /// Space left and right of a cell's text. A styled table has no box,
+    /// so its outer columns give up the padding on their outer side and
+    /// the text lines up with the rules and with the prose around it.
+    fn cell_margin(&self, column: usize, columns: usize) -> egui::Margin {
+        let flush = self.style.is_some();
+        egui::Margin {
+            left: if flush && column == 0 { 0 } else { 4 },
+            right: if flush && column + 1 == columns { 0 } else { 4 },
+            top: self.padding as i8,
+            bottom: 0,
+        }
+    }
+
+    /// Widen `widths` in proportion until they use `budget`, when the
+    /// style asks for full-width tables and they leave room.
+    fn fill(&self, widths: &mut [f32], budget: f32) {
+        if !self.style.is_some_and(|style| style.fill_width) {
+            return;
+        }
+        let total: f32 = widths.iter().sum();
+        // One pixel short of the budget: a table that lands a rounding
+        // error over it would grow a horizontal scroll bar.
+        let target = budget - 1.0;
+        if total > 0.0 && total < target {
+            let scale = target / total;
+            for width in widths {
+                *width *= scale;
+            }
+        }
+    }
+
+    /// One column of a styled table. The table owns its column widths and
+    /// its separators ([`Self::column_separators`]), so the column is as
+    /// wide as it is told to be.
+    fn column(&self, width: f32) -> Option<egui_extras::Column> {
+        self.style.map(|_| egui_extras::Column::exact(width))
+    }
+
+    /// The separators of a styled table, laid over the table that `ui` has
+    /// just shown with columns of `widths`: invisible until the pointer is
+    /// on one, and dragged to resize the column on its left.
+    ///
+    /// A drag is stored as the table's column widths and shows from the
+    /// next frame. Returns whether a drag ended this frame: rows may have
+    /// rewrapped, so the caller's cached layout is stale.
+    fn column_separators(
+        &self,
+        ui: &mut Ui,
+        table_id: Id,
+        widths: &[f32],
+        minimums: &[f32],
+        budget: f32,
+        fit_epoch: u64,
+    ) -> bool {
+        let Some(style) = self.style else {
+            return false;
+        };
+        let table = ui.min_rect();
+        let spacing = ui.spacing().item_spacing.x;
+        let reach = ui.style().interaction.resize_grab_radius_side;
+        let mut resized = widths.to_vec();
+        let mut ended = false;
+        let mut x = table.left() - spacing * 0.5;
+        for (column, width) in widths.iter().enumerate() {
+            x += width + spacing;
+            let handle = egui::Rect::from_x_y_ranges(x - reach..=x + reach, table.y_range());
+            let response = ui.interact(
+                handle,
+                table_id.with("_separator").with(column),
+                egui::Sense::drag(),
+            );
+            // A drag held against a column's minimum ends wherever the
+            // pointer has got to, not on the separator.
+            ended |= response.drag_stopped();
+            if !(response.hovered() || response.dragged()) {
+                continue;
+            }
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+            let held = if response.dragged() { 2.0 } else { 1.0 };
+            ui.painter().vline(
+                x,
+                table.y_range(),
+                egui::Stroke::new(style.header_rule.width * held, style.header_rule.color),
+            );
+            drag_separator(
+                &mut resized,
+                minimums,
+                column,
+                response.drag_delta().x,
+                budget,
+                style.fill_width,
+            );
+        }
+        if resized != widths {
+            store_table_column_widths(ui, table_id, &resized, fit_epoch);
+        }
+        ended
+    }
+
+    /// Paint the rule under the row whose first cell is `first_cell`.
+    /// `clip` is the table's own clip rect: a cell's is its column.
+    fn rule_below(
+        &self,
+        ui: &Ui,
+        first_cell: egui::Rect,
+        table_width: f32,
+        clip: egui::Rect,
+        is_header: bool,
+    ) {
+        let Some(style) = self.style else {
+            return;
+        };
+        let stroke = if is_header {
+            style.header_rule
+        } else {
+            style.rule
+        };
+        // On a pixel center: a hairline that straddles two pixel rows is
+        // painted at half strength in both and all but disappears.
+        let pixels_per_point = ui.pixels_per_point();
+        let between_rows = first_cell.bottom() + ui.spacing().item_spacing.y * 0.5;
+        let y = ((between_rows * pixels_per_point).floor() + 0.5) / pixels_per_point;
+        // A painter of the table's own: the cell's is clipped to its column.
+        ui.ctx()
+            .layer_painter(ui.layer_id())
+            .with_clip_rect(clip)
+            .hline(
+                first_cell.left()..=first_cell.left() + table_width,
+                y,
+                stroke,
+            );
+    }
+}
+
+/// Move the separator right of `column` by `delta`, changing `widths`.
+///
+/// Widening takes the room the table leaves in `budget` first and the
+/// column to the right second; narrowing hands the room to the column to
+/// the right when the table is kept full (`fill`), and shrinks the table
+/// otherwise. No column goes below its minimum.
+fn drag_separator(
+    widths: &mut [f32],
+    minimums: &[f32],
+    column: usize,
+    delta: f32,
+    budget: f32,
+    fill: bool,
+) {
+    let minimum = |index: usize| minimums.get(index).copied().unwrap_or(40.0);
+    let neighbor = (column + 1 < widths.len()).then_some(column + 1);
+    if delta > 0.0 {
+        let spare = (budget - widths.iter().sum::<f32>()).max(0.0);
+        let from_spare = delta.min(spare);
+        let from_neighbor = neighbor.map_or(0.0, |index| {
+            (delta - from_spare).min(widths[index] - minimum(index)).max(0.0)
+        });
+        widths[column] += from_spare + from_neighbor;
+        if let Some(index) = neighbor {
+            widths[index] -= from_neighbor;
+        }
+    } else {
+        let given = (-delta).min(widths[column] - minimum(column)).max(0.0);
+        widths[column] -= given;
+        if let (true, Some(index)) = (fill, neighbor) {
+            widths[index] += given;
+        }
+    }
+}
+
+/// How far right a cell's content starts so that it ends up aligned as its
+/// column asks. Only a cell of text and inline code that fits on one line
+/// is moved: its width is known before it is laid out, and moving anything
+/// else (a link, an image, a formula) could wrap it differently from how
+/// its row was measured.
+fn cell_alignment_offset(
+    ui: &Ui,
+    cell: &[(pulldown_cmark::Event, Range<usize>)],
+    alignment: Option<&pulldown_cmark::Alignment>,
+    fonts: &CellFonts,
+    available: f32,
+) -> f32 {
+    use pulldown_cmark::{Event, Tag, TagEnd};
+    let share = match alignment {
+        Some(pulldown_cmark::Alignment::Right) => 1.0,
+        Some(pulldown_cmark::Alignment::Center) => 0.5,
+        _ => return 0.0,
+    };
+    let (mut strong, mut emphasis) = (fonts.all_strong, false);
+    let mut width = 0.0;
+    for (event, _) in cell {
+        let (text, font) = match event {
+            Event::Text(text) => (text, fonts.text(strong, emphasis)),
+            // Longer code is cut into lines of its own.
+            Event::Code(code) if inline_code_wrap_segments(code).len() == 1 => (code, &fonts.code),
+            Event::Start(Tag::Strong) | Event::End(TagEnd::Strong) => {
+                strong = fonts.all_strong || matches!(event, Event::Start(_));
+                continue;
+            }
+            Event::Start(Tag::Emphasis) | Event::End(TagEnd::Emphasis) => {
+                emphasis = matches!(event, Event::Start(_));
+                continue;
+            }
+            // A cell's events open with the tags of its cell and row.
+            Event::Start(Tag::TableCell | Tag::TableRow | Tag::TableHead) => continue,
+            _ => return 0.0,
+        };
+        width += ui
+            .painter()
+            .layout_no_wrap(text.to_string(), font.clone(), egui::Color32::WHITE)
+            .size()
+            .x;
+    }
+    // Two pixels of slack: text painted as several labels (search
+    // highlights) loses the kerning between them and comes out wider.
+    ((available - width - 2.0) * share).floor().max(0.0)
+}
+
+/// The faces the text of one table cell is painted in, as
+/// `Style::to_richtext_with_options` picks them.
+struct CellFonts {
+    body: egui::FontId,
+    strong: egui::FontId,
+    /// The true italic, when the style has one; else emphasis is the
+    /// slanted body face, which is as wide as the upright one.
+    emphasis: Option<egui::FontId>,
+    code: egui::FontId,
+    /// A header cell: strong whatever its markup says.
+    all_strong: bool,
+}
+
+impl CellFonts {
+    fn text(&self, strong: bool, emphasis: bool) -> &egui::FontId {
+        match (strong, emphasis, &self.emphasis) {
+            (true, _, _) => &self.strong,
+            (false, true, Some(italic)) => italic,
+            _ => &self.body,
+        }
+    }
+}
+
 fn markdown_table_id(source_id: Id, source_start: usize) -> Id {
     source_id.with("_markdown_table").with(source_start)
 }
@@ -1407,6 +1816,38 @@ impl Newline {
     }
 }
 
+/// The kind of block `event` starts, for the gap a [`BlockRhythm`] leaves
+/// above it. `None` when nothing follows in the container (no event, or
+/// the container's own end tag): the last block leaves no gap.
+///
+/// [`BlockRhythm`]: egui_commonmark_backend_extended::typography::BlockRhythm
+fn upcoming_block(event: Option<&pulldown_cmark::Event>) -> Option<BlockKind> {
+    use pulldown_cmark::{Event, Tag};
+    match event? {
+        Event::End(_) => None,
+        Event::Start(Tag::Heading { .. }) => Some(BlockKind::Heading),
+        Event::Rule
+        | Event::Start(
+            Tag::CodeBlock(_)
+            | Tag::BlockQuote(_)
+            | Tag::Table(_)
+            | Tag::HtmlBlock
+            | Tag::MetadataBlock(_),
+        ) => Some(BlockKind::Boxed),
+        _ => Some(BlockKind::Text),
+    }
+}
+
+/// Where the document column and the pane around it are, for blocks that
+/// may leave the column.
+#[derive(Clone, Copy)]
+struct ColumnPlace {
+    left: f32,
+    width: f32,
+    /// Left edge of the pane the column sits in.
+    pane_left: f32,
+}
+
 #[derive(Default)]
 struct DefinitionList {
     is_first_item: bool,
@@ -1429,6 +1870,8 @@ pub struct CommonMarkViewerInternal {
     is_list_item: bool,
     def_list: DefinitionList,
     is_table: bool,
+    /// Column alignments of the table being rendered, from its start tag.
+    table_alignments: Vec<pulldown_cmark::Alignment>,
     is_blockquote: bool,
     checkbox_events: Vec<CheckboxClickEvent>,
 
@@ -1447,6 +1890,14 @@ pub struct CommonMarkViewerInternal {
     /// Raw text of the frontmatter block being collected. `Some` only between
     /// `Tag::MetadataBlock` and its end, so ordinary text is unaffected.
     frontmatter: Option<String>,
+    /// The kind of the block that follows the event being processed, in
+    /// the same container. Only kept up to date with a block rhythm.
+    upcoming: Option<BlockKind>,
+    /// The document column of the current render.
+    column: Option<ColumnPlace>,
+    /// The next block continues the row it starts on: the text of a
+    /// footnote after the footnote's label.
+    continues_row: bool,
 }
 
 pub(crate) struct CheckboxClickEvent {
@@ -1470,9 +1921,13 @@ impl CommonMarkViewerInternal {
             code_block: None,
             html_block: String::new(),
             is_table: false,
+            table_alignments: Vec::new(),
             is_blockquote: false,
             checkbox_events: Vec::new(),
             frontmatter: None,
+            upcoming: None,
+            column: None,
+            continues_row: false,
             current_heading_y: None,
             current_heading_source_start: None,
             current_heading_text: String::new(),
@@ -1514,6 +1969,12 @@ fn compute_layout_signature(ui: &egui::Ui, options: &CommonMarkOptions) -> u64 {
     // Formula size changes rendered formula extents, so split_points measured
     // at the old scale are stale. Quantized like the heights above.
     ((options.math_scale * 100.0).round() as i32).hash(&mut h);
+    // The room diagrams may take decides how far they are scaled down.
+    options
+        .block_style
+        .figure_max_width
+        .map(|width| width.round() as i32)
+        .hash(&mut h);
     h.finish()
 }
 
@@ -1745,6 +2206,11 @@ impl CommonMarkViewerInternal {
             let content_origin_y = ui.next_widget_position().y;
             let content_origin_x = ui.max_rect().left();
             self.render_origin_y = content_origin_y;
+            self.column = Some(ColumnPlace {
+                left: content_origin_x,
+                width: max_width,
+                pane_left: scroll_area_left,
+            });
             show_preamble(ui, options, max_width);
 
             // Use cached events — clone the Vec reference data for iteration
@@ -2054,8 +2520,8 @@ impl CommonMarkViewerInternal {
             let max_width = recorded_geometry
                 .map(|geometry| geometry.width)
                 .unwrap_or_else(|| options.max_width(ui));
-            let content_left =
-                ui.max_rect().left() + recorded_geometry.map_or(0.0, |g| g.left_offset);
+            let pane_left = ui.max_rect().left();
+            let content_left = pane_left + recorded_geometry.map_or(0.0, |g| g.left_offset);
             // Same visible-edge cap as the bootstrap pass (see there for why
             // this is `max_rect`, not `clip_rect`): the recorded width is
             // relative to the content column, and re-anchoring it at
@@ -2134,6 +2600,11 @@ impl CommonMarkViewerInternal {
                 |ui| {
                     self.slice_start_y = first_end_y;
                     self.render_origin_y = ui.min_rect().top();
+                    self.column = Some(ColumnPlace {
+                        left: content_left,
+                        width: max_width,
+                        pane_left,
+                    });
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.set_row_height(ui.text_style_height(&TextStyle::Body));
                     // The bootstrap pass painted the preamble above the
@@ -2212,6 +2683,7 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::Event::Start(pulldown_cmark::Tag::Table(_))
         )
         .then_some(src_span.start);
+        self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
         self.event(ui, event, src_span, cache, options, max_width);
 
         self.def_list_def_wrapping(events, max_width, cache, options, ui);
@@ -2244,7 +2716,7 @@ impl CommonMarkViewerInternal {
 
             let mut events_iter = item_events.into_iter().enumerate().peekable();
 
-            self.line.try_insert_start(ui);
+            self.new_line(ui, options, 0.0);
 
             // Proccess a single event separately so that we do not insert spaces where we do not
             // want them
@@ -2273,7 +2745,7 @@ impl CommonMarkViewerInternal {
             self.line.should_end_newline = true;
 
             // Only end the definition items line if it is not the last element in the list
-            if !matches!(
+            if options.block_style.rhythm.is_none() && !matches!(
                 events.peek(),
                 Some((
                     _,
@@ -2332,7 +2804,7 @@ impl CommonMarkViewerInternal {
             let mut collected_events = delayed_events(events, |tag| {
                 matches!(tag, pulldown_cmark::TagEnd::BlockQuote(_))
             });
-            self.line.try_insert_start(ui);
+            self.block_start(ui, options, BlockKind::Boxed);
 
             // Currently the blockquotes are made in such a way that they need a newline at the end
             // and the start so when this is the first element in the markdown the newline must be
@@ -2340,9 +2812,7 @@ impl CommonMarkViewerInternal {
             self.line.should_not_start_newline_forced = false;
             if let Some(alert) = parse_alerts(&options.alerts, &mut collected_events) {
                 egui_commonmark_backend_extended::alert_ui(alert, ui, |ui| {
-                    for (event, src_span) in collected_events {
-                        self.event(ui, event, src_span, cache, options, max_width);
-                    }
+                    self.quoted_events(ui, collected_events, cache, options, max_width);
                 })
             } else {
                 let bar = options
@@ -2351,9 +2821,7 @@ impl CommonMarkViewerInternal {
                     .unwrap_or_else(|| ui.visuals().weak_text_color());
                 blockquote(ui, bar, |ui| {
                     self.text_style.quote = true;
-                    for (event, src_span) in collected_events {
-                        self.event(ui, event, src_span, cache, options, max_width);
-                    }
+                    self.quoted_events(ui, collected_events, cache, options, max_width);
                     self.text_style.quote = false;
                 });
             }
@@ -2362,9 +2830,89 @@ impl CommonMarkViewerInternal {
                 self.line.should_end_newline_forced = false;
             }
 
-            self.line.try_insert_end(ui);
+            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
+            self.block_end(ui, options, BlockKind::Boxed);
             self.is_blockquote = false;
         }
+    }
+
+    /// Render the events of a blockquote, which are not driven through
+    /// [`Self::process_event`].
+    fn quoted_events(
+        &mut self,
+        ui: &mut Ui,
+        events: Vec<(pulldown_cmark::Event, Range<usize>)>,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+    ) {
+        let mut events = events.into_iter().peekable();
+        while let Some((event, src_span)) = events.next() {
+            self.upcoming = upcoming_block(events.peek().map(|(event, _)| event));
+            self.event(ui, event, src_span, cache, options, max_width);
+        }
+    }
+
+    /// Before a block. With the built-in spacing this is the blank line
+    /// that separates it from the block above. With a rhythm that gap was
+    /// left when the block above ended; only a block that follows inline
+    /// content of its own container (the text of a tight list item) still
+    /// has to start a row of its own.
+    fn block_start(&mut self, ui: &mut Ui, options: &CommonMarkOptions, kind: BlockKind) {
+        let continues_row = std::mem::take(&mut self.continues_row);
+        match options.block_style.rhythm {
+            Some(rhythm) => {
+                if !row_is_fresh(ui) && !continues_row {
+                    start_row_below(ui, rhythm.gap(BlockKind::Text, kind, body_font_size(ui)));
+                }
+            }
+            None => self.line.try_insert_start(ui),
+        }
+    }
+
+    /// After a block of `kind`: end its line, and with a rhythm leave the
+    /// gap to the block that follows.
+    fn block_end(&mut self, ui: &mut Ui, options: &CommonMarkOptions, kind: BlockKind) {
+        if options.block_style.rhythm.is_some() {
+            self.rhythm_gap_after(ui, options, kind);
+        } else {
+            self.line.try_insert_end(ui);
+        }
+    }
+
+    /// With a rhythm, leave the gap between a block of `kind` that just
+    /// ended and the block that follows it. The last block of a container
+    /// leaves none.
+    fn rhythm_gap_after(&self, ui: &mut Ui, options: &CommonMarkOptions, kind: BlockKind) {
+        if let (Some(rhythm), Some(next)) = (options.block_style.rhythm, self.upcoming) {
+            start_row_below(ui, rhythm.gap(kind, next, body_font_size(ui)));
+        }
+    }
+
+    /// Continue on a new line inside a block. With a rhythm the line
+    /// starts `gap_em` body font sizes below the content so far.
+    fn new_line(&mut self, ui: &mut Ui, options: &CommonMarkOptions, gap_em: f32) {
+        if options.block_style.rhythm.is_some() {
+            if !row_is_fresh(ui) {
+                start_row_below(ui, (gap_em * body_font_size(ui)).round());
+            }
+        } else {
+            self.line.try_insert_start(ui);
+        }
+    }
+
+    /// Where a diagram at the top level of the document may be shown.
+    fn figure_space(&self, options: &CommonMarkOptions) -> Option<FigureSpace> {
+        let room = options.block_style.figure_max_width?;
+        let column = self.column?;
+        if self.list.is_inside_a_list() || self.is_blockquote || self.is_table {
+            return None;
+        }
+        Some(FigureSpace {
+            axis: column.left + column.width / 2.0,
+            width: room.max(column.width),
+            min_left: column.pane_left,
+        })
     }
 
     fn table<'e>(
@@ -2377,7 +2925,7 @@ impl CommonMarkViewerInternal {
         source_start: Option<usize>,
     ) {
         if self.is_table {
-            self.line.try_insert_start(ui);
+            self.block_start(ui, options, BlockKind::Boxed);
 
             let id = markdown_table_id(
                 self.source_id.unwrap_or_else(|| ui.id()),
@@ -2398,15 +2946,19 @@ impl CommonMarkViewerInternal {
                 rows.first().map(|r| r.len()).unwrap_or(0)
             };
             let line_h = body_line_height(ui, options);
+            let alignments = std::mem::take(&mut self.table_alignments);
 
             if num_cols == 0 {
                 self.is_table = false;
                 if events.peek().is_none() {
                     self.line.should_end_newline_forced = false;
                 }
-                self.line.try_insert_end(ui);
+                self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
+                self.block_end(ui, options, BlockKind::Boxed);
                 return;
             }
+            let look = TableLook::new(ui, options);
+            let has_header = !header.is_empty();
             let cell_h = line_h + ui.spacing().item_spacing.y;
             // Outer ScrollArea::horizontal handles the case where columns
             // (auto-sized to content) total wider than the parent ui; without it,
@@ -2429,7 +2981,13 @@ impl CommonMarkViewerInternal {
                 .map(|column| {
                     header
                         .get(column)
-                        .map(|cell| unbreakable_text_width(ui, &markdown_cell_text(cell)))
+                        .map(|cell| {
+                            unbreakable_text_width_in(
+                                ui,
+                                &markdown_cell_text(cell),
+                                look.cell_font(true, cell),
+                            )
+                        })
                         .unwrap_or(40.0)
                 })
                 .collect();
@@ -2442,13 +3000,25 @@ impl CommonMarkViewerInternal {
                 .map(|column| {
                     table_rows
                         .iter()
-                        .filter_map(|row| row.get(column))
-                        .map(|cell| natural_text_width(ui, &markdown_cell_text(cell)))
+                        .enumerate()
+                        .filter_map(|(index, row)| Some((index, row.get(column)?)))
+                        .map(|(index, cell)| {
+                            natural_text_width_in(
+                                ui,
+                                &markdown_cell_text(cell),
+                                look.cell_font(has_header && index == 0, cell),
+                            )
+                        })
                         .fold(40.0, f32::max)
                 })
                 .collect();
-            let (table_frame, baseline_widths, visible_column_budget) =
-                framed_table_widths(ui, &desired_widths, &minimum_widths, table_bound);
+            let (table_frame, baseline_widths, visible_column_budget) = table_widths_in_frame(
+                ui,
+                look.frame,
+                &desired_widths,
+                &minimum_widths,
+                table_bound,
+            );
             let layout_key = table_layout_key(
                 ui,
                 &desired_widths,
@@ -2458,7 +3028,7 @@ impl CommonMarkViewerInternal {
                 cache.layout_revision(),
                 options.math_scale,
             );
-            let (initial_widths, height_layout_changed) = cached_height_aware_widths(
+            let (mut initial_widths, height_layout_changed) = cached_height_aware_widths(
                 ui,
                 id,
                 layout_key,
@@ -2470,14 +3040,24 @@ impl CommonMarkViewerInternal {
                 |column, width| {
                     table_rows
                         .iter()
-                        .map(|row| {
+                        .enumerate()
+                        .map(|(index, row)| {
                             row.get(column).map_or(0.0, |cell| {
-                                table_cell_height(cell, line_h, cache, ui, width, options)
+                                table_cell_height_in(
+                                    cell,
+                                    line_h,
+                                    cache,
+                                    ui,
+                                    width,
+                                    options,
+                                    look.cell_font(has_header && index == 0, cell),
+                                )
                             })
                         })
                         .collect()
                 },
             );
+            look.fill(&mut initial_widths, visible_column_budget);
             // The document ui is allocated at the prose width, and a child ui
             // can never exceed its parent's allocation — so a wider viewport
             // must be carved out explicitly. egui does not clamp an explicit
@@ -2541,23 +3121,26 @@ impl CommonMarkViewerInternal {
             // compressed by the same factor.
             let reserved_row_heights: Vec<f32> = table_rows
                 .iter()
-                .map(|row| {
+                .enumerate()
+                .map(|(index, row)| {
                     row.iter()
                         .enumerate()
                         .map(|(column, cell)| {
-                            table_cell_height(
+                            table_cell_height_in(
                                 cell,
                                 line_h,
                                 cache,
                                 ui,
                                 initial_widths.get(column).copied().unwrap_or(40.0),
                                 options,
+                                look.cell_font(has_header && index == 0, cell),
                             )
                         })
                         .fold(cell_h, f32::max)
+                        + 2.0 * look.padding
                 })
                 .collect();
-            let group_frame = egui::Frame::group(ui.style());
+            let group_frame = table_frame;
             let reserved_height = reserved_row_heights.iter().sum::<f32>()
                 + ui.spacing().item_spacing.y
                     * reserved_row_heights.len().saturating_sub(1) as f32
@@ -2575,10 +3158,12 @@ impl CommonMarkViewerInternal {
                             ui.vertical(|ui| {
                                 table_frame.show(ui, |ui| {
                                     let reset_column_widths = height_layout_changed;
+                                    let table_clip = ui.clip_rect();
+                                    let mut shown_widths = Vec::new();
                                     let mut builder = egui_extras::TableBuilder::new(ui)
                                         .id_salt(id.with("_wrapped"))
-                                        .striped(true)
-                                        .resizable(true)
+                                        .striped(look.style.is_none())
+                                        .resizable(look.style.is_none())
                                         .vscroll(false)
                                         // Shrink horizontally to the columns' content so a
                                         // table narrower than the panel hugs its columns
@@ -2590,6 +3175,10 @@ impl CommonMarkViewerInternal {
                                         .min_scrolled_height(0.0)
                                         .cell_layout(egui::Layout::left_to_right(egui::Align::Min));
                                     for (column, width) in initial_widths.into_iter().enumerate() {
+                                        if let Some(styled) = look.column(width) {
+                                            builder = builder.column(styled);
+                                            continue;
+                                        }
                                         let mut column_width = egui_extras::Column::initial(width)
                                             .resizable(true)
                                             .clip(true)
@@ -2610,11 +3199,12 @@ impl CommonMarkViewerInternal {
                                             let measure_ui = body.ui_mut();
                                             table_rows
                                                 .iter()
-                                                .map(|row| {
+                                                .enumerate()
+                                                .map(|(index, row)| {
                                                     row.iter()
                                                         .enumerate()
                                                         .map(|(column, cell)| {
-                                                            table_cell_height(
+                                                            table_cell_height_in(
                                                                 cell,
                                                                 line_h,
                                                                 cache,
@@ -2624,31 +3214,66 @@ impl CommonMarkViewerInternal {
                                                                     .copied()
                                                                     .unwrap_or(40.0),
                                                                 options,
+                                                                look.cell_font(has_header && index == 0, cell),
                                                             )
                                                         })
                                                         .fold(cell_h, f32::max)
+                                                        + 2.0 * look.padding
                                                 })
                                                 .collect()
                                         };
                                         store_table_column_widths(body.ui_mut(), id, &widths, table_fit_epoch);
+                                        let table_width = widths.iter().sum::<f32>()
+                                            + body.ui_mut().spacing().item_spacing.x
+                                                * widths.len().saturating_sub(1) as f32;
+                                        shown_widths.clone_from(&widths);
+                                        let row_count = table_rows.len();
                                         body.heterogeneous_rows(heights.into_iter(), |mut row_ui| {
-                                            let row = &table_rows[row_ui.index()];
-                                                for col in row {
+                                            let row_index = row_ui.index();
+                                            let row = &table_rows[row_index];
+                                            let is_header = has_header && row_index == 0;
+                                            let header_strong = is_header && look.style.is_some();
+                                                for (column, col) in row.iter().enumerate() {
                                                     row_ui.col(|ui| {
+                                                        if column == 0 && row_index + 1 < row_count {
+                                                            look.rule_below(
+                                                                ui,
+                                                                ui.max_rect(),
+                                                                table_width,
+                                                                table_clip,
+                                                                is_header,
+                                                            );
+                                                        }
                                                         ui.style_mut().wrap_mode =
                                                             Some(egui::TextWrapMode::Wrap);
                                                         ui.set_width(ui.max_rect().width());
                                                         egui::Frame::NONE
-                                                            .inner_margin(egui::Margin::symmetric(4, 0))
+                                                            .inner_margin(look.cell_margin(column, row.len()))
                                                             .show(ui, |ui| {
                                                                 let col_w = ui.available_width();
                                                                 ui.set_width(col_w);
+                                                                let indent = if look.style.is_some() {
+                                                                    cell_alignment_offset(
+                                                                        ui,
+                                                                        col,
+                                                                        alignments.get(column),
+                                                                        &look.cell_fonts(is_header, options),
+                                                                        col_w,
+                                                                    )
+                                                                } else {
+                                                                    0.0
+                                                                };
+                                                                let was_strong = self.text_style.strong;
+                                                                self.text_style.strong |= header_strong;
                                                                 // Isolate the wrapping cursor from the
                                                                 // preallocated TableBuilder row height.
                                                                 // Otherwise egui uses that entire height as
                                                                 // the first text line's minimum height and
                                                                 // later inline widgets overflow the row.
                                                                 ui.horizontal_wrapped(|ui| {
+                                                                    if indent > 0.0 {
+                                                                        ui.add_space(indent);
+                                                                    }
                                                                     for (e, src_span) in col {
                                                                         let tmp_start =
                                                                             std::mem::replace(
@@ -2679,11 +3304,22 @@ impl CommonMarkViewerInternal {
                                                                             tmp_end;
                                                                     }
                                                                 });
+                                                                self.text_style.strong = was_strong;
                                                             });
                                                     });
                                                 }
                                         });
                                     });
+                                    if look.column_separators(
+                                        ui,
+                                        id,
+                                        &shown_widths,
+                                        &minimum_widths,
+                                        visible_column_budget,
+                                        table_fit_epoch,
+                                    ) {
+                                        cache.mark_layout_changed();
+                                    }
                                 });
                             });
                         });
@@ -2696,7 +3332,8 @@ impl CommonMarkViewerInternal {
                 self.line.should_end_newline_forced = false;
             }
 
-            self.line.try_insert_end(ui);
+            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
+            self.block_end(ui, options, BlockKind::Boxed);
         }
     }
 
@@ -2791,16 +3428,22 @@ impl CommonMarkViewerInternal {
                 footnote_start(ui, &footnote);
             }
             pulldown_cmark::Event::SoftBreak => {
-                soft_break(ui);
+                // After a display formula the line that continues the
+                // paragraph starts a row; a space would indent it.
+                if options.block_style.rhythm.is_none() || !row_is_fresh(ui) {
+                    soft_break(ui);
+                }
             }
             pulldown_cmark::Event::HardBreak => newline(ui),
             pulldown_cmark::Event::Rule => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Boxed);
+                let rhythm = options.block_style.rhythm.is_some();
                 rule_styled(
                     ui,
-                    self.line.can_insert_end(),
+                    !rhythm && self.line.can_insert_end(),
                     options.block_style.short_rule,
                 );
+                self.rhythm_gap_after(ui, options, BlockKind::Boxed);
             }
             pulldown_cmark::Event::TaskListMarker(mut checkbox) => {
                 if options.mutable {
@@ -2813,7 +3456,9 @@ impl CommonMarkViewerInternal {
                             span: src_span,
                         });
                     }
-                } else {
+                } else if !self.list.bullet_becomes_task_box(checkbox) {
+                    // With a list style the box is painted in the item's
+                    // marker slot instead, in place of its bullet.
                     ui.add(
                         ImmutableCheckbox::without_text(&mut checkbox)
                             .marker(options.block_style.task_marker),
@@ -2846,7 +3491,12 @@ impl CommonMarkViewerInternal {
                 // preceding text (`obeys\n$$…$$`). Without the breaks it flows to
                 // the right of that text and, being taller than a line, gets
                 // pushed down by the row's bottom-alignment.
-                newline(ui);
+                let rhythm = options.block_style.rhythm.is_some();
+                if !rhythm {
+                    newline(ui);
+                } else if !row_is_fresh(ui) {
+                    start_row_below(ui, 0.0);
+                }
                 #[cfg(feature = "math")]
                 {
                     crate::render_math(ui, cache, &tex, false, options);
@@ -2855,7 +3505,13 @@ impl CommonMarkViewerInternal {
                 if let Some(math_fn) = options.math_fn {
                     math_fn(ui, &tex, false);
                 }
-                newline(ui);
+                if !rhythm {
+                    newline(ui);
+                } else if self.upcoming.is_some() {
+                    // Text that continues the paragraph starts below the
+                    // formula; the end of the paragraph leaves its own gap.
+                    start_row_below(ui, 0.0);
+                }
             }
         }
     }
@@ -2916,7 +3572,10 @@ impl CommonMarkViewerInternal {
             // Accumulate RichText - will render all at once in end_tag(Heading)
             self.current_heading_rich_texts.push(rich_text);
         } else if self.is_table {
-            ui.add(egui::Label::new(rich_text).wrap());
+            match self.code_chip_radius(bg, options) {
+                Some(radius) => inline_code_label(ui, rich_text, radius, true),
+                None => ui.add(egui::Label::new(rich_text).wrap()),
+            };
         } else {
             // The item's first text decides where its deferred marker paints:
             // mirror exactly the job `ui.label` is about to build (same format,
@@ -2931,8 +3590,25 @@ impl CommonMarkViewerInternal {
             );
             let format = job.sections.first().map(|section| section.format.clone());
             self.list.flush_pending_markers(ui, format);
-            ui.label(rich_text);
+            match self.code_chip_radius(bg, options) {
+                Some(radius) => inline_code_label(ui, rich_text, radius, false),
+                None => ui.label(rich_text),
+            };
         }
+    }
+
+    /// The corner radius to paint the text being emitted on a chip with:
+    /// inline code, when the style asks for chips. A search highlight keeps
+    /// its own background.
+    fn code_chip_radius(
+        &self,
+        highlight: Option<egui::Color32>,
+        options: &CommonMarkOptions,
+    ) -> Option<f32> {
+        options
+            .block_style
+            .inline_code_radius
+            .filter(|_| self.text_style.code && highlight.is_none())
     }
 
     /// Render source-literal text while preserving fine-grained search highlighting.
@@ -3087,17 +3763,26 @@ impl CommonMarkViewerInternal {
     ) {
         match tag {
             pulldown_cmark::Tag::Paragraph => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Text);
+                // Only the items of a loose list hold paragraphs.
+                self.list.mark_loose();
             }
             pulldown_cmark::Tag::Heading { level, .. } => {
+                let rhythm = options.block_style.rhythm.is_some();
                 // End current row to ensure heading starts at left edge
-                ui.end_row();
+                if !rhythm {
+                    ui.end_row();
+                } else if !row_is_fresh(ui) {
+                    start_row_below(ui, 0.0);
+                }
                 // Record position BEFORE spacing for scroll navigation
                 self.current_heading_y = Some(ui.cursor().top());
                 self.current_heading_source_start = Some(source_start);
                 self.current_heading_text.clear();
                 // Add extra spacing above headings if configured
-                heading_start_spacing(ui, &options.typography);
+                if !rhythm {
+                    heading_start_spacing(ui, &options.typography);
+                }
                 self.text_style.heading = Some(match level {
                     HeadingLevel::H1 => 0,
                     HeadingLevel::H2 => 1,
@@ -3115,7 +3800,7 @@ impl CommonMarkViewerInternal {
             }
             pulldown_cmark::Tag::CodeBlock(c) => {
                 // List items render in one horizontal_wrapped row; end it before a block widget.
-                if self.list.is_inside_a_list() {
+                if self.list.is_inside_a_list() && options.block_style.rhythm.is_none() {
                     ui.end_row();
                 }
 
@@ -3133,11 +3818,14 @@ impl CommonMarkViewerInternal {
                         });
                     }
                 }
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Boxed);
             }
 
             pulldown_cmark::Tag::List(point) => {
-                if !self.list.is_inside_a_list() && self.line.can_insert_start() {
+                if !self.list.is_inside_a_list()
+                    && self.line.can_insert_start()
+                    && options.block_style.rhythm.is_none()
+                {
                     newline(ui);
                 }
 
@@ -3156,14 +3844,20 @@ impl CommonMarkViewerInternal {
             }
 
             pulldown_cmark::Tag::FootnoteDefinition(note) => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Text);
 
                 self.line.should_start_newline = false;
                 self.line.should_end_newline = false;
-                footnote(ui, &note);
+                match options.block_style.list {
+                    Some(list) => footnote_label(ui, &note, list.marker),
+                    None => footnote(ui, &note),
+                }
+                // The note's text continues on the row of its label.
+                self.continues_row = true;
             }
-            pulldown_cmark::Tag::Table(_) => {
+            pulldown_cmark::Tag::Table(alignments) => {
                 self.is_table = true;
+                self.table_alignments = alignments;
             }
             pulldown_cmark::Tag::TableHead => {}
             pulldown_cmark::Tag::TableRow => {}
@@ -3187,22 +3881,26 @@ impl CommonMarkViewerInternal {
                 self.image = Some(crate::Image::new(&dest_url, options));
             }
             pulldown_cmark::Tag::HtmlBlock => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Boxed);
             }
             pulldown_cmark::Tag::MetadataBlock(_) => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Boxed);
                 self.frontmatter = Some(String::new());
             }
 
             pulldown_cmark::Tag::DefinitionList => {
-                self.line.try_insert_start(ui);
+                self.block_start(ui, options, BlockKind::Text);
                 self.def_list.is_first_item = true;
             }
             pulldown_cmark::Tag::DefinitionListTitle => {
                 // we disable newline as the first title should not insert a newline
                 // as we have already done that upon the DefinitionList Tag
                 if !self.def_list.is_first_item {
-                    self.line.try_insert_start(ui)
+                    let between_terms = options
+                        .block_style
+                        .rhythm
+                        .map_or(0.0, |rhythm| rhythm.tight_item);
+                    self.new_line(ui, options, between_terms);
                 } else {
                     self.def_list.is_first_item = false;
                 }
@@ -3225,9 +3923,11 @@ impl CommonMarkViewerInternal {
     ) {
         match tag {
             pulldown_cmark::TagEnd::Paragraph => {
-                self.line.try_insert_end(ui);
+                self.block_end(ui, options, BlockKind::Text);
                 // Add extra paragraph spacing if configured
-                paragraph_end_spacing(ui, &options.typography);
+                if options.block_style.rhythm.is_none() {
+                    paragraph_end_spacing(ui, &options.typography);
+                }
             }
             pulldown_cmark::TagEnd::Heading { .. } => {
                 // Render all accumulated heading fragments at once, positioned at left edge
@@ -3296,8 +3996,10 @@ impl CommonMarkViewerInternal {
                 self.current_heading_source_start = None;
                 self.current_heading_text.clear();
                 // Add extra spacing below headings if configured
-                heading_end_spacing(ui, &options.typography);
-                self.line.try_insert_end(ui);
+                if options.block_style.rhythm.is_none() {
+                    heading_end_spacing(ui, &options.typography);
+                }
+                self.block_end(ui, options, BlockKind::Heading);
                 self.text_style.heading = None;
             }
             pulldown_cmark::TagEnd::BlockQuote(_) => {}
@@ -3305,7 +4007,7 @@ impl CommonMarkViewerInternal {
                 self.end_code_block(ui, cache, options, max_width);
 
                 // Keep any following list-item text below the completed block widget.
-                if self.list.is_inside_a_list() {
+                if self.list.is_inside_a_list() && options.block_style.rhythm.is_none() {
                     ui.end_row();
                 }
             }
@@ -3316,7 +4018,15 @@ impl CommonMarkViewerInternal {
                     self.line.should_end_newline = true;
                 }
 
-                self.list.end_level(ui, self.line.can_insert_end());
+                if options.block_style.rhythm.is_some() {
+                    let outermost = self.list.is_last_level();
+                    self.list.end_level(ui, false);
+                    if outermost {
+                        self.rhythm_gap_after(ui, options, BlockKind::Text);
+                    }
+                } else {
+                    self.list.end_level(ui, self.line.can_insert_end());
+                }
 
                 if !self.list.is_inside_a_list() {
                     // Reset all the state and make it ready for the next list that occurs
@@ -3333,7 +4043,7 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::TagEnd::FootnoteDefinition => {
                 self.line.should_start_newline = true;
                 self.line.should_end_newline = true;
-                self.line.try_insert_end(ui);
+                self.block_end(ui, options, BlockKind::Text);
             }
             pulldown_cmark::TagEnd::Table => {}
             pulldown_cmark::TagEnd::TableHead => {}
@@ -3372,13 +4082,7 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::TagEnd::HtmlBlock => {
                 if !self.html_block.is_empty() {
                     if let Some(table) = egui_commonmark_backend_extended::html_table::parse_html_table(&self.html_block) {
-                        self.render_html_table(
-                            ui,
-                            &table,
-                            options,
-                            max_width,
-                            cache.table_fit_epoch(),
-                        );
+                        self.render_html_table(ui, &table, cache, options, max_width);
                     } else if let Some(html_fn) = options.html_fn {
                         html_fn(ui, &self.html_block);
                     } else {
@@ -3387,17 +4091,22 @@ impl CommonMarkViewerInternal {
                         self.event_text(text, ui, options);
                     }
                     self.html_block.clear();
+                    // The built-in spacing leaves the gap to the block
+                    // that follows; a rhythm leaves gaps at block ends.
+                    self.rhythm_gap_after(ui, options, BlockKind::Boxed);
                 }
             }
 
             pulldown_cmark::TagEnd::MetadataBlock(_) => {
                 if let Some(raw) = self.frontmatter.take() {
                     render_frontmatter_table(ui, &raw, options, max_width);
-                    self.line.try_insert_end(ui);
+                    self.block_end(ui, options, BlockKind::Boxed);
                 }
             }
 
-            pulldown_cmark::TagEnd::DefinitionList => self.line.try_insert_end(ui),
+            pulldown_cmark::TagEnd::DefinitionList => {
+                self.block_end(ui, options, BlockKind::Text);
+            }
             pulldown_cmark::TagEnd::DefinitionListTitle
             | pulldown_cmark::TagEnd::DefinitionListDefinition => {}
             pulldown_cmark::TagEnd::Superscript | pulldown_cmark::TagEnd::Subscript => {}
@@ -3414,8 +4123,9 @@ impl CommonMarkViewerInternal {
         if let Some(block) = self.code_block.take() {
             let id = ui.id().with("_code_block").with(self.curr_code_block);
             self.curr_code_block += 1;
-            block.end(ui, cache, options, max_width, id);
-            self.line.try_insert_end(ui);
+            let figure = self.figure_space(options);
+            block.end_as_figure(ui, cache, options, max_width, id, figure);
+            self.block_end(ui, options, BlockKind::Boxed);
         }
     }
 
@@ -3423,10 +4133,11 @@ impl CommonMarkViewerInternal {
         &mut self,
         ui: &mut Ui,
         table: &egui_commonmark_backend_extended::html_table::HtmlTable,
+        cache: &mut CommonMarkCache,
         options: &CommonMarkOptions,
         max_width: f32,
-        table_fit_epoch: u64,
     ) {
+        let table_fit_epoch = cache.table_fit_epoch();
         let id = ui.id().with("_html_table").with(self.curr_table);
         self.curr_table += 1;
 
@@ -3441,7 +4152,9 @@ impl CommonMarkViewerInternal {
         let cell_h = line_h + ui.spacing().item_spacing.y;
 
         if num_cols == 0 {
-            self.line.try_insert_end(ui);
+            if options.block_style.rhythm.is_none() {
+                self.line.try_insert_end(ui);
+            }
             return;
         }
 
@@ -3460,13 +4173,22 @@ impl CommonMarkViewerInternal {
             .map(|row| (true, row.as_slice()))
             .chain(table.rows.iter().map(|row| (false, row.as_slice())))
             .collect();
+        let look = TableLook::new(ui, options);
+        // A styled table sets its header rows strong; measure them so.
+        let row_font = |is_header: bool| {
+            if is_header {
+                &look.strong_font
+            } else {
+                &look.body_font
+            }
+        };
         let minimum_widths: Vec<f32> = (0..num_cols)
             .map(|column| {
                 table
                     .header
                     .iter()
                     .filter_map(|row| row.get(column))
-                    .map(|cell| unbreakable_text_width(ui, cell))
+                    .map(|cell| unbreakable_text_width_in(ui, cell, row_font(true)))
                     .fold(40.0, f32::max)
             })
             .collect();
@@ -3474,13 +4196,20 @@ impl CommonMarkViewerInternal {
             .map(|column| {
                 table_rows
                     .iter()
-                    .filter_map(|(_, row)| row.get(column))
-                    .map(|cell| natural_text_width(ui, cell))
+                    .filter_map(|(is_header, row)| Some((is_header, row.get(column)?)))
+                    .map(|(is_header, cell)| {
+                        natural_text_width_in(ui, cell, row_font(*is_header))
+                    })
                     .fold(40.0, f32::max)
             })
             .collect();
-        let (table_frame, baseline_widths, visible_column_budget) =
-            framed_table_widths(ui, &desired_widths, &minimum_widths, table_bound);
+        let (table_frame, baseline_widths, visible_column_budget) = table_widths_in_frame(
+            ui,
+            look.frame,
+            &desired_widths,
+            &minimum_widths,
+            table_bound,
+        );
         let layout_key = table_layout_key(
             ui,
             &desired_widths,
@@ -3490,7 +4219,7 @@ impl CommonMarkViewerInternal {
             0,
             1.0,
         );
-        let (initial_widths, height_layout_changed) = cached_height_aware_widths(
+        let (mut initial_widths, height_layout_changed) = cached_height_aware_widths(
             ui,
             id,
             layout_key,
@@ -3502,14 +4231,21 @@ impl CommonMarkViewerInternal {
             |column, width| {
                 table_rows
                     .iter()
-                    .map(|(_, row)| {
+                    .map(|(is_header, row)| {
                         row.get(column).map_or(0.0, |cell| {
-                            wrapped_text_height(ui, cell, width - 16.0, line_h) + 8.0
+                            wrapped_text_height_in(
+                                ui,
+                                cell,
+                                width - 16.0,
+                                line_h,
+                                row_font(*is_header),
+                            ) + 8.0
                         })
                     })
                     .collect()
             },
         );
+        look.fill(&mut initial_widths, visible_column_budget);
         // Column widths persist across pane-width changes (see the markdown
         // table notes), with the same separator-drag caps.
         let usable_bound_now = (table_bound
@@ -3552,10 +4288,12 @@ impl CommonMarkViewerInternal {
                 ui.vertical(|ui| {
                     table_frame.show(ui, |ui| {
                         let reset_column_widths = height_layout_changed;
+                        let table_clip = ui.clip_rect();
+                        let mut shown_widths = Vec::new();
                         let mut builder = egui_extras::TableBuilder::new(ui)
                             .id_salt(id.with("_wrapped"))
-                            .striped(true)
-                            .resizable(true)
+                            .striped(look.style.is_none())
+                            .resizable(look.style.is_none())
                             .vscroll(false)
                             // Hug columns when narrower than the panel (#47); the
                             // outer ScrollArea still handles wide-table overflow.
@@ -3563,6 +4301,10 @@ impl CommonMarkViewerInternal {
                             .min_scrolled_height(0.0)
                             .cell_layout(egui::Layout::left_to_right(egui::Align::Min));
                         for (column, width) in initial_widths.into_iter().enumerate() {
+                            if let Some(styled) = look.column(width) {
+                                builder = builder.column(styled);
+                                continue;
+                            }
                             let mut column_width = egui_extras::Column::initial(width)
                                 .resizable(true)
                                 .clip(true)
@@ -3579,13 +4321,6 @@ impl CommonMarkViewerInternal {
                             builder.reset();
                         }
 
-                        let render_cell_strong = |ui: &mut Ui, cell: &str| {
-                            egui::Frame::NONE
-                                .inner_margin(egui::Margin::symmetric(8, 4))
-                                .show(ui, |ui| {
-                                    ui.strong(cell);
-                                });
-                        };
 
                         builder.body(|mut body| {
                             let widths = body.widths().to_vec();
@@ -3593,44 +4328,78 @@ impl CommonMarkViewerInternal {
                                 let measure_ui = body.ui_mut();
                                 table_rows
                                     .iter()
-                                    .map(|(_, row)| {
+                                    .map(|(is_header, row)| {
                                         row.iter()
                                             .enumerate()
                                             .map(|(column, cell)| {
-                                                wrapped_text_height(
+                                                wrapped_text_height_in(
                                                     measure_ui,
                                                     cell,
                                                     widths.get(column).copied().unwrap_or(40.0)
                                                         - 16.0,
                                                     line_h,
+                                                    row_font(*is_header),
                                                 ) + 8.0
                                             })
                                             .fold(cell_h, f32::max)
+                                            + 2.0 * look.padding
                                     })
                                     .collect()
                             };
                             store_table_column_widths(body.ui_mut(), id, &widths, table_fit_epoch);
+                            let table_width = widths.iter().sum::<f32>()
+                                + body.ui_mut().spacing().item_spacing.x
+                                    * widths.len().saturating_sub(1) as f32;
+                            shown_widths.clone_from(&widths);
+                            let row_count = table_rows.len();
                             body.heterogeneous_rows(heights.into_iter(), |mut row_ui| {
-                                let (is_header, row) = table_rows[row_ui.index()];
-                                for cell in row {
+                                let row_index = row_ui.index();
+                                let (is_header, row) = table_rows[row_index];
+                                for (column, cell) in row.iter().enumerate() {
                                     row_ui.col(|ui| {
-                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                        if is_header {
-                                            render_cell_strong(ui, cell);
-                                        } else {
-                                            egui::Frame::NONE
-                                                .inner_margin(egui::Margin::symmetric(8, 4))
-                                                .show(ui, |ui| {
-                                                    let rich_text = self
-                                                        .text_style
-                                                        .to_richtext_with_options(ui, cell, options);
-                                                    ui.label(rich_text);
-                                                });
+                                        if column == 0 && row_index + 1 < row_count {
+                                            // The rule under the last header row is the
+                                            // header rule; a table may have several.
+                                            let last_header = is_header
+                                                && !table_rows
+                                                    .get(row_index + 1)
+                                                    .is_some_and(|(header, _)| *header);
+                                            look.rule_below(
+                                                ui,
+                                                ui.max_rect(),
+                                                table_width,
+                                                table_clip,
+                                                last_header,
+                                            );
                                         }
+                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                        egui::Frame::NONE
+                                            .inner_margin(look.html_cell_margin(column, row.len()))
+                                            .show(ui, |ui| {
+                                                if is_header && look.style.is_none() {
+                                                    ui.strong(cell);
+                                                    return;
+                                                }
+                                                let mut style = self.text_style.clone();
+                                                style.strong |= is_header;
+                                                ui.label(style.to_richtext_with_options(
+                                                    ui, cell, options,
+                                                ));
+                                            });
                                     });
                                 }
                             });
                         });
+                        if look.column_separators(
+                            ui,
+                            id,
+                            &shown_widths,
+                            &minimum_widths,
+                            visible_column_budget,
+                            table_fit_epoch,
+                        ) {
+                            cache.mark_layout_changed();
+                        }
                     });
                 });
             });
@@ -3638,12 +4407,61 @@ impl CommonMarkViewerInternal {
                 scroll_out
             })
             .inner;
-        self.line.try_insert_end(ui);
+        if options.block_style.rhythm.is_none() {
+            self.line.try_insert_end(ui);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    /// Drag the separator right of `column` in a table of three columns
+    /// with minimums of 50 and a budget of 400.
+    fn dragged(widths: [f32; 3], column: usize, delta: f32, fill: bool) -> [f32; 3] {
+        let mut widths = widths;
+        drag_separator(&mut widths, &[50.0; 3], column, delta, 400.0, fill);
+        widths
+    }
+
+    #[test]
+    fn widening_a_column_takes_spare_room_before_its_neighbors() {
+        // 40 spare: the neighbor is left alone.
+        assert_eq!(dragged([100.0, 160.0, 100.0], 0, 30.0, true), [130.0, 160.0, 100.0]);
+        // 40 spare, 60 asked: the other 20 come from the column to the right.
+        assert_eq!(dragged([100.0, 160.0, 100.0], 0, 60.0, true), [160.0, 140.0, 100.0]);
+        // A full table: all of it comes from the right, whether or not the
+        // table is kept full.
+        for fill in [true, false] {
+            assert_eq!(dragged([100.0, 200.0, 100.0], 0, 60.0, fill), [160.0, 140.0, 100.0]);
+        }
+    }
+
+    #[test]
+    fn a_column_stops_growing_when_its_neighbor_is_at_its_minimum() {
+        assert_eq!(dragged([100.0, 70.0, 230.0], 0, 60.0, true), [120.0, 50.0, 230.0]);
+        assert_eq!(dragged([300.0, 50.0, 50.0], 0, 60.0, true), [300.0, 50.0, 50.0]);
+    }
+
+    #[test]
+    fn narrowing_a_column_hands_its_room_on_only_in_a_table_kept_full() {
+        assert_eq!(dragged([100.0, 200.0, 100.0], 0, -30.0, true), [70.0, 230.0, 100.0]);
+        assert_eq!(dragged([100.0, 200.0, 100.0], 0, -30.0, false), [70.0, 200.0, 100.0]);
+        // Not below its minimum.
+        assert_eq!(dragged([100.0, 200.0, 100.0], 0, -80.0, true), [50.0, 250.0, 100.0]);
+    }
+
+    #[test]
+    fn the_last_separator_resizes_the_last_column_alone() {
+        assert_eq!(dragged([100.0, 160.0, 100.0], 2, 60.0, true), [100.0, 160.0, 140.0]);
+        assert_eq!(dragged([100.0, 200.0, 100.0], 2, 60.0, true), [100.0, 200.0, 100.0]);
+        assert_eq!(dragged([100.0, 200.0, 100.0], 2, -30.0, true), [100.0, 200.0, 70.0]);
+    }
+
+    #[test]
+    fn a_still_pointer_resizes_nothing() {
+        assert_eq!(dragged([100.0, 160.0, 100.0], 1, 0.0, true), [100.0, 160.0, 100.0]);
+    }
+
     #[test]
     fn frontmatter_splits_top_level_key_value_pairs() {
         let pairs = parse_frontmatter_pairs(
@@ -3791,7 +4609,7 @@ mod tests {
                 "expected monospace code to be wider: body={body_width} mono={mono_width}"
             );
 
-            // `wrapped_text_height` subtracts 8 px before layout. Choose a
+            // `wrapped_text_height_in` subtracts 8 px before layout. Choose a
             // width where Body still fits but the rendered monospace code
             // must wrap, exposing the old one-line row-height estimate.
             let column_width = (body_width + mono_width) * 0.5 + 8.0;

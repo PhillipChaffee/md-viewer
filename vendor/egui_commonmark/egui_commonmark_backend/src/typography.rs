@@ -153,6 +153,97 @@ impl CodeBlockStyle {
     }
 }
 
+/// How a table is typeset. Setting it removes the table's outer box, its
+/// zebra stripes and its vertical grid lines (a column separator still shows
+/// while the pointer is on it, so columns stay resizable), sets the header
+/// row in the strong face, and honors the column alignment the markdown
+/// asks for (`:--`, `:-:`, `--:`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableStyle {
+    /// Hairline between body rows.
+    pub rule: egui::Stroke,
+    /// Rule under the header row.
+    pub header_rule: egui::Stroke,
+    /// Space above and below the text of every cell.
+    pub cell_padding: f32,
+    /// Widen the columns of a table narrower than its bound until it fills
+    /// the bound, instead of leaving it hugging the left edge.
+    pub fill_width: bool,
+}
+
+/// How list markers are drawn. Setting it also drops the bullet of a task
+/// list item, whose check box then takes the marker's place, and indents a
+/// nested list by its marker slot only.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ListStyle {
+    /// Color of bullets, numbers and task boxes.
+    pub marker: egui::Color32,
+    /// Radius of a bullet as a multiple of the body font size.
+    pub bullet_radius: f32,
+    /// Width of the slot a marker sits in, as a multiple of the body font
+    /// size. The item text starts right of it.
+    pub indent: f32,
+}
+
+/// Vertical space between blocks, as multiples of the body font size.
+///
+/// Setting it replaces the built-in spacing (one blank line of body text
+/// between any two blocks) with one gap per pair of neighbors. Gaps never
+/// add up: a heading after a code block gets the heading's space, not both.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlockRhythm {
+    /// Between paragraphs, around lists, and between the items of a loose
+    /// list.
+    pub paragraph: f32,
+    /// Around code blocks, tables, quotes, diagrams and thematic breaks.
+    pub block: f32,
+    /// Above a heading.
+    pub heading_above: f32,
+    /// Below a heading.
+    pub heading_below: f32,
+    /// Between the items of a tight list (no blank line between items in
+    /// the source).
+    pub tight_item: f32,
+    /// Above and below a display formula, inside its own block.
+    pub display_math: f32,
+}
+
+/// The kind of block a [`BlockRhythm`] gap is computed for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockKind {
+    /// Running text: a paragraph, a list, a footnote.
+    Text,
+    Heading,
+    /// A boxed or figure-like block: code, table, quote, diagram, rule.
+    Boxed,
+}
+
+impl BlockRhythm {
+    /// The gap in pixels between a block of kind `upper` and the block of
+    /// kind `lower` that follows it, for a body font of `font_size`. Whole
+    /// pixels, so a gap is the same wherever on the pixel grid it lands.
+    pub fn gap(&self, upper: BlockKind, lower: BlockKind, font_size: f32) -> f32 {
+        let wanted = |kind| match kind {
+            BlockKind::Boxed => self.block,
+            BlockKind::Text | BlockKind::Heading => self.paragraph,
+        };
+        let em = match (upper, lower) {
+            // A heading belongs to what follows it, whatever that is: the
+            // space below it is the heading's alone.
+            (BlockKind::Heading, _) => self.heading_below,
+            (_, BlockKind::Heading) => self.heading_above,
+            _ => wanted(upper).max(wanted(lower)),
+        };
+        (em * font_size).round()
+    }
+
+    /// The gap in pixels between two items of a list.
+    pub fn item_gap(&self, loose: bool, font_size: f32) -> f32 {
+        let em = if loose { self.paragraph } else { self.tight_item };
+        (em * font_size).round()
+    }
+}
+
 /// Opt-in styling of block elements and of the document column.
 ///
 /// The default reproduces the renderer's built-in look, so consumers that do
@@ -192,7 +283,23 @@ pub struct BlockStyle {
     /// of starting it at the left edge. Only has an effect when
     /// `default_width` is narrower than that space.
     pub center_content: bool,
+    /// `None` keeps the built-in table: a framed, striped grid.
+    pub table: Option<TableStyle>,
+    /// `None` keeps the built-in list markers.
+    pub list: Option<ListStyle>,
+    /// `None` keeps the built-in spacing between blocks.
+    pub rhythm: Option<BlockRhythm>,
+    /// Let a diagram wider than the document column use up to this width,
+    /// centered on the column, before it is scaled down. `None` keeps
+    /// diagrams inside the column.
+    pub figure_max_width: Option<f32>,
+    /// Corner radius of the background of inline code. `None` keeps the
+    /// square background as tall as the line.
+    pub inline_code_radius: Option<f32>,
 }
+
+#[cfg(test)]
+mod rhythm_tests;
 
 #[cfg(test)]
 mod tests {

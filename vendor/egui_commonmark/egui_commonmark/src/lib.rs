@@ -83,7 +83,8 @@
 
 use egui::{self, Id};
 use egui_commonmark_backend_extended::elements::{
-    paint_list_marker, reserve_list_marker, ListMarkerKind, ListMarkerSlot,
+    body_font_size, indent_by_spaces, paint_list_marker, reserve_list_marker_styled,
+    start_row_below, ListMarkerKind, ListMarkerSlot,
 };
 
 #[cfg(feature = "svg")]
@@ -99,7 +100,8 @@ pub use egui_commonmark_backend_extended::misc::{
     header_position_key, CommonMarkCache, STRONG_FONT_FAMILY,
 };
 pub use egui_commonmark_backend_extended::typography::{
-    BlockStyle, CodeBlockStyle, Measurement, TypographyConfig,
+    BlockKind, BlockRhythm, BlockStyle, CodeBlockStyle, ListStyle, Measurement, TableStyle,
+    TypographyConfig,
 };
 #[cfg(feature = "math")]
 pub use egui_commonmark_backend_extended::{
@@ -632,6 +634,9 @@ impl<'f> CommonMarkViewer<'f> {
 
 pub(crate) struct ListLevel {
     current_number: Option<u64>,
+    /// Whether the list's items hold paragraphs, as they do when blank
+    /// lines separate them in the source.
+    loose: bool,
 }
 
 #[derive(Default)]
@@ -647,12 +652,14 @@ impl List {
     pub fn start_level_with_number(&mut self, start_number: u64) {
         self.items.push(ListLevel {
             current_number: Some(start_number),
+            loose: false,
         });
     }
 
     pub fn start_level_without_number(&mut self) {
         self.items.push(ListLevel {
             current_number: None,
+            loose: false,
         });
     }
 
@@ -664,6 +671,29 @@ impl List {
         self.items.len() == 1
     }
 
+    /// Note that the innermost list holds a paragraph: it is a loose list.
+    pub fn mark_loose(&mut self) {
+        if let Some(level) = self.items.last_mut() {
+            level.loose = true;
+        }
+    }
+
+    /// Turn the bullet waiting to be painted for the current item into a
+    /// task box. Returns whether it did: only a bullet in a styled slot is
+    /// replaced, so a numbered task item keeps its number.
+    pub fn bullet_becomes_task_box(&mut self, checked: bool) -> bool {
+        match self.pending_markers.last_mut() {
+            Some((slot, kind))
+                if slot.style.is_some()
+                    && matches!(kind, ListMarkerKind::Bullet | ListMarkerKind::BulletHollow) =>
+            {
+                *kind = ListMarkerKind::Task(checked);
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn start_item(&mut self, ui: &mut egui::Ui, options: &CommonMarkOptions) {
         // A nested list starts a new item before the outer item has painted any
         // text; flush the outer marker here so it stays on its own row.
@@ -671,14 +701,27 @@ impl List {
 
         // To ensure that newlines are only inserted within the list and not before it
         if self.has_list_begun {
-            newline(ui);
+            match options.block_style.rhythm {
+                Some(rhythm) => {
+                    let loose = self.items.last().is_some_and(|level| level.loose);
+                    start_row_below(ui, rhythm.item_gap(loose, body_font_size(ui)));
+                }
+                None => newline(ui),
+            }
         } else {
             self.has_list_begun = true;
         }
 
+        let style = options.block_style.list;
+        let flat = options.block_style.rhythm.is_some();
         let len = self.items.len();
         if let Some(item) = self.items.last_mut() {
-            ui.label(" ".repeat((len - 1) * options.indentation_spaces));
+            // A nested list already sits inside its parent item's text
+            // column; with a list style its marker slot is all the indent
+            // it gets, so every level steps in by the same amount.
+            if style.is_none() {
+                indent_by_spaces(ui, (len - 1) * options.indentation_spaces, flat);
+            }
 
             // The marker's box must match the item text's line box, and the
             // text's line height is resolved against the font size. Resolving
@@ -688,7 +731,7 @@ impl List {
             // this line's glyphs down (issue #196).
             let row_height = crate::parsers::pulldown::body_line_height(ui, options);
 
-            let slot = reserve_list_marker(ui, row_height);
+            let slot = reserve_list_marker_styled(ui, row_height, style, flat);
             let kind = if let Some(number) = &mut item.current_number {
                 let kind = ListMarkerKind::Number(number.to_string());
                 *number += 1;
@@ -711,7 +754,10 @@ impl List {
             unreachable!();
         }
 
-        ui.add_space(4.0);
+        // A styled slot carries the gap between marker and text itself.
+        if style.is_none() {
+            ui.add_space(4.0);
+        }
     }
 
     /// Paint every reserved list marker that is still outstanding.
