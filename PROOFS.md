@@ -225,8 +225,13 @@ Two checks say no.
 - **Cover checks.** Every harness has `kani::cover!` statements for its
   interesting cases, and `run-proofs.sh` fails if one is unreachable.
 - **Mutants.** `scripts/proof-mutants.tsv` lists 76 one-line faults in the
-  shipped code, at least one per harness. `scripts/kill-proof-mutants.sh`
-  plants each and expects Kani to reject it. Result: not recorded yet.
+  shipped code, at least one for each harness but the one that pins
+  finding 1. `scripts/kill-proof-mutants.sh` plants each and expects Kani
+  to reject it. Last run: 76 killed, 0 survived, in 19 minutes.
+
+The cover gate has already earned its place: it rejected the first
+version of `a_step_out_and_back_is_the_identity`, whose assumptions made
+one of its two cases unreachable.
 
 ## What is not proven
 
