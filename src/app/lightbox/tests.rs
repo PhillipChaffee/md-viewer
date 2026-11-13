@@ -171,6 +171,25 @@ fn the_close_button_shows_a_hand_and_closes_the_lightbox() {
     assert!(harness.app.lightbox.is_none());
 }
 
+#[test]
+fn a_double_click_on_the_picture_returns_to_full_size_unpanned() {
+    let mut harness = with_lightbox(egui::vec2(4000.0, 4000.0));
+    let [_, viewport, _] = overlay_rects(&harness);
+    let pointer = viewport.center() + viewport.size() * 0.25;
+    frame_on(&mut harness, vec![egui::Event::PointerMoved(pointer)]);
+    frame_on(&mut harness, vec![wheel(3.0)]);
+    harness.idle();
+    assert!(zoom_of(&harness) > 1.0);
+    assert_ne!(pan_of(&harness), Vec2::ZERO);
+
+    click_on(&mut harness, pointer);
+    click_on(&mut harness, pointer);
+    harness.idle();
+
+    assert_close(zoom_of(&harness), 1.0);
+    assert_eq!(pan_of(&harness), Vec2::ZERO);
+}
+
 fn wheel(lines: f32) -> egui::Event {
     egui::Event::MouseWheel {
         unit: egui::MouseWheelUnit::Line,

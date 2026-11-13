@@ -40,6 +40,14 @@ pub(crate) struct LightboxState {
     pub(crate) scroll_offset: egui::Vec2,
 }
 
+/// What this frame's clicks on the picture's canvas ask for.
+struct CanvasClicks {
+    /// A click landed on the canvas but not on the picture: close.
+    beside_image: bool,
+    /// A double click: back to 100%, unpanned.
+    reset_view: bool,
+}
+
 impl LightboxState {
     /// Multiply the zoom by `factor`, within the range the overlay supports.
     pub(crate) fn zoom_by(&mut self, factor: f32) {
@@ -117,12 +125,21 @@ impl LightboxState {
                         .vertical_scroll_offset(offset.y);
                 }
 
-                let scroll_output = scroll_area.show(ui, |ui| {
-                    clicked_beside_image = self.image_canvas(ui, viewport_size);
-                });
+                let mut scroll_output =
+                    scroll_area.show(ui, |ui| self.image_canvas(ui, viewport_size));
+                let clicks = scroll_output.inner;
+                clicked_beside_image = clicks.beside_image;
 
-                // Sync tracking: captures drag-to-scroll changes on non-zoom frames
-                if zoom_offset.is_none() {
+                if clicks.reset_view {
+                    // The scroll area keeps an offset of its own. Unless the
+                    // reset is written into it, the sync below reads the old
+                    // pan straight back and the picture stays where it was.
+                    self.zoom = 1.0;
+                    self.scroll_offset = egui::Vec2::ZERO;
+                    scroll_output.state.offset = egui::Vec2::ZERO;
+                    scroll_output.state.store(ui.ctx(), scroll_output.id);
+                } else if zoom_offset.is_none() {
+                    // Sync tracking: captures drag-to-scroll changes on non-zoom frames
                     self.scroll_offset = scroll_output.state.offset;
                 }
             });
@@ -130,10 +147,9 @@ impl LightboxState {
         clicked_beside_image
     }
 
-    /// Paint the image centered in its scrollable canvas and handle clicks
-    /// on it: a double click resets the zoom. Returns whether a click landed
-    /// beside the image.
-    fn image_canvas(&mut self, ui: &mut egui::Ui, viewport_size: egui::Vec2) -> bool {
+    /// Paint the image centered in its scrollable canvas and report the
+    /// clicks on it.
+    fn image_canvas(&self, ui: &mut egui::Ui, viewport_size: egui::Vec2) -> CanvasClicks {
         let display_size = self.base_size * self.zoom;
         // Allocate content: at least the viewport for centering, larger
         // when the image overflows (for scroll panning)
@@ -148,14 +164,13 @@ impl LightboxState {
             mesh.add_rect_with_uv(image_rect, uv, egui::Color32::WHITE);
             ui.painter().add(egui::Shape::mesh(mesh));
         }
-        if response.double_clicked() {
-            self.zoom = 1.0;
-            self.scroll_offset = egui::Vec2::ZERO;
+        CanvasClicks {
+            beside_image: response.clicked()
+                && response
+                    .interact_pointer_pos()
+                    .is_some_and(|pos| !image_rect.contains(pos)),
+            reset_view: response.double_clicked(),
         }
-        response.clicked()
-            && response
-                .interact_pointer_pos()
-                .is_some_and(|pos| !image_rect.contains(pos))
     }
 
     /// Show the zoom percentage at the bottom center unless it is 100%.
