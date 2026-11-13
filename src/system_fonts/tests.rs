@@ -505,3 +505,29 @@ fn text_sizes_step_one_class_at_a_time_and_stop_at_the_ends() {
     assert_eq!(all[0].smaller(), None);
     assert_eq!(all[all.len() - 1].larger(), None);
 }
+
+/// A machine where fontconfig lists no fonts at all, as in a slim container.
+/// The picker scan runs in a child process because the fontconfig file is
+/// chosen through the environment, which is process-wide.
+#[test]
+fn a_machine_with_no_fonts_still_gets_a_font_list() {
+    let scratch = crate::test_support::ScratchDir::new();
+    let config = scratch.path().join("fonts.conf");
+    std::fs::write(&config, "<?xml version=\"1.0\"?><fontconfig></fontconfig>").unwrap();
+
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "system_fonts::tests::system_font_picker_list_is_sorted_canonical_and_body_capable",
+        ])
+        .env("FONTCONFIG_FILE", &config)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "{stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
