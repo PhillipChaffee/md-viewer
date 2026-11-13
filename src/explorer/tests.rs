@@ -167,6 +167,14 @@ fn entries_without_a_modification_time_go_last_in_both_date_orders() {
 }
 
 #[test]
+fn entries_modified_at_the_same_time_keep_the_order_they_were_listed_in() {
+    for order in [SortOrder::DateAsc, SortOrder::DateDesc] {
+        let same_time = vec![file_node("b.md", Some(5)), file_node("a.md", Some(5))];
+        assert_eq!(sorted(same_time, order), ["b.md", "a.md"]);
+    }
+}
+
+#[test]
 fn folders_are_ordered_among_themselves_like_files() {
     let folder = |name: &str, modified_secs: u64| FileTreeNode::Directory {
         path: PathBuf::from(name),

@@ -193,26 +193,23 @@ impl FileExplorer {
             match sort_order {
                 SortOrder::NameAsc => a.name().cmp(b.name()),
                 SortOrder::NameDesc => b.name().cmp(a.name()),
-                SortOrder::DateAsc => {
-                    // Oldest first: None (unknown) sorts last
-                    match (a.modified(), b.modified()) {
-                        (Some(a_time), Some(b_time)) => a_time.cmp(&b_time),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => a.name().cmp(b.name()),
-                    }
-                }
-                SortOrder::DateDesc => {
-                    // Newest first: None (unknown) sorts last
-                    match (a.modified(), b.modified()) {
-                        (Some(a_time), Some(b_time)) => b_time.cmp(&a_time),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => a.name().cmp(b.name()),
-                    }
-                }
+                SortOrder::DateAsc => Self::by_date(a, b, false),
+                SortOrder::DateDesc => Self::by_date(a, b, true),
             }
         });
+    }
+
+    /// Order two nodes by modification time. A node whose time is unknown
+    /// goes last in both directions, and two such nodes go by name. Equal
+    /// times compare equal, so the sort keeps the order they were in.
+    fn by_date(a: &FileTreeNode, b: &FileTreeNode, newest_first: bool) -> std::cmp::Ordering {
+        match (a.modified(), b.modified()) {
+            (Some(a_time), Some(b_time)) if newest_first => b_time.cmp(&a_time),
+            (Some(a_time), Some(b_time)) => a_time.cmp(&b_time),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.name().cmp(b.name()),
+        }
     }
 
     /// Set root directory and start a shallow background scan.
