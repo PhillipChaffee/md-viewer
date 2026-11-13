@@ -1854,6 +1854,15 @@ struct DefinitionList {
     is_def_list_def: bool,
 }
 
+/// One piece of a heading, kept until the heading ends and is laid out
+/// from the left edge in one go.
+enum HeadingPiece {
+    Text(egui::RichText),
+    /// A whole link. Rendered where it ended it would be laid out before
+    /// the heading's text, on top of the heading's start.
+    Link(Link),
+}
+
 pub struct CommonMarkViewerInternal {
     curr_table: usize,
     curr_code_block: usize,
@@ -1879,8 +1888,8 @@ pub struct CommonMarkViewerInternal {
     current_heading_y: Option<f32>,
     current_heading_source_start: Option<usize>,
     current_heading_text: String,
-    /// Accumulate heading RichText fragments for single render at end
-    current_heading_rich_texts: Vec<egui::RichText>,
+    /// Accumulate the heading's text and links for single render at end
+    current_heading_pieces: Vec<HeadingPiece>,
     /// Content-space Y of the first event rendered by the current slice.
     slice_start_y: f32,
     /// Screen-space Y of the root UI for the current full or sliced render.
@@ -1931,7 +1940,7 @@ impl CommonMarkViewerInternal {
             current_heading_y: None,
             current_heading_source_start: None,
             current_heading_text: String::new(),
-            current_heading_rich_texts: Vec::new(),
+            current_heading_pieces: Vec::new(),
             slice_start_y: 0.0,
             render_origin_y: 0.0,
         }
@@ -3428,7 +3437,7 @@ impl CommonMarkViewerInternal {
                     }
                     if auto_link.is_some() {
                         if let Some(link) = self.link.take() {
-                            link.end(ui, cache);
+                            self.end_link(link, ui, cache);
                         }
                     }
                     if wrap {
@@ -3537,6 +3546,16 @@ impl CommonMarkViewerInternal {
         }
     }
 
+    /// A link is complete: show it, or in a heading keep it for its place
+    /// among the heading's pieces.
+    fn end_link(&mut self, link: Link, ui: &mut Ui, cache: &mut CommonMarkCache) {
+        if self.text_style.heading.is_some() {
+            self.current_heading_pieces.push(HeadingPiece::Link(link));
+        } else {
+            link.end(ui, cache);
+        }
+    }
+
     fn event_text(&mut self, text: CowStr, ui: &mut Ui, options: &CommonMarkOptions) {
         self.emit_text(text, None, HighlightKind::None, ui, options);
     }
@@ -3591,7 +3610,8 @@ impl CommonMarkViewerInternal {
             self.current_heading_text
                 .push_str(raw_heading_text.unwrap_or(&text));
             // Accumulate RichText - will render all at once in end_tag(Heading)
-            self.current_heading_rich_texts.push(rich_text);
+            self.current_heading_pieces
+                .push(HeadingPiece::Text(rich_text));
         } else if self.is_table {
             match self.code_chip_radius(bg, options) {
                 Some(radius) => inline_code_label(ui, rich_text, radius, true),
@@ -3952,17 +3972,22 @@ impl CommonMarkViewerInternal {
             }
             pulldown_cmark::TagEnd::Heading { .. } => {
                 // Render all accumulated heading fragments at once, positioned at left edge
-                if !self.current_heading_rich_texts.is_empty() {
+                if !self.current_heading_pieces.is_empty() {
                     let available = ui.available_rect_before_wrap();
                     let left_edge = ui.min_rect().left();
                     let heading_rect = egui::Rect::from_min_size(
                         egui::pos2(left_edge, available.top()),
                         egui::vec2(available.width() + (available.left() - left_edge), available.height()),
                     );
-                    let rich_texts = std::mem::take(&mut self.current_heading_rich_texts);
+                    let pieces = std::mem::take(&mut self.current_heading_pieces);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(heading_rect), |ui| {
-                        for rt in rich_texts {
-                            ui.label(rt);
+                        for piece in pieces {
+                            match piece {
+                                HeadingPiece::Text(rt) => {
+                                    ui.label(rt);
+                                }
+                                HeadingPiece::Link(link) => link.end(ui, cache),
+                            }
                         }
                     });
                 }
@@ -4091,7 +4116,7 @@ impl CommonMarkViewerInternal {
                     // the previous one. Empty links have no visible widget to
                     // render; keep the cursor where the image left it.
                     if !link.text.is_empty() {
-                        link.end(ui, cache);
+                        self.end_link(link, ui, cache);
                     }
                 }
             }
@@ -5879,6 +5904,43 @@ mod tests {
         assert_eq!(expanded_visible_text(markdown), "Paragraph 📌 🚀 📌");
     }
 
+    /// The pieces a heading has kept so far, a link as `[text](destination)`.
+    fn heading_display(renderer: &CommonMarkViewerInternal) -> Vec<String> {
+        renderer
+            .current_heading_pieces
+            .iter()
+            .map(|piece| match piece {
+                HeadingPiece::Text(text) => text.text().to_owned(),
+                HeadingPiece::Link(link) => {
+                    let text: String = link.text.iter().map(|text| text.text()).collect();
+                    format!("[{text}]({})", link.destination)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_link_in_a_heading_keeps_its_place_among_the_heading_text() {
+        egui::__run_test_ui(|ui| {
+            let mut renderer = CommonMarkViewerInternal::new();
+            let mut cache = CommonMarkCache::default();
+            let options = CommonMarkOptions::default();
+            let markdown = "## Read [go](guide.md) now";
+
+            for (event, span) in Parser::new_ext(markdown, Options::empty()).into_offset_iter() {
+                if matches!(event, Event::End(pulldown_cmark::TagEnd::Heading(_))) {
+                    break;
+                }
+                renderer.event(ui, event, span, &mut cache, &options, 540.0);
+            }
+
+            assert_eq!(
+                heading_display(&renderer),
+                ["Read ", "[go](guide.md)", " now"]
+            );
+        });
+    }
+
     #[test]
     fn production_inline_code_stays_literal_and_keeps_source_highlighting() {
         // Drive the production Event::Code branch and inspect its heading accumulator output.
@@ -5899,8 +5961,7 @@ mod tests {
                 540.0,
             );
 
-            assert_eq!(renderer.current_heading_rich_texts.len(), 1);
-            assert_eq!(renderer.current_heading_rich_texts[0].text(), ":pushpin:");
+            assert_eq!(heading_display(&renderer), [":pushpin:"]);
             assert_eq!(renderer.current_heading_text, ":pushpin:");
             assert!(
                 cache.active_search_y().is_some(),
@@ -5926,12 +5987,7 @@ mod tests {
                 540.0,
             );
 
-            let display: String = renderer
-                .current_heading_rich_texts
-                .iter()
-                .map(|text| text.text())
-                .collect();
-            assert_eq!(display, "Pin 📌");
+            assert_eq!(heading_display(&renderer).concat(), "Pin 📌");
             assert_eq!(renderer.current_heading_text, "Pin :pushpin:");
         });
     }

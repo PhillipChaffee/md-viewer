@@ -284,6 +284,16 @@ fn a_quote_inside_a_quote_is_a_quote_of_its_own() {
 }
 
 #[test]
+fn a_link_in_a_heading_is_set_where_it_is_written() {
+    let frame = show("## Read [go](guide.md) now\n\nText.\n", &rhythm());
+    let [read, go, now] = ["Read", "go", "now"].map(|marker| frame.text(marker));
+
+    assert_close(go.left, read.rect.right(), "the link follows the text before it");
+    assert!(now.left > go.left + 5.0, "and the rest follows the link");
+    assert_close(go.rect.top(), read.rect.top(), "on the heading's line");
+}
+
+#[test]
 fn the_last_block_leaves_no_gap_below_it() {
     let frame = show("Para one.\n\nLast para.\n", &rhythm());
 

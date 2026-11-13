@@ -100,10 +100,7 @@ fn links_work_wherever_they_are_written() {
     }
 }
 
-/// Known bug, listed in `tests/README.md`: a link written in a heading is
-/// drawn over the start of the heading and does nothing when clicked.
 #[test]
-#[should_panic(expected = "a link in a heading leads nowhere")]
 fn a_link_in_a_heading_can_be_followed() {
     let mut reader = library("## A heading with [go](guide.md)");
 
