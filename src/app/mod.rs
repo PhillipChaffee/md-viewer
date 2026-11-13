@@ -1,16 +1,16 @@
 //! The application state and its construction.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
-use eframe::egui;
+use eframe::egui::{self, FontId, TextStyle};
 #[cfg(feature = "mcp")]
 use egui_mcp_bridge::{McpBridge, McpUiExt};
 
 use crate::app::lightbox::LightboxState;
-use crate::explorer::FileExplorer;
+use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::{EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS};
 use crate::persist::{restored_sidebar_width, PersistedState, APP_KEY};
 use crate::recent::RecentEntry;
@@ -45,6 +45,10 @@ fn zoom_percent(zoom: f32) -> i32 {
     (zoom * 100.0).round() as i32
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent on/off setting or a per-frame latch, not a state of one machine"
+)]
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,
     active_tab: usize,
@@ -122,7 +126,7 @@ pub(crate) struct MarkdownApp {
     last_applied_zoom_level: Option<f32>,
     last_window_title: String,
     title_dirty: bool,
-    /// Cached set of open tab paths for file explorer highlighting (avoids per-frame syscalls)
+    /// Cached set of open tab paths for file explorer highlighting (avoids per-frame syscalls).
     open_tab_paths: HashSet<PathBuf>,
     // Lightbox overlay for enlarged mermaid diagrams
     lightbox: Option<LightboxState>,
@@ -141,6 +145,153 @@ pub(crate) struct MarkdownApp {
     mcp_bridge: McpBridge,
 }
 
+/// One-time egui setup that never changes at runtime.
+fn configure_context(ctx: &egui::Context) {
+    // Clear stale egui widget data loaded from disk (scroll offsets, panel sizes, etc.)
+    // We don't persist egui memory (see persist_egui_memory), but eframe always
+    // loads it if present. This purges the old blob so it doesn't waste startup time/RAM.
+    ctx.memory_mut(|mem| mem.data = egui::util::IdTypeMap::default());
+
+    // Disable egui's built-in Ctrl+/- zoom — we handle zoom ourselves
+    ctx.options_mut(|opt| opt.zoom_with_keyboard = false);
+
+    // Set constant styles once at init (never changes at runtime)
+    ctx.style_mut(|style| {
+        // Constant floating-scrollbar geometry (#139).
+        //
+        // egui's floating bar animates its width between `floating_width`
+        // (2) and `bar_width` (10) on hover. A dormant floating bar is
+        // hidden by `dormant_*_opacity: 0.0`, not by being thin, so that
+        // width governs the bar's *interact* rect and nothing visible.
+        // Beside a panel divider the growing and shrinking rect claims and
+        // releases the pointer on alternating frames, and at the one pixel
+        // just outside the resize handle the two never settle.
+        //
+        // Measured on Xvfb with the pointer held still: on `main` exactly
+        // one x out of 36 cycles through four states, in both the painted
+        // pixels and the cursor shape; with the width pinned, zero — and
+        // both builds produce an identical state map across x, so this
+        // removes the oscillation rather than moving it out of view.
+        // `scripts/hover-stability.sh` is that measurement.
+        style.spacing.scroll.floating_width = style.spacing.scroll.bar_width;
+        style.url_in_tooltip = true;
+        style
+            .text_styles
+            .insert(TextStyle::Body, FontId::proportional(16.0));
+        style
+            .text_styles
+            .insert(TextStyle::Heading, FontId::proportional(32.0));
+        style
+            .text_styles
+            .insert(TextStyle::Small, FontId::proportional(13.0));
+        style
+            .text_styles
+            .insert(TextStyle::Monospace, FontId::monospace(14.0));
+
+        // Smoother scroll animation
+        style.animation_time = 0.15;
+        style.scroll_animation.points_per_second = 1500.0;
+
+        // Reduce resize grab radius to prevent overlap with adjacent scrollbars
+        style.interaction.resize_grab_radius_side = SIDEBAR_RESIZE_GRAB_RADIUS;
+    });
+}
+
+/// Scan the picker's family list off the UI thread: probing every family's
+/// Latin coverage takes ~0.5s on a stock Arch system (see
+/// `scan_pickable_font_families`). Until the result lands, the font dialog
+/// shows "System Default" plus a scanning note. `None` means the thread
+/// could not be started, and the list stays empty.
+fn spawn_font_family_scan() -> Option<Receiver<Vec<String>>> {
+    let (font_family_tx, font_family_rx) = mpsc::channel();
+    std::thread::Builder::new()
+        .name("font-family-scan".to_owned())
+        .spawn(move || {
+            let _ = font_family_tx.send(scan_pickable_font_families());
+        })
+        .is_ok()
+        .then_some(font_family_rx)
+}
+
+/// The tabs to start with, and the message to show when the requested file
+/// could not be opened. A file from the command line takes priority over the
+/// previous session's tabs; with neither, the app starts on the welcome page.
+fn initial_tabs(
+    file: Option<&Path>,
+    session_tabs: Option<Vec<PathBuf>>,
+) -> (Vec<Tab>, Option<String>) {
+    if let Some(path) = file {
+        return match Tab::new(path.to_path_buf()) {
+            Ok(tab) => (vec![tab], None),
+            Err(error) => (
+                Vec::new(),
+                Some(format!("Unable to open {}: {error}", path.display())),
+            ),
+        };
+    }
+    let tabs = session_tabs
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|path| path.exists())
+        .filter_map(|path| {
+            Tab::new(path.clone())
+                .inspect_err(|error| log::warn!("Unable to restore {}: {error}", path.display()))
+                .ok()
+        })
+        .collect();
+    (tabs, None)
+}
+
+/// The file explorer for this launch. Its root is the first of: the command
+/// line file's folder, the persisted root if it still exists, the first open
+/// tab's folder, and the working directory.
+fn initial_explorer(
+    file: Option<&Path>,
+    first_tab: Option<&Tab>,
+    sort_order: Option<SortOrder>,
+    persisted_root: Option<PathBuf>,
+    expanded_dirs: Option<Vec<PathBuf>>,
+) -> FileExplorer {
+    let mut file_explorer = FileExplorer::default();
+
+    // Restore sort order before scanning (so initial scan uses correct order)
+    if let Some(sort_order) = sort_order {
+        file_explorer.sort_order = sort_order;
+    }
+
+    let root = file
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .or_else(|| persisted_root.filter(|root| root.exists()))
+        .or_else(|| {
+            first_tab
+                .and_then(|tab| tab.path.parent())
+                .map(Path::to_path_buf)
+        })
+        .or_else(|| std::env::current_dir().ok());
+    if let Some(root) = root {
+        file_explorer.set_root(root);
+    }
+
+    // Restore expanded directories (children will lazy-load on first render)
+    if let Some(expanded) = expanded_dirs {
+        file_explorer.expanded_dirs = expanded.into_iter().collect();
+    }
+    file_explorer
+}
+
+/// Whether the app runs on a virtual display (e.g., Xvfb :99). Virtual
+/// displays lack vsync, causing unlimited FPS and high CPU, so the frame
+/// loop caps its own rate there.
+fn on_virtual_display() -> bool {
+    std::env::var("DISPLAY")
+        .is_ok_and(|display| display != ":0" && display != ":0.0" && !display.is_empty())
+}
+
+const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {
+    egui::Color32::from_rgba_premultiplied(r, g, b, a)
+}
+
 impl MarkdownApp {
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
@@ -153,190 +304,62 @@ impl MarkdownApp {
             .storage
             .and_then(|s| eframe::get_value(s, APP_KEY))
             .unwrap_or_default();
-        let selected_font_family = persisted.selected_font_family;
-        let font_preset = persisted.font_preset.unwrap_or_default();
-        let text_size_class = persisted.text_size_class.unwrap_or_default();
 
         // Setup fonts with system font fallbacks for Unicode support, led by
         // the user's picked family (font picker) or the preset's emulated
         // stack; the text-size class is shared by every preset.
         setup_fonts(
             &cc.egui_ctx,
-            selected_font_family.as_deref(),
-            font_preset,
-            text_size_class,
+            persisted.selected_font_family.as_deref(),
+            persisted.font_preset.unwrap_or_default(),
+            persisted.text_size_class.unwrap_or_default(),
         );
+        configure_context(&cc.egui_ctx);
 
-        // Scan the picker's family list off the UI thread: probing every
-        // family's Latin coverage takes ~0.5s on a stock Arch system (see
-        // `scan_pickable_font_families`). Until the result lands, the font
-        // dialog shows "System Default" plus a scanning note.
-        let (font_family_tx, font_family_rx) = mpsc::channel();
-        let scan_spawned = std::thread::Builder::new()
-            .name("font-family-scan".to_owned())
-            .spawn(move || {
-                let _ = font_family_tx.send(scan_pickable_font_families());
-            })
-            .is_ok();
-        let pending_font_family_scan = scan_spawned.then_some(font_family_rx);
+        Self::from_persisted(&cc.egui_ctx, persisted, file, watch)
+    }
 
-        // Clear stale egui widget data loaded from disk (scroll offsets, panel sizes, etc.)
-        // We don't persist egui memory (see persist_egui_memory), but eframe always
-        // loads it if present. This purges the old blob so it doesn't waste startup time/RAM.
-        cc.egui_ctx.memory_mut(|mem| mem.data = Default::default());
-
-        // Disable egui's built-in Ctrl+/- zoom — we handle zoom ourselves
-        cc.egui_ctx
-            .options_mut(|opt| opt.zoom_with_keyboard = false);
-
-        // Set constant styles once at init (never changes at runtime)
-        cc.egui_ctx.style_mut(|style| {
-            // Constant floating-scrollbar geometry (#139).
-            //
-            // egui's floating bar animates its width between `floating_width`
-            // (2) and `bar_width` (10) on hover. A dormant floating bar is
-            // hidden by `dormant_*_opacity: 0.0`, not by being thin, so that
-            // width governs the bar's *interact* rect and nothing visible.
-            // Beside a panel divider the growing and shrinking rect claims and
-            // releases the pointer on alternating frames, and at the one pixel
-            // just outside the resize handle the two never settle.
-            //
-            // Measured on Xvfb with the pointer held still: on `main` exactly
-            // one x out of 36 cycles through four states, in both the painted
-            // pixels and the cursor shape; with the width pinned, zero — and
-            // both builds produce an identical state map across x, so this
-            // removes the oscillation rather than moving it out of view.
-            // `scripts/hover-stability.sh` is that measurement.
-            style.spacing.scroll.floating_width = style.spacing.scroll.bar_width;
-            style.url_in_tooltip = true;
-            use egui::{FontId, TextStyle};
-            style
-                .text_styles
-                .insert(TextStyle::Body, FontId::proportional(16.0));
-            style
-                .text_styles
-                .insert(TextStyle::Heading, FontId::proportional(32.0));
-            style
-                .text_styles
-                .insert(TextStyle::Small, FontId::proportional(13.0));
-            style
-                .text_styles
-                .insert(TextStyle::Monospace, FontId::monospace(14.0));
-
-            // Smoother scroll animation
-            style.animation_time = 0.15;
-            style.scroll_animation.points_per_second = 1500.0;
-
-            // Reduce resize grab radius to prevent overlap with adjacent scrollbars
-            style.interaction.resize_grab_radius_side = SIDEBAR_RESIZE_GRAB_RADIUS;
-        });
-
-        let dark_mode = persisted
-            .dark_mode
-            .unwrap_or_else(|| cc.egui_ctx.style().visuals.dark_mode);
-        let zoom_level = persisted.zoom_level.unwrap_or(1.0).clamp(0.5, 3.0);
-        let show_outline = persisted.show_outline.unwrap_or(true);
-        let full_width_content = persisted.full_width_content.unwrap_or(false);
-        let math_scale = persisted.math_scale.unwrap_or(1.0).clamp(1.0, 2.0);
-        let highlight_color = persisted
-            .highlight_color
-            .map(|[r, g, b, a]| egui::Color32::from_rgba_premultiplied(r, g, b, a));
-        let link_color = persisted
-            .link_color
-            .map(|[r, g, b, a]| egui::Color32::from_rgba_premultiplied(r, g, b, a));
-        let smooth_text_rendering = persisted.smooth_text_rendering.unwrap_or(false);
-        let show_explorer = persisted.show_explorer.unwrap_or(true);
-        let explorer_width =
-            restored_sidebar_width(persisted.explorer_width, EXPLORER_DEFAULT_WIDTH);
-        let outline_width = restored_sidebar_width(persisted.outline_width, OUTLINE_DEFAULT_WIDTH);
-
-        // Determine initial tabs
-        let mut startup_error = None;
-        let initial_tabs: Vec<Tab> = if let Some(ref path) = file {
-            // CLI argument takes priority
-            match Tab::new(path.clone()) {
-                Ok(tab) => vec![tab],
-                Err(error) => {
-                    startup_error = Some(format!("Unable to open {}: {error}", path.display()));
-                    Vec::new()
-                }
-            }
-        } else if let Some(paths) = persisted.open_tabs {
-            // Restore previous session tabs
-            paths
-                .into_iter()
-                .filter(|p| p.exists())
-                .filter_map(|path| match Tab::new(path.clone()) {
-                    Ok(tab) => Some(tab),
-                    Err(error) => {
-                        log::warn!("Unable to restore {}: {error}", path.display());
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            // No file and no saved session → start empty (welcome page).
-            Vec::new()
-        };
-
-        let tabs = initial_tabs;
-
+    /// Build the app state from the last session's settings and the launch
+    /// arguments. The context's fonts must already match `persisted`.
+    fn from_persisted(
+        ctx: &egui::Context,
+        persisted: PersistedState,
+        file: Option<PathBuf>,
+        watch: bool,
+    ) -> Self {
+        let (tabs, startup_error) = initial_tabs(file.as_deref(), persisted.open_tabs);
         let active_tab = persisted
             .active_tab
             .unwrap_or(0)
             .min(tabs.len().saturating_sub(1));
-
-        // Initialize file explorer
-        let mut file_explorer = FileExplorer::default();
-
-        // Restore sort order before scanning (so initial scan uses correct order)
-        if let Some(sort_order) = persisted.explorer_sort_order {
-            file_explorer.sort_order = sort_order;
-        }
-
-        // Determine explorer root:
-        // 1. From CLI file path
-        // 2. From persisted state
-        // 3. From first open tab
-        // 4. Current working directory as fallback
-        let explorer_root = file
-            .as_ref()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .or(persisted.explorer_root.filter(|p| p.exists()))
-            .or_else(|| {
-                tabs.first()
-                    .and_then(|t| t.path.parent().map(|p| p.to_path_buf()))
-            })
-            .or_else(|| std::env::current_dir().ok());
-
-        if let Some(ref root) = explorer_root {
-            file_explorer.set_root(root.clone());
-        }
-
-        // Restore expanded directories (children will lazy-load on first render)
-        if let Some(expanded) = persisted.expanded_dirs {
-            file_explorer.expanded_dirs = expanded.into_iter().collect();
-        }
+        let file_explorer = initial_explorer(
+            file.as_deref(),
+            tabs.first(),
+            persisted.explorer_sort_order,
+            persisted.explorer_root,
+            persisted.expanded_dirs,
+        );
 
         #[cfg(feature = "mcp")]
         let mcp_bridge = McpBridge::builder().port(9877).build();
         #[cfg(feature = "mcp")]
         log::info!("MCP bridge listening on port {}", mcp_bridge.port());
 
-        // Detect virtual display (e.g., Xvfb :99) to limit frame rate
-        // Virtual displays lack vsync, causing unlimited FPS and high CPU
-        let is_virtual_display = std::env::var("DISPLAY")
-            .map(|d| d != ":0" && d != ":0.0" && !d.is_empty())
-            .unwrap_or(false);
+        let highlight_color = persisted.highlight_color.map(color_from_persisted);
+        let link_color = persisted.link_color.map(color_from_persisted);
+        let font_preset = persisted.font_preset.unwrap_or_default();
+        let text_size_class = persisted.text_size_class.unwrap_or_default();
 
         let mut app = Self {
             tabs,
             active_tab,
-            dark_mode,
-            zoom_level,
-            show_outline,
-            full_width_content,
-            math_scale,
+            dark_mode: persisted
+                .dark_mode
+                .unwrap_or_else(|| ctx.style().visuals.dark_mode),
+            zoom_level: persisted.zoom_level.unwrap_or(1.0).clamp(0.5, 3.0),
+            show_outline: persisted.show_outline.unwrap_or(true),
+            full_width_content: persisted.full_width_content.unwrap_or(false),
+            math_scale: persisted.math_scale.unwrap_or(1.0).clamp(1.0, 2.0),
             // Frame 1 always rebuilds Visuals anyway (last_applied_dark_mode
             // starts at None), so this just avoids a spurious second rebuild
             // afterward if nothing further changes.
@@ -345,20 +368,20 @@ impl MarkdownApp {
             link_color,
             last_applied_link_color: link_color,
             show_color_settings_dialog: false,
-            // Already applied above via setup_fonts(); last_applied starts in
+            // Already applied by `new` via setup_fonts(); last_applied starts in
             // sync so update() doesn't redundantly reload fonts on frame 1.
             last_applied_font_config: Some((
-                selected_font_family.clone(),
+                persisted.selected_font_family.clone(),
                 font_preset,
                 text_size_class,
             )),
-            selected_font_family,
+            selected_font_family: persisted.selected_font_family,
             available_font_families: Vec::new(),
             available_font_families_lower: Vec::new(),
-            pending_font_family_scan,
+            pending_font_family_scan: spawn_font_family_scan(),
             show_font_dialog: false,
             font_filter: String::new(),
-            smooth_text_rendering,
+            smooth_text_rendering: persisted.smooth_text_rendering.unwrap_or(false),
             font_preset,
             text_size_class,
             watch_enabled: watch,
@@ -371,12 +394,15 @@ impl MarkdownApp {
             watched_explorer_dirs: HashSet::new(),
             hovered_tab: None,
             file_explorer,
-            show_explorer,
-            explorer_width,
-            outline_width,
+            show_explorer: persisted.show_explorer.unwrap_or(true),
+            explorer_width: restored_sidebar_width(
+                persisted.explorer_width,
+                EXPLORER_DEFAULT_WIDTH,
+            ),
+            outline_width: restored_sidebar_width(persisted.outline_width, OUTLINE_DEFAULT_WIDTH),
             flashing_paths: HashMap::new(),
-            is_virtual_display,
-            egui_ctx: cc.egui_ctx.clone(),
+            is_virtual_display: on_virtual_display(),
+            egui_ctx: ctx.clone(),
             last_applied_dark_mode: None,
             last_applied_zoom_level: None,
             last_window_title: String::new(),
@@ -396,9 +422,9 @@ impl MarkdownApp {
 
         // Record a CLI-provided file as recent (an explicit open). Session-restored
         // tabs are not treated as explicit opens, so they are not recorded here.
-        if let Some(f) = &file {
-            let f = f.canonicalize().unwrap_or_else(|_| f.clone());
-            app.record_recent(&f);
+        if let Some(file) = file {
+            let file = file.canonicalize().unwrap_or(file);
+            app.record_recent(&file);
         }
 
         if watch {
@@ -409,19 +435,16 @@ impl MarkdownApp {
     }
 
     fn window_title(&self) -> String {
-        if let Some(tab) = self.tabs.get(self.active_tab) {
-            format!("{} - Markdown Viewer", tab.title())
-        } else {
-            "Markdown Viewer".to_string()
-        }
+        self.tabs.get(self.active_tab).map_or_else(
+            || "Markdown Viewer".to_string(),
+            |tab| format!("{} - Markdown Viewer", tab.title()),
+        )
     }
 
-    fn is_markdown_file(path: &std::path::Path) -> bool {
-        path.extension()
-            .map(|ext| {
-                let ext = ext.to_string_lossy().to_lowercase();
-                ext == "md" || ext == "markdown" || ext == "txt"
-            })
-            .unwrap_or(false)
+    fn is_markdown_file(path: &Path) -> bool {
+        path.extension().is_some_and(|ext| {
+            let ext = ext.to_string_lossy().to_lowercase();
+            ext == "md" || ext == "markdown" || ext == "txt"
+        })
     }
 }
