@@ -13,6 +13,8 @@ use notify_debouncer_mini::{
     Debouncer,
 };
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

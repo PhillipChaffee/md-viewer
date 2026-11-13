@@ -5,6 +5,8 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 
@@ -129,6 +131,19 @@ fn non_rendered_spans(pattern: &Regex, content: &str) -> Vec<Range<usize>> {
         spans.extend(url.into_iter().chain(alt).map(|part| part.range()));
     }
     spans
+}
+
+/// The match index one step from `current` among `count` matches: forward
+/// for a `direction` of zero or more and backward below zero, wrapping at
+/// either end. `count` is at least one.
+pub(crate) const fn stepped_match_index(current: usize, count: usize, direction: i32) -> usize {
+    if direction >= 0 {
+        (current + 1) % count
+    } else if current == 0 {
+        count - 1
+    } else {
+        current - 1
+    }
 }
 
 pub(crate) fn take_search_correction_request(pending: &mut bool) -> bool {

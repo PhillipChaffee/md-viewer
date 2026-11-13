@@ -23,6 +23,8 @@ use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fon
 use crate::tab::Tab;
 use crate::theme::ThemeId;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 
@@ -189,6 +191,23 @@ fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, D
     (theme, look)
 }
 
+/// The tab a saved session comes back on: the one it saved, or the last
+/// of `tab_count` where that one is gone, and the first where it saved
+/// none.
+fn restored_active_tab(saved: Option<usize>, tab_count: usize) -> usize {
+    saved.unwrap_or(0).min(tab_count.saturating_sub(1))
+}
+
+/// The document zoom a saved session comes back at.
+fn restored_zoom(saved: Option<f32>) -> f32 {
+    saved.unwrap_or(1.0).clamp(0.5, 3.0)
+}
+
+/// The formula size a saved session comes back at, relative to the text.
+fn restored_math_scale(saved: Option<f32>) -> f32 {
+    saved.unwrap_or(1.0).clamp(1.0, 2.0)
+}
+
 const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {
     egui::Color32::from_rgba_premultiplied(r, g, b, a)
 }
@@ -230,10 +249,7 @@ impl MarkdownApp {
     ) -> Self {
         let (theme, document_look) = restored_look(ctx, &persisted);
         let (tabs, startup_error) = initial_tabs(file.as_deref(), persisted.open_tabs);
-        let active_tab = persisted
-            .active_tab
-            .unwrap_or(0)
-            .min(tabs.len().saturating_sub(1));
+        let active_tab = restored_active_tab(persisted.active_tab, tabs.len());
         let file_explorer = initial_explorer(
             file.as_deref(),
             tabs.first(),
@@ -258,7 +274,7 @@ impl MarkdownApp {
             tabs,
             active_tab,
             theme,
-            zoom_level: persisted.zoom_level.unwrap_or(1.0).clamp(0.5, 3.0),
+            zoom_level: restored_zoom(persisted.zoom_level),
             show_outline: persisted.show_outline.unwrap_or(true),
             outline_rule: OutlineRule::restored(persisted.show_outline),
             heading_spy: HeadingSpy::default(),
@@ -267,7 +283,7 @@ impl MarkdownApp {
             column_drag_grab: None,
             line_spacing: persisted.line_spacing.unwrap_or_default(),
             document_look,
-            math_scale: persisted.math_scale.unwrap_or(1.0).clamp(1.0, 2.0),
+            math_scale: restored_math_scale(persisted.math_scale),
             // Frame 1 always rebuilds Visuals anyway (last_applied_theme
             // starts at None), so this just avoids a spurious second rebuild
             // afterward if nothing further changes.

@@ -4,6 +4,8 @@ use std::collections::HashSet;
 
 use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 
@@ -127,6 +129,17 @@ pub(crate) fn header_is_hidden(
     index: usize,
     collapsed: &HashSet<usize>,
 ) -> bool {
+    has_collapsed_ancestor(headers, index, |ancestor| collapsed.contains(&ancestor))
+}
+
+/// Whether some ancestor of the header at `index` is one `is_collapsed`
+/// names. A header's parent is the nearest header before it with a lower
+/// level, and its ancestors are its parent and that parent's ancestors.
+fn has_collapsed_ancestor(
+    headers: &[Header],
+    index: usize,
+    is_collapsed: impl Fn(usize) -> bool,
+) -> bool {
     if index == 0 || index >= headers.len() {
         return false;
     }
@@ -137,7 +150,7 @@ pub(crate) fn header_is_hidden(
         // Only consider headers with lower level than what we're searching for
         if h.level < search_level {
             // Found an ancestor
-            if collapsed.contains(&i) {
+            if is_collapsed(i) {
                 return true;
             }
             // This ancestor is not collapsed, but check its ancestors too

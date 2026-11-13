@@ -97,7 +97,9 @@ trivial_numeric_casts = "warn"
 unused_qualifications = "warn"
 # The `mcp` feature is declared only on machines that have the local
 # egui-mcp-bridge checkout; the cfg name must stay known everywhere else.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("mcp"))'] }
+# `kani` is set only by `cargo kani`, which compiles the proof harnesses in
+# each module's `proofs.rs`; no other build sees them (see PROOFS.md).
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("mcp"))', 'cfg(kani)'] }
 
 [workspace.lints.rustdoc]
 # The whole stable group in one entry, so lints rustdoc gains stay owned by

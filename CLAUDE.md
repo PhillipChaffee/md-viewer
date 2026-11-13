@@ -49,6 +49,7 @@ the app; `GATES.md` lists every quality gate and each exception to one.
 cargo run -- file.md        # run the app
 cargo test                  # the app crate's tests
 ./run-gates.sh              # every gate, in parallel
+./run-proofs.sh             # the Kani proofs in each proofs.rs (PROOFS.md)
 ```
 
 The renderer fork has its own workspace and its own tests:

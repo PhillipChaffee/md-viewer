@@ -10,6 +10,8 @@ use crate::app::MarkdownApp;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::theme::{Palette, ThemeId};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

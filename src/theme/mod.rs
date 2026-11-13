@@ -4,6 +4,8 @@
 use egui::{Color32, CornerRadius, Stroke};
 use serde::{Deserialize, Serialize};
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

@@ -9,6 +9,8 @@ use crate::icons::Icon;
 use crate::tab::Tab;
 use crate::theme::Palette;
 
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 

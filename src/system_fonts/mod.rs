@@ -16,6 +16,8 @@ use crate::system_fonts::install::{
 mod bundled;
 mod emoji;
 mod install;
+#[cfg(kani)]
+mod proofs;
 #[cfg(test)]
 mod tests;
 
