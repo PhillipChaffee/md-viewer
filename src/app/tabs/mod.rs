@@ -3,10 +3,13 @@
 use std::path::{Path, PathBuf};
 
 use crate::app::MarkdownApp;
-use crate::dialogs::{pick_file, pick_folder};
 use crate::links::apply_fragment_navigation;
 use crate::recent::{now_epoch_secs, push_recent};
 use crate::tab::Tab;
+
+/// Asks the user for a path, with the dialog starting in the given folder.
+/// `Ok(None)` means the user cancelled.
+pub(crate) type PathPicker = Box<dyn Fn(Option<&Path>) -> Result<Option<PathBuf>, String>>;
 
 impl MarkdownApp {
     pub(crate) fn open_file_dialog(&mut self) {
@@ -17,7 +20,7 @@ impl MarkdownApp {
             .map(Path::to_path_buf)
             .or_else(|| self.file_explorer.root.clone());
 
-        match pick_file(initial_dir.as_deref()) {
+        match (self.file_picker)(initial_dir.as_deref()) {
             Ok(Some(path)) => self.open_in_new_tab(path),
             Ok(None) => {}
             Err(error) => {
@@ -30,7 +33,7 @@ impl MarkdownApp {
     /// Open a native folder picker and point the file explorer at the chosen
     /// directory (issue #28). The chosen root is persisted via `save()`.
     pub(crate) fn open_folder_dialog(&mut self) {
-        match pick_folder(self.file_explorer.root.as_deref()) {
+        match (self.folder_picker)(self.file_explorer.root.as_deref()) {
             Ok(Some(path)) => {
                 self.file_explorer.set_root(path);
                 // Make sure the explorer is visible so the result is seen.

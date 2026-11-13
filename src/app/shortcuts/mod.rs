@@ -1,6 +1,7 @@
 //! Keyboard shortcuts and dropped files.
 
 use std::mem;
+use std::path::Path;
 
 use eframe::egui::{self, Key};
 
@@ -173,6 +174,14 @@ fn shortcut_actions(input: &egui::InputState, focus: Focus) -> Vec<AppAction> {
     actions
 }
 
+/// Whether a dropped file is one the viewer opens, judged by its extension.
+fn is_markdown_file(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| {
+        let ext = ext.to_string_lossy().to_lowercase();
+        ext == "md" || ext == "markdown" || ext == "txt"
+    })
+}
+
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -200,7 +209,7 @@ impl MarkdownApp {
 
             for file in &i.raw.dropped_files {
                 if let Some(path) = &file.path {
-                    if Self::is_markdown_file(path) {
+                    if is_markdown_file(path) {
                         self.open_in_new_tab(path.clone());
                     } else {
                         self.error_message = Some(

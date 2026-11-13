@@ -3,16 +3,8 @@
 use eframe::egui;
 
 use crate::app::MarkdownApp;
+use crate::layout::line_fraction;
 use crate::search::SearchBarOutcome;
-
-/// How far down the document `line` sits, as a fraction of `total_lines`.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "a scroll estimate: line counts past f32's 24-bit mantissa lose a rounding error, not a position"
-)]
-fn line_ratio(line: usize, total_lines: usize) -> f32 {
-    line as f32 / total_lines as f32
-}
 
 impl MarkdownApp {
     /// Render the find bar while it is open. The returned clicks are applied
@@ -159,7 +151,7 @@ impl MarkdownApp {
         // Line-ratio estimate gets the view roughly in the right area. The renderer
         // records the actual y of the active match during paint; render_tab_content
         // schedules a corrective scroll next frame if this estimate was off.
-        let estimated_y = line_ratio(m.line_number, tab.content_lines) * tab.last_content_height;
+        let estimated_y = line_fraction(m.line_number, tab.content_lines) * tab.last_content_height;
         let margin = if tab.last_viewport_height > 0.0 {
             tab.last_viewport_height * 0.35
         } else {
