@@ -18,14 +18,6 @@ pub(crate) struct SearchMatch {
     pub(crate) line_number: usize,
 }
 
-/// Per-frame return from `render_search_bar`.
-#[derive(Default)]
-pub(crate) struct SearchBarOutcome {
-    pub(crate) close_requested: bool,
-    pub(crate) prev_clicked: bool,
-    pub(crate) next_clicked: bool,
-}
-
 /// App-level search state — only one find bar is visible at a time.
 #[derive(Default)]
 pub(crate) struct SearchState {

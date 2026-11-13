@@ -201,17 +201,11 @@ impl MarkdownApp {
         self.render_error_bar(ctx);
 
         // Find bar (conditional, between error bar and tab bar)
-        let search_outcome = self.render_search_bar(ctx);
+        let find_actions = self.render_search_bar(ctx);
         // Rebuild matches if query or tab changed (TextEdit may have mutated the query)
         self.maybe_rebuild_search();
-        if search_outcome.close_requested {
-            self.close_search();
-        }
-        if search_outcome.next_clicked {
-            self.jump_match(1);
-        }
-        if search_outcome.prev_clicked {
-            self.jump_match(-1);
+        for action in find_actions {
+            self.apply_action(ctx, action);
         }
 
         // Close tab if requested
