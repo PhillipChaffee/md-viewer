@@ -81,14 +81,11 @@ impl MarkdownApp {
 
         let (reading_width, palette) = (self.reading_width, self.theme.palette());
         let column_drag_grab = &mut self.column_drag_grab;
-        let mut pane_width = self.document_pane_width;
-        let mut requested_width = None;
-        let mut edited = false;
         let mcp = &self.mcp;
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
-        egui::Frame::NONE
+        let (pane_width, requested_width, edited) = egui::Frame::NONE
             .inner_margin(egui::Margin {
                 left: 8,
                 right: CONTENT_RIGHT_RESIZE_GUTTER,
@@ -99,11 +96,10 @@ impl MarkdownApp {
                 let raw_scroll = ui.ctx().input(|i| i.raw_scroll_delta.y);
                 let content_rect = ui.available_rect_before_wrap();
                 let column = Column::in_pane(content_rect, reading_width);
-                pane_width = content_rect.width();
 
                 // (the Preview|Edit toggle lives in the bars above)
-                if tab.is_editing {
-                    edited = edit_pane(ui, tab, column);
+                let edited = if tab.is_editing {
+                    edit_pane(ui, tab, column)
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
@@ -111,9 +107,10 @@ impl MarkdownApp {
                         tab.scroll_to(offset);
                     }
                     wheel_scroll_during_selection(ui, tab, &mut scroll, raw_scroll, content_rect);
-                }
+                    false
+                };
                 // After the document, so the strips sit on top of it.
-                requested_width = resize_strips(ui, column, column_drag_grab, palette);
+                let requested_width = resize_strips(ui, column, column_drag_grab, palette);
                 for (name, strip) in column.strips() {
                     mcp::rect(mcp, format_args!("{name}"), "slider", strip, None);
                 }
@@ -122,7 +119,9 @@ impl MarkdownApp {
                 if ui.ctx().input(|i| i.smooth_scroll_delta.length_sq() > 0.0) {
                     ui.ctx().request_repaint();
                 }
-            });
+                (content_rect.width(), requested_width, edited)
+            })
+            .inner;
 
         let clicked_link = tab.check_link_hooks();
         if edited {
