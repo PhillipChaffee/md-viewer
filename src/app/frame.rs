@@ -349,14 +349,7 @@ impl MarkdownApp {
         // rendered. Synchronize the app-level state that depends on tab paths.
         let path_after_render = self.tabs.get(self.active_tab).map(|tab| tab.path.clone());
         if path_after_render != path_before_render {
-            if let Some(path) = path_after_render {
-                self.record_recent(&path);
-            }
-            self.title_dirty = true;
-            self.refresh_open_tab_paths();
-            if self.watch_enabled {
-                self.update_watched_paths();
-            }
+            self.active_tab_navigated();
         }
 
         // Open link in new tab if requested

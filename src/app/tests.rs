@@ -137,6 +137,33 @@ fn alt_arrow_moves_one_history_step_per_keypress() {
 }
 
 #[test]
+fn history_navigation_retitles_the_window_and_moves_the_explorer_highlight() {
+    let window_titles = |output: &egui::FullOutput| -> Vec<String> {
+        output
+            .viewport_output
+            .values()
+            .flat_map(|viewport| &viewport.commands)
+            .filter_map(|command| match command {
+                egui::ViewportCommand::Title(title) => Some(title.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut harness = Harness::with_three_docs();
+    let (b, c) = (harness.path("b.md"), harness.path("c.md"));
+    harness.app.navigate_active_tab_to(&b);
+    harness.app.navigate_active_tab_to(&c);
+    harness.idle();
+
+    let mut titles = window_titles(&harness.press(Modifiers::ALT, Key::ArrowLeft));
+    titles.extend(window_titles(&harness.idle()));
+
+    assert_eq!(titles, ["b.md - Markdown Viewer"]);
+    assert!(harness.app.open_tab_paths.contains(&b));
+    assert!(!harness.app.open_tab_paths.contains(&c));
+}
+
+#[test]
 fn view_shortcuts_flip_their_own_setting() {
     let mut harness = Harness::with_three_docs();
     let (dark, outline, explorer) = (

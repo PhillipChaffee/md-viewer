@@ -101,16 +101,8 @@ impl MarkdownApp {
             .tabs
             .get_mut(self.active_tab)
             .is_some_and(|tab| tab.navigate_to_path(path).unwrap_or(false));
-        if !changed {
-            return;
-        }
-
-        let opened_path = self.tabs[self.active_tab].path.clone();
-        self.record_recent(&opened_path);
-        self.title_dirty = true;
-        self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
+        if changed {
+            self.active_tab_navigated();
         }
     }
 
@@ -122,8 +114,26 @@ impl MarkdownApp {
                 tab.navigate_forward()
             }
         });
-        if let Some(Err(error)) = result {
-            self.error_message = Some(format!("Unable to navigate history: {error}"));
+        match result {
+            Some(Ok(true)) => self.active_tab_navigated(),
+            Some(Err(error)) => {
+                self.error_message = Some(format!("Unable to navigate history: {error}"));
+            }
+            Some(Ok(false)) | None => {}
+        }
+    }
+
+    /// Bring everything that mirrors tab paths back in line after the active
+    /// tab moved to another document: the recent list, the window title, the
+    /// explorer's open-file highlight, and the watched paths.
+    pub(crate) fn active_tab_navigated(&mut self) {
+        if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
+            self.record_recent(&path);
+        }
+        self.title_dirty = true;
+        self.refresh_open_tab_paths();
+        if self.watch_enabled {
+            self.update_watched_paths();
         }
     }
 
