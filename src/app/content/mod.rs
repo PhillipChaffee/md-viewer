@@ -198,6 +198,7 @@ fn push_search_ranges(tab: &mut Tab, search_is_open: bool, active_idx: usize) {
 /// handles the wheel natively.
 fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
     let pending_edit = tab.pending_edit_scroll.take();
+    let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
         .id_salt(tab.id.with("edit-scroll"))
         .auto_shrink(false)
@@ -208,15 +209,19 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
                 ui.add_space(column.inset());
                 let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4_i8, 2_i8));
                 frame.show(ui, |ui| {
-                    egui::TextEdit::multiline(&mut tab.content)
+                    edited = egui::TextEdit::multiline(&mut tab.content)
                         .id_salt(ui.id().with("edit"))
                         .desired_width(column.width - 8.0)
                         .desired_rows(24)
                         .frame(false)
-                        .ui(ui);
+                        .ui(ui)
+                        .changed();
                 });
             });
         });
+    if edited {
+        tab.content_edited();
+    }
     tab.scroll_offset = edit_out.state.offset.y;
     tab.last_viewport_height = edit_out.inner_rect.height();
     tab.last_content_height = edit_out.content_size.y;

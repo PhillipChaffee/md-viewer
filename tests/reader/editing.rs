@@ -89,11 +89,7 @@ fn the_preview_shows_what_was_typed() {
     reader.assert_hides("## Afterword");
 }
 
-/// Known bug, listed in `tests/README.md`: the preview shows the heading
-/// that was typed, and the contents sidebar beside it does not. This test
-/// states the right behavior and is expected to fail until the app has it.
 #[test]
-#[should_panic(expected = "the contents sidebar lacks the heading the page shows")]
 fn the_contents_follow_what_was_typed() {
     let mut reader = draft();
     reader.press("Ctrl+E");

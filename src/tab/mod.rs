@@ -245,7 +245,6 @@ impl Tab {
     }
 
     fn apply_loaded_content(&mut self, path: PathBuf, content: String, reset_scroll: bool) {
-        self.content_lines = content.lines().count();
         self.content = content;
         self.saved_content = self.content.clone();
         self.path = path;
@@ -257,20 +256,40 @@ impl Tab {
             self.pending_scroll_offset = None;
         }
         self.base_uri = Self::compute_base_uri(&self.path);
+        self.index_content();
+        self.collapsed_headers.clear();
+
+        // Stale byte ranges; caller rebuilds if search bar is open.
+        self.search_matches.clear();
+    }
+
+    /// Bring what is worked out from the text back in line with it after
+    /// the editor changed it: the contents, the meta line and the links.
+    /// Called once per edit, never per frame.
+    pub(crate) fn content_edited(&mut self) {
+        let headings_before = self.outline_headers.len();
+        self.index_content();
+        // The folds are kept by position, which only a heading added or
+        // removed shifts.
+        if self.outline_headers.len() != headings_before {
+            self.collapsed_headers.clear();
+        }
+    }
+
+    /// Work out everything that is read off `content`: its line count,
+    /// meta line, title, headings and local links.
+    fn index_content(&mut self) {
+        self.content_lines = self.content.lines().count();
         self.kicker = kicker_line(&self.path, &self.content);
 
         let parsed = parse_headers(&self.content);
         self.document_title = parsed.document_title;
         self.outline_headers = parsed.outline_headers;
-        self.collapsed_headers.clear();
 
         self.local_links = parse_local_links(&self.content, &self.path);
         for link in &self.local_links {
             self.cache.add_link_hook(link);
         }
-
-        // Stale byte ranges; caller rebuilds if search bar is open.
-        self.search_matches.clear();
     }
 
     pub(crate) fn navigate_to_link(&mut self, link: &str) -> io::Result<bool> {

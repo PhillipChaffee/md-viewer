@@ -159,6 +159,47 @@ mod editing {
     use crate::test_support::assert_close;
 
     #[test]
+    fn an_edit_brings_the_contents_the_meta_line_and_the_links_up_to_date() {
+        let (_dir, mut tab) = tab_on(&[
+            ("notes.md", "# Notes\n\n## One\n\n## Two\n"),
+            ("other.md", "# Other"),
+        ]);
+        tab.collapsed_headers.insert(1);
+
+        tab.content.push_str("\nA line of prose.");
+        tab.content_edited();
+        assert_eq!(tab.content_lines, 7);
+        assert!(
+            tab.collapsed_headers.contains(&1),
+            "typing prose folds nothing open"
+        );
+
+        tab.content = format!(
+            "# Renamed\n\nSee [other](other.md).\n\n{}",
+            "word ".repeat(700)
+        );
+        tab.content_edited();
+
+        let titles: Vec<&str> = tab
+            .outline_headers
+            .iter()
+            .map(|header| header.title.as_str())
+            .collect();
+        assert_eq!(titles, ["Renamed"]);
+        assert_eq!(tab.document_title.as_deref(), Some("Renamed"));
+        assert_eq!(tab.kicker, "notes.md \u{b7} 4 min read");
+        assert!(
+            tab.collapsed_headers.is_empty(),
+            "a fold is kept by position, which a removed heading shifts"
+        );
+        // The new link is one the renderer reports clicks on.
+        tab.cache
+            .link_hooks_mut()
+            .insert("other.md".to_owned(), true);
+        assert_eq!(tab.check_link_hooks().as_deref(), Some("other.md"));
+    }
+
+    #[test]
     fn switching_to_the_editor_and_back_keeps_the_place_in_the_document() {
         let (_dir, mut tab) = tab_with("# Notes");
         tab.scroll_offset = 200.0;

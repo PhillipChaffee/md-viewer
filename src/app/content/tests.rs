@@ -130,6 +130,28 @@ fn edit_mode_shows_the_source_and_takes_typing() {
 }
 
 #[test]
+fn a_heading_typed_in_the_editor_is_in_the_contents_at_once() {
+    let mut harness = LabelHarness::with_docs(&[("a.md", "# Title")]);
+    harness.click("More");
+    harness.click("Edit Document");
+    harness.get_by_role(Role::MultilineTextInput).click();
+    harness.frames(2);
+
+    let editor = harness.get_by_role(Role::MultilineTextInput);
+    editor.type_text("\n\n## Afterword");
+    harness.frames(2);
+
+    let tab = &harness.state().tabs[0];
+    let titles: Vec<&str> = tab
+        .outline_headers
+        .iter()
+        .map(|header| header.title.as_str())
+        .collect();
+    assert_eq!(titles, ["Title", "Afterword"]);
+    assert_eq!(tab.content_lines, 3);
+}
+
+#[test]
 fn switching_to_edit_mode_keeps_the_place_in_a_long_document() {
     let mut harness = long_doc();
     harness.key_press(Key::PageDown);
