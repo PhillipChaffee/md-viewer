@@ -391,6 +391,20 @@ fn unsaved_edits_are_not_overwritten_by_a_change_on_disk() {
 }
 
 #[test]
+fn unsaved_edits_shown_in_the_preview_are_not_overwritten_either() {
+    let mut harness = open(&[("a.md", "on disk")]);
+    let doc = harness.path("a.md");
+    harness.app.tabs[0].set_edit_mode(true);
+    harness.app.tabs[0].content = "my edit".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
+
+    fs::write(&doc, "changed elsewhere").unwrap();
+    harness.app.reload_changed_tabs(vec![doc]);
+
+    assert_eq!(harness.app.tabs[0].content, "my edit");
+}
+
+#[test]
 fn an_edit_tab_without_unsaved_changes_follows_the_disk() {
     let mut harness = open(&[("a.md", "on disk")]);
     let doc = harness.path("a.md");

@@ -234,13 +234,12 @@ impl MarkdownApp {
             .is_some_and(|tab| tab.path == path);
         let mut reloaded = false;
         for tab in self.tabs.iter_mut().filter(|tab| tab.path == path) {
-            // Never clobber unsaved edit-mode edits with a disk
-            // reload (dirty-reload suppression, mirroring the
-            // dsh-better-sidebar editor). A reload of identical
-            // content (e.g. our own save echoing back through the
-            // watcher) still proceeds.
-            if tab.is_editing && tab.content != tab.saved_content {
-                log::info!("Skipping reload of dirty edit tab: {}", path.display());
+            // Never clobber unsaved edits with a disk reload, whether the
+            // tab shows the editor or the preview of what was typed. A
+            // reload of identical content (e.g. our own save echoing back
+            // through the watcher) still proceeds.
+            if tab.content != tab.saved_content {
+                log::info!("Skipping reload of unsaved tab: {}", path.display());
                 continue;
             }
             log::info!("Reloading tab: {}", path.display());
