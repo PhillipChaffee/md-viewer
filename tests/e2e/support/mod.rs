@@ -65,6 +65,12 @@ impl Home {
         fs::write(path, content).unwrap();
     }
 
+    /// Delete a document from the folder `md-viewer` is run in.
+    #[track_caller]
+    pub(crate) fn delete(&self, name: &str) {
+        fs::remove_file(self.0.join("docs").join(name)).unwrap();
+    }
+
     /// Every file the app has written to its settings folders, with its
     /// text.
     pub(crate) fn saved_settings(&self) -> Vec<(PathBuf, String)> {

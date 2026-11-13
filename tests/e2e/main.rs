@@ -8,7 +8,11 @@ mod support;
 
 #[cfg(test)]
 mod cli;
+#[cfg(test)]
+mod cli_depth;
 #[cfg(all(test, target_os = "linux"))]
 mod terminal;
 #[cfg(all(test, target_os = "linux"))]
 mod window;
+#[cfg(all(test, target_os = "linux"))]
+mod window_depth;

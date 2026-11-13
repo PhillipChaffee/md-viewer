@@ -73,10 +73,12 @@ impl Screen {
         }
 
         // `-displayfd` has Xvfb pick a free display and report it once the
-        // display accepts connections.
+        // display accepts connections. `-noreset` keeps the display as it
+        // is when its last window closes: a server that resets itself then
+        // can refuse the app a test starts next.
         let mut xvfb = Command::new("Xvfb")
             .args(["-displayfd", "1", "-screen", "0", "1600x1000x24"])
-            .args(["-nolisten", "tcp"])
+            .args(["-nolisten", "tcp", "-noreset"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
