@@ -4,9 +4,13 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
 use crate::tab::Tab;
 use crate::watcher::FLASH_DURATION_MS;
+
+#[cfg(test)]
+mod tests;
 
 /// How long a save's outcome stays beside the mode toggle.
 const SAVE_FLASH: Duration = Duration::from_millis(FLASH_DURATION_MS * 3);
@@ -69,7 +73,7 @@ impl MarkdownApp {
             ));
 
             if new_tab_btn.clicked() {
-                self.open_file_dialog();
+                self.apply_action(ui.ctx(), AppAction::OpenFile);
             }
 
             // Preview|Edit segmented toggle for the active tab, right-aligned
@@ -145,9 +149,7 @@ impl MarkdownApp {
         self.active_tab = 0;
         self.title_dirty = true;
         self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 }
 
