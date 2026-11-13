@@ -119,17 +119,11 @@ impl Fonts {
     }
 
     fn definitions(&mut self, preferred: Option<&str>, preset: FontPreset) -> FontDefinitions {
-        font_definitions(
-            &mut self.collection,
-            &mut self.source_cache,
-            None,
-            preferred,
-            preset,
-        )
+        font_definitions(&mut self.system(), None, preferred, preset)
     }
 
     fn pickable(&mut self) -> Vec<String> {
-        pickable_family_names(&mut self.collection, &mut self.source_cache)
+        pickable_family_names(&mut self.system())
     }
 }
 
@@ -237,8 +231,7 @@ fn preset_code_face_leads_the_monospace_chain_when_installed() {
 fn installed_fonts_cover_reported_scripts() {
     let mut fonts = Fonts::multilingual();
     let definitions = font_definitions(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         Some("en-US"),
         None,
         FontPreset::default(),
@@ -402,8 +395,7 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
     fonts.register_latin("Noto Sans");
 
     let installed = install_regular_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut FontDefinitions::default(),
         None,
         None,

@@ -1,7 +1,6 @@
 //! Color and monochrome emoji fallback faces.
 
 use egui::{FontData, FontDefinitions, FontFamily};
-use fontique::{Collection, SourceCache};
 
 use crate::system_fonts::install::SystemFonts;
 
@@ -46,17 +45,9 @@ const BUILTIN_EMOJI_KEYS: [&str; 2] = ["NotoEmoji-Regular", "emoji-icon-font"];
 /// blank). With the patch, emoji render in full color; without it, the
 /// monochrome face still provides visible glyphs.
 ///
-/// The color face is the one `collection` lists under `COLOR_EMOJI_FAMILY`;
+/// The color face is the one `fonts` lists under `COLOR_EMOJI_FAMILY`;
 /// where none is installed the chains get the monochrome face only.
-pub(crate) fn install_emoji_fonts(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-    definitions: &mut FontDefinitions,
-) {
-    let mut fonts = SystemFonts {
-        collection,
-        source_cache,
-    };
+pub(crate) fn install_emoji_fonts(fonts: &mut SystemFonts<'_>, definitions: &mut FontDefinitions) {
     let color_face = fonts.named(COLOR_EMOJI_FAMILY, COLOR_EMOJI_SAMPLE);
     if let Some(face) = color_face {
         log::info!("Loaded system color emoji font from {}", face.source);

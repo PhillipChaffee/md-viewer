@@ -31,11 +31,7 @@ const UI_SYMBOLS_IN_COLOR_FONT: [char; 3] = ['\u{25B6}', '\u{26A0}', '\u{2714}']
 /// The emoji faces `setup_fonts` adds on a machine with `fonts` installed.
 fn emoji_definitions(mut fonts: Fonts) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
-    install_emoji_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-    );
+    install_emoji_fonts(&mut fonts.system(), &mut definitions);
     definitions
 }
 
@@ -312,11 +308,7 @@ fn definitions_without_family_chains_only_gain_the_font_data() {
     let mut definitions = FontDefinitions::empty();
     definitions.families.clear();
 
-    install_emoji_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-    );
+    install_emoji_fonts(&mut fonts.system(), &mut definitions);
 
     let mut faces: Vec<&str> = definitions.font_data.keys().map(String::as_str).collect();
     faces.sort_unstable();

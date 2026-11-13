@@ -344,9 +344,12 @@ struct FontSetup<'a> {
 
 /// Give `ctx` the faces `collection` has for `setup`, at its text size.
 fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSetup<'_>) {
-    let definitions = font_definitions(
+    let mut fonts = SystemFonts {
         collection,
-        &mut SourceCache::default(),
+        source_cache: &mut SourceCache::default(),
+    };
+    let definitions = font_definitions(
+        &mut fonts,
         setup.locale,
         setup.preferred_family,
         setup.preset,
@@ -356,16 +359,15 @@ fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSet
 }
 
 /// The font chains for one font configuration, with every face taken from
-/// `collection`: egui's bundled faces stay in as the last resort.
+/// `fonts`: egui's bundled faces stay in as the last resort.
 fn font_definitions(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
+    fonts: &mut SystemFonts<'_>,
     locale: Option<&str>,
     preferred_family: Option<&str>,
     preset: FontPreset,
 ) -> FontDefinitions {
     let started = std::time::Instant::now();
-    let family_count = collection.family_names().count();
+    let family_count = fonts.collection.family_names().count();
     let mut definitions = FontDefinitions::default();
     let defaults = definitions
         .families
@@ -373,32 +375,20 @@ fn font_definitions(
         .cloned()
         .unwrap_or_default();
     let installed = install_regular_fonts(
-        collection,
-        source_cache,
+        fonts,
         &mut definitions,
         locale,
         preferred_family,
         preset.body_families(),
     );
-    let bold_count = install_strong_font_family(
-        collection,
-        source_cache,
-        &mut definitions,
-        &installed,
-        &defaults,
-    );
+    let bold_count = install_strong_font_family(fonts, &mut definitions, &installed, &defaults);
     let preset_mono_families = preset.mono_families();
     let preset_mono = if preset_mono_families.is_empty() {
         false
     } else {
-        install_preset_mono_font(
-            collection,
-            source_cache,
-            &mut definitions,
-            preset_mono_families,
-        )
+        install_preset_mono_font(fonts, &mut definitions, preset_mono_families)
     };
-    install_emoji_fonts(collection, source_cache, &mut definitions);
+    install_emoji_fonts(fonts, &mut definitions);
     // Last, so the document chains end in every fallback installed above.
     install_document_families(
         &mut definitions,
@@ -439,24 +429,19 @@ fn font_definitions(
 pub(crate) fn scan_pickable_font_families() -> Vec<String> {
     let mut collection = Collection::new(CollectionOptions::default());
     let mut source_cache = SourceCache::default();
-    pickable_family_names(&mut collection, &mut source_cache)
+    pickable_family_names(&mut SystemFonts {
+        collection: &mut collection,
+        source_cache: &mut source_cache,
+    })
 }
 
-fn pickable_family_names(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-) -> Vec<String> {
-    let mut names: Vec<String> = collection.family_names().map(str::to_owned).collect();
+fn pickable_family_names(fonts: &mut SystemFonts<'_>) -> Vec<String> {
+    let mut names: Vec<String> = fonts.collection.family_names().map(str::to_owned).collect();
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup();
     names.retain(|name| {
-        canonical_family_id(collection, name).is_some_and(|id| {
-            let mut fonts = SystemFonts {
-                collection,
-                source_cache,
-            };
-            fonts.regular(&[id], LATIN_SAMPLE).is_some()
-        })
+        canonical_family_id(fonts.collection, name)
+            .is_some_and(|id| fonts.regular(&[id], LATIN_SAMPLE).is_some())
     });
     names
 }

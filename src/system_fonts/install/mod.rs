@@ -238,14 +238,13 @@ const PRIMARY_SANS_KEY: &str = "SystemSans";
 /// Accumulates the regular faces chosen for one `FontDefinitions`, so every
 /// selection step shares the platform collection and the faces installed so
 /// far.
-struct RegularFontInstaller<'fonts> {
-    collection: &'fonts mut Collection,
-    source_cache: &'fonts mut SourceCache,
+struct RegularFontInstaller<'fonts, 'system> {
+    fonts: &'fonts mut SystemFonts<'system>,
     definitions: &'fonts mut FontDefinitions,
     installed: Vec<InstalledFont>,
 }
 
-impl RegularFontInstaller<'_> {
+impl RegularFontInstaller<'_, '_> {
     /// Install the best regular face from `family_ids` that covers
     /// `required_glyphs`. Returns whether any face qualified.
     ///
@@ -259,11 +258,7 @@ impl RegularFontInstaller<'_> {
         required_glyphs: &'static str,
         primary: bool,
     ) -> bool {
-        let mut fonts = SystemFonts {
-            collection: self.collection,
-            source_cache: self.source_cache,
-        };
-        let Some(selected) = fonts.regular(family_ids, required_glyphs) else {
+        let Some(selected) = self.fonts.regular(family_ids, required_glyphs) else {
             return false;
         };
         self.install(key, selected, required_glyphs, primary);
@@ -324,7 +319,7 @@ impl RegularFontInstaller<'_> {
     }
 
     fn install_preferred_family(&mut self, name: &str) -> bool {
-        let Some(family_id) = self.collection.family_id(name) else {
+        let Some(family_id) = self.fonts.collection.family_id(name) else {
             log::warn!("Preferred font '{name}' not found; falling back to system default.");
             return false;
         };
@@ -343,7 +338,7 @@ impl RegularFontInstaller<'_> {
     fn install_preset_body_family(&mut self, preset_families: &'static [&'static str]) -> bool {
         let family_ids: Vec<FamilyId> = preset_families
             .iter()
-            .filter_map(|name| self.collection.family_id(name))
+            .filter_map(|name| self.fonts.collection.family_id(name))
             .collect();
         let installed =
             self.install_from_families(PRIMARY_SANS_KEY, &family_ids, LATIN_SAMPLE, true);
@@ -357,6 +352,7 @@ impl RegularFontInstaller<'_> {
 
     fn install_generic_sans(&mut self) -> bool {
         let families: Vec<_> = self
+            .fonts
             .collection
             .generic_families(GenericFamily::SansSerif)
             .collect();
@@ -370,7 +366,7 @@ impl RegularFontInstaller<'_> {
             if installed_fonts_cover(&self.installed, spec.required_glyphs) {
                 continue;
             }
-            let families = fallback_family_ids(self.collection, spec.script, locale);
+            let families = fallback_family_ids(self.fonts.collection, spec.script, locale);
             self.install_from_families(spec.key, &families, spec.required_glyphs, false);
         }
     }
@@ -380,7 +376,7 @@ impl RegularFontInstaller<'_> {
             if installed_fonts_cover(&self.installed, glyphs) {
                 continue;
             }
-            let families: Vec<_> = self.collection.generic_families(generic).collect();
+            let families: Vec<_> = self.fonts.collection.generic_families(generic).collect();
             self.install_from_families(key, &families, glyphs, false);
         }
     }
@@ -400,16 +396,14 @@ impl RegularFontInstaller<'_> {
 /// family was installed (the picker's choice outranks the preset's emulated
 /// stack).
 pub(crate) fn install_regular_fonts(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
+    fonts: &mut SystemFonts<'_>,
     definitions: &mut FontDefinitions,
     locale: Option<&str>,
     preferred_family: Option<&str>,
     preset_body_families: Option<&'static [&'static str]>,
 ) -> Vec<InstalledFont> {
     let mut installer = RegularFontInstaller {
-        collection,
-        source_cache,
+        fonts,
         definitions,
         installed: Vec::new(),
     };
@@ -457,8 +451,7 @@ fn build_strong_family(
 }
 
 pub(crate) fn install_strong_font_family(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
+    fonts: &mut SystemFonts<'_>,
     definitions: &mut FontDefinitions,
     installed: &[InstalledFont],
     default_proportional: &[String],
@@ -471,10 +464,6 @@ pub(crate) fn install_strong_font_family(
     let mut primary_bold = None;
     let mut fallback_bold = Vec::new();
     let mut count = 0;
-    let mut fonts = SystemFonts {
-        collection,
-        source_cache,
-    };
 
     for regular in installed {
         if regular.primary {
@@ -535,19 +524,14 @@ pub(crate) fn install_strong_font_family(
 /// bundled monospace (and any installed fallbacks) as fallback. Returns
 /// whether a preset face was installed.
 pub(crate) fn install_preset_mono_font(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
+    fonts: &mut SystemFonts<'_>,
     definitions: &mut FontDefinitions,
     mono_families: &'static [&'static str],
 ) -> bool {
     let family_ids: Vec<FamilyId> = mono_families
         .iter()
-        .filter_map(|name| collection.family_id(name))
+        .filter_map(|name| fonts.collection.family_id(name))
         .collect();
-    let mut fonts = SystemFonts {
-        collection,
-        source_cache,
-    };
     let Some(selected) = fonts.regular(&family_ids, "{}") else {
         log::warn!(
             "Preset mono families {mono_families:?} had no usable face; keeping the bundled monospace."

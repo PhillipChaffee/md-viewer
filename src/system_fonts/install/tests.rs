@@ -19,8 +19,7 @@ impl Installed {
     ) -> Self {
         let mut definitions = FontDefinitions::default();
         let installed = install_regular_fonts(
-            &mut fonts.collection,
-            &mut fonts.source_cache,
+            &mut fonts.system(),
             &mut definitions,
             None,
             preferred,
@@ -52,8 +51,7 @@ impl Installed {
     /// strong text is drawn from.
     fn strong(mut self, fonts: &mut Fonts) -> (usize, Vec<String>) {
         let count = install_strong_font_family(
-            &mut fonts.collection,
-            &mut fonts.source_cache,
+            &mut fonts.system(),
             &mut self.definitions,
             &self.fonts,
             &["DefaultLatin".to_owned()],
@@ -321,8 +319,7 @@ fn preset_code_face_goes_in_front_of_the_bundled_monospace() {
     let bundled_first = definitions.families[&FontFamily::Monospace][0].clone();
 
     let installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut definitions,
         &["First Mono", "Second Mono"],
     );
@@ -338,8 +335,7 @@ fn missing_preset_code_faces_leave_the_monospace_chain_alone() {
     let mut definitions = FontDefinitions::default();
 
     let installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut definitions,
         &["First Mono", "Second Mono"],
     );
@@ -433,20 +429,9 @@ fn definitions_without_family_chains_only_gain_the_font_data() {
     let mut definitions = FontDefinitions::empty();
     definitions.families.clear();
 
-    let installed = install_regular_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-        None,
-        None,
-        None,
-    );
-    let mono_installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-        &["Fixture Sans"],
-    );
+    let installed = install_regular_fonts(&mut fonts.system(), &mut definitions, None, None, None);
+    let mono_installed =
+        install_preset_mono_font(&mut fonts.system(), &mut definitions, &["Fixture Sans"]);
 
     assert_eq!(installed.len(), 1);
     assert!(mono_installed);
