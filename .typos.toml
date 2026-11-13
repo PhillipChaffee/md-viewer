@@ -10,6 +10,8 @@ pn = "pn"
 recomment = "recomment"
 # hyphenated prefix in the devlogs: mis-serializes, mis-parsed
 mis = "mis"
+# the `writeable` crate (ICU), named in deny.toml's duplicate list
+writeable = "writeable"
 
 [files]
 # vendored upstream sources keep upstream's spelling; fixes go upstream
