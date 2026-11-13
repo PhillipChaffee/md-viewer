@@ -24,7 +24,7 @@ pub(crate) struct Header {
 pub(crate) struct ParsedHeaders {
     /// Document title (first h1, if any).
     pub(crate) document_title: Option<String>,
-    /// Outline headers (excludes the first h1).
+    /// Every heading of the document, the title's h1 included.
     pub(crate) outline_headers: Vec<Header>,
 }
 

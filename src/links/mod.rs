@@ -48,8 +48,7 @@ fn slugify_heading(title: &str) -> String {
 
 /// Where a `#fragment` landed inside a document.
 enum FragmentTarget<'a> {
-    /// The document title (the first `h1`, which the outline excludes) — the
-    /// very top of the document.
+    /// The document title (the first `h1`) — the very top of the document.
     DocumentTop,
     Header(&'a Header),
     Missing,
@@ -357,9 +356,9 @@ fn explicit_uri_scheme(destination: &str) -> Option<&str> {
     Some(scheme)
 }
 
-/// Resolve a relative/absolute filesystem path or a `file:` URI against the
-/// directory containing the Markdown document.
-/// Turn a destination into a path to try.
+/// Turn a destination into a path to try: a relative or absolute filesystem
+/// path, or a `file:` URI, resolved against the directory containing the
+/// Markdown document.
 ///
 /// `Ok(None)` means there is nothing to open — a fragment, or a destination
 /// this viewer treats as external. `Err` means the destination names a local
