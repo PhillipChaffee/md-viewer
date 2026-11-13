@@ -247,6 +247,16 @@ asserts only what a user can observe. [tests/README.md](tests/README.md)
 describes the layers, the rule its tests follow, and the extra packages the
 window tests need.
 
+Some of the arithmetic under the window is machine-checked as well: the
+column width, zoom and scroll math, tab and search indices, history, and
+the restore of saved settings. [PROOFS.md](PROOFS.md) lists every proof
+with its bounds, and everything that is not proven. To run them (needs
+[Kani](https://github.com/model-checking/kani)):
+
+```bash
+./run-proofs.sh
+```
+
 Two things to know before you rely on those gates:
 
 - **The vendored renderer is outside them.** `vendor/egui_commonmark` has its
