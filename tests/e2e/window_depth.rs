@@ -3,8 +3,12 @@
 
 use super::support::{kill, wait_for, Home, Running, Screen};
 
-/// The paper a first run reads on.
+/// The paper a first run reads on, and the paper of the Dusk theme.
 const SEPIA: &str = "F8F1E3";
+const DUSK: &str = "2C2C2E";
+
+/// A pixel in the page's left margin, clear of the text column.
+const MARGIN: (u32, u32) = (60, 400);
 
 /// A pixel in the middle of the text column, well below the title.
 const MID_PAGE: (u32, u32) = (590, 400);
@@ -211,4 +215,106 @@ fn the_real_window_repaints_when_the_file_changes() {
 
     let repainted = wait_for(|| (window.pixel(home.root(), x, y) != SEPIA).then_some(()));
     assert!(repainted.is_some(), "the page never showed the code block");
+}
+
+/// A home with `a.md` and `b.md`, and a session left by an earlier run
+/// that had both open, `b.md` in front, plus `more` of its own.
+fn home_with_two_tabs_saved(more: &str) -> Home {
+    let home = Home::new();
+    home.doc("a.md", "# Alpha");
+    home.doc("b.md", "# Beta");
+    home.left_session(&format!(
+        "(open_tabs: Some([\"{}\", \"{}\"]), active_tab: Some(1){more})",
+        home.doc_path("a.md").display(),
+        home.doc_path("b.md").display()
+    ));
+    home
+}
+
+#[test]
+fn a_session_left_by_an_earlier_run_is_resumed_from_its_file() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = home_with_two_tabs_saved("");
+
+    let _app = show(&home, &screen, &[]);
+
+    screen.window_titled("b.md - Markdown Viewer");
+}
+
+#[test]
+fn a_session_file_from_before_the_themes_opens_in_the_theme_it_maps_to() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = home_with_two_tabs_saved(", dark_mode: Some(true), full_width_content: Some(false)");
+
+    let _app = show(&home, &screen, &[]);
+
+    let window = screen.window_titled("b.md - Markdown Viewer");
+    let (x, y) = MARGIN;
+    assert!(
+        window.pixel_becomes(home.root(), x, y, DUSK),
+        "the page is {}",
+        window.pixel(home.root(), x, y)
+    );
+}
+
+#[test]
+fn the_title_follows_the_tab_in_front_and_the_last_tab_closed() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = home_with_two_tabs_saved("");
+    let mut app = show(&home, &screen, &[]);
+    let window = screen.window_titled("b.md - Markdown Viewer");
+
+    for (key, title) in [
+        ("Tab", "a.md - Markdown Viewer"),
+        ("w", "b.md - Markdown Viewer"),
+        ("w", "Markdown Viewer"),
+    ] {
+        let retitled = window.press_ctrl(key, || window.title() == title);
+
+        assert!(
+            retitled,
+            "after Ctrl+{key} the title is {:?}",
+            window.title()
+        );
+    }
+    assert!(app.is_alive());
+}
+
+#[test]
+fn a_damaged_settings_file_does_not_stop_the_app_and_is_replaced_on_quit() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    for damaged in [
+        "",
+        "not a settings file",
+        "{\"md-viewer-state\": \"(theme: \"}",
+        "\u{0}\u{1}",
+    ] {
+        let home = Home::new();
+        home.doc("notes.md", "# Notes");
+        home.left_settings_file(damaged);
+        let mut app = show(&home, &screen, &[]);
+        let window = screen.window_titled("Markdown Viewer");
+        let (x, y) = MARGIN;
+        assert!(
+            window.pixel_becomes(home.root(), x, y, SEPIA),
+            "{damaged:?}"
+        );
+
+        assert!(window.press_ctrl("q", || !app.is_alive()), "still running");
+
+        assert_eq!(app.exit_code(), Some(0), "{damaged:?}");
+        let saved = home.saved_settings();
+        assert!(
+            saved.iter().any(|(_, text)| text.contains("Sepia")),
+            "the settings were not written afresh: {saved:?}"
+        );
+    }
 }

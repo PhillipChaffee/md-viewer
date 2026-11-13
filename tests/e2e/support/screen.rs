@@ -194,13 +194,14 @@ impl Window<'_> {
     #[track_caller]
     pub(crate) fn pixel(&self, scratch: &Path, x: u32, y: u32) -> String {
         let shot = scratch.join(format!("window-{}.png", self.id));
-        let taken = self
-            .screen
-            .tool("import")
-            .args(["-window", &self.id])
-            .arg(&shot)
-            .status();
-        assert!(taken.is_ok_and(|status| status.success()), "no screenshot");
+        // A window can be titled a moment before it can be photographed.
+        let taken = wait_for(|| {
+            let mut import = self.screen.tool("import");
+            import.args(["-window", &self.id]).arg(&shot);
+            let taken = import.stderr(Stdio::null()).status();
+            taken.is_ok_and(|status| status.success()).then_some(())
+        });
+        assert!(taken.is_some(), "no screenshot");
         let output = self
             .screen
             .tool("convert")

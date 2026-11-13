@@ -23,6 +23,12 @@ pub(crate) const PATIENCE: Duration = Duration::from_secs(60);
 
 static NEXT_HOME: AtomicUsize = AtomicUsize::new(0);
 
+/// Where md-viewer keeps its settings under the user's data folder, and
+/// the name its session goes by in that file.
+const SETTINGS_FOLDER: &str = "md-viewer";
+const SETTINGS_FILE: &str = "app.ron";
+const SESSION_KEY: &str = "md-viewer-state";
+
 /// Poll `seen` until it gives a value or `PATIENCE` runs out.
 pub(crate) fn wait_for<T>(mut seen: impl FnMut() -> Option<T>) -> Option<T> {
     let deadline = Instant::now() + PATIENCE;
@@ -63,6 +69,25 @@ impl Home {
         let path = self.0.join("docs").join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
+    }
+
+    /// Where the document `name` is on disk.
+    pub(crate) fn doc_path(&self, name: &str) -> PathBuf {
+        self.0.join("docs").join(name)
+    }
+
+    /// Put `text` where the app keeps its settings between runs, as the
+    /// whole settings file an earlier run left behind.
+    pub(crate) fn left_settings_file(&self, text: &str) {
+        let folder = self.0.join("data").join(SETTINGS_FOLDER);
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join(SETTINGS_FILE), text).unwrap();
+    }
+
+    /// Leave `session` as the session an earlier run saved, in the
+    /// settings file the app reads at its next start.
+    pub(crate) fn left_session(&self, session: &str) {
+        self.left_settings_file(&format!("{{{SESSION_KEY:?}: {session:?}}}"));
     }
 
     /// Delete a document from the folder `md-viewer` is run in.
