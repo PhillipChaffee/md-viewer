@@ -52,6 +52,12 @@ fn kicker_line(path: &Path, content: &str) -> String {
     )
 }
 
+/// The text of the document at `path`, with any bytes that are not UTF-8
+/// replaced.
+fn read_document(path: &Path) -> io::Result<String> {
+    Ok(String::from_utf8_lossy(&fs::read(path)?).into_owned())
+}
+
 /// Finish a step through history that went to the newest entry of `from`:
 /// that entry leaves `from`, and `left`, the document the step came from,
 /// becomes the newest entry of `to`.
@@ -138,27 +144,17 @@ impl Tab {
     pub(crate) fn new(path: PathBuf) -> io::Result<Self> {
         // Canonicalize path for consistent comparison with watcher events
         let path = path.canonicalize().unwrap_or(path);
-        let content = String::from_utf8_lossy(&fs::read(&path)?).into_owned();
-        let parsed = parse_headers(&content);
-        let local_links = parse_local_links(&content, &path);
-        let content_lines = content.lines().count();
-        let base_uri = Self::compute_base_uri(&path);
-        let kicker = kicker_line(&path, &content);
-
-        let mut cache = CommonMarkCache::default();
-        for link in &local_links {
-            cache.add_link_hook(link);
-        }
-
-        let saved_content = content.clone();
-        Ok(Self {
+        let content = read_document(&path)?;
+        let mut tab = Self {
             id: egui::Id::new(&path),
+            base_uri: Self::compute_base_uri(&path),
             path,
+            saved_content: content.clone(),
             content,
-            cache,
-            document_title: parsed.document_title,
-            kicker,
-            outline_headers: parsed.outline_headers,
+            cache: CommonMarkCache::default(),
+            document_title: None,
+            kicker: String::new(),
+            outline_headers: Vec::new(),
             collapsed_headers: HashSet::new(),
             scroll_offset: 0.0,
             pending_scroll_offset: None,
@@ -166,19 +162,19 @@ impl Tab {
             correct_active_search_pending: false,
             last_content_height: 0.0,
             last_viewport_height: 0.0,
-            content_lines,
-            local_links,
-            base_uri,
+            content_lines: 0,
+            local_links: Vec::new(),
             history_back: Vec::new(),
             history_forward: Vec::new(),
             search_matches: Vec::new(),
             content_version: 1,
             is_editing: false,
-            saved_content,
             save_flash: None,
             pending_edit_scroll: None,
             pre_edit_view_content_height: 0.0,
-        })
+        };
+        tab.index_content();
+        Ok(tab)
     }
 
     /// Switch between rendered view and raw-edit mode, preserving the scroll
@@ -209,8 +205,8 @@ impl Tab {
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {
-        let content = String::from_utf8_lossy(&fs::read(&self.path)?).into_owned();
-        self.apply_loaded_content(self.path.clone(), content, false);
+        let content = read_document(&self.path)?;
+        self.apply_loaded_content(self.path.clone(), content);
         Ok(())
     }
 
@@ -239,22 +235,20 @@ impl Tab {
     }
 
     fn load_file(&mut self, path: &Path) -> io::Result<()> {
-        let content = String::from_utf8_lossy(&fs::read(path)?).into_owned();
-        self.apply_loaded_content(path.to_path_buf(), content, true);
+        let content = read_document(path)?;
+        self.apply_loaded_content(path.to_path_buf(), content);
+        self.scroll_offset = 0.0;
+        self.pending_scroll_offset = None;
         Ok(())
     }
 
-    fn apply_loaded_content(&mut self, path: PathBuf, content: String, reset_scroll: bool) {
+    fn apply_loaded_content(&mut self, path: PathBuf, content: String) {
         self.content = content;
         self.saved_content = self.content.clone();
         self.path = path;
         self.id = egui::Id::new(&self.path);
         self.cache = CommonMarkCache::default();
         self.content_version = self.content_version.wrapping_add(1);
-        if reset_scroll {
-            self.scroll_offset = 0.0;
-            self.pending_scroll_offset = None;
-        }
         self.base_uri = Self::compute_base_uri(&self.path);
         self.index_content();
         self.collapsed_headers.clear();
@@ -311,24 +305,15 @@ impl Tab {
             return Ok(false);
         };
 
-        if target_path == self.path || !target_path.is_file() {
-            return Ok(false);
-        }
-        let previous_path = self.path.clone();
-        self.load_file(&target_path)?;
+        let visited = self.visit(&target_path)?;
         // `guide.md#section` opens the document *and* lands on the heading —
         // the #141 decision that an anchor selects a place in the document,
-        // not just the document. Applied after `load_file`, whose
-        // `reset_scroll` would otherwise clear it.
-        if let Some(fragment) = &fragment {
+        // not just the document. Applied after the load, which resets the
+        // scroll and would otherwise clear it.
+        if let (true, Some(fragment)) = (visited, fragment) {
             apply_fragment_navigation(self, fragment);
         }
-        record_visit(
-            &mut self.history_back,
-            &mut self.history_forward,
-            previous_path,
-        );
-        Ok(true)
+        Ok(visited)
     }
 
     /// Replace this tab's document and record a browser-like history entry.
@@ -337,12 +322,18 @@ impl Tab {
         let Ok(target_path) = target_path.canonicalize() else {
             return Ok(false);
         };
-        if target_path == self.path || !target_path.is_file() {
+        self.visit(&target_path)
+    }
+
+    /// Show the document at `target` in place of this one, and make this
+    /// one where Back goes. Returns whether that happened: it does not for
+    /// the document already shown, nor for anything but a file.
+    fn visit(&mut self, target: &Path) -> io::Result<bool> {
+        if target == self.path || !target.is_file() {
             return Ok(false);
         }
-
         let previous_path = self.path.clone();
-        self.load_file(&target_path)?;
+        self.load_file(target)?;
         record_visit(
             &mut self.history_back,
             &mut self.history_forward,
@@ -395,10 +386,6 @@ impl Tab {
     }
 
     pub(crate) fn resolve_link(&self, link: &str) -> io::Result<Option<PathBuf>> {
-        if link.starts_with('#') {
-            return Ok(None);
-        }
-
         let Some(current_dir) = self.path.parent() else {
             return Ok(None);
         };
