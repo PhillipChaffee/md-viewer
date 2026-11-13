@@ -260,14 +260,11 @@ pub(crate) struct Watched {
     pub(crate) explorer_dirs: HashSet<PathBuf>,
 }
 
-/// Wrapper for file watchers that supports both inotify (local) and poll (GVFS/remote).
-pub(crate) enum FileWatcher {
-    Inotify(Debouncer<RecommendedWatcher>),
-    Poll(Debouncer<PollWatcher>),
-    Dual {
-        inotify: Debouncer<RecommendedWatcher>,
-        poll: Debouncer<PollWatcher>,
-    },
+/// The running watcher backends: inotify for local paths, polling for GVFS
+/// documents. At least one runs.
+pub(crate) struct FileWatcher {
+    inotify: Option<Debouncer<RecommendedWatcher>>,
+    poll: Option<Debouncer<PollWatcher>>,
 }
 
 impl FileWatcher {
@@ -290,34 +287,17 @@ impl FileWatcher {
             .needs_poll()
             .then(|| start_poll(plan, on_events, &mut accepted))
             .flatten();
-        Self::from_backends(inotify, poll).map(|watcher| (watcher, accepted))
-    }
-
-    /// Wraps whichever backends started; `None` when neither did.
-    fn from_backends(
-        inotify: Option<Debouncer<RecommendedWatcher>>,
-        poll: Option<Debouncer<PollWatcher>>,
-    ) -> Option<Self> {
-        match (inotify, poll) {
-            (Some(inotify), Some(poll)) => Some(Self::Dual { inotify, poll }),
-            (Some(inotify), None) => Some(Self::Inotify(inotify)),
-            (None, Some(poll)) => Some(Self::Poll(poll)),
-            (None, None) => None,
-        }
+        (inotify.is_some() || poll.is_some()).then_some((Self { inotify, poll }, accepted))
     }
 
     pub(crate) fn inotify_watcher(&mut self) -> Option<&mut dyn notify::Watcher> {
-        match self {
-            Self::Inotify(d) | Self::Dual { inotify: d, .. } => Some(d.watcher()),
-            Self::Poll(_) => None,
-        }
+        let debouncer = self.inotify.as_mut()?;
+        Some(debouncer.watcher())
     }
 
     pub(crate) fn poll_watcher(&mut self) -> Option<&mut dyn notify::Watcher> {
-        match self {
-            Self::Poll(d) | Self::Dual { poll: d, .. } => Some(d.watcher()),
-            Self::Inotify(_) => None,
-        }
+        let debouncer = self.poll.as_mut()?;
+        Some(debouncer.watcher())
     }
 
     fn backend(&mut self, backend: Backend) -> Option<&mut dyn notify::Watcher> {
