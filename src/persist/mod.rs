@@ -6,7 +6,10 @@ use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 
 use crate::explorer::SortOrder;
-use crate::layout::{LineSpacing, SIDEBAR_MIN_WIDTH, ZOOM_MAX, ZOOM_MIN};
+use crate::layout::{
+    LineSpacing, ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_MIN_WIDTH,
+    ZOOM_MAX, ZOOM_MIN,
+};
 use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::theme::ThemeId;
@@ -78,13 +81,76 @@ pub(crate) struct PersistedState {
     pub(crate) recent_files: Option<Vec<RecentEntry>>,
 }
 
+/// What each saved setting comes back as. A setting the file does not
+/// hold, as on a first launch, comes back as its default.
+impl PersistedState {
+    pub(crate) fn theme(&self) -> ThemeId {
+        ThemeId::restored(self.theme, self.dark_mode)
+    }
+
+    pub(crate) fn zoom(&self) -> f32 {
+        restored_zoom(self.zoom_level)
+    }
+
+    /// Whether the outline shows until the first frame knows whether the
+    /// window has room for it.
+    pub(crate) fn show_outline(&self) -> bool {
+        self.show_outline.unwrap_or(true)
+    }
+
+    pub(crate) const fn reading_width(&self) -> ReadingWidth {
+        ReadingWidth::restored(self.reading_width, self.full_width_content)
+    }
+
+    pub(crate) fn line_spacing(&self) -> LineSpacing {
+        self.line_spacing.unwrap_or_default()
+    }
+
+    pub(crate) fn math_scale(&self) -> f32 {
+        restored_math_scale(self.math_scale)
+    }
+
+    pub(crate) fn highlight_color(&self) -> Option<Color32> {
+        self.highlight_color.map(color_from_persisted)
+    }
+
+    pub(crate) fn link_color(&self) -> Option<Color32> {
+        self.link_color.map(color_from_persisted)
+    }
+
+    pub(crate) fn smooth_text_rendering(&self) -> bool {
+        self.smooth_text_rendering.unwrap_or(false)
+    }
+
+    pub(crate) fn font_preset(&self) -> FontPreset {
+        self.font_preset.unwrap_or_default()
+    }
+
+    pub(crate) fn text_size_class(&self) -> TextSizeClass {
+        self.text_size_class.unwrap_or_default()
+    }
+
+    /// A fresh install opens on the document alone.
+    pub(crate) fn show_explorer(&self) -> bool {
+        self.show_explorer.unwrap_or(false)
+    }
+
+    pub(crate) fn explorer_width(&self) -> f32 {
+        restored_sidebar_width(self.explorer_width, EXPLORER_DEFAULT_WIDTH)
+    }
+
+    pub(crate) fn outline_width(&self) -> f32 {
+        restored_sidebar_width(self.outline_width, OUTLINE_DEFAULT_WIDTH)
+    }
+}
+
 /// The document zoom a saved session comes back at.
-pub(crate) fn restored_zoom(saved: Option<f32>) -> f32 {
+fn restored_zoom(saved: Option<f32>) -> f32 {
     saved.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX)
 }
 
 /// The formula size a saved session comes back at, relative to the text.
-pub(crate) fn restored_math_scale(saved: Option<f32>) -> f32 {
+fn restored_math_scale(saved: Option<f32>) -> f32 {
     saved.unwrap_or(1.0).clamp(MATH_SCALE_MIN, MATH_SCALE_MAX)
 }
 
@@ -94,11 +160,11 @@ pub(crate) const fn color_to_persisted(color: Color32) -> [u8; 4] {
 }
 
 /// The color the settings file holds as `bytes`.
-pub(crate) const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> Color32 {
+const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> Color32 {
     Color32::from_rgba_premultiplied(r, g, b, a)
 }
 
-pub(crate) fn restored_sidebar_width(width: Option<f32>, default: f32) -> f32 {
+fn restored_sidebar_width(width: Option<f32>, default: f32) -> f32 {
     width
         .filter(|width| width.is_finite())
         .map_or(default, |width| width.max(SIDEBAR_MIN_WIDTH))

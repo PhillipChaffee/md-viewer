@@ -115,3 +115,51 @@ fn a_color_comes_back_from_its_saved_bytes_unchanged() {
         Color32::from_rgb(10, 20, 30)
     );
 }
+
+#[test]
+fn a_file_that_holds_no_settings_reads_as_the_defaults() {
+    let fresh = PersistedState::default();
+
+    assert_eq!(fresh.theme(), ThemeId::default());
+    assert_close(fresh.zoom(), 1.0);
+    assert!(fresh.show_outline());
+    assert_eq!(fresh.reading_width(), ReadingWidth::DEFAULT);
+    assert_eq!(fresh.line_spacing(), LineSpacing::Comfortable);
+    assert_close(fresh.math_scale(), 1.0);
+    assert_eq!(fresh.highlight_color(), None);
+    assert_eq!(fresh.link_color(), None);
+    assert!(!fresh.smooth_text_rendering());
+    assert_eq!(fresh.font_preset(), FontPreset::Reader);
+    assert_eq!(fresh.text_size_class(), TextSizeClass::Normal);
+    assert!(!fresh.show_explorer());
+    assert_close(fresh.explorer_width(), EXPLORER_DEFAULT_WIDTH);
+    assert_close(fresh.outline_width(), OUTLINE_DEFAULT_WIDTH);
+}
+
+#[test]
+fn saved_settings_are_read_back_with_out_of_range_numbers_pulled_in() {
+    let saved = PersistedState {
+        dark_mode: Some(true),
+        zoom_level: Some(9.0),
+        show_outline: Some(false),
+        full_width_content: Some(true),
+        math_scale: Some(0.2),
+        highlight_color: Some([10, 20, 30, 255]),
+        smooth_text_rendering: Some(true),
+        show_explorer: Some(true),
+        explorer_width: Some(12.0),
+        outline_width: Some(300.0),
+        ..PersistedState::default()
+    };
+
+    assert_eq!(saved.theme(), ThemeId::Dusk);
+    assert_close(saved.zoom(), ZOOM_MAX);
+    assert!(!saved.show_outline());
+    assert_eq!(saved.reading_width(), ReadingWidth::FIT_WINDOW);
+    assert_close(saved.math_scale(), MATH_SCALE_MIN);
+    assert_eq!(saved.highlight_color(), Some(Color32::from_rgb(10, 20, 30)));
+    assert!(saved.smooth_text_rendering());
+    assert!(saved.show_explorer());
+    assert_close(saved.explorer_width(), SIDEBAR_MIN_WIDTH);
+    assert_close(saved.outline_width(), 300.0);
+}

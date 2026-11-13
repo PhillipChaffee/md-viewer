@@ -14,13 +14,8 @@ use crate::app::watching::LiveReload;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
-use crate::layout::{
-    ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS,
-};
-use crate::persist::{
-    color_from_persisted, restored_math_scale, restored_sidebar_width, restored_zoom,
-    PersistedState, APP_KEY,
-};
+use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
+use crate::persist::{PersistedState, APP_KEY};
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
 use crate::tab::Tab;
@@ -184,11 +179,11 @@ fn is_virtual_display(display: Option<&str>) -> bool {
 /// The theme of the last session, and what the document pane renders with
 /// until frame 1, which rebuilds it once the theme's visuals are applied.
 fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, DocumentLook) {
-    let theme = ThemeId::restored(persisted.theme, persisted.dark_mode);
+    let theme = persisted.theme();
     let fonts = document_fonts(
         persisted.selected_font_family.as_deref(),
-        persisted.font_preset.unwrap_or_default(),
-        persisted.text_size_class.unwrap_or_default(),
+        persisted.font_preset(),
+        persisted.text_size_class(),
     );
     let look = DocumentLook::new(&ctx.style(), theme.palette(), &fonts);
     (theme, look)
@@ -220,8 +215,8 @@ impl MarkdownApp {
         setup_fonts(
             &cc.egui_ctx,
             persisted.selected_font_family.as_deref(),
-            persisted.font_preset.unwrap_or_default(),
-            persisted.text_size_class.unwrap_or_default(),
+            persisted.font_preset(),
+            persisted.text_size_class(),
         );
         configure_context(&cc.egui_ctx);
 
@@ -237,6 +232,22 @@ impl MarkdownApp {
         watch: bool,
     ) -> Self {
         let (theme, document_look) = restored_look(ctx, &persisted);
+        // Each setting is read here, before the paths leave `persisted`.
+        let zoom_level = persisted.zoom();
+        let show_outline = persisted.show_outline();
+        let outline_rule = OutlineRule::restored(persisted.show_outline);
+        let reading_width = persisted.reading_width();
+        let line_spacing = persisted.line_spacing();
+        let math_scale = persisted.math_scale();
+        let highlight_color = persisted.highlight_color();
+        let link_color = persisted.link_color();
+        let smooth_text_rendering = persisted.smooth_text_rendering();
+        let font_preset = persisted.font_preset();
+        let text_size_class = persisted.text_size_class();
+        let show_explorer = persisted.show_explorer();
+        let explorer_width = persisted.explorer_width();
+        let outline_width = persisted.outline_width();
+
         let (tabs, startup_error) = initial_tabs(file.as_deref(), persisted.open_tabs);
         let active_tab = restored_active_tab(persisted.active_tab, tabs.len());
         let file_explorer = initial_explorer(
@@ -249,28 +260,21 @@ impl MarkdownApp {
 
         let mcp = Mcp::new();
 
-        let highlight_color = persisted.highlight_color.map(color_from_persisted);
-        let link_color = persisted.link_color.map(color_from_persisted);
-        let font_preset = persisted.font_preset.unwrap_or_default();
-        let text_size_class = persisted.text_size_class.unwrap_or_default();
-        let reading_width =
-            ReadingWidth::restored(persisted.reading_width, persisted.full_width_content);
-
         let mut app = Self {
             tabs,
             active_tab,
             revealed_tab: None,
             theme,
-            zoom_level: restored_zoom(persisted.zoom_level),
-            show_outline: persisted.show_outline.unwrap_or(true),
-            outline_rule: OutlineRule::restored(persisted.show_outline),
+            zoom_level,
+            show_outline,
+            outline_rule,
             heading_spy: HeadingSpy::default(),
             reading_width,
             document_pane_width: f32::INFINITY,
             column_drag_grab: None,
-            line_spacing: persisted.line_spacing.unwrap_or_default(),
+            line_spacing,
             document_look,
-            math_scale: restored_math_scale(persisted.math_scale),
+            math_scale,
             // Frame 1 always rebuilds Visuals anyway (last_applied_theme
             // starts at None), so this just avoids a spurious second rebuild
             // afterward if nothing further changes.
@@ -292,7 +296,7 @@ impl MarkdownApp {
             pending_font_family_scan: spawn_font_family_scan(),
             show_font_dialog: false,
             font_filter: String::new(),
-            smooth_text_rendering: persisted.smooth_text_rendering.unwrap_or(false),
+            smooth_text_rendering,
             font_preset,
             text_size_class,
             file_picker: Box::new(pick_file),
@@ -301,13 +305,9 @@ impl MarkdownApp {
             error_message: startup_error,
             is_dragging: false,
             file_explorer,
-            // A fresh install opens on the document alone.
-            show_explorer: persisted.show_explorer.unwrap_or(false),
-            explorer_width: restored_sidebar_width(
-                persisted.explorer_width,
-                EXPLORER_DEFAULT_WIDTH,
-            ),
-            outline_width: restored_sidebar_width(persisted.outline_width, OUTLINE_DEFAULT_WIDTH),
+            show_explorer,
+            explorer_width,
+            outline_width,
             flashing_paths: HashMap::new(),
             is_virtual_display: is_virtual_display(std::env::var("DISPLAY").ok().as_deref()),
             egui_ctx: ctx.clone(),
