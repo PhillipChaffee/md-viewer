@@ -100,11 +100,11 @@ impl MarkdownApp {
 
     /// The horizontally scrollable row of tabs.
     fn tab_strip(&mut self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
-        // Collect the titles first: drawing a tab updates `self.hovered_tab`.
         let titles: Vec<String> = self.tabs.iter().map(Tab::title).collect();
         let has_siblings = titles.len() > 1;
-        // Last frame's hover decides the close buttons for the whole strip.
-        let hovered_tab = self.hovered_tab;
+        // The tab under the pointer last frame decides this frame's close
+        // buttons for the whole strip.
+        let hovered_tab = self.hovered_tab.take();
 
         egui::ScrollArea::horizontal()
             .max_width(ui.available_width() - 30.0)
@@ -119,13 +119,19 @@ impl MarkdownApp {
                             show_close: is_active || hovered_tab == Some(index),
                             has_siblings,
                         };
-                        if tab_label(ui, &label, actions).hovered() {
+                        // `hovered()` is false over the tab's own label and
+                        // close button, which take the hover for themselves.
+                        if tab_label(ui, &label, actions).contains_pointer() {
                             self.hovered_tab = Some(index);
                         }
                         ui.separator();
                     }
                 });
             });
+        if self.hovered_tab != hovered_tab {
+            // The close buttons drawn this frame are one pointer move stale.
+            ui.ctx().request_repaint();
+        }
     }
 
     /// Applies the frame's tab strip actions. Returns the tab the caller

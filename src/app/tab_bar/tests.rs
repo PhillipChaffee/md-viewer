@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use eframe::egui::{Key, PointerButton};
+use eframe::egui::{self, Event, Key, PointerButton};
 use egui_kittest::kittest::Queryable as _;
 
 use crate::app::content::tests::label_harness::LabelHarness;
@@ -69,6 +69,43 @@ fn middle_clicking_a_tab_closes_it() {
     assert_eq!(
         open_paths(&harness),
         [harness.path("a.md"), harness.path("c.md")]
+    );
+}
+
+#[test]
+fn a_tab_under_the_pointer_shows_a_close_button_until_the_pointer_leaves() {
+    let close_buttons = |harness: &LabelHarness| harness.query_all_by_label("×").count();
+    let mut harness = three_tabs();
+    assert_eq!(close_buttons(&harness), 1, "only the active tab's");
+
+    harness.get_by_label("a.md").hover();
+    harness.frames(2);
+    assert_eq!(close_buttons(&harness), 2);
+
+    harness.event(Event::PointerMoved(egui::pos2(600.0, 500.0)));
+    harness.frames(2);
+    assert_eq!(close_buttons(&harness), 1);
+}
+
+#[test]
+fn the_close_button_of_a_hovered_tab_closes_that_tab() {
+    let mut harness = three_tabs();
+    harness.get_by_label("a.md").hover();
+    harness.frames(2);
+
+    let leftmost = |a: &egui_kittest::Node<'_>, b: &egui_kittest::Node<'_>| {
+        a.rect().left().total_cmp(&b.rect().left())
+    };
+    harness
+        .get_all_by_label("×")
+        .min_by(leftmost)
+        .unwrap()
+        .click();
+    harness.frames(2);
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("b.md"), harness.path("c.md")]
     );
 }
 
