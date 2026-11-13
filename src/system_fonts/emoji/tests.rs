@@ -1,14 +1,16 @@
 use super::*;
 
+use std::borrow::Cow;
+
 use egui::Color32;
+use fontique::FontWeight;
+
+use crate::system_fonts::tests::{bundled_face, Fonts, LATIN_FACE};
 
 /// Subset of Noto Color Emoji holding only the glyphs these tests name, so
 /// they run the same on a machine with no color emoji font installed. See
 /// `fixtures/README.txt` for how it was produced.
-const COLOR_EMOJI_FIXTURE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/src/system_fonts/emoji/fixtures/color-emoji-subset.ttf"
-);
+const COLOR_EMOJI_FIXTURE: &[u8] = include_bytes!("fixtures/color-emoji-subset.ttf");
 
 /// 🟢 🔴 🔵 ⚪ ✅, the emoji the project's own documents use.
 const DOC_EMOJI: [char; 5] = [
@@ -26,19 +28,28 @@ const SOLID_DOC_EMOJI: [char; 3] = ['\u{1F7E2}', '\u{1F534}', '\u{2705}'];
 /// ▶ ⚠ ✔, symbols the UI draws that Noto Color Emoji also maps.
 const UI_SYMBOLS_IN_COLOR_FONT: [char; 3] = ['\u{25B6}', '\u{26A0}', '\u{2714}'];
 
-/// What `setup_fonts` installs on a machine whose color emoji font is the
-/// fixture.
-fn definitions_with_color_font() -> FontDefinitions {
+/// The emoji faces `setup_fonts` adds on a machine with `fonts` installed.
+fn emoji_definitions(mut fonts: Fonts) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
-    install_emoji_fonts_from(&mut definitions, &[COLOR_EMOJI_FIXTURE], EMOJI_FONT_PATH);
+    install_emoji_fonts(
+        &mut fonts.collection,
+        &mut fonts.source_cache,
+        &mut definitions,
+    );
     definitions
+}
+
+/// What `setup_fonts` installs on a machine whose color emoji font is the
+/// fixture, installed under the family name it carries: Noto Color Emoji.
+fn definitions_with_color_font() -> FontDefinitions {
+    let mut fonts = Fonts::none();
+    fonts.register_as_is(COLOR_EMOJI_FIXTURE);
+    emoji_definitions(fonts)
 }
 
 /// What `setup_fonts` installs on a machine with no color emoji font.
 fn definitions_without_color_font() -> FontDefinitions {
-    let mut definitions = FontDefinitions::default();
-    install_emoji_fonts_from(&mut definitions, &[], EMOJI_FONT_PATH);
-    definitions
+    emoji_definitions(Fonts::none())
 }
 
 /// `definitions` narrowed to the face `key` as the whole proportional chain,
@@ -237,24 +248,78 @@ fn color_emoji_font_maps_the_ui_symbols_it_is_kept_from_claiming() {
     }
 }
 
+/// The color face is found through the platform's font collection, so it
+/// loads wherever a distribution keeps the file (Debian and Ubuntu use
+/// `/usr/share/fonts/truetype/noto/`, Arch `/usr/share/fonts/noto/`).
 #[test]
-fn unreadable_color_font_paths_are_skipped() {
-    let mut definitions = FontDefinitions::default();
-    install_emoji_fonts_from(
-        &mut definitions,
-        &["/nonexistent/NotoColorEmoji.ttf", COLOR_EMOJI_FIXTURE],
-        EMOJI_FONT_PATH,
-    );
-    assert!(definitions.font_data.contains_key(COLOR_EMOJI_KEY));
+fn color_face_goes_ahead_of_the_built_in_emoji_faces_and_monochrome_last() {
+    let definitions = definitions_with_color_font();
+
+    for family in [FontFamily::Proportional, FontFamily::Monospace] {
+        let chain = &definitions.families[&family];
+        let position = |key: &str| chain.iter().position(|name| name == key);
+        let color = position(COLOR_EMOJI_KEY).expect("color face in the chain");
+        for built_in in BUILTIN_EMOJI_KEYS {
+            assert!(color < position(built_in).expect("built-in emoji face"));
+        }
+        assert_eq!(chain.last().map(String::as_str), Some(MONOCHROME_EMOJI_KEY));
+    }
 }
 
 #[test]
-fn missing_emoji_fonts_leave_the_definitions_untouched() {
-    let mut definitions = FontDefinitions::default();
-    install_emoji_fonts_from(
-        &mut definitions,
-        &["/nonexistent/NotoColorEmoji.ttf"],
-        "/nonexistent/NotoEmoji-Regular.ttf",
+fn machine_without_a_color_emoji_font_gets_the_monochrome_face_only() {
+    let definitions = definitions_without_color_font();
+
+    assert!(!definitions.font_data.contains_key(COLOR_EMOJI_KEY));
+    let mut expected = FontDefinitions::default().families[&FontFamily::Proportional].clone();
+    expected.push(MONOCHROME_EMOJI_KEY.to_owned());
+    assert_eq!(definitions.families[&FontFamily::Proportional], expected);
+}
+
+/// A family that merely carries the name cannot stand in for the color face.
+#[test]
+fn family_without_emoji_glyphs_is_not_taken_for_the_color_face() {
+    let mut fonts = Fonts::none();
+    fonts.register(
+        &bundled_face(LATIN_FACE),
+        COLOR_EMOJI_FAMILY,
+        FontWeight::NORMAL,
     );
-    assert_eq!(definitions, FontDefinitions::default());
+
+    let definitions = emoji_definitions(fonts);
+
+    assert!(!definitions.font_data.contains_key(COLOR_EMOJI_KEY));
+}
+
+/// The monochrome face is part of the binary: an installed copy has no
+/// source tree to read it from.
+#[test]
+fn monochrome_face_is_compiled_into_the_binary() {
+    let definitions = definitions_without_color_font();
+    let face = &definitions.font_data[MONOCHROME_EMOJI_KEY];
+    assert!(
+        matches!(face.font, Cow::Borrowed(_)),
+        "the face was read from a file at run time"
+    );
+}
+
+/// Definitions a caller built without the standard families get the faces
+/// registered, and no family chain is invented for them.
+#[test]
+fn definitions_without_family_chains_only_gain_the_font_data() {
+    let mut fonts = Fonts::none();
+    fonts.register_as_is(COLOR_EMOJI_FIXTURE);
+    let mut definitions = FontDefinitions::empty();
+    definitions.families.clear();
+
+    install_emoji_fonts(
+        &mut fonts.collection,
+        &mut fonts.source_cache,
+        &mut definitions,
+    );
+
+    let mut faces: Vec<&str> = definitions.font_data.keys().map(String::as_str).collect();
+    faces.sort_unstable();
+    assert_eq!(faces, [COLOR_EMOJI_KEY, MONOCHROME_EMOJI_KEY]);
+    assert!(definitions.families.is_empty());
 }

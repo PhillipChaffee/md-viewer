@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
@@ -84,6 +85,41 @@ pub(crate) struct ExplorerScanResult {
     root: PathBuf,
     sort_order: SortOrder,
     tree: Vec<FileTreeNode>,
+}
+
+/// A scan of the explorer root, with the settings it was requested under so
+/// it can run on another thread while the explorer keeps changing.
+#[derive(Clone)]
+struct RootScan {
+    root: PathBuf,
+    sort_order: SortOrder,
+    expanded_dirs: HashSet<PathBuf>,
+}
+
+impl RootScan {
+    fn run(self) -> ExplorerScanResult {
+        let mut tree = FileExplorer::scan_directory_shallow(&self.root, self.sort_order);
+        FileExplorer::restore_expanded_children(&mut tree, &self.expanded_dirs, self.sort_order);
+        ExplorerScanResult {
+            root: self.root,
+            sort_order: self.sort_order,
+            tree,
+        }
+    }
+}
+
+/// A job for a worker thread.
+type Work = Box<dyn FnOnce() + Send>;
+
+/// Starts a job on a thread with the given name, or says why it could not.
+type SpawnThread = fn(&str, Work) -> io::Result<()>;
+
+/// Run `work` on a new thread called `name`.
+fn spawn_named_thread(name: &str, work: Work) -> io::Result<()> {
+    std::thread::Builder::new()
+        .name(name.to_owned())
+        .spawn(work)
+        .map(drop)
 }
 
 /// File explorer state.
@@ -179,37 +215,32 @@ impl FileExplorer {
     pub(crate) fn set_root(&mut self, path: PathBuf) {
         // Convert empty path to current directory
         let path = if path.as_os_str().is_empty() {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            std::env::current_dir().unwrap_or(path)
         } else {
             path
         };
         self.root = Some(path.clone());
-        if !self.start_root_scan(path.clone(), "explorer-scan") {
-            self.tree = Self::scan_directory_shallow(&path, self.sort_order);
-            Self::restore_expanded_children(&mut self.tree, &self.expanded_dirs, self.sort_order);
-        }
+        self.scan_root(path, "explorer-scan", spawn_named_thread);
     }
 
-    fn start_root_scan(&mut self, path: PathBuf, thread_name: &str) -> bool {
-        let sort_order = self.sort_order;
-        let expanded_dirs = self.expanded_dirs.clone();
+    /// Scan `root` on a thread started through `spawn`, to be collected by
+    /// `poll_pending_scan`. If no thread can be started, scan right here, so
+    /// the tree still appears.
+    fn scan_root(&mut self, root: PathBuf, thread_name: &str, spawn: SpawnThread) {
+        let scan = RootScan {
+            root,
+            sort_order: self.sort_order,
+            expanded_dirs: self.expanded_dirs.clone(),
+        };
         let (tx, rx) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name(thread_name.to_owned())
-            .spawn(move || {
-                let mut tree = Self::scan_directory_shallow(&path, sort_order);
-                Self::restore_expanded_children(&mut tree, &expanded_dirs, sort_order);
-                let _ = tx.send(ExplorerScanResult {
-                    root: path,
-                    sort_order,
-                    tree,
-                });
-            });
-        if spawned.is_ok() {
+        let background = scan.clone();
+        let work: Work = Box::new(move || {
+            let _ = tx.send(background.run());
+        });
+        if spawn(thread_name, work).is_ok() {
             self.pending_scan = Some(rx);
-            true
         } else {
-            false
+            self.tree = scan.run().tree;
         }
     }
 
@@ -240,12 +271,8 @@ impl FileExplorer {
 
     /// Refresh the file tree in the background.
     pub(crate) fn refresh(&mut self) {
-        if let Some(root) = &self.root.clone() {
-            if self.start_root_scan(root.clone(), "explorer-refresh") {
-                return;
-            }
-            self.tree = Self::scan_directory_shallow(root, self.sort_order);
-            Self::restore_expanded_children(&mut self.tree, &self.expanded_dirs, self.sort_order);
+        if let Some(root) = self.root.clone() {
+            self.scan_root(root, "explorer-refresh", spawn_named_thread);
         }
     }
 

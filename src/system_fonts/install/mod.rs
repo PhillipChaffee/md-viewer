@@ -74,7 +74,8 @@ pub(crate) struct SelectedFont {
     index: u32,
     family_id: FamilyId,
     pub(crate) family: String,
-    source: String,
+    /// Where the face was loaded from, for the log.
+    pub(crate) source: String,
     weight: FontWeight,
 }
 
@@ -83,7 +84,8 @@ impl SelectedFont {
         (self.blob.id(), self.index)
     }
 
-    fn data(&self) -> FontData {
+    /// The face as egui takes it.
+    pub(crate) fn data(&self) -> FontData {
         let mut data = FontData::from_owned(self.blob.data().to_vec());
         data.index = self.index;
         data
@@ -197,24 +199,45 @@ pub(crate) fn select_body_font(
     )
 }
 
+/// Regular face of the installed family called `family` that covers
+/// `required_glyphs`, wherever the platform keeps its file.
+pub(crate) fn select_family_font(
+    collection: &mut Collection,
+    source_cache: &mut SourceCache,
+    family: &str,
+    required_glyphs: &str,
+) -> Option<SelectedFont> {
+    let family_id = collection.family_id(family)?;
+    select_from_families(
+        collection,
+        source_cache,
+        &[family_id],
+        FontWeight::NORMAL,
+        required_glyphs,
+        false,
+    )
+}
+
 /// Key the primary sans is installed under.
 const PRIMARY_SANS_KEY: &str = "SystemSans";
 
 /// Accumulates the regular faces chosen for one `FontDefinitions`, so every
-/// selection step shares the platform collection and the set of faces
-/// already loaded.
+/// selection step shares the platform collection and the faces installed so
+/// far.
 struct RegularFontInstaller<'fonts> {
     collection: &'fonts mut Collection,
     source_cache: &'fonts mut SourceCache,
     definitions: &'fonts mut FontDefinitions,
     installed: Vec<InstalledFont>,
-    loaded_faces: HashSet<(u64, u32)>,
 }
 
 impl RegularFontInstaller<'_> {
     /// Install the best regular face from `family_ids` that covers
-    /// `required_glyphs`. Returns whether any face qualified; a qualifying
-    /// face that is already loaded is not installed twice.
+    /// `required_glyphs`. Returns whether any face qualified.
+    ///
+    /// No face is installed twice: the primary sans is installed first and
+    /// once, and a fallback is only looked for when no installed face covers
+    /// its glyphs, so the face found for it cannot be one of those.
     fn install_from_families(
         &mut self,
         key: &'static str,
@@ -243,9 +266,6 @@ impl RegularFontInstaller<'_> {
         required_glyphs: &'static str,
         primary: bool,
     ) {
-        if !self.loaded_faces.insert(selected.identity()) {
-            return;
-        }
         log::info!(
             "Loaded system font {} ({}, weight {}) from {} (face index {})",
             key,
@@ -381,7 +401,6 @@ pub(crate) fn install_regular_fonts(
         source_cache,
         definitions,
         installed: Vec::new(),
-        loaded_faces: HashSet::new(),
     };
     installer.install_primary_sans(preferred_family, preset_body_families);
     installer.install_script_fallbacks(locale);

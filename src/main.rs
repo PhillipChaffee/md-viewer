@@ -2,11 +2,13 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::io;
+
 use clap::Parser;
 
 use crate::cli::{
-    fall_back_to_x11_if_wayland_socket_is_dead, launched_from_terminal, run_native_once,
-    should_detach, spawn_detached_child, Args,
+    app_creator, dead_wayland_variables, launch, launched_from_terminal, native_options,
+    spawn_detached, Args, APP_ID,
 };
 
 mod app;
@@ -29,23 +31,19 @@ mod watcher;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+/// Wires the process's own streams, environment, executable, and the native
+/// event loop into `cli`, which holds every decision made with them.
 fn main() -> eframe::Result<()> {
     env_logger::init();
 
     let args = Args::parse();
+    let from_terminal = launched_from_terminal([&io::stdin(), &io::stdout(), &io::stderr()]);
+    let respawn = || spawn_detached(std::env::current_exe()?, std::env::args_os().collect());
 
-    if should_detach(&args, launched_from_terminal()) {
-        match spawn_detached_child() {
-            Ok(()) => return Ok(()),
-            // `error` is the one level env_logger prints when `RUST_LOG` is
-            // unset, so whoever launched from the terminal still sees why
-            // the window stayed attached to it.
-            Err(err) => {
-                log::error!("Failed to detach md-viewer process: {err}. Running in foreground.");
-            }
+    launch(&args, from_terminal, &respawn, &|args| {
+        for name in dead_wayland_variables(&std::env::var_os) {
+            std::env::remove_var(name);
         }
-    }
-
-    fall_back_to_x11_if_wayland_socket_is_dead();
-    run_native_once(&args)
+        eframe::run_native(APP_ID, native_options(), app_creator(args))
+    })
 }

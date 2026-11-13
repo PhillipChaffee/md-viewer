@@ -148,6 +148,14 @@ fn rendered_emoji_does_not_match_shortcode_only_source() {
 }
 
 #[test]
+fn only_a_well_formed_pattern_compiles() {
+    crate::test_support::evaluate_log_arguments();
+    assert!(compile_pattern("(unclosed").is_none());
+    let link = compile_pattern(MARKDOWN_LINK_PATTERN).expect("the link pattern compiles");
+    assert!(link.is_match("[text](url)"));
+}
+
+#[test]
 fn literal_unicode_emoji_still_matches_raw_source() {
     let matches = find_matches("before 📌 after", "📌");
     assert_eq!(matches.len(), 1);
