@@ -138,12 +138,21 @@ fn a_table_is_ruled_between_its_rows_in_the_themes_hairline_and_aligned() {
     }
 }
 
+/// The shapes painted below the top bar, whose icons are drawn from the
+/// same circles and muted strokes the list markers use.
+fn document_shapes(output: &egui::FullOutput) -> Vec<Shape> {
+    painted_shapes(output)
+        .into_iter()
+        .filter(|shape| shape.visual_bounding_rect().top() >= crate::app::chrome::BAR_HEIGHT)
+        .collect()
+}
+
 #[test]
 fn a_task_item_shows_a_box_in_the_muted_color_and_no_bullet() {
     let mut harness = reader("- [x] done\n- [ ] open\n");
     let output = harness.idle();
     let muted = ThemeId::Sepia.palette().muted;
-    let shapes = painted_shapes(&output);
+    let shapes = document_shapes(&output);
 
     let boxes = shapes
         .iter()
@@ -162,7 +171,7 @@ fn bullets_and_numbers_hang_in_the_muted_color() {
     let output = harness.idle();
     let muted = ThemeId::Sepia.palette().muted;
 
-    let bullet = painted_shapes(&output)
+    let bullet = document_shapes(&output)
         .into_iter()
         .find_map(|shape| match shape {
             Shape::Circle(circle) => Some(circle),
