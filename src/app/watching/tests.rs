@@ -239,6 +239,23 @@ fn live_reload_waits_while_there_is_nothing_to_watch() {
 }
 
 #[test]
+fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
+    let mut harness = open(&[("a.md", "# A")]);
+    harness.apply(AppAction::CloseTab);
+    // GVFS folders are never watched, so this leaves nothing to register.
+    harness.app.file_explorer.root =
+        Some(PathBuf::from("/run/user/1000/gvfs/sftp:host=example/notes"));
+
+    harness.apply(AppAction::ToggleWatch);
+    for _ in 0..=MAX_WATCHER_RETRIES {
+        harness.idle();
+    }
+
+    assert_eq!(harness.app.error_message, None);
+    assert!(harness.app.watch_enabled);
+}
+
+#[test]
 fn a_watcher_that_cannot_start_is_reported_in_the_error_bar() {
     let mut harness = open(&[("a.md", "# A")]);
     let (_events, receiver) = mpsc::channel();

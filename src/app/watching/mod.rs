@@ -43,20 +43,20 @@ impl MarkdownApp {
         self.adopt_watcher(FileWatcher::start(&plan, on_events), events);
     }
 
-    /// What a fresh start registers, or `None` when no document is open and
-    /// the explorer has no root.
+    /// What a fresh start registers, or `None` when there is nothing to
+    /// watch: no open document is on disk, and the explorer has no local
+    /// root.
     fn watch_plan(&self) -> Option<WatchPlan> {
-        let open_files = self.get_open_tab_paths();
-        let root = self.file_explorer.root.as_deref();
-        if open_files.is_empty() && root.is_none() {
-            return None;
-        }
-        let explorer_dirs =
-            explorer_watch_dirs(root, &self.file_explorer.expanded_dirs, Path::is_dir);
-        Some(WatchPlan::new(
-            open_files,
+        let explorer_dirs = explorer_watch_dirs(
+            self.file_explorer.root.as_deref(),
+            &self.file_explorer.expanded_dirs,
+            Path::is_dir,
+        );
+        let plan = WatchPlan::new(
+            self.get_open_tab_paths(),
             explorer_dirs.into_iter().collect(),
-        ))
+        );
+        (!plan.is_empty()).then_some(plan)
     }
 
     /// Puts a freshly started watcher into use, with the channel its events
@@ -136,10 +136,11 @@ impl MarkdownApp {
 
     pub(crate) fn check_file_changes(&mut self) -> Vec<PathBuf> {
         let Some(rx) = &self.watcher_rx else {
-            // Attempt recovery if watching is enabled and there's something to watch
-            // Check actual tabs and explorer root, not watched_paths (which may be empty after failure)
-            let has_watchable = !self.tabs.is_empty() || self.file_explorer.root.is_some();
-            if self.watch_enabled && has_watchable {
+            // No watcher runs. With live reload on, that is a failure to
+            // recover from only when there is something to watch; the plan
+            // is rebuilt from the tabs and the explorer, not from
+            // `watched_paths`, which is empty after a failure.
+            if self.watch_enabled && self.watch_plan().is_some() {
                 self.recover_watcher(None);
             }
             return Vec::new();

@@ -164,6 +164,7 @@ fn a_plan_with_nothing_to_watch_starts_no_watcher() {
     let plan = WatchPlan::new(Vec::new(), Vec::new());
     let (handler, _events) = mpsc::channel();
 
+    assert!(plan.is_empty());
     assert!(FileWatcher::start(&plan, handler).is_none());
 }
 

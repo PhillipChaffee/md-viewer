@@ -79,6 +79,11 @@ impl WatchPlan {
     pub(crate) const fn needs_poll(&self) -> bool {
         !self.gvfs_files.is_empty()
     }
+
+    /// Whether there is nothing to register, so no backend has to run.
+    pub(crate) const fn is_empty(&self) -> bool {
+        !self.needs_inotify() && !self.needs_poll()
+    }
 }
 
 /// The explorer directories to watch: a local root plus each expanded local
