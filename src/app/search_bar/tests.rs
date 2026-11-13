@@ -5,6 +5,7 @@ use eframe::egui::{self, accesskit};
 use egui_kittest::kittest::Queryable as _;
 
 use super::STRIP_HEIGHT;
+use crate::app::action::AppAction;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::UiHarness;
 use crate::test_support::{assert_close, painted_shapes};
@@ -128,6 +129,51 @@ fn a_document_not_yet_laid_out_is_left_where_it_is() {
 
     assert_eq!(pending_scroll(&harness), None);
     assert_eq!(harness.app.tabs[0].search_matches.len(), 2);
+}
+
+/// The matches the find bar holds for the tab in front, once it has caught
+/// up with what the tab shows.
+fn matches_in_front(harness: &mut Harness) -> usize {
+    harness.app.maybe_rebuild_search();
+    harness.app.tabs[harness.app.active_tab]
+        .search_matches
+        .len()
+}
+
+#[test]
+fn the_matches_follow_a_tab_to_the_document_it_moves_to() {
+    let mut harness = Harness::with_docs(&[("a.md", "needle\n"), ("b.md", "needle needle\n")]);
+    harness.app.open_search();
+    harness.app.search.query = "needle".to_owned();
+    assert_eq!(matches_in_front(&mut harness), 1);
+    harness.app.search.active_match_index = 1;
+
+    harness.app.navigate_active_tab_to(&harness.path("b.md"));
+    assert_eq!(matches_in_front(&mut harness), 2);
+    assert_eq!(harness.app.search.active_match_index, 0);
+
+    harness.apply(AppAction::NavigateBack);
+    assert_eq!(matches_in_front(&mut harness), 1);
+}
+
+#[test]
+fn closing_a_tab_counts_the_document_that_takes_its_place() {
+    let mut harness = Harness::with_docs(&[
+        ("a.md", "# A\n"),
+        ("b.md", "# B\n"),
+        ("c.md", "needle needle needle\n"),
+    ]);
+    harness.app.open_in_new_tab(harness.path("b.md"));
+    harness.app.open_in_new_tab(harness.path("c.md"));
+    harness.app.focus_tab(1);
+    harness.app.open_search();
+    harness.app.search.query = "needle".to_owned();
+    assert_eq!(matches_in_front(&mut harness), 0);
+
+    harness.app.close_active_tab();
+
+    assert_eq!(harness.active_path(), harness.path("c.md"));
+    assert_eq!(matches_in_front(&mut harness), 3);
 }
 
 #[test]

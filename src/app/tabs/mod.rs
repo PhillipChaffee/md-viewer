@@ -163,12 +163,15 @@ impl MarkdownApp {
 
     /// Bring everything that mirrors tab paths back in line after the active
     /// tab moved to another document: the recent list, the window title, the
-    /// explorer's open-file highlight, and the watched paths.
+    /// find bar's matches, the explorer's open-file highlight, and the
+    /// watched paths.
     pub(crate) fn active_tab_navigated(&mut self) {
         if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
             self.record_recent(&path);
         }
         self.title_dirty = true;
+        // The same tab, another document: what the find bar counted is gone.
+        self.search.last_tab = None;
         self.refresh_open_tab_paths();
         if self.watch_enabled {
             self.update_watched_paths();
@@ -193,6 +196,9 @@ impl MarkdownApp {
 
         self.tabs.remove(idx);
         self.title_dirty = true;
+        // The tabs after the closed one moved down a place, so the place
+        // the find bar searched may hold another document now.
+        self.search.last_tab = None;
         self.refresh_open_tab_paths();
 
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
