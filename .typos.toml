@@ -11,5 +11,4 @@ writeable = "writeable"
 
 [files]
 # vendored upstream sources keep upstream's spelling; fixes go upstream
-# generated flatpak source list: crate names and hashes, not prose
-extend-exclude = ["vendor/", "flatpak/cargo-sources.json"]
+extend-exclude = ["vendor/"]

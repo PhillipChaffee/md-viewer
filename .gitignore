@@ -1,11 +1,5 @@
 /target
 
-# Snap build artifacts
-/parts/
-/prime/
-/stage/
-*.snap
-
 # Agent worktrees and per-run audit scratch
 /.claude/worktrees/
 

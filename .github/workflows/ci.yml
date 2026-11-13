@@ -257,16 +257,3 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check app/renderer workspace dependency contract
         run: bash scripts/check-workspace-sync.sh
-      - name: Check versions match
-        run: |
-          # Robust extraction tolerating quotes and spacing
-          CARGO_VER=$(awk -F'"' '/^version[[:space:]]*=[[:space:]]*"/{print $2; exit}' Cargo.toml)
-          SNAP_VER=$(sed -n "s/^version:[[:space:]]*['\"]\\?\\([0-9]\\+\\.[0-9]\\+\\.[0-9]\\+\\)['\"]\\?/\\1/p" snap/snapcraft.yaml)
-
-          echo "Cargo.toml: $CARGO_VER"
-          echo "snapcraft.yaml: $SNAP_VER"
-
-          if [ "$CARGO_VER" != "$SNAP_VER" ]; then
-            echo "::error::Version mismatch! Cargo=$CARGO_VER Snap=$SNAP_VER"
-            exit 1
-          fi

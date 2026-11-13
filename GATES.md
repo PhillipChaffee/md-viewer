@@ -32,7 +32,7 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | `osv-scanner.toml` | Thirteen advisories ignored: the same four, and nine "unmaintained" notices on transitive crates. One license override for a `WITH LLVM-exception` expression. |
 | `ci.yml`, `run-gates.sh` license list | The shared full-lint list, unchanged, plus `Zlib`, `BSL-1.0`, `CDLA-Permissive-2.0`, `OFL-1.1`, `Ubuntu-font-1.0`. |
 | `Cargo.toml` cargo-shear | `image` is ignored: used for its features only. |
-| `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/`, build output and the generated flatpak list are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
+| `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/` and build output are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
 | `.gitleaks.toml` | `target/` is skipped in the working-tree scan. |
 
 ## Caveat: the renderer fork is first-party code outside the gates
