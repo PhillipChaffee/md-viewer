@@ -329,16 +329,23 @@ fn ctrl_s_writes_unsaved_edits_and_nothing_else() {
     let mut harness = Harness::with_docs(&[("a.md", "original")]);
     let path = harness.path("a.md");
 
-    harness.app.tabs[0].content = "changed outside edit mode".to_owned();
     harness.press(Modifiers::CTRL, Key::S);
-    assert_eq!(fs::read_to_string(&path).unwrap(), "original");
+    assert!(
+        harness.app.tabs[0].save_flash.is_none(),
+        "nothing was unsaved"
+    );
 
-    harness.app.tabs[0].content = "original".to_owned();
     harness.app.tabs[0].set_edit_mode(true);
     harness.app.tabs[0].content = "edited".to_owned();
     harness.press(Modifiers::CTRL, Key::S);
     assert_eq!(fs::read_to_string(&path).unwrap(), "edited");
     assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
+
+    // Edits left unsaved are saved from the preview of them too.
+    harness.app.tabs[0].content = "edited again".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
+    harness.press(Modifiers::CTRL, Key::S);
+    assert_eq!(fs::read_to_string(&path).unwrap(), "edited again");
 }
 
 #[test]

@@ -79,6 +79,27 @@ fn a_save_that_cannot_be_written_is_reported_and_flagged() {
 }
 
 #[test]
+fn unsaved_edits_are_saved_from_the_preview_as_from_the_editor() {
+    let mut harness = Harness::with_docs(&[("a.md", "original")]);
+    let on_disk = |harness: &Harness| std::fs::read_to_string(harness.path("a.md")).unwrap();
+
+    harness.apply(AppAction::Save);
+    assert!(
+        harness.app.tabs[0].save_flash.is_none(),
+        "there was nothing to save"
+    );
+
+    harness.app.tabs[0].set_edit_mode(true);
+    harness.app.tabs[0].content = "edited".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
+    harness.apply(AppAction::Save);
+
+    assert_eq!(on_disk(&harness), "edited");
+    assert_eq!(harness.app.tabs[0].saved_content, "edited");
+    assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
+}
+
+#[test]
 fn document_actions_without_a_document_do_nothing() {
     let mut harness = Harness::with_three_docs();
     harness.apply(AppAction::CloseTab);

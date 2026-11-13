@@ -170,14 +170,15 @@ impl MarkdownApp {
         }
     }
 
-    /// Persist the active tab's edit buffer. Only meaningful in edit mode
-    /// with unsaved changes; the flash label in the edit toolbar reports the
-    /// outcome.
+    /// Persist the active tab's unsaved edits, from the editor or from the
+    /// preview of them: the unsaved mark is shown in both. With nothing
+    /// unsaved it does nothing; the flash label beside the mode toggle
+    /// reports the outcome.
     fn save_active_tab(&mut self) {
         let Some(tab) = self.tabs.get_mut(self.active_tab) else {
             return;
         };
-        if !tab.is_editing || tab.content == tab.saved_content {
+        if tab.content == tab.saved_content {
             return;
         }
         match tab.save_to_disk() {

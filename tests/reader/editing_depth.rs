@@ -151,12 +151,7 @@ fn the_unsaved_mark_stays_in_the_preview() {
     assert_eq!(reader.read_file("draft.md"), SOURCE);
 }
 
-/// Known bug, listed in `tests/README.md`: back in the preview the unsaved
-/// mark still shows, and says to press Ctrl+S, but Ctrl+S saves nothing
-/// there. This test states the right behavior and is expected to fail
-/// until the app has it.
 #[test]
-#[should_panic(expected = "Ctrl+S in the preview did not save the unsaved changes")]
 fn ctrl_s_saves_from_the_preview_too() {
     let mut reader = editing(SOURCE);
     append(&mut reader, " More.");
