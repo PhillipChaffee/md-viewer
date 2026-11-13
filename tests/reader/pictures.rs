@@ -269,11 +269,7 @@ fn a_file_that_is_not_a_picture_leaves_a_warning_too() {
     assert!(reader.pictures().is_empty());
 }
 
-/// Known bug, listed in `tests/README.md`: a picture that could not be
-/// loaded once is never tried again, so the warning stays after the file
-/// has appeared and the page has been reloaded.
 #[test]
-#[should_panic(expected = "the picture is still missing")]
 fn a_picture_that_appears_later_is_shown_once_the_page_is_reloaded() {
     let mut reader = framed("![late](late.png)");
     reader.wait_for("the warning sign", |reader| reader.sees("\u{26a0}"));

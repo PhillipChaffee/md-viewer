@@ -766,12 +766,21 @@ impl Image {
     }
 
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
-        let response = ui.add(
-            egui::Image::from_uri(&self.uri)
-                .fit_to_original_size(1.0)
-                .max_width(options.max_width(ui))
-                .sense(egui::Sense::click()),
-        );
+        let image = egui::Image::from_uri(&self.uri)
+            .fit_to_original_size(1.0)
+            .max_width(options.max_width(ui))
+            .sense(egui::Sense::click());
+        // egui's loaders keep a failure for as long as the app runs. A
+        // cache that has not shown this picture yet belongs to a page just
+        // loaded or reloaded: a failure it finds is left from before, and
+        // is forgotten so the picture is asked for again. A load that
+        // starts now is pending here, so it is never asked for twice.
+        if cache.observed_image_size(&self.uri).is_none()
+            && image.load_for_size(ui.ctx(), ui.available_size()).is_err()
+        {
+            ui.ctx().forget_image(&self.uri);
+        }
+        let response = ui.add(image);
         cache.observe_image_size(&self.uri, response.rect.size());
 
         if response.hovered() {
