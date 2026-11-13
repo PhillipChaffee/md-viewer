@@ -406,14 +406,8 @@ mod tests {
         ];
 
         for latex in formulas {
-            let rendered = render_math_formula(
-                latex,
-                false,
-                egui::Color32::BLACK,
-                egui::Color32::WHITE,
-                16.0,
-            )
-            .unwrap_or_else(|error| panic!("failed to render {latex:?}: {error}"));
+            let rendered = render_math_formula(latex, false, egui::Color32::BLACK, 16.0)
+                .unwrap_or_else(|error| panic!("failed to render {latex:?}: {error}"));
 
             assert!(rendered.size.x > 0.0);
             assert!(rendered.size.y > 0.0);
@@ -422,34 +416,46 @@ mod tests {
 
     #[cfg(feature = "math")]
     #[test]
-    fn math_cache_key_includes_exact_colors() {
-        let base = math_cache_hash(
-            "x + y",
-            false,
-            egui::Color32::BLACK,
-            egui::Color32::WHITE,
-            16.0,
+    fn math_cache_key_includes_the_exact_text_color() {
+        // The background is not part of the key: formulas are rasterized
+        // transparent, so one raster serves every surface.
+        let base = math_cache_hash("x + y", false, egui::Color32::BLACK, 16.0);
+        assert_ne!(
+            base,
+            math_cache_hash("x + y", false, egui::Color32::DARK_GRAY, 16.0)
         );
         assert_ne!(
             base,
-            math_cache_hash(
-                "x + y",
-                false,
-                egui::Color32::DARK_GRAY,
-                egui::Color32::WHITE,
-                16.0,
-            )
+            math_cache_hash("x + y", false, egui::Color32::from_gray(1), 16.0)
         );
-        assert_ne!(
-            base,
-            math_cache_hash(
-                "x + y",
-                false,
-                egui::Color32::BLACK,
-                egui::Color32::LIGHT_GRAY,
-                16.0,
-            )
-        );
+    }
+
+    #[cfg(feature = "math")]
+    #[test]
+    fn a_formula_is_ink_in_the_text_color_on_a_transparent_image() {
+        // A sepia page's ink: neither black nor white, so a composite onto
+        // an assumed background would show.
+        let ink = egui::Color32::from_rgb(0x2b, 0x26, 0x22);
+        for is_inline in [true, false] {
+            let image = render_math_formula(r"\frac{a}{b} + x^2", is_inline, ink, 16.0)
+                .unwrap()
+                .image;
+
+            assert_eq!(image.pixels[0], egui::Color32::TRANSPARENT);
+            assert!(image.pixels.contains(&ink), "no fully inked pixel");
+            // Every pixel is the ink at some opacity, so it blends with
+            // whatever it is painted on. Premultiplication rounds a channel
+            // by at most one step.
+            for pixel in &image.pixels {
+                let expected = egui::Color32::from_rgba_unmultiplied(
+                    ink.r(),
+                    ink.g(),
+                    ink.b(),
+                    pixel.a(),
+                );
+                assert_eq!(*pixel, expected);
+            }
+        }
     }
 
     #[cfg(feature = "math")]
@@ -457,7 +463,7 @@ mod tests {
     fn math_cache_key_includes_the_point_size() {
         // Without this, the first rendered size is served for every later
         // scale and changing the setting appears to do nothing.
-        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, egui::Color32::WHITE, pt);
+        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, pt);
         assert_ne!(at(16.0), at(20.0));
         assert_ne!(at(16.0), at(16.5));
     }
@@ -468,7 +474,7 @@ mod tests {
         // The size derives from a resolved font height, which fluctuates in the
         // last float digits between frames. Re-keying on that would recompile
         // every formula through typst on every paint.
-        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, egui::Color32::WHITE, pt);
+        let at = |pt| math_cache_hash("x + y", true, egui::Color32::BLACK, pt);
         assert_eq!(at(16.0), at(16.0001));
     }
 
@@ -485,7 +491,6 @@ mod tests {
                     latex: "x + y".to_owned(),
                     is_inline: true,
                     fg: egui::Color32::BLACK,
-                    bg: egui::Color32::WHITE,
                     size_pt: 16.0,
                     result_tx,
                 },
@@ -511,7 +516,6 @@ mod tests {
                 latex: "x + y".to_owned(),
                 is_inline: true,
                 fg: egui::Color32::BLACK,
-                bg: egui::Color32::WHITE,
                 size_pt: 16.0,
                 result_tx,
             }
@@ -538,15 +542,9 @@ mod tests {
         }
 
         let render = |latex| {
-            render_math_formula(
-                latex,
-                true,
-                egui::Color32::BLACK,
-                egui::Color32::WHITE,
-                16.0,
-            )
-            .unwrap()
-            .image
+            render_math_formula(latex, true, egui::Color32::BLACK, 16.0)
+                .unwrap()
+                .image
         };
         let first = render(r"\text{在}");
         let second = render(r"\text{中}");
@@ -559,12 +557,10 @@ mod tests {
     #[cfg(feature = "math")]
     #[test]
     fn inline_fraction_raster_keeps_vertical_ink_margin() {
-        let bg = egui::Color32::BLACK;
         let rendered = render_math_formula(
             r"-\frac15\sum_{l=1}^5 P_{a,l}",
             true,
             egui::Color32::WHITE,
-            bg,
             16.0,
         )
         .unwrap();
@@ -573,7 +569,7 @@ mod tests {
             .filter(|y| {
                 rendered.image.pixels[y * width..(y + 1) * width]
                     .iter()
-                    .any(|pixel| *pixel != bg)
+                    .any(|pixel| *pixel != egui::Color32::TRANSPARENT)
             })
             .collect();
         let top = *ink_rows.first().expect("formula has ink");
@@ -1388,7 +1384,6 @@ struct MathJob {
     latex: String,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     /// Resolved point size. Travels with the job because the worker thread has
     /// no `Ui` to ask, and must match the size that produced `hash`.
     size_pt: f32,
@@ -1419,8 +1414,7 @@ fn start_math_workers(worker_count: usize, queue_capacity: usize) -> mpsc::SyncS
                     },
                     Err(_) => break,
                 };
-                let result =
-                    render_math_formula(&job.latex, job.is_inline, job.fg, job.bg, job.size_pt);
+                let result = render_math_formula(&job.latex, job.is_inline, job.fg, job.size_pt);
                 let _ = job.result_tx.send(MathRenderResult {
                     hash: job.hash,
                     result,
@@ -1639,7 +1633,6 @@ fn render_math_formula(
     latex: &str,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     size_pt: f32,
 ) -> Result<MathRendered, String> {
     // 0. Decode common HTML entities that OCR/conversion tools may leave in math
@@ -1738,21 +1731,26 @@ fn render_math_formula(
     // Transparent background: typst-render outputs premultiplied RGBA.
     // The alpha channel cleanly separates "ink" from "no ink".
     // We boost alpha via pow(0.6) so thin strokes (like numerals) appear
-    // more solid, then composite fg over bg using the boosted alpha.
+    // more solid, then emit fg at the boosted alpha.
+    //
+    // The image stays transparent instead of being composited onto a
+    // background color here: a formula is painted on the page, but also on
+    // table rows, quotes and highlights, and an opaque image in the page
+    // color shows as a box on all of those.
     //
     // Alpha is a u8, so there are only 256 possible boosted values. Precompute
-    // the composited fg/bg color for every alpha once (a 256-entry LUT) instead
-    // of running a powf + 3 lerps per pixel — the per-pixel loop was the single
-    // largest render cost (~90 ms/formula, more on big display equations).
-    let mut lut = [bg; 256];
+    // the fg color for every alpha once (a 256-entry LUT) instead of running a
+    // powf per pixel — the per-pixel loop was the single largest render cost
+    // (~90 ms/formula, more on big display equations).
+    let mut lut = [egui::Color32::TRANSPARENT; 256];
     for (a, slot) in lut.iter_mut().enumerate() {
         if a >= 3 {
             let boosted = (a as f32 / 255.0).powf(0.6).min(1.0);
-            let inv = 1.0 - boosted;
-            *slot = egui::Color32::from_rgb(
-                (fg.r() as f32 * boosted + bg.r() as f32 * inv) as u8,
-                (fg.g() as f32 * boosted + bg.g() as f32 * inv) as u8,
-                (fg.b() as f32 * boosted + bg.b() as f32 * inv) as u8,
+            *slot = egui::Color32::from_rgba_unmultiplied(
+                fg.r(),
+                fg.g(),
+                fg.b(),
+                (boosted * 255.0).round() as u8,
             );
         }
     }
@@ -1785,13 +1783,12 @@ pub fn cached_inline_math_height(
     latex: &str,
     options: &CommonMarkOptions,
 ) -> Option<f32> {
-    // Key must match what the render pipeline stores (exact colors, like #92,
+    // Key must match what the render pipeline stores (exact color, like #92,
     // and the same point size — see `math_size_pt`).
     let hash = math_cache_hash(
         latex,
         true,
         ui.visuals().text_color(),
-        ui.visuals().panel_fill,
         math_size_pt(ui, options),
     );
     match cache.math_states.get(&hash) {
@@ -1833,11 +1830,10 @@ fn render_math_with_layout(
     align_to_text_baseline: bool,
     options: &CommonMarkOptions,
 ) {
-    let bg = ui.visuals().panel_fill;
     let fg = ui.visuals().text_color();
     let size_pt = math_size_pt(ui, options);
 
-    let hash = math_cache_hash(latex, is_inline, fg, bg, size_pt);
+    let hash = math_cache_hash(latex, is_inline, fg, size_pt);
 
     // Poll for completed background renders
     let mut received_any = false;
@@ -1884,7 +1880,7 @@ fn render_math_with_layout(
         && !cache.math_rendering.contains(&hash)
         && cache.math_rendering.len() < math_concurrency()
     {
-        if spawn_math_render(hash, latex, is_inline, fg, bg, size_pt, cache)
+        if spawn_math_render(hash, latex, is_inline, fg, size_pt, cache)
             == MathEnqueueStatus::Full
         {
             // The shared queue is bounded. Retry promptly after workers have
@@ -2005,18 +2001,11 @@ fn render_math_with_layout(
 }
 
 #[cfg(feature = "math")]
-fn math_cache_hash(
-    latex: &str,
-    is_inline: bool,
-    fg: egui::Color32,
-    bg: egui::Color32,
-    size_pt: f32,
-) -> u64 {
+fn math_cache_hash(latex: &str, is_inline: bool, fg: egui::Color32, size_pt: f32) -> u64 {
     let mut hasher = DefaultHasher::new();
     latex.hash(&mut hasher);
     is_inline.hash(&mut hasher);
     fg.hash(&mut hasher);
-    bg.hash(&mut hasher);
     // Quantized to 0.01 pt: the rendered bitmap differs at any size the eye can
     // tell apart, but per-frame float resolution of the body height must not
     // spawn a fresh typst compile every paint.
@@ -2046,7 +2035,6 @@ fn spawn_math_render(
     latex: &str,
     is_inline: bool,
     fg: egui::Color32,
-    bg: egui::Color32,
     size_pt: f32,
     cache: &mut CommonMarkCache,
 ) -> MathEnqueueStatus {
@@ -2056,7 +2044,6 @@ fn spawn_math_render(
         is_inline,
         fg,
         size_pt,
-        bg,
         result_tx: cache.math_tx.clone(),
     };
     let status = enqueue_math_job(&MATH_JOB_TX, job);
