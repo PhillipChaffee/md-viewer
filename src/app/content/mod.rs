@@ -15,7 +15,7 @@ use crate::search::take_search_correction_request;
 use crate::tab::Tab;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 /// The active search match counts as visible only this far inside the
 /// viewport's top and bottom edges.
