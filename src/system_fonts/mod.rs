@@ -1,7 +1,7 @@
 //! Font presets, text sizes, and system font installation for egui.
 
 use egui::{FontDefinitions, FontFamily};
-use fontique::{Collection, CollectionOptions, SourceCache};
+use fontique::{Collection, CollectionOptions, FamilyId, SourceCache};
 use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::emoji::install_emoji_fonts;
@@ -230,11 +230,50 @@ pub(crate) fn setup_fonts(
     preset: FontPreset,
     size: TextSizeClass,
 ) {
-    let started = std::time::Instant::now();
     let mut collection = Collection::new(CollectionOptions::default());
-    let family_count = collection.family_names().count();
-    let mut source_cache = SourceCache::default();
     let locale = sys_locale::get_locale();
+    let setup = FontSetup {
+        locale: locale.as_deref(),
+        preferred_family,
+        preset,
+        size,
+    };
+    apply_fonts(ctx, &mut collection, &setup);
+}
+
+/// What the document is set in: the user's choices plus the system locale,
+/// which steers the script fallbacks.
+struct FontSetup<'a> {
+    locale: Option<&'a str>,
+    preferred_family: Option<&'a str>,
+    preset: FontPreset,
+    size: TextSizeClass,
+}
+
+/// Give `ctx` the faces `collection` has for `setup`, at its text size.
+fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSetup<'_>) {
+    let definitions = font_definitions(
+        collection,
+        &mut SourceCache::default(),
+        setup.locale,
+        setup.preferred_family,
+        setup.preset,
+    );
+    ctx.set_fonts(definitions);
+    apply_text_size_class(ctx, setup.size);
+}
+
+/// The font chains for one font configuration, with every face taken from
+/// `collection`: egui's bundled faces stay in as the last resort.
+fn font_definitions(
+    collection: &mut Collection,
+    source_cache: &mut SourceCache,
+    locale: Option<&str>,
+    preferred_family: Option<&str>,
+    preset: FontPreset,
+) -> FontDefinitions {
+    let started = std::time::Instant::now();
+    let family_count = collection.family_names().count();
     let mut definitions = FontDefinitions::default();
     let defaults = definitions
         .families
@@ -242,16 +281,16 @@ pub(crate) fn setup_fonts(
         .cloned()
         .unwrap_or_default();
     let installed = install_regular_fonts(
-        &mut collection,
-        &mut source_cache,
+        collection,
+        source_cache,
         &mut definitions,
-        locale.as_deref(),
+        locale,
         preferred_family,
         preset.body_families(),
     );
     let bold_count = install_strong_font_family(
-        &mut collection,
-        &mut source_cache,
+        collection,
+        source_cache,
         &mut definitions,
         &installed,
         &defaults,
@@ -261,13 +300,13 @@ pub(crate) fn setup_fonts(
         false
     } else {
         install_preset_mono_font(
-            &mut collection,
-            &mut source_cache,
+            collection,
+            source_cache,
             &mut definitions,
             preset_mono_families,
         )
     };
-    install_emoji_fonts(&mut definitions);
+    install_emoji_fonts(collection, source_cache, &mut definitions);
     if installed.is_empty() {
         log::warn!("No suitable system font fallbacks found; using egui defaults.");
     } else {
@@ -279,8 +318,7 @@ pub(crate) fn setup_fonts(
             started.elapsed().as_secs_f64() * 1000.0
         );
     }
-    ctx.set_fonts(definitions);
-    apply_text_size_class(ctx, size);
+    definitions
 }
 
 /// Enumerate the family names the font picker should offer: one canonical
@@ -315,17 +353,19 @@ fn pickable_family_names(
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup();
     names.retain(|name| {
-        let Some(id) = collection.family_id(name) else {
-            return false;
-        };
-        // Keep only each family's canonical (first-seen) name so aliases —
-        // localized names and weight-instance names — collapse into a single
-        // entry instead of five rows that all pick the same regular face.
-        let canonical = collection.family_name(id).map(str::to_owned);
-        if canonical.as_deref() != Some(name.as_str()) {
-            return false;
-        }
-        select_body_font(collection, source_cache, &[id]).is_some()
+        canonical_family_id(collection, name)
+            .is_some_and(|id| select_body_font(collection, source_cache, &[id]).is_some())
     });
     names
+}
+
+/// The family `name` belongs to, if `name` is that family's canonical
+/// (first-seen) name. Aliases — localized names, weight-instance names, other
+/// spellings — resolve to the same family and give `None`, so they collapse
+/// into a single entry instead of five rows that all pick the same regular
+/// face.
+fn canonical_family_id(collection: &mut Collection, name: &str) -> Option<FamilyId> {
+    collection
+        .family_id(name)
+        .filter(|id| collection.family_name(*id) == Some(name))
 }
