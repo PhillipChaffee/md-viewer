@@ -159,13 +159,27 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Unmodified + PageDown in Document => AppAction::Scroll(KeyboardScrollAction::PageDown),
 ];
 
+/// Whether `key` went down this frame while `chord` was held. The chord is
+/// read off the key press itself and not off the modifiers held when the
+/// frame ends: a quick tap lets go of Ctrl inside the frame the key went
+/// down in.
+fn pressed_with(input: &egui::InputState, chord: Chord, key: Key) -> bool {
+    input.events.iter().any(|event| {
+        matches!(
+            event,
+            egui::Event::Key { key: went_down, pressed: true, modifiers, .. }
+                if *went_down == key && chord.is_held(*modifiers)
+        )
+    })
+}
+
 /// The actions this frame's input asks for, in the order they run. Each kind
 /// of action is queued once per frame: when two bindings for the same kind
 /// fire together, the later row of [`BINDINGS`] replaces the earlier one.
 fn shortcut_actions(input: &egui::InputState, focus: Focus) -> Vec<AppAction> {
     let mut actions: Vec<AppAction> = Vec::new();
     for &(chord, key, scope, action) in BINDINGS {
-        if scope.covers(focus) && chord.is_held(input.modifiers) && input.key_pressed(key) {
+        if scope.covers(focus) && pressed_with(input, chord, key) {
             let kind = mem::discriminant(&action);
             match actions
                 .iter_mut()

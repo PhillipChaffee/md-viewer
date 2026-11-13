@@ -35,6 +35,29 @@ fn actions_for(modifiers: Modifiers, keys: &[Key], focus: Focus) -> Vec<AppActio
 }
 
 #[test]
+fn a_shortcut_counts_by_what_was_held_when_its_key_went_down() {
+    let press = |modifiers| egui::Event::Key {
+        key: Key::D,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    let mut input = egui::InputState::default();
+
+    // A quick tap: Ctrl is up again before the frame ends.
+    input.modifiers = Modifiers::NONE;
+    input.events = vec![press(Modifiers::CTRL)];
+    let tapped = shortcut_actions(&input, Focus::Reading);
+    assert!(matches!(tapped[..], [AppAction::NextTheme]));
+
+    // Ctrl went down after the key did, inside the same frame.
+    input.modifiers = Modifiers::CTRL;
+    input.events = vec![press(Modifiers::NONE)];
+    assert!(shortcut_actions(&input, Focus::Reading).is_empty());
+}
+
+#[test]
 fn a_frame_without_keys_asks_for_nothing() {
     for focus in [Focus::Reading, Focus::FindBar, Focus::Lightbox] {
         assert!(actions_for(Modifiers::CTRL, &[], focus).is_empty());

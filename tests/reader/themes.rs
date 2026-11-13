@@ -54,13 +54,7 @@ fn ctrl_d_steps_through_the_themes_and_wraps() {
     }
 }
 
-/// Known bug, listed in `tests/README.md`: the app reads the modifier keys
-/// once per frame, so Ctrl+D pressed and released inside one frame is seen
-/// as a plain D. The real window drops such taps when a frame runs long.
-/// This test states the right behavior and is expected to fail until the
-/// app has it.
 #[test]
-#[should_panic(expected = "a shortcut tapped inside one frame was dropped")]
 fn a_shortcut_tapped_inside_one_frame_still_counts() {
     let mut reader = article();
 
