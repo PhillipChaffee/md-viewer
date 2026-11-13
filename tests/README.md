@@ -96,3 +96,4 @@ fails on the day the bug is fixed. Remove the marker then.
 | `tabs_depth::the_tab_in_front_is_scrolled_into_the_strip` | With more tabs than fit, the strip does not scroll to the tab in front, so a document just opened has no tab on screen |
 | `tabs_depth::with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch` | With more tabs than fit, the open-file button is drawn over the Preview and Edit switch |
 | `editing_depth::ctrl_s_saves_from_the_preview_too` | Back in the preview the unsaved mark says to press Ctrl+S, and Ctrl+S saves nothing there |
+| `keyboard::closing_a_tab_from_the_find_bar_leaves_the_query_alone` | With the keyboard in the find bar, Ctrl+W closes the tab and also deletes the last word of the query |

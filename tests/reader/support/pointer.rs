@@ -1,9 +1,15 @@
 //! Finer work with the mouse: gestures on a spot of the window, for what
 //! has no name to click, such as a picture or the empty page.
 
+use eframe::egui::accesskit::Role;
 use eframe::egui::{self, Modifiers, PointerButton, Pos2};
+use egui_kittest::kittest::{By, NodeT as _, Queryable as _};
 
 use super::Reader;
+
+/// Where a color picker's hue strip is, right of and below the bottom
+/// left corner of its "Blending:" label, in pixels at full size.
+const HUE: (f32, f32) = (15.0, 36.0);
 
 /// The primary button going down or coming up at `at`.
 const fn button(at: Pos2, pressed: bool) -> egui::Event {
@@ -97,5 +103,49 @@ impl Reader {
     /// its right end.
     pub(crate) fn sideways_wheel_at(&mut self, x: f32, y: f32, pixels: f32) {
         self.turn_wheel(x, y, egui::vec2(-pixels, 0.0), Modifiers::NONE);
+    }
+
+    /// Turn the mouse wheel away from the reader with Ctrl held, as a
+    /// browser's zoom gesture goes; a negative count turns it back.
+    pub(crate) fn ctrl_wheel(&mut self, pixels: f32) {
+        let (x, y) = (self.window.0 / 2.0, self.window.1 / 2.0);
+        let ctrl = super::keys::chord("Ctrl+A").0;
+        self.turn_wheel(x, y, egui::vec2(0.0, pixels), ctrl);
+    }
+
+    /// Choose another color with the `nth` color swatch in the window
+    /// (from zero, in reading order): open its picker, move the hue, and
+    /// close the picker.
+    #[track_caller]
+    pub(crate) fn pick_another_color(&mut self, nth: usize) {
+        self.click_color_swatch(nth);
+        // The picker names only its blending row; the hue strip is the
+        // second strip under it.
+        let blending = self.the("Blending:").area;
+        self.click_point(blending.left + HUE.0, blending.bottom() + HUE.1);
+        self.press("Escape");
+    }
+
+    /// Click the `nth` color swatch in the window: the small button that
+    /// shows a color and opens its picker.
+    #[track_caller]
+    fn click_color_swatch(&mut self, nth: usize) {
+        let swatches: Vec<_> = self
+            .kit
+            .query_all(By::new().role(Role::ColorWell))
+            .filter_map(|node| node.accesskit_node().bounding_box())
+            .collect();
+        let Some(swatch) = swatches.get(nth) else {
+            panic!("there is no color swatch number {nth}\n{}", self.describe());
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "window coordinates are a few thousand at most"
+        )]
+        let (x, y) = (
+            f64::midpoint(swatch.x0, swatch.x1) as f32,
+            f64::midpoint(swatch.y0, swatch.y1) as f32,
+        );
+        self.click_point(x, y);
     }
 }

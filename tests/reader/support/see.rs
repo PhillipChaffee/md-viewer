@@ -327,6 +327,33 @@ impl Reader {
         self.click_point(at.x, at.y);
     }
 
+    /// Where the `nth` text field is (from zero, in reading order).
+    #[track_caller]
+    pub(crate) fn text_field_area(&self, nth: usize) -> Area {
+        let mut fields = self
+            .elements()
+            .into_iter()
+            .filter(|element| matches!(element.role, Role::TextInput | Role::MultilineTextInput));
+        let field = fields.nth(nth);
+        field.map_or_else(
+            || panic!("there is no text field number {nth}\n{}", self.describe()),
+            |field| field.area,
+        )
+    }
+
+    /// Whether the `nth` (from zero, in reading order) of the controls
+    /// labelled exactly `label` can be used, for a label the window shows
+    /// twice.
+    #[track_caller]
+    pub(crate) fn is_enabled_nth(&self, label: &str, nth: usize) -> bool {
+        let all = self.all(label);
+        let found = all.get(nth);
+        found.map_or_else(
+            || panic!("there is no `{label}` number {nth}\n{}", self.describe()),
+            |element| element.enabled,
+        )
+    }
+
     /// The title the app gave its window.
     #[track_caller]
     pub(crate) fn title(&self) -> &str {

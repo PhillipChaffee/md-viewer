@@ -16,6 +16,8 @@ mod contents_sidebar;
 #[cfg(test)]
 mod diagrams;
 #[cfg(test)]
+mod dialogs;
+#[cfg(test)]
 mod docs;
 #[cfg(test)]
 mod editing;
@@ -28,6 +30,8 @@ mod find;
 #[cfg(test)]
 mod find_depth;
 #[cfg(test)]
+mod geometry;
+#[cfg(test)]
 mod history;
 #[cfg(test)]
 mod history_depth;
@@ -35,6 +39,8 @@ mod history_depth;
 mod home;
 #[cfg(test)]
 mod home_depth;
+#[cfg(test)]
+mod keyboard;
 #[cfg(test)]
 mod lightbox;
 #[cfg(test)]
@@ -46,6 +52,8 @@ mod live_reload_depth;
 #[cfg(test)]
 mod math;
 #[cfg(test)]
+mod menu;
+#[cfg(test)]
 mod opening;
 #[cfg(test)]
 mod opening_depth;
@@ -53,6 +61,8 @@ mod opening_depth;
 mod pages;
 #[cfg(test)]
 mod pictures;
+#[cfg(test)]
+mod popover;
 #[cfg(test)]
 mod prose;
 #[cfg(test)]
