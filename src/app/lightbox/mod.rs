@@ -3,6 +3,7 @@
 use eframe::egui;
 
 use crate::app::{zoom_percent, MarkdownApp};
+use crate::theme;
 
 #[cfg(test)]
 mod tests;
@@ -203,7 +204,7 @@ impl LightboxState {
             egui::Align2::CENTER_CENTER,
             format!("{zoom_pct}%"),
             egui::FontId::proportional(16.0),
-            egui::Color32::from_gray(180),
+            theme::ON_SCRIM_MUTED,
         );
     }
 }
@@ -214,11 +215,7 @@ fn paint_backdrop(ctx: &egui::Context, screen_rect: egui::Rect) {
         egui::Order::Foreground,
         egui::Id::new("lightbox_backdrop"),
     ))
-    .rect_filled(
-        screen_rect,
-        0.0,
-        egui::Color32::from_rgba_unmultiplied(0, 0, 0, 200),
-    );
+    .rect_filled(screen_rect, 0.0, theme::SCRIM);
 }
 
 /// Full-screen input sink at Tooltip order — blocks all input to lower
@@ -250,7 +247,7 @@ fn close_button_clicked(ctx: &egui::Context, screen_rect: egui::Rect, open_id: u
                 egui::Button::new(
                     egui::RichText::new("\u{2715}")
                         .size(20.0)
-                        .color(egui::Color32::from_gray(200)),
+                        .color(theme::ON_SCRIM),
                 )
                 .frame(false),
             );

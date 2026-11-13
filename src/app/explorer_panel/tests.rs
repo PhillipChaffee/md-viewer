@@ -5,6 +5,7 @@ use egui_kittest::kittest::Queryable as _;
 
 use super::*;
 use crate::app::content::tests::label_harness::LabelHarness;
+use crate::theme::ThemeId;
 
 /// `a.md` open in the only tab, beside `b.md` and a folder `sub` that holds
 /// `c.md` and, one level down, `deep/d.md`.
@@ -258,18 +259,18 @@ fn copying_the_contents_of_a_file_that_is_gone_copies_nothing() {
 }
 
 #[test]
-fn a_file_that_just_changed_is_highlighted_in_either_theme() {
+fn a_file_that_just_changed_is_highlighted_in_every_theme() {
     let mut harness = explorer();
     assert!(!is_highlighted(&harness, "b.md"));
 
-    for dark_mode in [true, false] {
+    for theme in ThemeId::ALL {
         let changed = harness.path("b.md");
         let app = harness.state_mut();
-        app.dark_mode = dark_mode;
+        app.theme = theme;
         app.flashing_paths.insert(changed, Instant::now());
         harness.frames(1);
 
-        assert!(is_highlighted(&harness, "b.md"), "dark mode: {dark_mode}");
+        assert!(is_highlighted(&harness, "b.md"), "{theme:?}");
         assert!(!is_highlighted(&harness, "a.md"));
     }
 }

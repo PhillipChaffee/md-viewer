@@ -1984,3 +1984,33 @@ An empty first list is the assertion worth making. It also explains rises in the
 **Fix:** `scan_pickable_font_families()` keeps a name only if it is the family's canonical name (`collection.family_name(family_id(name)) == name` collapses each alias group to one entry) AND `select_from_families` finds a normal-style face covering `"Aa"` — the identical gate `install_regular_fonts` applies, so anything listed is guaranteed to take effect. The probe costs ~0.5 s (one face load per rejected candidate), so it runs on a background thread and the dialog shows "System Default" + a scanning note until it lands.
 **Gotchas:** `family_names()` order is HashMap-arbitrary — sort case-insensitively yourself. `family_name(id)` returns the first-seen name for the id, which is the canonical one. Listing a family whose selection would fail re-creates the silent-fallback bug; always mirror the installer's gate.
 **Files:** `src/system_fonts.rs` (`scan_pickable_font_families`, `pickable_family_names`), `src/main.rs` (`pending_font_family_scan` poll), `docs/devlog/068-fonts-one-menu.md`
+
+### A fence tag that is a language name, not an extension, never reached syntect
+
+**Context:** Giving each reading theme its own syntect theme. Paper and Sepia were configured differently and painted identical code.
+**Problem:** The renderer looks a fence tag up with `find_syntax_by_extension`. `rs` matches; `rust` does not, and falls through to egui_extras' built-in highlighter, which has two fixed palettes and ignores `syntax_theme_light` / `syntax_theme_dark`. Most real documents tag blocks by name.
+**Fix:** `BlockStyle::syntax_by_language_name` (opt-in) adds a `find_syntax_by_token` lookup. The highlight cache key also hashes the theme *name* now: it hashed only `dark_mode`, so two light themes shared cached jobs.
+**How it was found:** by sampling a pixel of a keyword in two screenshots. The color (`#9986FF`) belonged to neither configured theme. A setting that changes nothing visible has not been shown to work.
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/misc.rs`, `src/app/content/look/mod.rs`, `docs/devlog/070-reader-foundation.md`
+
+### Text of different faces or sizes on one line does not share a baseline
+
+**Context:** Inline code set at 0.875 em beside a serif body face sat about 4 px high.
+**Problem:** epaint places every glyph at `row_top + ascent` of its own face. There is no baseline alignment between labels, and `TextFormat::valign` only acts inside one galley. A smaller face, or one with a lower ascent, floats.
+**Fix:** shift the code face down with `FontTweak::y_offset_factor = body_ascent_em / scale - code_ascent_em`, both ascents read with `ttf_parser`. The tweak is visual only, so line heights and measured positions do not change.
+**Gotcha:** the tweak is per face, for every use of it. It is right for one body face and one scale; keep it conditional on that pair (here: the bundled serif).
+**Files:** `src/system_fonts/bundled/mod.rs`
+
+### In the renderer's wrapping row, a tall block leaves its height to the next row
+
+**Context:** Painting a block (the meta line) above the first document block, inside the column ui.
+**Problem:** the column is a `left_to_right` wrapping layout. `Layout::end_row` starts the new row with the *old* row's height, and a heading begins with its own `end_row`, so a heading after a tall block got a blank line as tall as the block. Separately, `allocate_ui_with_layout` places a zero-height child at the *bottom* of a row of body height, one line low.
+**Fix:** place the block with `scope_builder` at `ui.cursor().min`, then `end_row()` and `set_row_height(0.0)`.
+**Files:** `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`show_preamble`)
+
+### Startup style writes after `setup_fonts` silently undo it
+
+**Context:** A session saved at text size Large came back at Normal.
+**Problem:** `setup_fonts` applies the size class to `TextStyle::Body/Heading/Monospace`; `configure_context` ran next and set them to 16/32/14 again. The last-applied gate then believed the fonts were in sync, so nothing reapplied the class.
+**Fix:** `configure_context` no longer sets those three styles. General rule: a value with a diff-gated "apply on change" path must have exactly one writer.
+**Files:** `src/app/startup/mod.rs`

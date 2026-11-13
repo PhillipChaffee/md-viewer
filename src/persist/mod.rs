@@ -5,9 +5,10 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::explorer::SortOrder;
-use crate::layout::SIDEBAR_MIN_WIDTH;
+use crate::layout::{LineSpacing, SIDEBAR_MIN_WIDTH};
 use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
+use crate::theme::ThemeId;
 
 #[cfg(test)]
 mod tests;
@@ -17,10 +18,24 @@ pub(crate) const APP_KEY: &str = "md-viewer-state";
 /// Persisted state saved between sessions.
 #[derive(Serialize, Deserialize, Default)]
 pub(crate) struct PersistedState {
+    /// The reading theme. `None` in a session saved before the themes;
+    /// see `dark_mode`.
+    pub(crate) theme: Option<ThemeId>,
+    /// Read only: what versions before the themes saved instead of
+    /// `theme`. `ThemeId::restored` maps it to a theme.
+    #[serde(default, skip_serializing)]
     pub(crate) dark_mode: Option<bool>,
     pub(crate) zoom_level: Option<f32>,
     pub(crate) show_outline: Option<bool>,
+    /// Width of the text column in px. `None` in a session saved before
+    /// the column was resizable; see `full_width_content`.
+    pub(crate) reading_width: Option<f32>,
+    /// Read only: what versions before the resizable column saved instead
+    /// of `reading_width`. `ReadingWidth::restored` maps it to a width.
+    #[serde(default, skip_serializing)]
     pub(crate) full_width_content: Option<bool>,
+    /// `None` keeps the Comfortable default.
+    pub(crate) line_spacing: Option<LineSpacing>,
     pub(crate) math_scale: Option<f32>,
     /// Selection/highlight background color override, stored as premultiplied
     /// RGBA bytes (`Color32`'s canonical representation — see `Color32::r/g/b/a`

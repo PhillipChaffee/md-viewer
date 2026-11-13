@@ -78,12 +78,13 @@ impl MarkdownApp {
 
             // Preview|Edit segmented toggle for the active tab, right-aligned
             // in the tab bar (DSH-better-sidebar editor-header placement).
+            let saved_color = self.theme.palette().positive;
             if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                 ui.add_space(8.0);
                 ui.separator();
                 ui.add_space(8.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    edit_mode_controls(ui, tab);
+                    edit_mode_controls(ui, tab, saved_color);
                 });
             }
         });
@@ -233,8 +234,9 @@ fn tab_context_menu(ui: &mut egui::Ui, label: &TabLabel<'_>, actions: &mut TabSt
 }
 
 /// The Preview|Edit toggle, the unsaved-changes marker, and the outcome of
-/// the last save. The caller lays these out right to left.
-fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab) {
+/// the last save, in `saved_color` when it worked. The caller lays these
+/// out right to left.
+fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, saved_color: egui::Color32) {
     if let Some(to_edit) = mode_toggle(ui, tab.is_editing) {
         tab.set_edit_mode(to_edit);
     }
@@ -246,7 +248,7 @@ fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab) {
         )
         .on_hover_text("Unsaved changes — press Ctrl+S to save");
     }
-    save_flash_label(ui, tab);
+    save_flash_label(ui, tab, saved_color);
 }
 
 /// Draws the segmented mode toggle. Returns the mode the user switched to:
@@ -294,7 +296,7 @@ fn mode_segment(ui: &mut egui::Ui, label: &str, active: bool) -> bool {
 }
 
 /// Shows the outcome of the last save until it expires, then forgets it.
-fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab) {
+fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab, saved_color: egui::Color32) {
     let Some((ok, at)) = tab.save_flash else {
         return;
     };
@@ -303,7 +305,7 @@ fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab) {
         return;
     }
     let (label, color) = if ok {
-        ("Saved ✓", egui::Color32::from_rgb(90, 200, 120))
+        ("Saved ✓", saved_color)
     } else {
         ("Save failed", ui.visuals().error_fg_color)
     };

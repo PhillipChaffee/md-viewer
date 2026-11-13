@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::app::tests::Harness;
+use crate::test_support::assert_close;
 
 #[test]
 fn a_history_action_moves_one_step_and_stops_at_either_end() {
@@ -22,13 +23,13 @@ fn a_history_action_moves_one_step_and_stops_at_either_end() {
 #[test]
 fn menu_only_actions_change_their_own_setting() {
     let mut harness = Harness::with_three_docs();
-    let (full_width, smooth_text) = (
-        harness.app.full_width_content,
-        harness.app.smooth_text_rendering,
-    );
+    let smooth_text = harness.app.smooth_text_rendering;
+    assert!(!harness.app.reading_width.fits_window());
 
     harness.apply(AppAction::ToggleFullWidth);
-    assert_eq!(harness.app.full_width_content, !full_width);
+    assert!(harness.app.reading_width.fits_window());
+    harness.apply(AppAction::ToggleFullWidth);
+    assert_eq!(harness.app.reading_width, ReadingWidth::DEFAULT);
     assert_eq!(harness.app.smooth_text_rendering, smooth_text);
     harness.apply(AppAction::ToggleSmoothText);
     assert_eq!(harness.app.smooth_text_rendering, !smooth_text);
@@ -100,4 +101,81 @@ fn lightbox_zoom_actions_do_nothing_without_a_lightbox() {
 
     assert!(harness.app.lightbox.is_none());
     assert!((harness.app.zoom_level - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn theme_actions_pick_a_theme_or_step_to_the_next() {
+    let mut harness = Harness::with_three_docs();
+
+    harness.apply(AppAction::SetTheme(ThemeId::Night));
+    assert_eq!(harness.app.theme, ThemeId::Night);
+    harness.apply(AppAction::NextTheme);
+    assert_eq!(harness.app.theme, ThemeId::Paper);
+    harness.apply(AppAction::NextTheme);
+    assert_eq!(harness.app.theme, ThemeId::Sepia);
+}
+
+#[test]
+fn a_column_width_is_set_inside_its_range() {
+    let mut harness = Harness::with_three_docs();
+
+    harness.apply(AppAction::SetReadingWidth(512.0));
+    assert_close(harness.app.reading_width.get(), 512.0);
+    harness.apply(AppAction::SetReadingWidth(1.0));
+    assert_close(harness.app.reading_width.get(), ReadingWidth::MIN);
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    assert!(harness.app.reading_width.fits_window());
+    harness.apply(AppAction::SetReadingWidth(f32::NAN));
+    assert_eq!(harness.app.reading_width, ReadingWidth::DEFAULT);
+}
+
+#[test]
+fn a_width_step_before_any_frame_starts_from_the_stored_width() {
+    let mut harness = Harness::with_three_docs();
+
+    // No frame has measured the pane yet.
+    harness.apply(AppAction::StepReadingWidth(ReadingWidth::STEP));
+    assert_close(harness.app.reading_width.get(), 720.0);
+    harness.apply(AppAction::StepReadingWidth(-2.0 * ReadingWidth::STEP));
+    assert_close(harness.app.reading_width.get(), 640.0);
+}
+
+#[test]
+fn a_new_line_spacing_lays_every_open_document_out_again() {
+    let mut harness = Harness::with_three_docs();
+    let b = harness.path("b.md");
+    harness.app.open_in_new_tab(b);
+    let revisions = |harness: &Harness| -> Vec<u64> {
+        let tabs = harness.app.tabs.iter();
+        tabs.map(|tab| tab.cache.layout_revision()).collect()
+    };
+    let before = revisions(&harness);
+    assert_eq!(before.len(), 2);
+
+    harness.apply(AppAction::SetLineSpacing(LineSpacing::Airy));
+
+    assert_eq!(harness.app.line_spacing, LineSpacing::Airy);
+    for (after, before) in revisions(&harness).into_iter().zip(before) {
+        assert!(after > before, "{before} -> {after}");
+    }
+}
+
+#[test]
+fn a_new_column_width_lays_documents_out_again_and_the_same_width_does_not() {
+    let mut harness = Harness::with_three_docs();
+    let revision = |harness: &Harness| harness.app.tabs[0].cache.layout_revision();
+
+    let before = revision(&harness);
+    harness.apply(AppAction::SetReadingWidth(512.0));
+    let resized = revision(&harness);
+    assert!(resized > before);
+
+    harness.apply(AppAction::SetReadingWidth(512.0));
+    assert_eq!(revision(&harness), resized, "nothing changed");
+
+    harness.apply(AppAction::StepReadingWidth(ReadingWidth::STEP));
+    let stepped = revision(&harness);
+    assert!(stepped > resized);
+    harness.apply(AppAction::ToggleFullWidth);
+    assert!(revision(&harness) > stepped);
 }

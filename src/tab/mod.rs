@@ -18,6 +18,37 @@ use crate::search::{find_matches, SearchMatch};
 #[cfg(test)]
 mod tests;
 
+/// Words a reader gets through in a minute: the usual figure for prose on
+/// a screen.
+const WORDS_PER_MINUTE: usize = 230;
+
+/// Minutes it takes to read `content`: at least one, rounded up.
+pub(crate) fn reading_minutes(content: &str) -> usize {
+    content
+        .split_whitespace()
+        .count()
+        .div_ceil(WORDS_PER_MINUTE)
+        .max(1)
+}
+
+/// The file name of `path` as shown to the user.
+fn file_title(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || "Unknown".to_string(),
+        |n| n.to_string_lossy().to_string(),
+    )
+}
+
+/// The line shown above a document: its file name and how long it takes
+/// to read.
+fn kicker_line(path: &Path, content: &str) -> String {
+    format!(
+        "{} · {} min read",
+        file_title(path),
+        reading_minutes(content)
+    )
+}
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
@@ -25,6 +56,9 @@ pub(crate) struct Tab {
     pub(crate) content: String,
     pub(crate) cache: CommonMarkCache,
     pub(crate) document_title: Option<String>,
+    /// The meta line above the document (`file-name · N min read`),
+    /// worked out when the content is loaded.
+    pub(crate) kicker: String,
     pub(crate) outline_headers: Vec<Header>,
     /// Set of header indices that are collapsed in the outline.
     pub(crate) collapsed_headers: HashSet<usize>,
@@ -91,6 +125,7 @@ impl Tab {
         let local_links = parse_local_links(&content, &path);
         let content_lines = content.lines().count();
         let base_uri = Self::compute_base_uri(&path);
+        let kicker = kicker_line(&path, &content);
 
         let mut cache = CommonMarkCache::default();
         for link in &local_links {
@@ -104,6 +139,7 @@ impl Tab {
             content,
             cache,
             document_title: parsed.document_title,
+            kicker,
             outline_headers: parsed.outline_headers,
             collapsed_headers: HashSet::new(),
             scroll_offset: 0.0,
@@ -151,10 +187,7 @@ impl Tab {
     }
 
     pub(crate) fn title(&self) -> String {
-        self.path.file_name().map_or_else(
-            || "Unknown".to_string(),
-            |n| n.to_string_lossy().to_string(),
-        )
+        file_title(&self.path)
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {
@@ -206,6 +239,7 @@ impl Tab {
             self.pending_scroll_offset = None;
         }
         self.base_uri = Self::compute_base_uri(&self.path);
+        self.kicker = kicker_line(&self.path, &self.content);
 
         let parsed = parse_headers(&self.content);
         self.document_title = parsed.document_title;

@@ -5,7 +5,10 @@ use std::time::Instant;
 use eframe::egui;
 
 use crate::app::MarkdownApp;
-use crate::layout::{keyboard_scroll_target, zoomed, KeyboardScrollAction};
+use crate::layout::{
+    keyboard_scroll_target, zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth,
+};
+use crate::theme::ThemeId;
 
 #[cfg(test)]
 mod tests;
@@ -37,10 +40,20 @@ pub(crate) enum AppAction {
     /// Write the active tab's unsaved edits to disk.
     Save,
     ToggleWatch,
-    ToggleDarkMode,
+    /// Switch to the next reading theme, wrapping around.
+    NextTheme,
+    SetTheme(ThemeId),
     ToggleExplorer,
     ToggleOutline,
+    /// Switch the text column between filling the window and its default
+    /// width.
     ToggleFullWidth,
+    /// Make the text column this many px wide; `ReadingWidth::MAX` fits the
+    /// window.
+    SetReadingWidth(f32),
+    /// Widen the text column by this many px, or narrow it if negative.
+    StepReadingWidth(f32),
+    SetLineSpacing(LineSpacing),
     ToggleSmoothText,
     OpenColorSettings,
     OpenFontSettings,
@@ -75,10 +88,17 @@ impl MarkdownApp {
             AppAction::CloseSearch => self.close_search(),
             AppAction::Save => self.save_active_tab(),
             AppAction::ToggleWatch => self.toggle_watching(),
-            AppAction::ToggleDarkMode => self.dark_mode = !self.dark_mode,
+            AppAction::NextTheme => self.theme = self.theme.next(),
+            AppAction::SetTheme(theme) => self.theme = theme,
             AppAction::ToggleExplorer => self.show_explorer = !self.show_explorer,
             AppAction::ToggleOutline => self.show_outline = !self.show_outline,
-            AppAction::ToggleFullWidth => self.full_width_content = !self.full_width_content,
+            AppAction::ToggleFullWidth => self.toggle_full_width(),
+            AppAction::SetReadingWidth(px) => self.set_reading_width(ReadingWidth::new(px)),
+            AppAction::StepReadingWidth(delta) => {
+                let shown_in = self.document_pane_width;
+                self.set_reading_width(self.reading_width.stepped(delta, shown_in));
+            }
+            AppAction::SetLineSpacing(spacing) => self.set_line_spacing(spacing),
             AppAction::ToggleSmoothText => {
                 self.smooth_text_rendering = !self.smooth_text_rendering;
             }
@@ -100,6 +120,33 @@ impl MarkdownApp {
             AppAction::Scroll(step) => self.scroll_active_tab(step),
             AppAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
+    }
+
+    fn toggle_full_width(&mut self) {
+        self.set_reading_width(if self.reading_width.fits_window() {
+            ReadingWidth::DEFAULT
+        } else {
+            ReadingWidth::FIT_WINDOW
+        });
+    }
+
+    /// A new column width is a new layout: each open document lays out
+    /// again, and its tables fit their columns to the new width instead
+    /// of keeping the ones a narrower column squeezed them into.
+    fn set_reading_width(&mut self, width: ReadingWidth) {
+        if width != self.reading_width {
+            self.reading_width = width;
+            for tab in &mut self.tabs {
+                tab.cache.refit_tables();
+            }
+        }
+    }
+
+    /// Line spacing is a renderer option, not part of the layout the
+    /// renderer watches, so each open document is told to lay out again.
+    fn set_line_spacing(&mut self, spacing: LineSpacing) {
+        self.line_spacing = spacing;
+        self.relayout_documents();
     }
 
     fn toggle_watching(&mut self) {

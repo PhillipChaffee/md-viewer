@@ -313,11 +313,8 @@ impl MarkdownApp {
         else {
             return;
         };
-        let flash_color = if self.dark_mode {
-            egui::Color32::from_rgba_unmultiplied(60, 200, 60, alpha)
-        } else {
-            egui::Color32::from_rgba_unmultiplied(80, 200, 80, alpha)
-        };
+        let [r, g, b, _] = self.theme.palette().positive.to_array();
+        let flash_color = egui::Color32::from_rgba_unmultiplied(r, g, b, alpha);
         // Use debug_painter which draws on top of everything
         ui.ctx().debug_painter().rect_filled(row, 4.0, flash_color);
     }

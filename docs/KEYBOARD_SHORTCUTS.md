@@ -42,7 +42,9 @@ The find bar also has on-screen `↑` and `↓` buttons next to the match count 
 
 | Shortcut | Action |
 | ---------- | -------- |
-| Ctrl+D | Toggle dark/light mode |
+| Ctrl+D | Next theme (Paper → Sepia → Dusk → Night) |
+| Ctrl+Alt+→ | Widen the text column by 40 px |
+| Ctrl+Alt+← | Narrow the text column by 40 px |
 | Ctrl+Shift+E | Toggle file explorer |
 | Ctrl+Shift+O | Toggle outline sidebar |
 | Ctrl++ / Ctrl+= | Zoom in |
@@ -52,3 +54,8 @@ The find bar also has on-screen `↑` and `↓` buttons next to the match count 
 | Page Up / Page Down | Scroll document up/down by page |
 | Ctrl+Scroll | Zoom in/out with mouse wheel |
 | Shift+Scroll over a wide table | Scroll the table horizontally |
+
+The text column can also be resized with the mouse: drag either edge of the
+column (a hairline and a resize cursor show where), and double-click an edge
+to go back to the default width. The column stays centered, so both edges
+move together.

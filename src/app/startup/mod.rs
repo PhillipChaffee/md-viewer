@@ -9,17 +9,24 @@ use eframe::egui::{self, FontId, TextStyle};
 #[cfg(feature = "mcp")]
 use egui_mcp_bridge::McpBridge;
 
+use crate::app::content::look::DocumentLook;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
-use crate::layout::{EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS};
+use crate::layout::{
+    ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS,
+};
 use crate::persist::{restored_sidebar_width, PersistedState, APP_KEY};
 use crate::search::SearchState;
-use crate::system_fonts::{scan_pickable_font_families, setup_fonts};
+use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
 use crate::tab::Tab;
+use crate::theme::ThemeId;
 
 #[cfg(test)]
 mod tests;
+
+/// Width of every scrollbar, at rest and hovered.
+const SCROLLBAR_WIDTH: f32 = 6.0;
 
 /// One-time egui setup that never changes at runtime.
 fn configure_context(ctx: &egui::Context) {
@@ -49,20 +56,25 @@ fn configure_context(ctx: &egui::Context) {
         // both builds produce an identical state map across x, so this
         // removes the oscillation rather than moving it out of view.
         // `scripts/hover-stability.sh` is that measurement.
+        //
+        // The bar is thin: it floats over the page's margin and is drawn
+        // in the theme's hairline color, so it reads as part of the paper.
+        let scroll = &mut style.spacing.scroll;
+        scroll.bar_width = SCROLLBAR_WIDTH;
+        // No track, and the handle in the widget fill colors the theme
+        // sets for it: the hairline color at rest, the muted color in use.
+        scroll.foreground_color = false;
+        scroll.active_background_opacity = 0.0;
+        scroll.interact_background_opacity = 0.0;
+        scroll.active_handle_opacity = 1.0;
         style.spacing.scroll.floating_width = style.spacing.scroll.bar_width;
         style.url_in_tooltip = true;
-        style
-            .text_styles
-            .insert(TextStyle::Body, FontId::proportional(16.0));
-        style
-            .text_styles
-            .insert(TextStyle::Heading, FontId::proportional(32.0));
+        // Body, heading and code sizes belong to the text-size class, which
+        // `setup_fonts` has already applied; setting them here would undo a
+        // restored class until the user next changed it.
         style
             .text_styles
             .insert(TextStyle::Small, FontId::proportional(13.0));
-        style
-            .text_styles
-            .insert(TextStyle::Monospace, FontId::monospace(14.0));
 
         // Smoother scroll animation
         style.animation_time = 0.15;
@@ -163,6 +175,19 @@ fn is_virtual_display(display: Option<&str>) -> bool {
     display.is_some_and(|display| display != ":0" && display != ":0.0" && !display.is_empty())
 }
 
+/// The theme of the last session, and what the document pane renders with
+/// until frame 1, which rebuilds it once the theme's visuals are applied.
+fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, DocumentLook) {
+    let theme = ThemeId::restored(persisted.theme, persisted.dark_mode);
+    let fonts = document_fonts(
+        persisted.selected_font_family.as_deref(),
+        persisted.font_preset.unwrap_or_default(),
+        persisted.text_size_class.unwrap_or_default(),
+    );
+    let look = DocumentLook::new(&ctx.style(), theme.palette(), &fonts);
+    (theme, look)
+}
+
 const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {
     egui::Color32::from_rgba_premultiplied(r, g, b, a)
 }
@@ -202,6 +227,7 @@ impl MarkdownApp {
         file: Option<PathBuf>,
         watch: bool,
     ) -> Self {
+        let (theme, document_look) = restored_look(ctx, &persisted);
         let (tabs, startup_error) = initial_tabs(file.as_deref(), persisted.open_tabs);
         let active_tab = persisted
             .active_tab
@@ -224,18 +250,22 @@ impl MarkdownApp {
         let link_color = persisted.link_color.map(color_from_persisted);
         let font_preset = persisted.font_preset.unwrap_or_default();
         let text_size_class = persisted.text_size_class.unwrap_or_default();
+        let reading_width =
+            ReadingWidth::restored(persisted.reading_width, persisted.full_width_content);
 
         let mut app = Self {
             tabs,
             active_tab,
-            dark_mode: persisted
-                .dark_mode
-                .unwrap_or_else(|| ctx.style().visuals.dark_mode),
+            theme,
             zoom_level: persisted.zoom_level.unwrap_or(1.0).clamp(0.5, 3.0),
             show_outline: persisted.show_outline.unwrap_or(true),
-            full_width_content: persisted.full_width_content.unwrap_or(false),
+            reading_width,
+            document_pane_width: f32::INFINITY,
+            column_drag_grab: None,
+            line_spacing: persisted.line_spacing.unwrap_or_default(),
+            document_look,
             math_scale: persisted.math_scale.unwrap_or(1.0).clamp(1.0, 2.0),
-            // Frame 1 always rebuilds Visuals anyway (last_applied_dark_mode
+            // Frame 1 always rebuilds Visuals anyway (last_applied_theme
             // starts at None), so this just avoids a spurious second rebuild
             // afterward if nothing further changes.
             highlight_color,
@@ -280,7 +310,7 @@ impl MarkdownApp {
             flashing_paths: HashMap::new(),
             is_virtual_display: is_virtual_display(std::env::var("DISPLAY").ok().as_deref()),
             egui_ctx: ctx.clone(),
-            last_applied_dark_mode: None,
+            last_applied_theme: None,
             last_applied_zoom_level: None,
             last_window_title: String::new(),
             title_dirty: true,

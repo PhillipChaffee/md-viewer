@@ -10,13 +10,16 @@ use eframe::egui;
 #[cfg(feature = "mcp")]
 use egui_mcp_bridge::{McpBridge, McpUiExt};
 
+use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::LightboxState;
 use crate::app::tabs::PathPicker;
 use crate::explorer::FileExplorer;
+use crate::layout::{LineSpacing, ReadingWidth};
 use crate::recent::RecentEntry;
 use crate::search::SearchState;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::tab::Tab;
+use crate::theme::ThemeId;
 use crate::watcher::FileWatcher;
 
 mod action;
@@ -55,14 +58,28 @@ fn zoom_percent(zoom: f32) -> i32 {
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,
     active_tab: usize,
-    dark_mode: bool,
+    /// The reading theme; its palette is every color the app paints.
+    theme: ThemeId,
     zoom_level: f32,
     show_outline: bool,
-    full_width_content: bool,
+    /// Width of the text column, which sits centered in the document
+    /// pane.
+    reading_width: ReadingWidth,
+    /// Width of the document pane as last laid out, so a width step can
+    /// start from the column that is shown. Infinite until a frame has
+    /// measured it.
+    document_pane_width: f32,
+    /// While an edge of the text column is being dragged: how far from
+    /// the edge the pointer took hold, so the edge does not jump to it.
+    column_drag_grab: Option<f32>,
+    line_spacing: LineSpacing,
+    /// The fonts and block styling the document pane renders with, rebuilt
+    /// when the theme or the fonts change (never per frame).
+    document_look: DocumentLook,
     math_scale: f32,
     // Selection/highlight background color override. `None` = theme default.
     highlight_color: Option<egui::Color32>,
-    // Mirrors `last_applied_dark_mode`: only rebuild Visuals when this changes.
+    // Mirrors `last_applied_theme`: only rebuild Visuals when this changes.
     last_applied_highlight_color: Option<egui::Color32>,
     // Hyperlink text color override. `None` = theme default.
     link_color: Option<egui::Color32>,
@@ -128,7 +145,7 @@ pub(crate) struct MarkdownApp {
     // Stored context for waking egui from the watcher bridge thread
     egui_ctx: egui::Context,
     // Track state to avoid unconditional repaints
-    last_applied_dark_mode: Option<bool>,
+    last_applied_theme: Option<ThemeId>,
     // Last zoom level handed to set_zoom_factor; skips redundant writes
     last_applied_zoom_level: Option<f32>,
     last_window_title: String,
