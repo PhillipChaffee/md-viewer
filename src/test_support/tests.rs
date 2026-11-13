@@ -11,6 +11,10 @@ fn scratch_dir_holds_nested_entries_and_removes_itself_when_dropped() {
     let folder = dir.dir("c/d");
 
     assert_eq!(fs::read_to_string(&file).unwrap(), "text");
+    assert_eq!(
+        fs::read(dir.file("raw.bin", [0xff, 0x00])).unwrap(),
+        [0xff, 0]
+    );
     assert_eq!(file, root.join("a/b/note.md"));
     assert!(folder.is_dir());
 
@@ -109,4 +113,31 @@ fn looking_for_text_nobody_painted_fails_the_test() {
     let output = frame_painting(&["first line"]);
 
     painted_text_starting(&output, "missing");
+}
+
+#[test]
+fn text_above_the_asked_height_is_passed_over() {
+    let output = frame_painting(&["same words", "between", "same words"]);
+    let (upper, between) = (
+        painted_text_starting(&output, "same"),
+        painted_text_starting(&output, "between"),
+    );
+
+    let lower = painted_text_starting_below(&output, "same", between.pos.y);
+
+    assert!(upper.pos.y < between.pos.y);
+    assert!(lower.pos.y > between.pos.y);
+    assert_eq!(
+        painted_text_starting_below(&output, "same", upper.pos.y).pos,
+        upper.pos
+    );
+}
+
+#[test]
+#[should_panic(expected = "no text painted that far down starts with the prefix")]
+fn looking_below_the_last_text_that_matches_fails_the_test() {
+    let output = frame_painting(&["first line", "second line"]);
+    let second = painted_text_starting(&output, "second");
+
+    painted_text_starting_below(&output, "first", second.pos.y);
 }
