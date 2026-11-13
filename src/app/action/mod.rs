@@ -47,9 +47,8 @@ pub(crate) enum AppAction {
     /// Switch the text column between filling the window and its default
     /// width.
     ToggleFullWidth,
-    /// Make the text column this many px wide; `ReadingWidth::MAX` fits the
-    /// window.
-    SetReadingWidth(f32),
+    /// Make the text column this wide.
+    SetReadingWidth(ReadingWidth),
     /// Widen the text column by this many px, or narrow it if negative.
     StepReadingWidth(f32),
     SetLineSpacing(LineSpacing),
@@ -99,7 +98,7 @@ impl MarkdownApp {
             AppAction::ToggleExplorer => self.show_explorer = !self.show_explorer,
             AppAction::ToggleOutline => self.toggle_outline(),
             AppAction::ToggleFullWidth => self.toggle_full_width(),
-            AppAction::SetReadingWidth(px) => self.set_reading_width(ReadingWidth::new(px)),
+            AppAction::SetReadingWidth(width) => self.set_reading_width(width),
             AppAction::StepReadingWidth(delta) => {
                 let shown_in = self.document_pane_width;
                 self.set_reading_width(self.reading_width.stepped(delta, shown_in));

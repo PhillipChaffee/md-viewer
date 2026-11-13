@@ -400,7 +400,7 @@ fn the_document_is_set_in_a_centered_column_of_the_reading_width() {
         (ReadingWidth::new(400.0), 400.0),
         (ReadingWidth::FIT_WINDOW, fit_window),
     ] {
-        harness.apply(AppAction::SetReadingWidth(width.get()));
+        harness.apply(AppAction::SetReadingWidth(width));
         harness.idle();
         let output = harness.idle();
 
@@ -653,7 +653,7 @@ fn dragging_a_column_edge_resizes_the_column_about_the_pane_center() {
 #[test]
 fn double_clicking_a_column_edge_goes_back_to_the_default_width() {
     let mut harness = reader(&title_and_long_paragraph());
-    harness.apply(AppAction::SetReadingWidth(400.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(400.0)));
     harness.idle();
     harness.idle();
     let on_edge = egui::pos2(column_left(400.0) - 5.0, 400.0);
@@ -718,7 +718,7 @@ fn a_table_squeezed_by_a_narrow_column_spreads_out_again_when_the_column_widens(
                  | Language selection | 120 | 0.031% | 64% |\n";
     let mut harness = reader(table);
     let mut header_lines = |width: f32| {
-        harness.apply(AppAction::SetReadingWidth(width));
+        harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(width)));
         for _ in 0..3 {
             harness.idle();
         }

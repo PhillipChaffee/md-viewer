@@ -403,7 +403,7 @@ fn ctrl_alt_arrows_widen_and_narrow_the_text_column_one_step_a_press() {
     assert_close(harness.app.reading_width.get(), 640.0);
 
     // From a column that fills the window, a step starts at what is shown.
-    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
     harness.idle();
     let shown = ReadingWidth::FIT_WINDOW.resolve(harness.app.document_pane_width);
     harness.press(ctrl_alt, Key::ArrowLeft);

@@ -137,7 +137,7 @@ impl MarkdownApp {
         }
         self.document_pane_width = pane_width;
         if let Some(width) = requested_width {
-            self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width.get()));
+            self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width));
         }
         open_in_new_tab
     }

@@ -147,13 +147,13 @@ fn theme_actions_pick_a_theme_or_step_to_the_next() {
 fn a_column_width_is_set_inside_its_range() {
     let mut harness = Harness::with_three_docs();
 
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     assert_close(harness.app.reading_width.get(), 512.0);
-    harness.apply(AppAction::SetReadingWidth(1.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(1.0)));
     assert_close(harness.app.reading_width.get(), ReadingWidth::MIN);
-    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
     assert!(harness.app.reading_width.fits_window());
-    harness.apply(AppAction::SetReadingWidth(f32::NAN));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(f32::NAN)));
     assert_eq!(harness.app.reading_width, ReadingWidth::DEFAULT);
 }
 
@@ -194,11 +194,11 @@ fn a_new_column_width_lays_documents_out_again_and_the_same_width_does_not() {
     let revision = |harness: &Harness| harness.app.tabs[0].cache.layout_revision();
 
     let before = revision(&harness);
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     let resized = revision(&harness);
     assert!(resized > before);
 
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     assert_eq!(revision(&harness), resized, "nothing changed");
 
     harness.apply(AppAction::StepReadingWidth(ReadingWidth::STEP));

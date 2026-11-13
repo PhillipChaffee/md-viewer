@@ -257,7 +257,7 @@ impl MarkdownApp {
             Some(&readout),
         );
         if slider.changed() {
-            *picked = Some(AppAction::SetReadingWidth(width));
+            *picked = Some(AppAction::SetReadingWidth(ReadingWidth::new(width)));
         }
 
         ui.horizontal(|ui| {
@@ -270,7 +270,7 @@ impl MarkdownApp {
                 None,
             );
             if fit.clicked() {
-                *picked = Some(AppAction::SetReadingWidth(ReadingWidth::MAX));
+                *picked = Some(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let reset = QuietButton::text("Reset")
@@ -284,7 +284,7 @@ impl MarkdownApp {
                     None,
                 );
                 if reset.clicked() {
-                    *picked = Some(AppAction::SetReadingWidth(ReadingWidth::DEFAULT.get()));
+                    *picked = Some(AppAction::SetReadingWidth(ReadingWidth::DEFAULT));
                 }
             });
         });
