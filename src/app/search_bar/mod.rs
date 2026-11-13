@@ -3,6 +3,7 @@
 use eframe::egui;
 
 use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
+use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::layout::line_fraction;
@@ -43,9 +44,9 @@ impl MarkdownApp {
                         let close_btn = QuietButton::icon(Icon::Close, "Close find bar")
                             .show(ui, palette)
                             .on_hover_text("Close (Esc)");
-                        #[cfg(feature = "mcp")]
-                        self.mcp_bridge.register_widget(
-                            "Search: Close",
+                        mcp::widget(
+                            &self.mcp,
+                            format_args!("Search: Close"),
                             "button",
                             &close_btn,
                             None,
@@ -71,9 +72,13 @@ impl MarkdownApp {
             .desired_width(QUERY_WIDTH);
         let response = ui.add(text_edit);
 
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Search: Input", "textbox", &response, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Search: Input"),
+            "textbox",
+            &response,
+            None,
+        );
 
         if self.search.focus_requested {
             response.request_focus();
@@ -94,23 +99,25 @@ impl MarkdownApp {
         };
         let label_response = chrome::small_label(ui, palette, &label_text);
 
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge.register_widget(
-            "Search: Match Count",
+        mcp::widget(
+            &self.mcp,
+            format_args!("Search: Match Count"),
             "label",
             &label_response,
             Some(&label_text),
         );
-        #[cfg(not(feature = "mcp"))]
-        let _ = label_response;
 
         let prev_btn = QuietButton::icon(Icon::ChevronUp, "Previous match")
             .enabled(total_matches > 0)
             .show(ui, palette)
             .on_hover_text("Previous match (Shift+Enter / Up)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Search: Previous", "button", &prev_btn, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Search: Previous"),
+            "button",
+            &prev_btn,
+            None,
+        );
         if prev_btn.clicked() {
             outcome.prev_clicked = true;
         }
@@ -119,9 +126,13 @@ impl MarkdownApp {
             .enabled(total_matches > 0)
             .show(ui, palette)
             .on_hover_text("Next match (Enter / Down)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Search: Next", "button", &next_btn, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Search: Next"),
+            "button",
+            &next_btn,
+            None,
+        );
         if next_btn.clicked() {
             outcome.next_clicked = true;
         }
