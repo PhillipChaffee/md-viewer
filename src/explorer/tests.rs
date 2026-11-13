@@ -26,19 +26,30 @@ fn names(nodes: &[FileTreeNode]) -> Vec<&str> {
     nodes.iter().map(FileTreeNode::name).collect()
 }
 
+/// What the tree has read of `directory`: `None` when it does not list the
+/// directory, or lists it unread.
+fn children_of<'tree>(
+    nodes: &'tree [FileTreeNode],
+    directory: &Path,
+) -> Option<&'tree [FileTreeNode]> {
+    nodes.iter().find_map(|node| match node {
+        FileTreeNode::Directory { path, children, .. } if path == directory => children.as_deref(),
+        FileTreeNode::Directory {
+            children: Some(loaded),
+            ..
+        } => children_of(loaded, directory),
+        _ => None,
+    })
+}
+
 /// Names of the loaded children of `directory`, in display order.
 fn child_names<'tree>(explorer: &'tree FileExplorer, directory: &Path) -> Vec<&'tree str> {
-    names(
-        explorer
-            .get_children(directory)
-            .expect("directory is loaded"),
-    )
+    names(children_of(&explorer.tree, directory).expect("directory is loaded"))
 }
 
 /// Whether the loaded children of `directory` include an entry called `name`.
 fn lists(explorer: &FileExplorer, directory: &Path, name: &str) -> bool {
-    explorer
-        .get_children(directory)
+    children_of(&explorer.tree, directory)
         .is_some_and(|children| children.iter().any(|node| node.name() == name))
 }
 
@@ -562,8 +573,8 @@ fn refreshing_a_directory_below_an_unloaded_parent_changes_nothing() {
 
     explorer.refresh_directory(&deep);
 
-    assert!(explorer.get_children(&docs).is_none());
-    assert!(explorer.get_children(&deep).is_none());
+    assert!(children_of(&explorer.tree, &docs).is_none());
+    assert!(children_of(&explorer.tree, &deep).is_none());
 }
 
 #[test]
@@ -573,7 +584,10 @@ fn toggling_a_folder_loads_it_once_and_then_only_flips_its_expansion() {
     dir.file("docs/guide.md", "# Guide");
     let mut explorer = explorer_at(dir.path());
     assert!(!explorer.is_expanded(&docs));
-    assert!(explorer.get_children(&docs).is_none(), "loaded lazily");
+    assert!(
+        children_of(&explorer.tree, &docs).is_none(),
+        "loaded lazily"
+    );
 
     explorer.toggle_expanded(&docs);
     assert!(explorer.is_expanded(&docs));
@@ -601,30 +615,15 @@ fn expanding_a_folder_loads_the_expanded_folders_remembered_below_it() {
     explorer.toggle_expanded(&docs);
     explorer.refresh();
     wait_for_scan(&mut explorer);
-    assert!(explorer.get_children(&docs).is_none(), "closed, so unread");
+    assert!(
+        children_of(&explorer.tree, &docs).is_none(),
+        "closed, so unread"
+    );
 
     explorer.toggle_expanded(&docs);
 
     assert!(explorer.is_expanded(&deep));
     assert_eq!(child_names(&explorer, &deep), ["guide.md"]);
-}
-
-#[test]
-fn loading_a_folder_reads_it_once_and_only_if_the_tree_lists_it() {
-    let dir = ScratchDir::new();
-    let docs = dir.dir("docs");
-    let deep = dir.dir("docs/deep");
-    dir.file("docs/guide.md", "# Guide");
-    let mut explorer = explorer_at(dir.path());
-
-    explorer.load_children(&deep);
-    assert!(explorer.get_children(&docs).is_none(), "not listed yet");
-
-    explorer.load_children(&docs);
-    dir.file("docs/later.md", "# Later");
-    explorer.load_children(&docs);
-    assert_eq!(child_names(&explorer, &docs), ["deep", "guide.md"]);
-    assert!(!explorer.is_expanded(&docs));
 }
 
 #[test]
@@ -637,7 +636,7 @@ fn expanding_a_folder_that_is_not_in_the_tree_loads_nothing() {
     explorer.toggle_expanded(&elsewhere);
 
     assert!(explorer.is_expanded(&elsewhere));
-    assert!(explorer.get_children(&elsewhere).is_none());
+    assert!(children_of(&explorer.tree, &elsewhere).is_none());
     assert_eq!(names(&explorer.tree), ["a.md"]);
 }
 
@@ -682,5 +681,5 @@ fn expand_all_stops_at_the_depth_limit_with_every_expanded_folder_loaded() {
     assert!(explorer.is_expanded(last_expanded));
     assert!(lists(&explorer, last_expanded, "level-11"));
     assert!(!explorer.is_expanded(first_closed));
-    assert!(explorer.get_children(first_closed).is_none());
+    assert!(children_of(&explorer.tree, first_closed).is_none());
 }

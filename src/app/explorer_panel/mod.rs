@@ -140,18 +140,6 @@ impl MarkdownApp {
     /// The scrollable file tree. Applies a directory toggle itself and
     /// returns any file click.
     fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette) -> ExplorerAction {
-        // Pre-load children for all expanded dirs to avoid mutation during render
-        let unloaded: Vec<PathBuf> = self
-            .file_explorer
-            .expanded_dirs()
-            .iter()
-            .filter(|dir| self.file_explorer.get_children(dir).is_none())
-            .cloned()
-            .collect();
-        for dir in &unloaded {
-            self.file_explorer.load_children(dir);
-        }
-
         let active_tab = self.tabs.get(self.active_tab);
         let listing = Listing {
             palette,

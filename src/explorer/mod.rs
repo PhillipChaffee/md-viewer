@@ -346,14 +346,6 @@ impl FileExplorer {
         Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
     }
 
-    /// Load children for a specific directory (lazy loading).
-    pub(crate) fn load_children(&mut self, dir_path: &Path) {
-        let sort_order = self.sort_order;
-        if let Some(children) = Self::children_slot_mut(&mut self.tree, dir_path) {
-            children.get_or_insert_with(|| Self::scan_directory_shallow(dir_path, sort_order));
-        }
-    }
-
     /// The children slot of the directory at `target_path`, searching only
     /// directories whose children are already loaded. `None` when the
     /// directory is not in the loaded tree; `Some(None)` when it is there
@@ -413,34 +405,6 @@ impl FileExplorer {
                 Self::resort_tree_recursive(child_nodes, sort_order);
             }
         }
-    }
-
-    /// Get children for a directory by path (looks up in original tree, not clone).
-    pub(crate) fn get_children(&self, target_path: &Path) -> Option<&Vec<FileTreeNode>> {
-        Self::find_children_in_tree(&self.tree, target_path)
-    }
-
-    /// Loaded children of the directory at `target_path`, searching only
-    /// directories whose children are already loaded.
-    fn find_children_in_tree<'tree>(
-        nodes: &'tree [FileTreeNode],
-        target_path: &Path,
-    ) -> Option<&'tree Vec<FileTreeNode>> {
-        for node in nodes {
-            let FileTreeNode::Directory { path, children, .. } = node else {
-                continue;
-            };
-            if path == target_path {
-                return children.as_ref();
-            }
-            let found = children
-                .as_deref()
-                .and_then(|loaded| Self::find_children_in_tree(loaded, target_path));
-            if found.is_some() {
-                return found;
-            }
-        }
-        None
     }
 
     /// Maximum depth for `expand_all` to prevent excessive recursion.
