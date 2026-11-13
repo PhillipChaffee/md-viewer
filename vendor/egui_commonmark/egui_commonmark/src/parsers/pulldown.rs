@@ -2801,9 +2801,7 @@ impl CommonMarkViewerInternal {
         ui: &mut Ui,
     ) {
         if self.is_blockquote {
-            let mut collected_events = delayed_events(events, |tag| {
-                matches!(tag, pulldown_cmark::TagEnd::BlockQuote(_))
-            });
+            let mut collected_events = delayed_events_blockquote(events);
             self.block_start(ui, options, BlockKind::Boxed);
 
             // Currently the blockquotes are made in such a way that they need a newline at the end

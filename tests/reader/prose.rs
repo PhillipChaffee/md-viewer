@@ -155,11 +155,7 @@ fn a_quote_inside_a_quote_steps_in_again() {
     );
 }
 
-/// Known bug, listed in `tests/README.md`: the first item of a list that
-/// follows a quote inside a quote is pushed far to the right of the items
-/// under it.
 #[test]
-#[should_panic(expected = "the first item is out of line")]
 fn a_list_after_a_quote_inside_a_quote_is_set_straight() {
     let reader = page("# Said\n\n> Outer\n>\n> > Inner\n\n- first item\n- second item");
 
