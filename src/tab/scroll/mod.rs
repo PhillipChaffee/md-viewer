@@ -39,4 +39,19 @@ impl Tab {
             is_estimate: measured.is_none(),
         }
     }
+
+    /// Schedule the scroll that puts the heading at `index` of the outline
+    /// just below the top of the pane.
+    pub(crate) fn jump_to_header(&mut self, index: usize) {
+        let header = &self.outline.headers()[index];
+        let (at, source_start) = (self.header_y(header), header.source_start);
+        self.pending_scroll_offset = Some((at.y - HEADER_SCROLL_MARGIN).max(0.0));
+        if at.is_estimate {
+            // The estimate only gets near the target. Ask for one complete
+            // paint, so that the corrective pass can measure the heading.
+            // The renderer records the same source-stable key, so formatting
+            // and duplicate display titles cannot redirect the jump.
+            self.pending_header_click_key = Some(header_position_key(source_start));
+        }
+    }
 }

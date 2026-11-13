@@ -1,15 +1,13 @@
 //! The outline sidebar.
 
 use eframe::egui;
-use egui_commonmark_extended::header_position_key;
 
 use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
 use crate::icons::paint_sidebar_resize_affordance;
-use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
-use crate::tab::scroll::HEADER_SCROLL_MARGIN;
+use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::tab::Tab;
 use crate::theme::Palette;
 
@@ -33,12 +31,8 @@ enum OutlineClick {
     ToggleFold(usize),
     ExpandAll,
     CollapseAll,
-    /// Scroll the document to a heading.
-    JumpTo {
-        /// Byte offset of the heading in the document source.
-        source_start: usize,
-        line_number: usize,
-    },
+    /// Scroll the document to the header at this index.
+    JumpTo(usize),
 }
 
 /// State shared by the outline's widgets while one frame is drawn.
@@ -86,15 +80,6 @@ struct OutlineRow<'a> {
     index: usize,
     header: &'a Header,
     chevron: Chevron,
-}
-
-/// Where a click on an outline entry scrolls the document.
-#[derive(Debug, PartialEq)]
-struct HeaderJump {
-    scroll_offset: f32,
-    /// The offset comes from line counts, not a measured position, so the
-    /// renderer must measure the heading and correct the scroll.
-    is_estimate: bool,
 }
 
 impl MarkdownApp {
@@ -176,10 +161,7 @@ fn apply_click(tab: &mut Tab, click: OutlineClick) {
         OutlineClick::ToggleFold(index) => tab.outline.toggle(index),
         OutlineClick::ExpandAll => tab.outline.expand_all(),
         OutlineClick::CollapseAll => tab.outline.collapse_all(),
-        OutlineClick::JumpTo {
-            source_start,
-            line_number,
-        } => jump_to_header(tab, source_start, line_number),
+        OutlineClick::JumpTo(index) => tab.jump_to_header(index),
     }
 }
 
@@ -290,10 +272,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
     );
 
     if !outline.is_dragging && laid_out.response.clicked() {
-        outline.click = Some(OutlineClick::JumpTo {
-            source_start: row.header.source_start,
-            line_number: row.header.line_number,
-        });
+        outline.click = Some(OutlineClick::JumpTo(row.index));
     }
     fold_control(ui, row, laid_out.chevron, outline);
 }
@@ -337,41 +316,5 @@ fn fold_control(
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));
-    }
-}
-
-/// Schedules the scroll that brings the clicked header into view.
-fn jump_to_header(tab: &mut Tab, source_start: usize, line_number: usize) {
-    // The renderer records the same source-stable key, so formatting
-    // and duplicate display titles cannot redirect the click.
-    let key = header_position_key(source_start);
-    let jump = header_jump(
-        tab.cache.get_header_position(&key),
-        line_number,
-        tab.content_lines,
-        tab.last_content_height,
-    );
-    tab.pending_scroll_offset = Some(jump.scroll_offset);
-    if jump.is_estimate {
-        // The estimate only gets us near the target. Request one
-        // complete paint so the corrective pass can measure it.
-        tab.pending_header_click_key = Some(key);
-    }
-}
-
-/// Picks the scroll offset for a header: its measured position when the
-/// renderer has painted it, otherwise an estimate from its line number.
-/// Before the document is laid out that estimate is the top.
-fn header_jump(
-    measured_y: Option<f32>,
-    line_number: usize,
-    content_lines: usize,
-    content_height: f32,
-) -> HeaderJump {
-    let estimated_y = line_fraction(line_number, content_lines) * content_height;
-    let header_y = measured_y.unwrap_or(estimated_y);
-    HeaderJump {
-        scroll_offset: (header_y - HEADER_SCROLL_MARGIN).max(0.0),
-        is_estimate: measured_y.is_none(),
     }
 }

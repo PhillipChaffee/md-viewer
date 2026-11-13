@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use egui_commonmark_extended::header_position_key;
 
 use crate::headers::Header;
-use crate::tab::scroll::HEADER_SCROLL_MARGIN;
 use crate::tab::Tab;
 
 #[cfg(test)]
@@ -47,21 +46,22 @@ fn slugify_heading(title: &str) -> String {
 }
 
 /// Where a `#fragment` landed inside a document.
-enum FragmentTarget<'a> {
+enum FragmentTarget {
     /// The document title (the first `h1`) — the very top of the document.
     DocumentTop,
-    Header(&'a Header),
+    /// The outline header at this index.
+    Header(usize),
     Missing,
 }
 
 /// Resolve a `#fragment` against a document's headings using slug semantics:
 /// exact slug match, first heading wins. The document title is matched before
 /// the outline headers because it is the page's primary anchor.
-fn find_fragment_target<'a>(
+fn find_fragment_target(
     document_title: Option<&str>,
-    headers: &'a [Header],
+    headers: &[Header],
     fragment: &str,
-) -> FragmentTarget<'a> {
+) -> FragmentTarget {
     let wanted = slugify_heading(fragment);
     if wanted.is_empty() {
         return FragmentTarget::Missing;
@@ -73,7 +73,7 @@ fn find_fragment_target<'a>(
     }
     headers
         .iter()
-        .find(|header| slugify_heading(&header.title) == wanted)
+        .position(|header| slugify_heading(&header.title) == wanted)
         .map_or(FragmentTarget::Missing, FragmentTarget::Header)
 }
 
@@ -92,16 +92,15 @@ pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
             tab.pending_scroll_offset = Some(0.0);
             true
         }
-        FragmentTarget::Header(header) => {
-            let at = tab.header_y(header);
+        FragmentTarget::Header(index) => {
+            let header = &tab.outline.headers()[index];
             let is_laid_out = tab.last_content_height > 0.0 && tab.content_lines > 0;
-            if !at.is_estimate || is_laid_out {
-                tab.pending_scroll_offset = Some((at.y - HEADER_SCROLL_MARGIN).max(0.0));
-            }
-            if at.is_estimate {
-                // An estimate only gets near the target, and an unpainted
-                // document has none; one full paint records the exact
-                // position for the corrective pass.
+            if is_laid_out || !tab.header_y(header).is_estimate {
+                tab.jump_to_header(index);
+            } else {
+                // Nothing is painted to estimate from, so no offset is
+                // set: one full paint records the heading's position for
+                // the corrective pass.
                 tab.pending_header_click_key = Some(header_position_key(header.source_start));
             }
             true

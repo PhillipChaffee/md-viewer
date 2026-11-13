@@ -12,10 +12,14 @@ fn tab() -> (ScratchDir, Tab) {
     (dir, tab)
 }
 
+/// The key the renderer records the position of the heading of `tab` under.
+fn heading_key(tab: &Tab) -> String {
+    header_position_key(tab.outline.headers()[0].source_start)
+}
+
 /// Record that the renderer painted the heading of `tab` at `y`.
 fn measure_heading(tab: &mut Tab, y: f32) {
-    let key = header_position_key(tab.outline.headers()[0].source_start);
-    tab.cache.record_header_content_y(&key, y);
+    tab.cache.record_header_content_y(&heading_key(tab), y);
 }
 
 fn heading_y(tab: &Tab) -> HeaderY {
@@ -75,4 +79,47 @@ fn a_measured_position_does_not_depend_on_layout_totals() {
         is_estimate: false,
     };
     assert_eq!(heading_y(&tab), measured);
+}
+
+#[test]
+fn a_jump_to_a_measured_heading_scrolls_to_just_above_it() {
+    let (_dir, mut tab) = tab();
+    measure_heading(&mut tab, 400.0);
+
+    tab.jump_to_header(0);
+
+    assert_eq!(tab.pending_scroll_offset, Some(350.0));
+    assert_eq!(tab.pending_header_click_key, None, "nothing to correct");
+}
+
+#[test]
+fn a_jump_to_a_measured_heading_near_the_top_scrolls_to_the_top() {
+    let (_dir, mut tab) = tab();
+    measure_heading(&mut tab, 20.0);
+
+    tab.jump_to_header(0);
+
+    assert_eq!(tab.pending_scroll_offset, Some(0.0));
+    assert_eq!(tab.pending_header_click_key, None);
+}
+
+#[test]
+fn a_jump_to_an_unmeasured_heading_is_estimated_and_asks_to_be_corrected() {
+    let (_dir, mut tab) = tab();
+    tab.last_content_height = 4000.0;
+
+    tab.jump_to_header(0);
+
+    assert_eq!(tab.pending_scroll_offset, Some(950.0));
+    assert_eq!(tab.pending_header_click_key, Some(heading_key(&tab)));
+}
+
+#[test]
+fn before_layout_a_jump_goes_to_the_top_and_asks_to_be_corrected() {
+    let (_dir, mut tab) = tab();
+
+    tab.jump_to_header(0);
+
+    assert_eq!(tab.pending_scroll_offset, Some(0.0));
+    assert_eq!(tab.pending_header_click_key, Some(heading_key(&tab)));
 }
