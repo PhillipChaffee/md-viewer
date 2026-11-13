@@ -1,0 +1,185 @@
+//! What the last frame painted: the color under a point and the ink of a
+//! piece of text, read from the frame's own drawing commands.
+
+use std::fmt;
+
+use eframe::egui::epaint::{ClippedPrimitive, Primitive, TextShape, Vertex, WHITE_UV};
+use eframe::egui::{self, Color32, Pos2, Rect, Shape, TextureId};
+
+/// An opaque color, as the hex code a designer would write.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Rgb(pub(crate) u8, pub(crate) u8, pub(crate) u8);
+
+impl Rgb {
+    /// Read `#RRGGBB`.
+    #[track_caller]
+    pub(crate) fn hex(code: &str) -> Self {
+        let digits = code.strip_prefix('#').unwrap();
+        let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).unwrap();
+        Self(channel(0), channel(2), channel(4))
+    }
+
+    fn of(color: Color32) -> Self {
+        Self(color.r(), color.g(), color.b())
+    }
+
+    /// WCAG relative luminance: 0 is black, 1 is white.
+    pub(crate) fn luminance(self) -> f64 {
+        let linear = |channel: u8| {
+            let level = f64::from(channel) / 255.0;
+            if level <= 0.040_45 {
+                level / 12.92
+            } else {
+                ((level + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.0722_f64.mul_add(
+            linear(self.2),
+            0.2126_f64.mul_add(linear(self.0), 0.7152 * linear(self.1)),
+        )
+    }
+
+    /// WCAG contrast ratio against `other`, from 1 to 21.
+    pub(crate) fn contrast(self, other: Self) -> f64 {
+        let (a, b) = (self.luminance(), other.luminance());
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+}
+
+impl fmt::Debug for Rgb {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{:02X}{:02X}{:02X}", self.0, self.1, self.2)
+    }
+}
+
+/// How much of `point` each corner of the triangle owns, or `None` when the
+/// point is outside it.
+fn weights(point: Pos2, corners: [Pos2; 3]) -> Option<[f32; 3]> {
+    let [a, b, c] = corners;
+    let area = (b - a).x.mul_add((c - a).y, -((b - a).y * (c - a).x));
+    if area.abs() <= f32::EPSILON {
+        return None;
+    }
+    let toward_b = (point - a)
+        .x
+        .mul_add((c - a).y, -((point - a).y * (c - a).x))
+        / area;
+    let toward_c = (b - a)
+        .x
+        .mul_add((point - a).y, -((b - a).y * (point - a).x))
+        / area;
+    let own = 1.0 - toward_b - toward_c;
+    [own, toward_b, toward_c]
+        .iter()
+        .all(|weight| *weight >= 0.0)
+        .then_some([own, toward_b, toward_c])
+}
+
+/// Lay a triangle's color at `point` over `under`. Colors are
+/// premultiplied, so a channel is `over + under * (1 - alpha)`.
+fn laid_over(under: [f32; 4], corners: [&Vertex; 3], share: [f32; 3]) -> [f32; 4] {
+    let mut over = [0.0_f32; 4];
+    for (vertex, weight) in corners.iter().zip(share) {
+        for (channel, level) in over.iter_mut().zip(vertex.color.to_array()) {
+            *channel = f32::from(level).mul_add(weight, *channel);
+        }
+    }
+    let keep = 1.0 - over[3] / 255.0;
+    [0, 1, 2, 3].map(|channel| under[channel].mul_add(keep, over[channel]))
+}
+
+/// The flat color the frame left at `point`, in window points. Text and
+/// images are skipped: this is the surface they sit on.
+pub(crate) fn color_at(frame: &[ClippedPrimitive], point: Pos2) -> Rgb {
+    let mut color = [0.0_f32; 4];
+    for clipped in frame {
+        let Primitive::Mesh(mesh) = &clipped.primitive else {
+            continue;
+        };
+        if !clipped.clip_rect.contains(point) || mesh.texture_id != TextureId::default() {
+            continue;
+        }
+        for triangle in mesh.indices.as_chunks::<3>().0 {
+            let corners = triangle.map(|corner| &mesh.vertices[corner as usize]);
+            if corners.iter().any(|vertex| vertex.uv != WHITE_UV) {
+                continue;
+            }
+            if let Some(share) = weights(point, corners.map(|vertex| vertex.pos)) {
+                color = laid_over(color, corners, share);
+            }
+        }
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "each channel is a blend of bytes, so it rounds to a byte"
+    )]
+    let byte = |level: f32| level.round().clamp(0.0, 255.0) as u8;
+    Rgb(byte(color[0]), byte(color[1]), byte(color[2]))
+}
+
+/// A text the frame painted.
+pub(crate) struct Painted {
+    pub(crate) text: String,
+    /// The color of its first glyph.
+    pub(crate) ink: Rgb,
+    /// The middle of its first line, where a person would click on it. A
+    /// text that wraps has its own middle off its words.
+    pub(crate) first_line: Pos2,
+}
+
+/// The middle of the glyphs on the first line of `text`.
+fn first_line(text: &TextShape) -> Pos2 {
+    let line = text.galley.rows.first();
+    let ends =
+        line.and_then(|line| Some((line, line.row.glyphs.first()?, line.row.glyphs.last()?)));
+    ends.map_or(text.pos, |(line, first, last)| {
+        let across = (first.pos.x + last.pos.x + last.advance_width) / 2.0;
+        text.pos + line.pos.to_vec2() + egui::vec2(across, line.row.size.y / 2.0)
+    })
+}
+
+/// Every text the frame painted, in paint order.
+pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
+    let mut texts = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Vec(members) => texts.extend(painted_text(members)),
+            Shape::Text(text) => {
+                let section = text.galley.job.sections.first();
+                let own = section.map_or(Color32::PLACEHOLDER, |section| section.format.color);
+                let ink = text
+                    .override_text_color
+                    .unwrap_or(if own == Color32::PLACEHOLDER {
+                        text.fallback_color
+                    } else {
+                        own
+                    });
+                texts.push(Painted {
+                    text: text.galley.text().to_owned(),
+                    ink: Rgb::of(ink),
+                    first_line: first_line(text),
+                });
+            }
+            _ => {}
+        }
+    }
+    texts
+}
+
+/// Where the frame painted pictures: images, formulas and diagrams, which
+/// reach the screen as textures and not as text.
+pub(crate) fn pictures(shapes: &[Shape]) -> Vec<Rect> {
+    let mut found = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Vec(members) => found.extend(pictures(members)),
+            Shape::Rect(rect) if rect.brush.is_some() => found.push(rect.rect),
+            Shape::Mesh(mesh) if mesh.texture_id != TextureId::default() => {
+                found.push(mesh.calc_bounds());
+            }
+            _ => {}
+        }
+    }
+    found
+}
