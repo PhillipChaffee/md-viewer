@@ -411,10 +411,7 @@ fn a_click_on_the_dimmed_page_does_not_reach_what_is_under_it() {
     assert!(!reader.is_enabled("Go back"));
 }
 
-/// Known bug, listed in `tests/README.md`: the dimmed view does not cover
-/// the top bar, so its buttons still act on the window behind the picture.
 #[test]
-#[should_panic(expected = "the find bar opened behind the picture")]
 fn the_buttons_of_the_top_bar_do_not_act_while_a_picture_is_enlarged() {
     let mut reader = enlarged("blue.png");
 

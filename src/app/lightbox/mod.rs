@@ -267,10 +267,15 @@ impl MarkdownApp {
             return;
         };
 
+        // The scrim and its input sink cover the whole window, the top bar
+        // included: nothing behind the picture may be reached. A click on
+        // the sink closes the lightbox.
+        let window_rect = ctx.content_rect();
+        paint_backdrop(ctx, window_rect);
+        let mut should_close = input_sink_clicked(ctx, window_rect, lightbox.open_id);
+
+        // The picture and its controls keep to the room under the top bar.
         let screen_rect = ctx.available_rect();
-        paint_backdrop(ctx, screen_rect);
-        // Clicking on the sink closes the lightbox.
-        let mut should_close = input_sink_clicked(ctx, screen_rect, lightbox.open_id);
 
         // Apply scroll-wheel zoom (proportional to scroll amount for smooth feel)
         let old_zoom = lightbox.zoom;

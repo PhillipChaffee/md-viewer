@@ -5,7 +5,7 @@ use eframe::egui::{self, Modifiers, Pos2, Rect, Vec2};
 
 use super::{LightboxState, LightboxTexture, DIAGRAM_SHEET_MARGIN};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{click_on, frame_on, painted_text};
+use crate::app::ui_harness::{click_on, frame_on, painted_text, UiHarness};
 use crate::test_support::{assert_close, painted_shapes};
 
 const VIEWPORT: Vec2 = egui::vec2(500.0, 500.0);
@@ -155,6 +155,21 @@ fn a_click_on_the_dimmed_margin_closes_the_lightbox() {
     click_on(&mut harness, margin);
 
     assert!(harness.app.lightbox.is_none());
+}
+
+#[test]
+fn a_click_on_a_top_bar_button_reaches_the_scrim_and_not_the_button() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.app_mut().lightbox = Some(lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO));
+    harness.frames(FADE_IN_FRAMES);
+
+    harness.click_exact("Find in document");
+
+    assert!(!harness.app().search.is_open, "the button behind acted");
+    assert!(
+        harness.app().lightbox.is_none(),
+        "the scrim was not clicked"
+    );
 }
 
 #[test]
