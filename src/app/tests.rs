@@ -10,6 +10,9 @@ use eframe::App as _;
 use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
 use super::MarkdownApp;
+use crate::layout::ReadingWidth;
+use crate::test_support::assert_close;
+use crate::theme::ThemeId;
 
 static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
 
@@ -166,14 +169,14 @@ fn history_navigation_retitles_the_window_and_moves_the_explorer_highlight() {
 #[test]
 fn view_shortcuts_flip_their_own_setting() {
     let mut harness = Harness::with_three_docs();
-    let (dark, outline, explorer) = (
-        harness.app.dark_mode,
+    let (theme, outline, explorer) = (
+        harness.app.theme,
         harness.app.show_outline,
         harness.app.show_explorer,
     );
 
     harness.press(Modifiers::CTRL, Key::D);
-    assert_eq!(harness.app.dark_mode, !dark);
+    assert_eq!(harness.app.theme, theme.next());
     harness.press(CTRL_SHIFT, Key::O);
     assert_eq!(harness.app.show_outline, !outline);
     harness.press(CTRL_SHIFT, Key::E);
@@ -184,7 +187,7 @@ fn view_shortcuts_flip_their_own_setting() {
         harness.app.show_explorer, !explorer,
         "Ctrl+E without Shift is not a shortcut"
     );
-    assert_eq!(harness.app.dark_mode, !dark);
+    assert_eq!(harness.app.theme, theme.next());
     assert_eq!(harness.app.show_outline, !outline);
 }
 
@@ -293,7 +296,7 @@ fn scroll_keys_move_the_document_until_the_find_bar_takes_the_arrows() {
 #[test]
 fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     let mut harness = Harness::with_three_docs();
-    let dark = harness.app.dark_mode;
+    let theme = harness.app.theme;
     harness.app.lightbox = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
@@ -313,7 +316,7 @@ fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     assert!((lightbox_zoom(&harness) - 1.0).abs() < 1e-6);
 
     harness.press(Modifiers::CTRL, Key::D);
-    assert_eq!(harness.app.dark_mode, dark);
+    assert_eq!(harness.app.theme, theme);
     harness.press(Modifiers::CTRL, Key::W);
     assert_eq!(harness.app.tabs.len(), 1);
 
@@ -365,4 +368,60 @@ fn f5_toggles_file_watching() {
     harness.press(Modifiers::NONE, Key::F5);
     assert!(harness.app.watcher.is_none());
     assert!(!harness.app.watch_enabled);
+}
+
+#[test]
+fn ctrl_d_steps_through_every_theme_and_comes_back_round() {
+    let mut harness = Harness::with_three_docs();
+    let start = harness.app.theme;
+
+    let mut seen = vec![start];
+    for _ in 1..ThemeId::ALL.len() {
+        harness.press(Modifiers::CTRL, Key::D);
+        seen.push(harness.app.theme);
+    }
+    seen.sort_by_key(|theme| ThemeId::ALL.iter().position(|known| known == theme));
+    assert_eq!(seen, ThemeId::ALL, "each press showed a theme not yet seen");
+
+    harness.press(Modifiers::CTRL, Key::D);
+    assert_eq!(harness.app.theme, start);
+}
+
+#[test]
+fn ctrl_alt_arrows_widen_and_narrow_the_text_column_one_step_a_press() {
+    let mut harness = Harness::with_three_docs();
+    harness.app.show_explorer = false;
+    harness.app.show_outline = false;
+    harness.idle();
+    let ctrl_alt = Modifiers::CTRL | Modifiers::ALT;
+    assert_eq!(harness.app.reading_width, ReadingWidth::DEFAULT);
+
+    harness.press(ctrl_alt, Key::ArrowRight);
+    assert_close(harness.app.reading_width.get(), 720.0);
+    harness.press(ctrl_alt, Key::ArrowLeft);
+    harness.press(ctrl_alt, Key::ArrowLeft);
+    assert_close(harness.app.reading_width.get(), 640.0);
+
+    // From a column that fills the window, a step starts at what is shown.
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    harness.idle();
+    let shown = ReadingWidth::FIT_WINDOW.resolve(harness.app.document_pane_width);
+    harness.press(ctrl_alt, Key::ArrowLeft);
+    assert_close(harness.app.reading_width.get(), shown - ReadingWidth::STEP);
+}
+
+#[test]
+fn the_column_shortcuts_and_the_history_shortcuts_do_not_fire_each_other() {
+    let mut harness = Harness::with_three_docs();
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+    harness.app.navigate_active_tab_to(&b);
+    harness.idle();
+
+    harness.press(Modifiers::CTRL | Modifiers::ALT, Key::ArrowLeft);
+    assert_eq!(harness.active_path(), b, "Ctrl+Alt+Left is not Back");
+    assert_close(harness.app.reading_width.get(), 640.0);
+
+    harness.press(Modifiers::ALT, Key::ArrowLeft);
+    assert_eq!(harness.active_path(), a);
+    assert_close(harness.app.reading_width.get(), 640.0);
 }

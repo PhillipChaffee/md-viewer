@@ -7,7 +7,7 @@ use eframe::egui::{self, Key};
 
 use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
-use crate::layout::{KeyboardScrollAction, ZOOM_STEP};
+use crate::layout::{KeyboardScrollAction, ReadingWidth, ZOOM_STEP};
 
 #[cfg(test)]
 mod tests;
@@ -25,7 +25,9 @@ enum Chord {
     Ctrl,
     CtrlNoShift,
     CtrlShift,
-    Alt,
+    CtrlAlt,
+    /// Alt without Ctrl, which with Alt is a chord of its own.
+    AltNoCtrl,
 }
 
 impl Chord {
@@ -38,7 +40,8 @@ impl Chord {
             Self::Ctrl => modifiers.ctrl,
             Self::CtrlNoShift => modifiers.ctrl && !modifiers.shift,
             Self::CtrlShift => modifiers.ctrl && modifiers.shift,
-            Self::Alt => modifiers.alt,
+            Self::CtrlAlt => modifiers.ctrl && modifiers.alt,
+            Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,
         }
     }
 }
@@ -106,7 +109,7 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     CtrlNoShift + O in Document => AppAction::OpenFile,
     Ctrl + T in Document => AppAction::OpenFile,
     Any + F5 in Document => AppAction::ToggleWatch,
-    Ctrl + D in Document => AppAction::ToggleDarkMode,
+    Ctrl + D in Document => AppAction::NextTheme,
     CtrlShift + O in Document => AppAction::ToggleOutline,
     CtrlShift + E in Document => AppAction::ToggleExplorer,
     Ctrl + Q in Document => AppAction::Quit,
@@ -124,8 +127,11 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Ctrl + Num7 in Document => AppAction::FocusTab(6),
     Ctrl + Num8 in Document => AppAction::FocusTab(7),
     Ctrl + Num9 in Document => AppAction::FocusTab(8),
-    Alt + ArrowLeft in Document => AppAction::NavigateBack,
-    Alt + ArrowRight in Document => AppAction::NavigateForward,
+    AltNoCtrl + ArrowLeft in Document => AppAction::NavigateBack,
+    AltNoCtrl + ArrowRight in Document => AppAction::NavigateForward,
+    // The text column, one step per press.
+    CtrlAlt + ArrowLeft in Document => AppAction::StepReadingWidth(-ReadingWidth::STEP),
+    CtrlAlt + ArrowRight in Document => AppAction::StepReadingWidth(ReadingWidth::STEP),
 
     // Opens the find bar, or refocuses it if already open.
     CtrlNoShift + F in Document => AppAction::OpenSearch,

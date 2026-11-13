@@ -4,7 +4,8 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::{zoom_percent, MarkdownApp};
-use crate::layout::ZOOM_STEP;
+use crate::layout::{LineSpacing, ZOOM_STEP};
+use crate::theme::ThemeId;
 
 #[cfg(test)]
 mod tests;
@@ -111,6 +112,7 @@ impl MarkdownApp {
     }
 
     fn view_menu(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        ui.menu_button("Theme", |ui| self.theme_menu(ui, picked));
         self.view_menu_layout_items(ui, picked);
         self.view_menu_rendering_items(ui, picked);
         ui.separator();
@@ -118,25 +120,42 @@ impl MarkdownApp {
         // formulas and prose in the same ratio. This changes only
         // the formulas, relative to the text around them.
         ui.menu_button("Formula Size", |ui| self.formula_size_menu(ui, picked));
+        ui.menu_button("Line Spacing", |ui| self.line_spacing_menu(ui, picked));
     }
 
-    /// The theme switch and the toggles for the panels around the document.
-    fn view_menu_layout_items(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let theme_text = if self.dark_mode {
-            "☀ Light Mode" // ☀ is text-presentation → monochrome
-        } else {
-            "☾ Dark Mode" // ☾ (U+263E) is a text symbol, not emoji
-        };
-        let theme_btn = ui.add(egui::Button::new(theme_text).shortcut_text("Ctrl+D"));
+    /// The reading themes, and the step through them that Ctrl+D takes.
+    fn theme_menu(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let next_btn = ui.add(egui::Button::new("Next Theme").shortcut_text("Ctrl+D"));
         #[cfg(feature = "mcp")]
         self.mcp_bridge.register_widget(
-            "Menu: View → Dark Mode",
+            "Menu: View → Theme → Next Theme",
             "button",
-            &theme_btn,
-            Some(if self.dark_mode { "dark" } else { "light" }),
+            &next_btn,
+            Some(self.theme.label()),
         );
-        pick(ui, &theme_btn, AppAction::ToggleDarkMode, picked);
+        pick(ui, &next_btn, AppAction::NextTheme, picked);
+        ui.separator();
+        for theme in ThemeId::ALL {
+            let selected = self.theme == theme;
+            let text = if selected {
+                format!("✓ {}", theme.label())
+            } else {
+                format!("   {}", theme.label())
+            };
+            let btn = ui.add(egui::Button::new(text));
+            #[cfg(feature = "mcp")]
+            self.mcp_bridge.register_widget(
+                &format!("Menu: View → Theme → {}", theme.label()),
+                "button",
+                &btn,
+                Some(if selected { "selected" } else { "unselected" }),
+            );
+            pick(ui, &btn, AppAction::SetTheme(theme), picked);
+        }
+    }
 
+    /// The toggles for the panels around the document and for its width.
+    fn view_menu_layout_items(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let explorer_text = toggle_text(self.show_explorer, "✓ Show Explorer", "Show Explorer");
         let explorer_btn = ui.add(egui::Button::new(explorer_text).shortcut_text("Ctrl+Shift+E"));
         #[cfg(feature = "mcp")]
@@ -159,14 +178,15 @@ impl MarkdownApp {
         );
         pick(ui, &outline_btn, AppAction::ToggleOutline, picked);
 
-        let full_width_text = toggle_text(self.full_width_content, "✓ Full Width", "Full Width");
+        let full_width = self.reading_width.fits_window();
+        let full_width_text = toggle_text(full_width, "✓ Full Width", "Full Width");
         let full_width_btn = ui.add(egui::Button::new(full_width_text));
         #[cfg(feature = "mcp")]
         self.mcp_bridge.register_widget(
             "Menu: View → Full Width",
             "button",
             &full_width_btn,
-            Some(on_off(self.full_width_content)),
+            Some(on_off(full_width)),
         );
         pick(ui, &full_width_btn, AppAction::ToggleFullWidth, picked);
     }
@@ -258,6 +278,26 @@ impl MarkdownApp {
         }
     }
 
+    fn line_spacing_menu(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        for spacing in LineSpacing::ALL {
+            let selected = self.line_spacing == spacing;
+            let text = if selected {
+                format!("✓ {}", spacing.label())
+            } else {
+                format!("   {}", spacing.label())
+            };
+            let btn = ui.add(egui::Button::new(text));
+            #[cfg(feature = "mcp")]
+            self.mcp_bridge.register_widget(
+                &format!("Menu: View → Line Spacing → {}", spacing.label()),
+                "button",
+                &btn,
+                Some(if selected { "selected" } else { "unselected" }),
+            );
+            pick(ui, &btn, AppAction::SetLineSpacing(spacing), picked);
+        }
+    }
+
     /// The visible back and forward arrows beside the menus.
     fn history_buttons(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         ui.separator();
@@ -294,9 +334,7 @@ impl MarkdownApp {
             }
 
             if self.watcher.is_some() {
-                ui.label(
-                    egui::RichText::new("● LIVE").color(egui::Color32::from_rgb(100, 200, 100)),
-                );
+                ui.label(egui::RichText::new("● LIVE").color(self.theme.palette().positive));
                 ui.separator();
             }
 

@@ -87,6 +87,22 @@ pub(crate) fn painted_shapes(output: &egui::FullOutput) -> Vec<egui::Shape> {
     shapes
 }
 
+/// The first text a frame painted that starts with `prefix`, with where
+/// it was painted.
+#[track_caller]
+pub(crate) fn painted_text_starting(
+    output: &egui::FullOutput,
+    prefix: &str,
+) -> egui::epaint::TextShape {
+    let found = painted_shapes(output)
+        .into_iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(text) if text.galley.text().starts_with(prefix) => Some(text),
+            _ => None,
+        });
+    found.expect("no painted text starts with the prefix")
+}
+
 /// Turn every log level on for the rest of the test process, so the
 /// arguments of log calls are evaluated the way a `RUST_LOG=trace` run
 /// evaluates them. No logger is installed; the records go nowhere.

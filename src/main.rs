@@ -26,6 +26,7 @@ mod system_fonts;
 mod tab;
 #[cfg(test)]
 mod test_support;
+mod theme;
 mod watcher;
 
 #[global_allocator]

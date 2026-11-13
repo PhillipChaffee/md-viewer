@@ -135,36 +135,28 @@ fn preset_labels_and_descriptions_tell_the_presets_apart() {
     let descriptions: HashSet<_> = FontPreset::ALL.map(FontPreset::description).into();
     assert_eq!(labels.len(), FontPreset::ALL.len());
     assert_eq!(descriptions.len(), FontPreset::ALL.len());
-    assert_eq!(FontPreset::default().label(), "Default");
+    assert_eq!(FontPreset::default().label(), "Reader");
+    assert!(FontPreset::Reader.description().contains("Source Serif 4"));
     assert!(FontPreset::Github.description().contains("github.com"));
     assert!(FontPreset::Vscode.description().contains("VS Code"));
 }
 
-/// GitHub: `.markdown-body{line-height:1.5}`, `pre{line-height:1.45}`.
-/// VS Code preview: `--markdown-line-height: 1.6`, code 1.357em.
+/// GitHub: `pre{line-height:1.45}`. VS Code preview: code 1.357em.
 #[test]
-fn preset_line_heights_follow_the_emulated_stylesheets() {
-    let (github_body, github_code) = FontPreset::Github.line_heights();
-    assert_close(github_body, 1.5);
-    assert_close(github_code, 1.45);
-
-    let (vscode_body, vscode_code) = FontPreset::Vscode.line_heights();
-    assert_close(vscode_body, 1.6);
-    assert_close(vscode_code, 1.36);
-
-    let (own_body, own_code) = FontPreset::Current.line_heights();
-    assert_close(own_body, 1.5);
-    assert_close(own_code, 1.3);
+fn preset_code_line_heights_follow_the_emulated_stylesheets() {
+    assert_close(FontPreset::Github.code_line_height(), 1.45);
+    assert_close(FontPreset::Vscode.code_line_height(), 1.36);
+    assert_close(FontPreset::Current.code_line_height(), 1.3);
+    assert_close(FontPreset::Reader.code_line_height(), 1.5);
 }
 
 #[test]
-fn text_size_labels_name_their_own_pixel_size_and_grow_in_order() {
+fn text_sizes_grow_in_order_and_are_told_apart_by_label() {
     let sizes = TextSizeClass::ALL.map(TextSizeClass::px);
     assert!(sizes.is_sorted_by(|smaller, larger| smaller < larger));
-    for size in TextSizeClass::ALL {
-        let pixels = format!("({}px)", size.px());
-        assert!(size.label().ends_with(&pixels), "{}", size.label());
-    }
+    let labels: HashSet<_> = TextSizeClass::ALL.map(TextSizeClass::label).into();
+    assert_eq!(labels.len(), TextSizeClass::ALL.len());
+    assert_eq!(TextSizeClass::default().label(), "Normal");
     assert_close(TextSizeClass::default().px(), 16.0);
 }
 
@@ -204,7 +196,7 @@ fn machine_without_fonts_keeps_egui_faces_and_gains_the_bundled_emoji() {
 
 #[test]
 fn system_sans_leads_the_body_chain_and_its_bold_face_leads_strong_text() {
-    let definitions = Fonts::with_sans().definitions(None, FontPreset::default());
+    let definitions = Fonts::with_sans().definitions(None, FontPreset::Current);
 
     assert_eq!(
         chain(&definitions, &FontFamily::Proportional)[0],
@@ -212,7 +204,7 @@ fn system_sans_leads_the_body_chain_and_its_bold_face_leads_strong_text() {
     );
     let strong = chain(&definitions, &FontFamily::Name(STRONG_FONT_FAMILY.into()));
     assert_eq!(strong[..2], ["SystemSansBold", "SystemSans"]);
-    // The default preset keeps egui's own monospace face in front.
+    // The system preset keeps egui's own monospace face in front.
     assert_eq!(
         chain(&definitions, &FontFamily::Monospace)[0],
         chain(&FontDefinitions::default(), &FontFamily::Monospace)[0]
@@ -406,4 +398,99 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
         .find(|font| font.primary)
         .expect("primary font installed");
     assert_eq!(primary.selected.family, "Noto Sans");
+}
+
+#[test]
+fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller() {
+    let fonts = document_fonts(None, FontPreset::Reader, TextSizeClass::Normal);
+
+    assert_close(fonts.body.size, 16.0 * 1.15);
+    assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
+    assert_close(fonts.heading.size, fonts.body.size * 2.0);
+    assert_eq!(
+        fonts.heading.family,
+        FontFamily::Name("MarkdownHeading".into())
+    );
+    assert_eq!(fonts.code.family, FontFamily::Monospace);
+    assert_close(fonts.code.size, fonts.body.size * 0.875);
+    assert_eq!(
+        fonts.emphasis,
+        Some(FontFamily::Name("MarkdownEmphasis".into()))
+    );
+    assert_eq!(fonts.inline_code_scale, Some(0.875));
+
+    // Every size class scales the same way.
+    for size in TextSizeClass::ALL {
+        let fonts = document_fonts(None, FontPreset::Reader, size);
+        assert_close(fonts.body.size, size.px() * 1.15);
+    }
+}
+
+#[test]
+fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face() {
+    for preset in [FontPreset::Current, FontPreset::Github, FontPreset::Vscode] {
+        let fonts = document_fonts(None, preset, TextSizeClass::Large);
+
+        assert_close(fonts.body.size, 18.0);
+        assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
+        assert_close(fonts.code.size, 18.0 * 0.875);
+        assert_eq!(fonts.emphasis, None, "{preset:?}");
+        assert_eq!(fonts.inline_code_scale, None, "{preset:?}");
+    }
+}
+
+#[test]
+fn a_picked_family_outranks_the_readers_serif() {
+    let fonts = document_fonts(
+        Some("Fixture Sans"),
+        FontPreset::Reader,
+        TextSizeClass::Normal,
+    );
+    // The serif's scale stays with the preset; its faces do not lead.
+    assert_eq!(fonts.emphasis, None);
+    assert_eq!(fonts.inline_code_scale, None);
+
+    let mut system = Fonts::with_sans();
+    let picked = system.definitions(Some("Fixture Sans"), FontPreset::Reader);
+    let body = chain(&picked, &FontFamily::Name("MarkdownBody".into()));
+    assert_eq!(body, chain(&picked, &FontFamily::Proportional));
+    assert!(!picked.font_data.contains_key("ReaderRegular"));
+}
+
+#[test]
+fn the_reader_registers_its_serif_for_the_document_and_leaves_the_chrome_its_sans() {
+    let mut system = Fonts::with_sans();
+
+    let reader = system.definitions(None, FontPreset::Reader);
+    let own = system.definitions(None, FontPreset::Current);
+
+    let body = chain(&reader, &FontFamily::Name("MarkdownBody".into()));
+    assert_eq!(body[0], "ReaderRegular");
+    assert_eq!(body[1..], chain(&reader, &FontFamily::Proportional));
+    assert_eq!(
+        chain(&reader, &FontFamily::Name("MarkdownHeading".into()))[0],
+        "ReaderBold"
+    );
+    assert_eq!(
+        chain(&reader, &FontFamily::Name(STRONG_FONT_FAMILY.into()))[0],
+        "ReaderSemibold"
+    );
+    assert_eq!(
+        chain(&reader, &FontFamily::Name("MarkdownEmphasis".into()))[0],
+        "ReaderItalic"
+    );
+    // The chrome is set in the same sans whichever preset the document uses.
+    assert_eq!(
+        chain(&reader, &FontFamily::Proportional),
+        chain(&own, &FontFamily::Proportional)
+    );
+    // Every preset registers the document families: egui panics on a
+    // family nobody registered.
+    for preset in FontPreset::ALL {
+        let definitions = system.definitions(None, preset);
+        for family in ["MarkdownBody", "MarkdownHeading", "MarkdownEmphasis"] {
+            let faces = chain(&definitions, &FontFamily::Name(family.into()));
+            assert!(!faces.is_empty(), "{preset:?} has no {family}");
+        }
+    }
 }

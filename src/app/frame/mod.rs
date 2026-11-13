@@ -6,10 +6,12 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::MarkdownApp;
 use crate::persist::{PersistedState, APP_KEY};
-use crate::system_fonts::setup_fonts;
+use crate::system_fonts::{document_fonts, setup_fonts};
+use crate::theme::{self, ColorOverrides};
 use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(test)]
@@ -46,10 +48,13 @@ impl eframe::App for MarkdownApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let state = PersistedState {
-            dark_mode: Some(self.dark_mode),
+            theme: Some(self.theme),
+            dark_mode: None,
             zoom_level: Some(self.zoom_level),
             show_outline: Some(self.show_outline),
-            full_width_content: Some(self.full_width_content),
+            reading_width: Some(self.reading_width.get()),
+            full_width_content: None,
+            line_spacing: Some(self.line_spacing),
             math_scale: Some(self.math_scale),
             highlight_color: self.highlight_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
             link_color: self.link_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
@@ -112,9 +117,12 @@ impl MarkdownApp {
             std::thread::sleep(Duration::from_millis(16)); // ~60 FPS cap
         }
 
-        self.apply_theme(ctx);
+        let theme_changed = self.apply_theme(ctx);
         self.poll_font_family_scan();
-        self.apply_fonts(ctx);
+        let fonts_changed = self.apply_fonts(ctx);
+        if theme_changed || fonts_changed {
+            self.rebuild_document_look(ctx);
+        }
 
         // Apply display zoom only when it actually changed: set_zoom_factor
         // is not free (it can invalidate glyph caches), and the value only
@@ -167,40 +175,45 @@ impl MarkdownApp {
         }
     }
 
-    /// Rebuild the egui visuals when dark mode or a color override changed.
-    fn apply_theme(&mut self, ctx: &egui::Context) {
-        if self.last_applied_dark_mode == Some(self.dark_mode)
+    /// Rebuild the egui visuals when the theme or a color override changed.
+    /// Returns whether it did.
+    fn apply_theme(&mut self, ctx: &egui::Context) -> bool {
+        if self.last_applied_theme == Some(self.theme)
             && self.last_applied_highlight_color == self.highlight_color
             && self.last_applied_link_color == self.link_color
         {
-            return;
+            return false;
         }
-        self.last_applied_dark_mode = Some(self.dark_mode);
+        self.last_applied_theme = Some(self.theme);
         self.last_applied_highlight_color = self.highlight_color;
         self.last_applied_link_color = self.link_color;
 
-        let mut visuals = if self.dark_mode {
-            let mut v = egui::Visuals::dark();
-            v.panel_fill = egui::Color32::from_rgb(0x12, 0x12, 0x12);
-            v.window_fill = egui::Color32::from_rgb(0x12, 0x12, 0x12);
-            v.extreme_bg_color = egui::Color32::from_rgb(0x1E, 0x1E, 0x1E);
-            v.override_text_color = Some(egui::Color32::from_rgb(0xE0, 0xE0, 0xE0));
-            v
-        } else {
-            let mut v = egui::Visuals::light();
-            v.panel_fill = egui::Color32::from_rgb(0xF8, 0xF8, 0xF8);
-            v.window_fill = egui::Color32::from_rgb(0xF8, 0xF8, 0xF8);
-            v.extreme_bg_color = egui::Color32::from_rgb(0xF0, 0xF0, 0xF0);
-            v.override_text_color = Some(egui::Color32::from_rgb(0x33, 0x33, 0x33));
-            v
+        let overrides = ColorOverrides {
+            highlight: self.highlight_color,
+            link: self.link_color,
         };
-        if let Some(color) = self.highlight_color {
-            visuals.selection.bg_fill = color;
+        ctx.set_visuals(theme::visuals(self.theme.palette(), overrides));
+        true
+    }
+
+    /// Rebuild what the document pane renders with from the theme and the
+    /// fonts now in force, and have every open document lay out again:
+    /// a font change moves every line.
+    fn rebuild_document_look(&mut self, ctx: &egui::Context) {
+        let fonts = document_fonts(
+            self.selected_font_family.as_deref(),
+            self.font_preset,
+            self.text_size_class,
+        );
+        self.document_look = DocumentLook::new(&ctx.style(), self.theme.palette(), &fonts);
+        self.relayout_documents();
+    }
+
+    /// Tell the renderer that every open document's layout is stale.
+    pub(crate) fn relayout_documents(&mut self) {
+        for tab in &mut self.tabs {
+            tab.cache.mark_layout_changed();
         }
-        if let Some(color) = self.link_color {
-            visuals.hyperlink_color = color;
-        }
-        ctx.set_visuals(visuals);
     }
 
     /// Collect the background font-family scan (async phase: poll the
@@ -232,15 +245,15 @@ impl MarkdownApp {
     /// Reload fonts only when the selected family, preset, or size class
     /// actually changes — rescanning the system font collection on every
     /// frame would be expensive and is unnecessary (see
-    /// `docs/EGUI_WORKFLOW.md`).
-    fn apply_fonts(&mut self, ctx: &egui::Context) {
+    /// `docs/EGUI_WORKFLOW.md`). Returns whether it reloaded them.
+    fn apply_fonts(&mut self, ctx: &egui::Context) -> bool {
         let font_config = (
             self.selected_font_family.clone(),
             self.font_preset,
             self.text_size_class,
         );
         if self.last_applied_font_config.as_ref() == Some(&font_config) {
-            return;
+            return false;
         }
         self.last_applied_font_config = Some(font_config);
         setup_fonts(
@@ -249,6 +262,7 @@ impl MarkdownApp {
             self.font_preset,
             self.text_size_class,
         );
+        true
     }
 
     /// Send the window title to the viewport once a tab change made it stale.
@@ -274,12 +288,9 @@ impl MarkdownApp {
         if let Some(error) = &self.error_message {
             egui::TopBottomPanel::top("error_bar").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("⚠").color(egui::Color32::from_rgb(255, 200, 100)),
-                    );
-                    ui.label(
-                        egui::RichText::new(error).color(egui::Color32::from_rgb(255, 200, 100)),
-                    );
+                    let warning = ui.visuals().warn_fg_color;
+                    ui.label(egui::RichText::new("⚠").color(warning));
+                    ui.label(egui::RichText::new(error).color(warning));
                     if ui.small_button("✕").clicked() {
                         clear_error = true;
                     }
@@ -407,18 +418,14 @@ impl MarkdownApp {
                 egui::Id::new("drop_overlay"),
             ));
 
-            painter.rect_filled(
-                screen_rect,
-                0.0,
-                egui::Color32::from_rgba_unmultiplied(0, 0, 0, 180),
-            );
+            painter.rect_filled(screen_rect, 0.0, theme::SCRIM);
 
             painter.text(
                 screen_rect.center(),
                 egui::Align2::CENTER_CENTER,
                 "Drop markdown file here",
                 egui::FontId::proportional(24.0),
-                egui::Color32::WHITE,
+                theme::ON_SCRIM,
             );
         }
     }

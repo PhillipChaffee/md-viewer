@@ -1,19 +1,25 @@
 //! The document pane: rendered markdown, edit mode, and link handling.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use eframe::egui;
 use egui::scroll_area::ScrollAreaOutput;
 use egui::Widget;
 use egui_commonmark_extended::CommonMarkViewer;
 
+use crate::app::action::AppAction;
+use crate::app::content::column::{resize_strips, Column};
+use crate::app::content::look::DocumentLook;
 use crate::app::outline::HEADER_SCROLL_MARGIN;
 use crate::app::MarkdownApp;
-use crate::layout::{content_default_width, content_width_limit, CONTENT_RIGHT_RESIZE_GUTTER};
+use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::links::handle_local_link_click;
 use crate::search::take_search_correction_request;
 use crate::tab::Tab;
 
+mod column;
+pub(crate) mod look;
 #[cfg(test)]
 pub(super) mod tests;
 
@@ -21,9 +27,17 @@ pub(super) mod tests;
 /// viewport's top and bottom edges.
 const SEARCH_VISIBLE_MARGIN: f32 = 20.0;
 
+/// Space between the top of the page and the meta line above the document.
+const KICKER_TOP_SPACE: f32 = 40.0;
+/// Space between the meta line and the document's first block.
+const KICKER_BOTTOM_SPACE: f32 = 6.0;
+/// The meta line is set in the chrome's sans at this size, whatever the
+/// document's own fonts.
+const KICKER_SIZE: f32 = 13.0;
+
 /// App settings the preview pane renders with.
-struct PreviewSettings {
-    full_width_content: bool,
+struct PreviewSettings<'look> {
+    look: &'look DocumentLook,
     math_scale: f32,
     line_height: f32,
     code_line_height: f32,
@@ -70,16 +84,22 @@ impl MarkdownApp {
             // drops the request because it has no rendered headings.
             header_key: tab.pending_header_click_key.take(),
         };
-        // Line heights follow the emulated viewer (GitHub 1.5/1.45,
-        // VS Code preview 1.6/1.36); the font preset owns the metrics.
-        let (line_height, code_line_height) = self.font_preset.line_heights();
         let settings = PreviewSettings {
-            full_width_content: self.full_width_content,
+            look: &self.document_look,
             math_scale: self.math_scale,
-            line_height,
-            code_line_height,
+            // Body lines follow the reader's spacing setting; code lines
+            // follow the font preset, which owns the code face's metrics.
+            line_height: self.line_spacing.line_height(),
+            code_line_height: self.font_preset.code_line_height(),
             force_full_render: corrections.header_key.is_some() || corrections.search,
         };
+
+        let (reading_width, palette) = (self.reading_width, self.theme.palette());
+        let column_drag_grab = &mut self.column_drag_grab;
+        let mut pane_width = self.document_pane_width;
+        let mut requested_width = None;
+        #[cfg(feature = "mcp")]
+        let mut strips = None;
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
@@ -93,17 +113,25 @@ impl MarkdownApp {
                 // Capture scroll input for manual handling during selection
                 let raw_scroll = ui.ctx().input(|i| i.raw_scroll_delta.y);
                 let content_rect = ui.available_rect_before_wrap();
+                let column = Column::in_pane(content_rect, reading_width);
+                pane_width = content_rect.width();
 
                 // (the Preview|Edit toggle lives in the tab bar)
                 if tab.is_editing {
-                    edit_pane(ui, tab, content_rect.width());
+                    edit_pane(ui, tab, column);
                 } else {
-                    let mut scroll = preview_pane(ui, tab, &settings, content_rect.width());
+                    let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
                     if corrected.is_some() {
                         tab.pending_scroll_offset = corrected;
                     }
                     wheel_scroll_during_selection(ui, tab, &mut scroll, raw_scroll, content_rect);
+                }
+                // After the document, so the strips sit on top of it.
+                requested_width = resize_strips(ui, column, column_drag_grab, palette);
+                #[cfg(feature = "mcp")]
+                {
+                    strips = Some(column.strips());
                 }
 
                 // Request repaint during smooth scrolling
@@ -112,14 +140,35 @@ impl MarkdownApp {
                 }
             });
 
-        let clicked_link = tab.check_link_hooks()?;
-        let (open_in_new_tab, navigation_error) =
-            handle_local_link_click(tab, &clicked_link, ctrl_held);
-        if let Some(error) = navigation_error {
-            self.error_message = Some(error);
+        let open_in_new_tab = follow_clicked_link(tab, ctrl_held, &mut self.error_message);
+        self.document_pane_width = pane_width;
+        #[cfg(feature = "mcp")]
+        for (name, rect) in strips.into_iter().flatten() {
+            self.mcp_bridge
+                .register_widget_rect(name, "slider", rect, None);
+        }
+        if let Some(width) = requested_width {
+            self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width.get()));
         }
         open_in_new_tab
     }
+}
+
+/// Act on the link the renderer reported clicked this frame, if any: a
+/// plain click navigates `tab`, and the path of a Ctrl+click is returned
+/// for the caller to open in a new tab.
+fn follow_clicked_link(
+    tab: &mut Tab,
+    ctrl_held: bool,
+    error_message: &mut Option<String>,
+) -> Option<(PathBuf, Option<String>)> {
+    let clicked_link = tab.check_link_hooks()?;
+    let (open_in_new_tab, navigation_error) =
+        handle_local_link_click(tab, &clicked_link, ctrl_held);
+    if let Some(error) = navigation_error {
+        *error_message = Some(error);
+    }
+    open_in_new_tab
 }
 
 /// Hands the find bar's matches to the renderer, which paints the highlights.
@@ -141,21 +190,24 @@ fn push_search_ranges(tab: &mut Tab, search_is_open: bool, active_idx: usize) {
     }
 }
 
-/// Edit mode: a scrollable `TextEdit` holding the raw markdown. The
-/// `TextEdit`'s own `ScrollArea` handles the wheel natively.
-fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, width: f32) {
+/// Edit mode: a scrollable `TextEdit` holding the raw markdown, as wide as
+/// the text column and centered like it. The `TextEdit`'s own `ScrollArea`
+/// handles the wheel natively.
+fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
     let pending_edit = tab.pending_edit_scroll.take();
     let edit_out = egui::ScrollArea::vertical()
         .id_salt(tab.id.with("edit-scroll"))
         .auto_shrink(false)
-        .max_width(width)
+        .max_width(column.pane.width())
         .show(ui, |ui| {
-            ui.vertical(|ui| {
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.add_space(column.inset());
                 let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4_i8, 2_i8));
                 frame.show(ui, |ui| {
                     egui::TextEdit::multiline(&mut tab.content)
                         .id_salt(ui.id().with("edit"))
-                        .desired_width(width - 8.0)
+                        .desired_width(column.width - 8.0)
                         .desired_rows(24)
                         .frame(false)
                         .ui(ui);
@@ -173,7 +225,19 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, width: f32) {
     }
 }
 
-/// View mode: the rendered document.
+/// The meta line above the document. It is painted inside the renderer's
+/// column, so it scrolls with the text it describes.
+fn document_preamble(ui: &mut egui::Ui, kicker: &str, color: egui::Color32) {
+    ui.add_space(KICKER_TOP_SPACE);
+    ui.label(
+        egui::RichText::new(kicker)
+            .font(egui::FontId::proportional(KICKER_SIZE))
+            .color(color),
+    );
+    ui.add_space(KICKER_BOTTOM_SPACE);
+}
+
+/// View mode: the rendered document, in the text column.
 ///
 /// The renderer owns the `ScrollArea` (via `show_scrollable`), so the scroll
 /// source, pending offset, and content version go in through builder
@@ -182,22 +246,26 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, width: f32) {
 fn preview_pane(
     ui: &mut egui::Ui,
     tab: &mut Tab,
-    settings: &PreviewSettings,
-    width: f32,
+    settings: &PreviewSettings<'_>,
+    column: Column,
 ) -> ScrollAreaOutput<()> {
     let pending = tab.pending_scroll_offset.take();
+    let look = settings.look;
+    // The document's fonts, for everything the renderer lays out below.
+    ui.set_style(Arc::clone(&look.style));
+    let kicker = tab.kicker.as_str();
+    let preamble = |ui: &mut egui::Ui| document_preamble(ui, kicker, look.muted);
+    // The renderer centers the column in the pane; tables, code blocks,
+    // images and diagrams keep to it, and a table too wide for it scrolls
+    // sideways inside it (#110).
+    let column_px = whole_pixels(column.width);
     let output = CommonMarkViewer::new()
         .default_implicit_uri_scheme(&tab.base_uri)
         .max_image_width(Some(800))
-        .default_width(content_default_width(settings.full_width_content))
-        // Full Width governs the complete document layout. With
-        // the reading cap active, tables reflow within it; their
-        // horizontal scroller still handles minimum-width or
-        // user-resized overflow (#110).
-        .table_max_width(Some(content_width_limit(
-            settings.full_width_content,
-            width,
-        )))
+        .default_width(Some(column_px))
+        .table_max_width(Some(column_px))
+        .block_style(look.blocks.clone())
+        .preamble(Some(&preamble))
         .indentation_spaces(2)
         .use_strong_font_family(true)
         // Frontmatter is metadata, not prose: show it as a
@@ -206,8 +274,8 @@ fn preview_pane(
         .render_frontmatter(true)
         .math_scale(settings.math_scale)
         .show_alt_text_on_hover(true)
-        .syntax_theme_dark("base16-ocean.dark")
-        .syntax_theme_light("base16-ocean.light")
+        .syntax_theme_dark(look.syntax_theme)
+        .syntax_theme_light(look.syntax_theme)
         .line_height(settings.line_height)
         .code_line_height(settings.code_line_height)
         .paragraph_spacing(2.0)

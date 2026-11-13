@@ -78,3 +78,35 @@ fn close_floats_pass_and_distant_ones_do_not() {
     let distant = std::panic::catch_unwind(|| assert_close(0.31, 0.3));
     assert!(distant.is_err());
 }
+
+/// A frame that paints `texts` one under the other, among other shapes.
+fn frame_painting(texts: &[&str]) -> egui::FullOutput {
+    egui::Context::default().run(egui::RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            for text in texts {
+                ui.label(*text);
+            }
+        });
+    })
+}
+
+#[test]
+fn painted_text_is_found_by_how_it_starts_in_paint_order() {
+    let output = frame_painting(&["first line", "second line", "second thought"]);
+
+    assert_eq!(
+        painted_text_starting(&output, "second").galley.text(),
+        "second line"
+    );
+    let first = painted_text_starting(&output, "first");
+    let third = painted_text_starting(&output, "second t");
+    assert!(first.pos.y < third.pos.y);
+}
+
+#[test]
+#[should_panic(expected = "no painted text starts with the prefix")]
+fn looking_for_text_nobody_painted_fails_the_test() {
+    let output = frame_painting(&["first line"]);
+
+    painted_text_starting(&output, "missing");
+}

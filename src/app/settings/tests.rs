@@ -181,8 +181,12 @@ fn the_search_box_narrows_the_list_without_regard_to_case() {
 #[test]
 fn a_preset_click_switches_the_preset() {
     let mut harness = fonts_dialog(&[]);
-    assert_eq!(harness.app().font_preset, FontPreset::Current);
+    assert_eq!(harness.app().font_preset, FontPreset::Reader);
 
+    harness.click_exact("System");
+    assert_eq!(harness.app().font_preset, FontPreset::Current);
+    harness.click_exact("Reader");
+    assert_eq!(harness.app().font_preset, FontPreset::Reader);
     harness.click_exact("GitHub");
     assert_eq!(harness.app().font_preset, FontPreset::Github);
     harness.click_exact("VS Code");

@@ -7,15 +7,16 @@ use std::rc::Rc;
 
 use crate::app::ui_harness::UiHarness;
 use crate::app::MarkdownApp;
+use crate::layout::{LineSpacing, ReadingWidth};
 use crate::test_support::assert_close;
+use crate::theme::ThemeId;
 
-/// The five on/off settings of the View menu, in menu order.
-fn view_toggles(app: &MarkdownApp) -> [bool; 5] {
+/// The four on/off settings of the View menu, in menu order.
+fn view_toggles(app: &MarkdownApp) -> [bool; 4] {
     [
-        app.dark_mode,
         app.show_explorer,
         app.show_outline,
-        app.full_width_content,
+        app.reading_width.fits_window(),
         app.smooth_text_rendering,
     ]
 }
@@ -24,7 +25,6 @@ fn view_toggles(app: &MarkdownApp) -> [bool; 5] {
 fn each_view_toggle_flips_its_own_setting_and_no_other() {
     let mut harness = UiHarness::with_three_docs();
     let items = [
-        "Mode",
         "Show Explorer",
         "Show Outline",
         "Full Width",
@@ -46,15 +46,12 @@ fn the_view_menu_ticks_exactly_the_settings_that_are_on() {
     let mut harness = UiHarness::with_three_docs();
     harness.app_mut().show_explorer = true;
     harness.app_mut().show_outline = false;
-    harness.app_mut().dark_mode = true;
 
     harness.click_exact("View");
 
     assert!(harness.shows("✓ Show Explorer"));
     assert!(harness.shows("Show Outline"));
     assert!(!harness.shows("✓ Show Outline"));
-    assert!(harness.shows("Light Mode"), "dark mode offers the way out");
-    assert!(!harness.shows("Dark Mode"));
 }
 
 #[test]
@@ -213,4 +210,58 @@ fn the_status_readout_names_the_active_file_while_it_exists() {
     std::fs::remove_file(&a).unwrap();
     harness.settle();
     assert!(!harness.shows(&shown_path));
+}
+
+#[test]
+fn the_theme_menu_picks_a_theme_by_name_and_ticks_the_one_in_use() {
+    let mut harness = UiHarness::with_three_docs();
+    assert_eq!(harness.app().theme, ThemeId::Sepia);
+
+    harness.click_exact("View");
+    harness.click("Theme");
+    assert!(harness.shows("✓ Sepia"));
+    harness.click("Night");
+    assert_eq!(harness.app().theme, ThemeId::Night);
+
+    harness.click_exact("View");
+    harness.click("Theme");
+    assert!(harness.shows("✓ Night"));
+    assert!(!harness.shows("✓ Sepia"));
+    harness.click("Next Theme");
+    assert_eq!(harness.app().theme, ThemeId::Paper);
+}
+
+#[test]
+fn the_line_spacing_menu_picks_a_spacing_and_ticks_the_one_in_use() {
+    let mut harness = UiHarness::with_three_docs();
+    assert_eq!(harness.app().line_spacing, LineSpacing::Comfortable);
+
+    harness.click_exact("View");
+    harness.click("Line Spacing");
+    assert!(harness.shows("✓ Comfortable"));
+    harness.click("Airy");
+    assert_eq!(harness.app().line_spacing, LineSpacing::Airy);
+
+    harness.click_exact("View");
+    harness.click("Line Spacing");
+    assert!(harness.shows("✓ Airy"));
+    assert!(!harness.shows("✓ Comfortable"));
+    harness.click("Compact");
+    assert_eq!(harness.app().line_spacing, LineSpacing::Compact);
+}
+
+#[test]
+fn full_width_is_ticked_only_while_the_column_fills_the_window() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.app_mut().reading_width = ReadingWidth::new(900.0);
+
+    harness.click_exact("View");
+    assert!(!harness.shows("✓ Full Width"));
+    harness.click("Full Width");
+    assert!(harness.app().reading_width.fits_window());
+
+    harness.click_exact("View");
+    assert!(harness.shows("✓ Full Width"));
+    harness.click("Full Width");
+    assert_eq!(harness.app().reading_width, ReadingWidth::DEFAULT);
 }

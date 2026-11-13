@@ -16,8 +16,10 @@ use crate::app::ui_harness::{
 };
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerScanResult, SortOrder};
+use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::assert_close;
+use crate::theme::{self, ThemeId};
 use crate::watcher::FLASH_DURATION_MS;
 
 const LONG_DOCUMENT_PARAGRAPHS: usize = 400;
@@ -90,10 +92,11 @@ fn customized_session() -> Harness {
     fs::create_dir(&guides).unwrap();
     let app = &mut harness.app;
     app.open_in_new_tab(b);
-    app.dark_mode = !app.dark_mode;
+    app.theme = ThemeId::Night;
     app.zoom_level = 1.25;
     app.show_outline = false;
-    app.full_width_content = true;
+    app.reading_width = ReadingWidth::new(512.0);
+    app.line_spacing = LineSpacing::Airy;
     app.math_scale = 1.5;
     app.highlight_color = Some(Color32::from_rgb(200, 30, 30));
     app.link_color = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
@@ -113,14 +116,15 @@ fn customized_session() -> Harness {
 fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
     (
         (
-            app.dark_mode,
+            app.theme,
+            app.line_spacing,
             app.show_outline,
-            app.full_width_content,
             app.smooth_text_rendering,
             app.show_explorer,
         ),
         (
             app.zoom_level.to_bits(),
+            app.reading_width.get().to_bits(),
             app.math_scale.to_bits(),
             app.explorer_width.to_bits(),
             app.outline_width.to_bits(),
@@ -167,13 +171,16 @@ fn a_saved_session_comes_back_on_the_next_launch() {
 #[test]
 fn each_frame_applies_theme_zoom_and_text_snapping_to_egui() {
     let mut harness = Harness::with_three_docs();
-    harness.app.dark_mode = true;
+    harness.app.theme = ThemeId::Dusk;
     harness.app.zoom_level = 1.25;
     harness.app.smooth_text_rendering = true;
     // egui takes a new zoom factor at the start of the frame after it is set.
     harness.idle();
     harness.idle();
-    let dark_panel = harness.ctx.style().visuals.panel_fill;
+    assert_eq!(
+        harness.ctx.style().visuals.panel_fill,
+        ThemeId::Dusk.palette().page
+    );
     assert!(harness.ctx.style().visuals.dark_mode);
     assert_close(harness.ctx.zoom_factor(), 1.25);
     let rounds_text = |harness: &Harness| -> bool {
@@ -182,13 +189,16 @@ fn each_frame_applies_theme_zoom_and_text_snapping_to_egui() {
     };
     assert!(!rounds_text(&harness));
 
-    harness.app.dark_mode = false;
+    harness.app.theme = ThemeId::Paper;
     harness.app.zoom_level = 1.0;
     harness.app.smooth_text_rendering = false;
     harness.idle();
     harness.idle();
     assert!(!harness.ctx.style().visuals.dark_mode);
-    assert_ne!(harness.ctx.style().visuals.panel_fill, dark_panel);
+    assert_eq!(
+        harness.ctx.style().visuals.panel_fill,
+        ThemeId::Paper.palette().page
+    );
     assert_close(harness.ctx.zoom_factor(), 1.0);
     assert!(rounds_text(&harness));
 }
@@ -460,4 +470,106 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
     let lightbox = harness.app().lightbox.as_ref().unwrap();
     assert!(matches!(lightbox.texture, LightboxTexture::Owned(_)));
     assert!(lightbox.base_size.x > 0.0 && lightbox.base_size.y > 0.0);
+}
+
+#[test]
+fn the_users_colors_stay_on_top_of_whichever_theme_is_picked() {
+    let mut harness = Harness::with_three_docs();
+    let highlight = Color32::from_rgb(200, 30, 30);
+    harness.app.highlight_color = Some(highlight);
+    harness.idle();
+
+    for theme in ThemeId::ALL {
+        harness.app.theme = theme;
+        harness.idle();
+        let visuals = harness.ctx.style().visuals.clone();
+        assert_eq!(visuals.selection.bg_fill, highlight, "{theme:?}");
+        assert_eq!(visuals.hyperlink_color, theme.palette().link);
+        assert_eq!(visuals.panel_fill, theme.palette().page);
+    }
+
+    harness.app.highlight_color = None;
+    harness.idle();
+    assert_eq!(
+        harness.ctx.style().visuals.selection.bg_fill,
+        harness.app.theme.palette().selection
+    );
+}
+
+#[test]
+fn the_document_look_follows_the_theme() {
+    let mut harness = Harness::with_three_docs();
+    harness.idle();
+
+    for theme in ThemeId::ALL {
+        harness.app.theme = theme;
+        harness.idle();
+        let look = &harness.app.document_look;
+        assert_eq!(look.muted, theme.palette().muted, "{theme:?}");
+        assert_eq!(look.syntax_theme, theme.palette().syntax_theme);
+        assert_eq!(look.style.visuals.panel_fill, theme.palette().page);
+    }
+}
+
+#[test]
+fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
+    let mut harness = Harness::with_three_docs();
+    harness.idle();
+    let body_size = |harness: &Harness| {
+        let styles = &harness.app.document_look.style.text_styles;
+        styles[&egui::TextStyle::Body].size
+    };
+    let revision = |harness: &Harness| harness.app.tabs[0].cache.layout_revision();
+    assert_close(body_size(&harness), 16.0 * 1.15);
+
+    let before = revision(&harness);
+    harness.app.text_size_class = TextSizeClass::Large;
+    harness.idle();
+    assert_close(body_size(&harness), 18.0 * 1.15);
+    assert!(revision(&harness) > before);
+
+    // A frame in which nothing changed rebuilds nothing.
+    let settled = revision(&harness);
+    harness.idle();
+    assert_eq!(revision(&harness), settled);
+
+    harness.app.font_preset = FontPreset::Current;
+    harness.idle();
+    assert_close(body_size(&harness), 18.0);
+    assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);
+    assert!(revision(&harness) > settled);
+}
+
+#[test]
+fn the_error_bar_is_written_in_the_themes_warning_color() {
+    let mut harness = Harness::with_three_docs();
+    harness.app.theme = ThemeId::Dusk;
+    harness.app.error_message = Some("Unable to open notes.md".to_owned());
+    harness.idle();
+
+    let output = harness.idle();
+
+    let message = crate::test_support::painted_text_starting(&output, "Unable to open");
+    assert_eq!(
+        message.galley.job.sections[0].format.color,
+        ThemeId::Dusk.palette().warning
+    );
+}
+
+#[test]
+fn the_drop_target_dims_the_window_with_the_scrim() {
+    let mut harness = Harness::with_three_docs();
+    let hovering = egui::RawInput {
+        hovered_files: vec![egui::HoveredFile::default()],
+        ..Default::default()
+    };
+
+    let output = frame_with(&mut harness, hovering);
+
+    let dimmed = crate::test_support::painted_shapes(&output)
+        .into_iter()
+        .any(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == theme::SCRIM));
+    assert!(dimmed);
+    let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
+    assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
 }

@@ -320,3 +320,31 @@ mod navigation {
         assert_eq!(tab.resolve_link("other.md").unwrap(), None);
     }
 }
+
+#[test]
+fn reading_time_is_a_minute_per_230_words_rounded_up_and_never_zero() {
+    assert_eq!(reading_minutes(""), 1);
+    assert_eq!(reading_minutes("one two three"), 1);
+    assert_eq!(reading_minutes(&"word ".repeat(230)), 1);
+    assert_eq!(reading_minutes(&"word ".repeat(231)), 2);
+    assert_eq!(reading_minutes(&"word\n\n".repeat(2_300)), 10);
+}
+
+#[test]
+fn the_meta_line_names_the_file_and_follows_the_content_that_is_loaded() {
+    let dir = ScratchDir::new();
+    let short = dir.file("short.md", "# Short\n\nA few words.");
+    let long = dir.file("long read.md", &"word ".repeat(700));
+
+    let mut tab = Tab::new(short).unwrap();
+    assert_eq!(tab.kicker, "short.md \u{b7} 1 min read");
+
+    // Navigating loads another document into the same tab.
+    assert!(tab.navigate_to_path(&long).unwrap());
+    assert_eq!(tab.kicker, "long read.md \u{b7} 4 min read");
+
+    // A reload picks up what is on disk now.
+    fs::write(&long, "Cut down to a line.").unwrap();
+    tab.reload().unwrap();
+    assert_eq!(tab.kicker, "long read.md \u{b7} 1 min read");
+}

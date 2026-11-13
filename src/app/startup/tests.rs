@@ -4,15 +4,18 @@
 use std::path::PathBuf;
 
 use eframe::egui::{self, Color32};
+use eframe::Storage as _;
 
 use super::is_virtual_display;
 use crate::app::ui_harness::{launch, MemoryStorage, ScratchDir};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
+use crate::layout::{LineSpacing, ReadingWidth};
 use crate::persist::{PersistedState, APP_KEY};
 use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::assert_close;
+use crate::theme::ThemeId;
 
 /// Launch with `persisted` as the last session's settings.
 fn relaunch(persisted: &PersistedState, file: Option<PathBuf>) -> MarkdownApp {
@@ -38,12 +41,14 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert!(app.error_message.is_none());
     assert!(app.show_outline);
     assert!(app.show_explorer);
-    assert!(!app.full_width_content);
+    assert_eq!(app.theme, ThemeId::Sepia);
+    assert_eq!(app.reading_width, ReadingWidth::DEFAULT);
+    assert_eq!(app.line_spacing, LineSpacing::Comfortable);
     assert!(!app.smooth_text_rendering);
     assert_close(app.zoom_level, 1.0);
     assert_close(app.math_scale, 1.0);
     assert_eq!(app.highlight_color, None);
-    assert_eq!(app.font_preset, FontPreset::Current);
+    assert_eq!(app.font_preset, FontPreset::Reader);
     assert_eq!(app.text_size_class, TextSizeClass::Normal);
     assert!(app.watcher.is_none());
     assert_eq!(
@@ -150,10 +155,11 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
         last_opened: 1_700_000_000,
     };
     let persisted = PersistedState {
-        dark_mode: Some(false),
+        theme: Some(ThemeId::Night),
         zoom_level: Some(9.0),
         show_outline: Some(false),
-        full_width_content: Some(true),
+        reading_width: Some(9_000.0),
+        line_spacing: Some(LineSpacing::Airy),
         math_scale: Some(0.25),
         highlight_color: Some([10, 20, 30, 255]),
         link_color: Some([1, 2, 3, 4]),
@@ -170,10 +176,11 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
 
     let app = relaunch(&persisted, None);
 
-    assert!(!app.dark_mode);
+    assert_eq!(app.theme, ThemeId::Night);
     assert_close(app.zoom_level, 3.0);
     assert!(!app.show_outline);
-    assert!(app.full_width_content);
+    assert_close(app.reading_width.get(), ReadingWidth::MAX);
+    assert_eq!(app.line_spacing, LineSpacing::Airy);
     assert_close(app.math_scale, 1.0);
     assert_eq!(app.highlight_color, Some(Color32::from_rgb(10, 20, 30)));
     assert_eq!(
@@ -239,4 +246,78 @@ fn only_a_numbered_x_display_other_than_the_first_counts_as_virtual() {
     assert!(!is_virtual_display(Some(":0.0")));
     assert!(!is_virtual_display(Some("")));
     assert!(!is_virtual_display(None));
+}
+
+/// Launch on a settings file with exactly `settings` in it, as an older
+/// version wrote it.
+fn launch_on_saved(settings: &str) -> MarkdownApp {
+    let mut storage = MemoryStorage::default();
+    storage.set_string(APP_KEY, settings.to_owned());
+    launch(&storage, None, false)
+}
+
+#[test]
+fn a_session_saved_before_the_reader_keeps_its_light_or_dark_choice_and_its_width() {
+    let dark_and_wide = launch_on_saved("(dark_mode: Some(true), full_width_content: Some(true))");
+    assert_eq!(dark_and_wide.theme, ThemeId::Dusk);
+    assert!(dark_and_wide.reading_width.fits_window());
+
+    let light_and_capped =
+        launch_on_saved("(dark_mode: Some(false), full_width_content: Some(false))");
+    assert_eq!(light_and_capped.theme, ThemeId::Paper);
+    assert_eq!(light_and_capped.reading_width, ReadingWidth::DEFAULT);
+
+    // It had picked its fonts too, and keeps them.
+    let own_fonts = launch_on_saved("(dark_mode: Some(true), font_preset: Some(Github))");
+    assert_eq!(own_fonts.font_preset, FontPreset::Github);
+}
+
+#[test]
+fn a_restored_text_size_is_in_force_from_the_first_frame() {
+    let persisted = PersistedState {
+        text_size_class: Some(TextSizeClass::Large),
+        ..PersistedState::default()
+    };
+
+    let app = relaunch(&persisted, None);
+
+    let style = app.egui_ctx.style();
+    assert_close(style.text_styles[&egui::TextStyle::Body].size, 18.0);
+    assert_close(style.text_styles[&egui::TextStyle::Heading].size, 36.0);
+    assert_close(style.text_styles[&egui::TextStyle::Small].size, 13.0);
+    let document = &app.document_look.style.text_styles;
+    assert_close(document[&egui::TextStyle::Body].size, 18.0 * 1.15);
+}
+
+#[test]
+fn scrollbars_are_thin_trackless_and_filled_with_the_themes_widget_colors() {
+    let app = launch(&MemoryStorage::default(), None, false);
+
+    let scroll = app.egui_ctx.style().spacing.scroll;
+    assert!(scroll.floating);
+    assert_close(scroll.bar_width, 6.0);
+    // Constant width: a bar that grows on hover fights the panel dividers.
+    assert_close(scroll.floating_width, scroll.bar_width);
+    assert!(!scroll.foreground_color);
+    assert_close(scroll.active_background_opacity, 0.0);
+    assert_close(scroll.interact_background_opacity, 0.0);
+    assert_close(scroll.active_handle_opacity, 1.0);
+}
+
+#[test]
+fn the_document_look_is_ready_before_the_first_frame() {
+    let persisted = PersistedState {
+        theme: Some(ThemeId::Night),
+        ..PersistedState::default()
+    };
+
+    let app = relaunch(&persisted, None);
+
+    assert_eq!(app.document_look.muted, ThemeId::Night.palette().muted);
+    assert_eq!(
+        app.document_look.syntax_theme,
+        ThemeId::Night.palette().syntax_theme
+    );
+    assert!(app.document_pane_width.is_infinite());
+    assert_eq!(app.column_drag_grab, None);
 }

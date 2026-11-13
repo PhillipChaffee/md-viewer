@@ -1,14 +1,19 @@
 //! Font presets, text sizes, and system font installation for egui.
 
-use egui::{FontDefinitions, FontFamily};
+use egui::{FontDefinitions, FontFamily, FontId, TextStyle};
 use fontique::{Collection, CollectionOptions, FamilyId, SourceCache};
 use serde::{Deserialize, Serialize};
 
+use crate::system_fonts::bundled::{
+    install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY,
+    DOCUMENT_HEADING_FAMILY,
+};
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
     install_preset_mono_font, install_regular_fonts, install_strong_font_family, select_body_font,
 };
 
+mod bundled;
 mod emoji;
 mod install;
 #[cfg(test)]
@@ -27,9 +32,12 @@ mod tests;
 /// bold rendering never regress when switching presets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum FontPreset {
-    /// The app's own look: best installed general-purpose sans for body text,
-    /// egui's bundled monospace face for code.
+    /// The reading look: the bundled Source Serif 4 for body text and
+    /// headings, the system sans for everything around the document.
     #[default]
+    Reader,
+    /// The app's look before the reader: best installed general-purpose
+    /// sans for body text, egui's bundled monospace face for code.
     Current,
     /// github.com rendered markdown (Primer `.markdown-body`): body
     /// `"Mona Sans VF", -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -45,12 +53,13 @@ pub(crate) enum FontPreset {
 }
 
 impl FontPreset {
-    pub(crate) const ALL: [Self; 3] = [Self::Current, Self::Github, Self::Vscode];
+    pub(crate) const ALL: [Self; 4] = [Self::Reader, Self::Current, Self::Github, Self::Vscode];
 
     /// Menu label for this preset.
     pub(crate) const fn label(self) -> &'static str {
         match self {
-            Self::Current => "Default",
+            Self::Reader => "Reader",
+            Self::Current => "System",
             Self::Github => "GitHub",
             Self::Vscode => "VS Code",
         }
@@ -59,9 +68,10 @@ impl FontPreset {
     /// One-line explanation of what the preset emulates, shown as menu hover text.
     pub(crate) const fn description(self) -> &'static str {
         match self {
-            Self::Current => {
-                "This app's default: best installed sans + bundled mono code font."
+            Self::Reader => {
+                "Reading style: bundled Source Serif 4 body and headings, sans everywhere else."
             }
+            Self::Current => "Best installed sans + bundled mono code font.",
             Self::Github => {
                 "github.com style: Mona Sans / Segoe UI / Noto Sans body, SF Mono / Liberation Mono code."
             }
@@ -71,15 +81,31 @@ impl FontPreset {
         }
     }
 
-    /// `(body line-height, code line-height)` multipliers fed to the renderer.
-    /// GitHub: `.markdown-body{line-height:1.5}`, `pre{line-height:1.45}`.
-    /// VS Code preview default: `--markdown-line-height: 1.6`, code 1.357em.
-    pub(crate) const fn line_heights(self) -> (f32, f32) {
+    /// Line height of code blocks as a multiple of the code font size. The
+    /// body line height is the user's line-spacing setting, whatever the
+    /// preset. GitHub: `pre{line-height:1.45}`; VS Code preview: 1.357em.
+    pub(crate) const fn code_line_height(self) -> f32 {
         match self {
-            Self::Current => (1.5, 1.3),
-            Self::Github => (1.5, 1.45),
-            Self::Vscode => (1.6, 1.36),
+            Self::Reader => 1.5,
+            Self::Current => 1.3,
+            Self::Github => 1.45,
+            Self::Vscode => 1.36,
         }
+    }
+
+    /// Document body size as a multiple of the text-size class. A serif
+    /// with a modest x-height reads smaller than a sans at the same size.
+    const fn body_scale(self) -> f32 {
+        match self {
+            Self::Reader => 1.15,
+            Self::Current | Self::Github | Self::Vscode => 1.0,
+        }
+    }
+
+    /// Whether the document is set in the bundled serif faces. A family the
+    /// user picked outranks the preset's own, as it does for every preset.
+    const fn uses_bundled_faces(self, preferred_family: Option<&str>) -> bool {
+        matches!(self, Self::Reader) && preferred_family.is_none()
     }
 
     /// Body families from the emulated viewer's CSS stack, in resolution
@@ -91,7 +117,7 @@ impl FontPreset {
     /// Linux browsers actually render for stacks asking for Segoe UI first.
     const fn body_families(self) -> Option<&'static [&'static str]> {
         match self {
-            Self::Current => None,
+            Self::Reader | Self::Current => None,
             Self::Github => Some(GITHUB_BODY_FAMILIES),
             Self::Vscode => Some(VSCODE_BODY_FAMILIES),
         }
@@ -108,7 +134,7 @@ impl FontPreset {
             // VS Code webviews always inject editor.fontFamily; its Linux
             // default is 'Droid Sans Mono', monospace.
             Self::Vscode => VSCODE_MONO_FAMILIES,
-            Self::Current => &[],
+            Self::Reader | Self::Current => &[],
         }
     }
 }
@@ -136,19 +162,21 @@ impl TextSizeClass {
         Self::Huge,
     ];
 
-    /// Menu label including the concrete pixel size.
+    /// Menu label. It names no pixel size: the document's depends on the
+    /// font preset too.
     pub(crate) const fn label(self) -> &'static str {
         match self {
-            Self::Small => "Small (14px)",
-            Self::Normal => "Normal (16px)",
-            Self::Large => "Large (18px)",
-            Self::ExtraLarge => "Extra large (20px)",
-            Self::Huge => "Huge (24px)",
+            Self::Small => "Small",
+            Self::Normal => "Normal",
+            Self::Large => "Large",
+            Self::ExtraLarge => "Extra large",
+            Self::Huge => "Huge",
         }
     }
 
-    /// Base body size in px. Headings and code cascade from this because the
-    /// renderer derives every document size from `TextStyle::Body`.
+    /// Base text size in px: what the chrome is set in. The document
+    /// scales it by the preset (see [`document_fonts`]), and its headings
+    /// and code cascade from there.
     pub(crate) const fn px(self) -> f32 {
         match self {
             Self::Small => 14.0,
@@ -205,13 +233,52 @@ const VSCODE_BODY_FAMILIES: &[&str] = &[
 /// by the generic monospace resolutions.
 const VSCODE_MONO_FAMILIES: &[&str] = &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"];
 
-/// Apply the shared base text size class to the context styles. Headings and
-/// code cascade because the renderer derives document sizes from
-/// `TextStyle::Body`.
+/// Code is set this much smaller than the body text around it: a
+/// monospace face looks larger than a proportional one at the same size.
+const CODE_SCALE: f32 = 0.875;
+
+/// The fonts the document pane lays out with, as opposed to the chrome
+/// around it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DocumentFonts {
+    pub(crate) body: FontId,
+    /// The family is the heading face; the renderer sizes each level from
+    /// the body size.
+    pub(crate) heading: FontId,
+    /// The font of code blocks.
+    pub(crate) code: FontId,
+    /// Size of inline code as a multiple of the text around it, where the
+    /// code face is aligned to the body face's baseline at that size.
+    /// `None` sets inline code at the size of the text around it.
+    pub(crate) inline_code_scale: Option<f32>,
+    /// A true italic family, where the document's faces have one. `None`
+    /// means emphasis is the body face slanted.
+    pub(crate) emphasis: Option<FontFamily>,
+}
+
+/// The document fonts for one font configuration. The named families are
+/// the ones [`setup_fonts`] registers for the same configuration.
+pub(crate) fn document_fonts(
+    preferred_family: Option<&str>,
+    preset: FontPreset,
+    size: TextSizeClass,
+) -> DocumentFonts {
+    let body = size.px() * preset.body_scale();
+    let bundled = preset.uses_bundled_faces(preferred_family);
+    DocumentFonts {
+        body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
+        heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
+        code: FontId::monospace(body * CODE_SCALE),
+        inline_code_scale: bundled.then_some(CODE_SCALE),
+        emphasis: bundled.then(|| FontFamily::Name(DOCUMENT_EMPHASIS_FAMILY.into())),
+    }
+}
+
+/// Apply the shared base text size class to the context styles: the sizes
+/// the chrome is set in.
 fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     let base = size.px();
     ctx.style_mut(|style| {
-        use egui::{FontId, TextStyle};
         style
             .text_styles
             .insert(TextStyle::Body, FontId::proportional(base));
@@ -307,6 +374,11 @@ fn font_definitions(
         )
     };
     install_emoji_fonts(collection, source_cache, &mut definitions);
+    // Last, so the document chains end in every fallback installed above.
+    install_document_families(
+        &mut definitions,
+        preset.uses_bundled_faces(preferred_family),
+    );
     if installed.is_empty() {
         log::warn!("No suitable system font fallbacks found; using egui defaults.");
     } else {
