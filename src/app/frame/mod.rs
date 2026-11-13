@@ -9,6 +9,7 @@ use eframe::egui;
 use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
+use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::persist::{PersistedState, APP_KEY};
@@ -24,11 +25,7 @@ const WARNING_SIDE: f32 = 16.0;
 
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        #[cfg(feature = "mcp")]
-        {
-            self.mcp_bridge.process_commands();
-            self.mcp_bridge.inject_raw_input(raw_input);
-        }
+        mcp::raw_input(&mut self.mcp, raw_input);
 
         // When lightbox is open, intercept scroll events before they reach InputState.
         // This prevents the document's ScrollArea from scrolling while letting us
@@ -94,8 +91,7 @@ impl eframe::App for MarkdownApp {
         self.render_overlays(ctx);
 
         // Capture AccessKit output for MCP bridge
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge.capture_output(ctx);
+        mcp::capture(&mut self.mcp, ctx);
     }
 }
 
@@ -104,14 +100,7 @@ impl MarkdownApp {
     /// changes, async polls, and theme, font, zoom, and title application.
     fn begin_frame(&mut self, ctx: &egui::Context) {
         // Enable AccessKit for MCP bridge
-        #[cfg(feature = "mcp")]
-        {
-            ctx.enable_accesskit();
-            self.mcp_bridge.begin_frame();
-            self.mcp_bridge.store_in_context(ctx); // Enable McpUiExt methods
-                                                   // Poll for MCP commands at reasonable rate (prevents CPU spin on virtual displays)
-            ctx.request_repaint_after(Duration::from_millis(50));
-        }
+        mcp::begin_frame(&mut self.mcp, ctx);
 
         self.poll_background_work(ctx);
 

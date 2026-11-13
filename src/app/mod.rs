@@ -7,11 +7,10 @@ use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
 use eframe::egui;
-#[cfg(feature = "mcp")]
-use egui_mcp_bridge::{McpBridge, McpUiExt};
 
 use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::LightboxState;
+use crate::app::mcp::Mcp;
 use crate::app::tabs::PathPicker;
 use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
@@ -29,6 +28,7 @@ mod content;
 mod explorer_panel;
 mod frame;
 mod lightbox;
+mod mcp;
 mod outline;
 mod overflow_menu;
 #[cfg(kani)]
@@ -180,6 +180,5 @@ pub(crate) struct MarkdownApp {
     /// and not while painting. `None` until the page next shows.
     home_list: Option<welcome::HomeList>,
     // MCP bridge for E2E testing
-    #[cfg(feature = "mcp")]
-    mcp_bridge: McpBridge,
+    mcp: Mcp,
 }

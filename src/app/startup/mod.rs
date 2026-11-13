@@ -6,10 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui::{self, FontId, TextStyle};
-#[cfg(feature = "mcp")]
-use egui_mcp_bridge::McpBridge;
 
 use crate::app::content::look::DocumentLook;
+use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
@@ -258,10 +257,7 @@ impl MarkdownApp {
             persisted.expanded_dirs,
         );
 
-        #[cfg(feature = "mcp")]
-        let mcp_bridge = McpBridge::builder().port(9877).build();
-        #[cfg(feature = "mcp")]
-        log::info!("MCP bridge listening on port {}", mcp_bridge.port());
+        let mcp = Mcp::new();
 
         let highlight_color = persisted.highlight_color.map(color_from_persisted);
         let link_color = persisted.link_color.map(color_from_persisted);
@@ -342,8 +338,7 @@ impl MarkdownApp {
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,
             home_list: None,
-            #[cfg(feature = "mcp")]
-            mcp_bridge,
+            mcp,
         };
 
         app.begin_session(file, watch);
