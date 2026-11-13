@@ -159,18 +159,11 @@ fn every_shortcut_does_the_same_with_the_find_bar_open() {
         } else {
             assert_eq!(changed, [change], "{shortcut}");
         }
-        // Ctrl+W is the exception: see the known bug below.
-        if shortcut != "Ctrl+W" {
-            assert_eq!(reader.typed()[0], "e", "{shortcut} typed into the find bar");
-        }
+        assert_eq!(reader.typed()[0], "e", "{shortcut} typed into the find bar");
     }
 }
 
-/// Known bug, listed in `tests/README.md`: with the keyboard in the find
-/// bar, Ctrl+W closes the tab and also deletes the last word of the
-/// query, as it would in a terminal.
 #[test]
-#[should_panic(expected = "Ctrl+W ate the query")]
 fn closing_a_tab_from_the_find_bar_leaves_the_query_alone() {
     let (_, reader) = pressed_in(PLACES[1].1, "", "Ctrl+W");
 

@@ -46,6 +46,16 @@ impl Chord {
             Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,
         }
     }
+
+    /// Whether the chord is a command: a key pressed with Ctrl or Alt. A
+    /// command is the app's alone. A plain key, such as Enter or an arrow,
+    /// is shared with whatever the keyboard is in.
+    const fn is_command(self) -> bool {
+        matches!(
+            self,
+            Self::Ctrl | Self::CtrlNoShift | Self::CtrlShift | Self::CtrlAlt | Self::AltNoCtrl
+        )
+    }
 }
 
 /// What the keyboard is talking to this frame.
@@ -159,35 +169,43 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Unmodified + PageDown in Document => AppAction::Scroll(KeyboardScrollAction::PageDown),
 ];
 
-/// Whether `key` went down this frame while `chord` was held. The chord is
+/// Whether `event` is `key` going down while `chord` is held. The chord is
 /// read off the key press itself and not off the modifiers held when the
 /// frame ends: a quick tap lets go of Ctrl inside the frame the key went
 /// down in.
-fn pressed_with(input: &egui::InputState, chord: Chord, key: Key) -> bool {
-    input.events.iter().any(|event| {
-        matches!(
-            event,
-            egui::Event::Key { key: went_down, pressed: true, modifiers, .. }
-                if *went_down == key && chord.is_held(*modifiers)
-        )
-    })
+fn is_press(event: &egui::Event, chord: Chord, key: Key) -> bool {
+    matches!(
+        event,
+        egui::Event::Key { key: went_down, pressed: true, modifiers, .. }
+            if *went_down == key && chord.is_held(*modifiers)
+    )
 }
 
 /// The actions this frame's input asks for, in the order they run. Each kind
 /// of action is queued once per frame: when two bindings for the same kind
 /// fire together, the later row of [`BINDINGS`] replaces the earlier one.
-fn shortcut_actions(input: &egui::InputState, focus: Focus) -> Vec<AppAction> {
+///
+/// The key press of a command that fired is taken out of `input`, so no
+/// widget drawn later in the frame acts on it a second time: Ctrl+W closes
+/// the tab and does not also delete a word in the text field the keyboard
+/// is in.
+fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction> {
     let mut actions: Vec<AppAction> = Vec::new();
     for &(chord, key, scope, action) in BINDINGS {
-        if scope.covers(focus) && pressed_with(input, chord, key) {
-            let kind = mem::discriminant(&action);
-            match actions
-                .iter_mut()
-                .find(|queued| mem::discriminant(*queued) == kind)
-            {
-                Some(queued) => *queued = action,
-                None => actions.push(action),
-            }
+        let pressed = |event: &egui::Event| is_press(event, chord, key);
+        if !scope.covers(focus) || !input.events.iter().any(pressed) {
+            continue;
+        }
+        if chord.is_command() {
+            input.events.retain(|event| !pressed(event));
+        }
+        let kind = mem::discriminant(&action);
+        match actions
+            .iter_mut()
+            .find(|queued| mem::discriminant(*queued) == kind)
+        {
+            Some(queued) => *queued = action,
+            None => actions.push(action),
         }
     }
 
@@ -221,7 +239,7 @@ impl MarkdownApp {
         } else {
             Focus::Reading
         };
-        let actions = ctx.input(|input| shortcut_actions(input, focus));
+        let actions = ctx.input_mut(|input| shortcut_actions(input, focus));
         for action in actions {
             self.apply_action(ctx, action);
         }

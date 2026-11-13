@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use eframe::egui::Modifiers;
+use egui_kittest::kittest::Queryable as _;
 
 use super::*;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
@@ -31,7 +32,7 @@ fn actions_for(modifiers: Modifiers, keys: &[Key], focus: Focus) -> Vec<AppActio
             modifiers,
         })
         .collect();
-    shortcut_actions(&input, focus)
+    shortcut_actions(&mut input, focus)
 }
 
 #[test]
@@ -48,13 +49,64 @@ fn a_shortcut_counts_by_what_was_held_when_its_key_went_down() {
     // A quick tap: Ctrl is up again before the frame ends.
     input.modifiers = Modifiers::NONE;
     input.events = vec![press(Modifiers::CTRL)];
-    let tapped = shortcut_actions(&input, Focus::Reading);
+    let tapped = shortcut_actions(&mut input, Focus::Reading);
     assert!(matches!(tapped[..], [AppAction::NextTheme]));
 
     // Ctrl went down after the key did, inside the same frame.
     input.modifiers = Modifiers::CTRL;
     input.events = vec![press(Modifiers::NONE)];
-    assert!(shortcut_actions(&input, Focus::Reading).is_empty());
+    assert!(shortcut_actions(&mut input, Focus::Reading).is_empty());
+}
+
+#[test]
+fn a_command_that_fired_is_taken_from_the_input_and_a_plain_key_is_left() {
+    let press = |modifiers, key| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    let mut input = egui::InputState::default();
+    input.events = vec![
+        press(Modifiers::CTRL, Key::W),
+        press(Modifiers::NONE, Key::Enter),
+        press(Modifiers::CTRL, Key::K),
+        egui::Event::Text("w".to_owned()),
+    ];
+
+    let actions = shortcut_actions(&mut input, Focus::FindBar);
+
+    assert!(matches!(
+        actions[..],
+        [AppAction::CloseTab, AppAction::NextMatch]
+    ));
+    assert_eq!(
+        input.events,
+        [
+            press(Modifiers::NONE, Key::Enter),
+            press(Modifiers::CTRL, Key::K),
+            egui::Event::Text("w".to_owned()),
+        ],
+        "Enter is the field's too, and Ctrl+K is no shortcut of the app"
+    );
+}
+
+#[test]
+fn ctrl_w_in_the_find_bar_closes_the_tab_and_leaves_the_query() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.press(Modifiers::CTRL, Key::F);
+    harness
+        .ui
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .type_text("one two");
+    harness.settle();
+    assert_eq!(harness.app().search.query, "one two");
+
+    harness.press(Modifiers::CTRL, Key::W);
+
+    assert!(harness.app().tabs.is_empty());
+    assert_eq!(harness.app().search.query, "one two");
 }
 
 #[test]
