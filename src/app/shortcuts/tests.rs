@@ -193,3 +193,15 @@ fn the_drag_state_lasts_only_while_files_hover() {
     harness.idle();
     assert!(!harness.app.is_dragging);
 }
+
+#[test]
+fn ctrl_e_edits_the_document_and_shift_makes_it_the_explorer_toggle() {
+    let plain = actions_for(Modifiers::CTRL, &[Key::E], Focus::Reading);
+    assert!(matches!(plain[..], [AppAction::ToggleEditMode]));
+
+    let with_shift = actions_for(CTRL_SHIFT, &[Key::E], Focus::Reading);
+    assert!(matches!(with_shift[..], [AppAction::ToggleExplorer]));
+
+    let under_a_lightbox = actions_for(Modifiers::CTRL, &[Key::E], Focus::Lightbox);
+    assert!(under_a_lightbox.is_empty());
+}

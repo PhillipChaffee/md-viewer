@@ -179,3 +179,43 @@ fn a_new_column_width_lays_documents_out_again_and_the_same_width_does_not() {
     harness.apply(AppAction::ToggleFullWidth);
     assert!(revision(&harness) > stepped);
 }
+
+#[test]
+fn the_edit_action_switches_the_active_tab_between_source_and_preview() {
+    let mut harness = Harness::with_three_docs();
+    let b = harness.path("b.md");
+    harness.app.open_in_new_tab(b);
+    assert_eq!(harness.app.active_tab, 1);
+
+    harness.apply(AppAction::ToggleEditMode);
+    assert!(harness.app.tabs[1].is_editing);
+    assert!(!harness.app.tabs[0].is_editing, "only the tab in front");
+
+    harness.apply(AppAction::ToggleEditMode);
+    assert!(!harness.app.tabs[1].is_editing);
+}
+
+#[test]
+fn the_edit_action_does_nothing_without_a_document() {
+    let mut harness = Harness::with_docs(&[]);
+
+    harness.apply(AppAction::ToggleEditMode);
+
+    assert!(harness.app.tabs.is_empty());
+    assert!(harness.app.error_message.is_none());
+}
+
+#[test]
+fn a_text_size_action_sets_the_size_class_the_fonts_follow() {
+    let mut harness = Harness::with_three_docs();
+    harness.idle();
+    let body = |harness: &Harness| harness.ctx.style().text_styles[&egui::TextStyle::Body].size;
+    let normal = body(&harness);
+
+    harness.apply(AppAction::SetTextSize(TextSizeClass::Huge));
+    assert_eq!(harness.app.text_size_class, TextSizeClass::Huge);
+    harness.idle();
+    harness.idle();
+
+    assert!(body(&harness) > normal, "the next frame sets text larger");
+}

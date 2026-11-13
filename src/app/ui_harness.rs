@@ -288,25 +288,39 @@ impl UiHarness {
         self.click_at(self.to_points(rect.center()));
     }
 
-    /// Open the menu named `menu` and click the item whose label contains
+    /// Open the overflow menu behind the top bar's last button.
+    pub(crate) fn open_more(&mut self) {
+        self.click_exact("More");
+    }
+
+    /// Open the overflow menu and click the row whose label contains
     /// `item`.
-    pub(crate) fn pick(&mut self, menu: &str, item: &str) {
-        self.click_exact(menu);
+    pub(crate) fn pick(&mut self, item: &str) {
+        self.open_more();
         self.click(item);
+    }
+
+    /// Whether the one toggle labelled exactly `label` is on.
+    pub(crate) fn is_on(&self, label: &str) -> bool {
+        let node = self.ui.get_by_label(label);
+        node.accesskit_node().toggled() == Some(accesskit::Toggled::True)
+    }
+
+    /// Move the pointer to `pos` and let what it points at react.
+    pub(crate) fn hover_at(&mut self, pos: egui::Pos2) {
+        self.ui.hover_at(pos);
+        self.settle();
+    }
+
+    /// Press and release `key` with `modifiers` held, then settle.
+    pub(crate) fn press(&mut self, modifiers: egui::Modifiers, key: egui::Key) {
+        self.ui.key_press_modifiers(modifiers, key);
+        self.settle();
     }
 
     /// Whether a widget whose label contains `label` is on screen.
     pub(crate) fn shows(&self, label: &str) -> bool {
         self.ui.query_all_by_label_contains(label).next().is_some()
-    }
-
-    /// Whether the one widget whose label contains `label` can be clicked.
-    pub(crate) fn is_enabled(&self, label: &str) -> bool {
-        !self
-            .ui
-            .get_by_label_contains(label)
-            .accesskit_node()
-            .is_disabled()
     }
 
     /// Every widget labelled exactly `label`, in tree order: its center in

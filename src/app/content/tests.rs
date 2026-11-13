@@ -7,10 +7,29 @@ use super::*;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{frame_on, painted_text};
 use crate::layout::{centered_column_left, LineSpacing, ReadingWidth, READING_COLUMN_MARGIN};
-use crate::test_support::{assert_close, painted_shapes, painted_text_starting};
+use crate::test_support::{assert_close, painted_shapes};
 use crate::theme::ThemeId;
 
 pub(crate) mod label_harness;
+
+/// The first text the document pane painted that starts with `prefix`,
+/// with where it was painted. The top bar above the pane repeats the
+/// document's title, and is passed over.
+#[track_caller]
+fn painted_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
+    let in_the_pane = painted_shapes(output)
+        .into_iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(text)
+                if text.pos.y >= crate::app::chrome::BAR_HEIGHT
+                    && text.galley.text().starts_with(prefix) =>
+            {
+                Some(text)
+            }
+            _ => None,
+        });
+    in_the_pane.expect("the document pane painted no text starting with the prefix")
+}
 
 /// One document that links to `b.md` and to a file that does not exist.
 fn linked_docs() -> LabelHarness {
@@ -96,7 +115,8 @@ fn a_link_to_a_missing_document_is_reported_and_changes_nothing() {
 #[test]
 fn edit_mode_shows_the_source_and_takes_typing() {
     let mut harness = LabelHarness::with_docs(&[("a.md", "# Title")]);
-    harness.click("Edit");
+    harness.click("More");
+    harness.click("Edit Document");
 
     let editor = harness.get_by_role(Role::MultilineTextInput);
     assert_eq!(editor.value().as_deref(), Some("# Title"));
@@ -118,7 +138,8 @@ fn switching_to_edit_mode_keeps_the_place_in_a_long_document() {
     let place = tab.scroll_offset / tab.last_content_height;
     assert!(place > 0.05, "the preview did not scroll: {place}");
 
-    harness.click("Edit");
+    harness.click("More");
+    harness.click("Edit Document");
     harness.frames(2);
 
     let tab = &harness.state().tabs[0];

@@ -299,7 +299,6 @@ impl MarkdownApp {
             watcher_retry_count: 0,
             watched_paths: HashSet::new(),
             watched_explorer_dirs: HashSet::new(),
-            hovered_tab: None,
             file_explorer,
             show_explorer: persisted.show_explorer.unwrap_or(true),
             explorer_width: restored_sidebar_width(

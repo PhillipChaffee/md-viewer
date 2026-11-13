@@ -1,5 +1,5 @@
-//! The menu bar: picking an item changes what its shortcut changes, and the
-//! bar reports the state the app is in.
+//! The overflow menu: picking a row changes what its shortcut changes, and
+//! the rows report the state the app is in.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ use crate::layout::{LineSpacing, ReadingWidth};
 use crate::test_support::assert_close;
 use crate::theme::ThemeId;
 
-/// The four on/off settings of the View menu, in menu order.
+/// The four on/off settings of the menu's view group, in menu order.
 fn view_toggles(app: &MarkdownApp) -> [bool; 4] {
     [
         app.show_explorer,
@@ -35,54 +35,66 @@ fn each_view_toggle_flips_its_own_setting_and_no_other() {
         let mut expected = view_toggles(harness.app());
         expected[index] = !expected[index];
 
-        harness.pick("View", item);
+        harness.pick(item);
 
         assert_eq!(view_toggles(harness.app()), expected, "picked {item}");
     }
 }
 
 #[test]
-fn the_view_menu_ticks_exactly_the_settings_that_are_on() {
+fn the_menu_ticks_exactly_the_settings_that_are_on() {
     let mut harness = UiHarness::with_three_docs();
     harness.app_mut().show_explorer = true;
     harness.app_mut().show_outline = false;
 
-    harness.click_exact("View");
+    harness.open_more();
 
-    assert!(harness.shows("✓ Show Explorer"));
-    assert!(harness.shows("Show Outline"));
-    assert!(!harness.shows("✓ Show Outline"));
+    assert!(harness.is_on("Show Explorer"));
+    assert!(!harness.is_on("Show Outline"));
+}
+
+#[test]
+fn picking_a_row_closes_the_menu() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.open_more();
+    assert!(harness.shows("Quit"));
+
+    harness.click("Show Outline");
+
+    assert!(!harness.shows("Quit"));
 }
 
 #[test]
 fn the_dialog_items_open_their_dialogs() {
     let mut harness = UiHarness::with_three_docs();
 
-    harness.pick("View", "Colors");
+    harness.pick("Colors");
     assert!(harness.app().show_color_settings_dialog);
     assert!(!harness.app().show_font_dialog);
 
-    harness.pick("View", "Fonts");
+    harness.pick("Fonts");
     assert!(harness.app().show_font_dialog);
 }
 
 #[test]
-fn the_zoom_items_step_and_reset_the_zoom_the_status_readout_shows() {
+fn the_zoom_row_steps_and_resets_the_zoom_it_reads_out_and_stays_open() {
     let mut harness = UiHarness::with_three_docs();
-    assert!(!harness.shows("%"), "100% is not worth a readout");
+    harness.open_more();
+    assert!(harness.shows("Reset Zoom, 100%"));
 
-    harness.pick("View", "Zoom In");
+    harness.click("Zoom In");
     assert_close(harness.app().zoom_level, 1.25);
-    assert!(harness.shows("125%"));
+    assert!(harness.shows("Reset Zoom, 125%"));
 
-    harness.pick("View", "Zoom Out");
-    harness.pick("View", "Zoom Out");
+    harness.click("Zoom Out");
+    harness.click("Zoom Out");
     assert_close(harness.app().zoom_level, 0.8);
-    assert!(harness.shows("80%"));
+    assert!(harness.shows("Reset Zoom, 80%"));
 
-    harness.pick("View", "Reset Zoom");
+    harness.click("Reset Zoom");
     assert_close(harness.app().zoom_level, 1.0);
-    assert!(!harness.shows("%"));
+    assert!(harness.shows("Reset Zoom, 100%"));
+    assert!(harness.shows("Quit"), "the row is pressed again and again");
 }
 
 #[test]
@@ -90,76 +102,93 @@ fn the_formula_size_submenu_sets_the_scale_and_ticks_it() {
     let mut harness = UiHarness::with_three_docs();
     assert_close(harness.app().math_scale, 1.0);
 
-    harness.click_exact("View");
-    harness.click("Formula Size");
-    assert!(harness.shows("✓ 100%"));
-    harness.click("150%");
+    harness.pick("Formula Size");
+    assert!(harness.is_on("100%"));
+    harness.click_exact("150%");
     assert_close(harness.app().math_scale, 1.5);
 
-    harness.click_exact("View");
-    harness.click("Formula Size");
-    assert!(harness.shows("✓ 150%"));
-    assert!(!harness.shows("✓ 100%"));
+    harness.pick("Formula Size");
+    assert!(harness.is_on("150%"));
+    assert!(!harness.is_on("100%"));
 }
 
 #[test]
-fn history_items_and_arrows_follow_the_active_tab_history() {
+fn the_history_rows_follow_the_active_tab_history() {
     let mut harness = UiHarness::with_three_docs();
     let (a, b) = (harness.path("a.md"), harness.path("b.md"));
-    let active = |harness: &UiHarness| {
-        let app = harness.app();
-        app.tabs[app.active_tab].path.clone()
-    };
-    assert!(!harness.is_enabled("◀"));
-    assert!(!harness.is_enabled("▶"));
+    harness.open_more();
+    assert_eq!(harness.enabled("Back"), [false]);
+    assert_eq!(harness.enabled("Forward"), [false]);
+    harness.open_more();
 
     harness.app_mut().navigate_active_tab_to(&b);
     harness.settle();
-    assert!(harness.is_enabled("◀"));
-    assert!(!harness.is_enabled("▶"));
 
-    harness.click("◀");
-    assert_eq!(active(&harness), a);
-    harness.click("▶");
-    assert_eq!(active(&harness), b);
+    harness.open_more();
+    assert_eq!(harness.enabled("Forward"), [false]);
+    harness.click_exact("Back");
+    assert_eq!(harness.active_path(), a);
 
-    harness.pick("Navigate", "Back");
-    assert_eq!(active(&harness), a);
-    harness.click_exact("Navigate");
-    assert!(!harness.is_enabled("Back"), "nothing lies behind a.md");
-    harness.click("Forward");
-    assert_eq!(active(&harness), b);
+    harness.open_more();
+    assert_eq!(harness.enabled("Back"), [false], "nothing lies behind a.md");
+    harness.click_exact("Forward");
+    assert_eq!(harness.active_path(), b);
 }
 
 #[test]
-fn file_menu_items_close_the_tab_open_the_find_bar_and_quit() {
+fn the_file_rows_close_the_tab_open_the_find_bar_and_quit() {
     let mut harness = UiHarness::with_three_docs();
 
-    harness.pick("File", "Find");
+    harness.pick("Find…");
     assert!(harness.app().search.is_open);
 
     assert!(!harness.close_requested());
-    harness.pick("File", "Quit");
+    harness.pick("Quit");
     assert!(harness.close_requested());
 
-    harness.pick("File", "Close Tab");
+    harness.pick("Close Tab");
     assert!(harness.app().tabs.is_empty());
 }
 
 #[test]
-fn watch_files_turns_live_reload_on_and_the_bar_says_so() {
+fn rows_that_need_a_document_are_dim_without_one() {
+    let mut harness = UiHarness::with_docs(&[]);
+
+    harness.open_more();
+
+    assert_eq!(harness.enabled("Close Tab"), [false]);
+    assert_eq!(harness.enabled("Edit Document"), [false]);
+    assert_eq!(harness.enabled("Open Folder…").last(), Some(&true));
+}
+
+#[test]
+fn edit_document_switches_to_the_source_and_back_and_is_ticked_meanwhile() {
     let mut harness = UiHarness::with_three_docs();
-    assert!(!harness.shows("LIVE"));
 
-    harness.pick("File", "Watch Files");
+    harness.pick("Edit Document");
+    assert!(harness.app().tabs[0].is_editing);
+    harness.open_more();
+    assert!(harness.is_on("Edit Document"));
+
+    harness.click("Edit Document");
+    assert!(!harness.app().tabs[0].is_editing);
+    harness.open_more();
+    assert!(!harness.is_on("Edit Document"));
+}
+
+#[test]
+fn live_reload_turns_file_watching_on_and_off_and_is_ticked_while_on() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.open_more();
+    assert!(!harness.is_on("Live Reload"));
+
+    harness.click("Live Reload");
     assert!(harness.app().watcher.is_some());
-    assert!(harness.shows("LIVE"));
-    harness.click_exact("File");
-    assert!(harness.shows("✓ Watch Files"));
+    harness.open_more();
+    assert!(harness.is_on("Live Reload"));
 
-    harness.click("Watch Files");
+    harness.click("Live Reload");
     assert!(harness.app().watcher.is_none());
-    assert!(!harness.shows("LIVE"));
 }
 
 #[test]
@@ -173,7 +202,7 @@ fn open_file_opens_what_the_picker_returns_in_a_new_tab() {
         Ok(Some(picked.clone()))
     });
 
-    harness.pick("File", "Open File");
+    harness.pick("Open File");
 
     let app = harness.app();
     assert_eq!(app.tabs.len(), 2);
@@ -194,59 +223,43 @@ fn open_folder_points_the_explorer_at_the_picked_folder() {
     let picked = folder.clone();
     harness.app_mut().folder_picker = Box::new(move |_| Ok(Some(picked.clone())));
 
-    harness.pick("File", "Open Folder");
+    harness.pick("Open Folder");
 
     assert_eq!(harness.app().file_explorer.root, Some(folder));
     assert!(harness.app().show_explorer, "the new root is put on screen");
 }
 
 #[test]
-fn the_status_readout_names_the_active_file_while_it_exists() {
-    let mut harness = UiHarness::with_three_docs();
-    let a = harness.path("a.md");
-    let shown_path = a.display().to_string();
-    assert!(harness.shows(&shown_path));
-
-    std::fs::remove_file(&a).unwrap();
-    harness.settle();
-    assert!(!harness.shows(&shown_path));
-}
-
-#[test]
-fn the_theme_menu_picks_a_theme_by_name_and_ticks_the_one_in_use() {
+fn the_theme_submenu_picks_a_theme_by_name_and_ticks_the_one_in_use() {
     let mut harness = UiHarness::with_three_docs();
     assert_eq!(harness.app().theme, ThemeId::Sepia);
 
-    harness.click_exact("View");
-    harness.click("Theme");
-    assert!(harness.shows("✓ Sepia"));
-    harness.click("Night");
+    harness.pick("Theme");
+    assert!(harness.is_on("Sepia"));
+    harness.click_exact("Night");
     assert_eq!(harness.app().theme, ThemeId::Night);
 
-    harness.click_exact("View");
-    harness.click("Theme");
-    assert!(harness.shows("✓ Night"));
-    assert!(!harness.shows("✓ Sepia"));
+    harness.pick("Theme");
+    assert!(harness.is_on("Night"));
+    assert!(!harness.is_on("Sepia"));
     harness.click("Next Theme");
     assert_eq!(harness.app().theme, ThemeId::Paper);
 }
 
 #[test]
-fn the_line_spacing_menu_picks_a_spacing_and_ticks_the_one_in_use() {
+fn the_line_spacing_submenu_picks_a_spacing_and_ticks_the_one_in_use() {
     let mut harness = UiHarness::with_three_docs();
     assert_eq!(harness.app().line_spacing, LineSpacing::Comfortable);
 
-    harness.click_exact("View");
-    harness.click("Line Spacing");
-    assert!(harness.shows("✓ Comfortable"));
-    harness.click("Airy");
+    harness.pick("Line Spacing");
+    assert!(harness.is_on("Comfortable"));
+    harness.click_exact("Airy");
     assert_eq!(harness.app().line_spacing, LineSpacing::Airy);
 
-    harness.click_exact("View");
-    harness.click("Line Spacing");
-    assert!(harness.shows("✓ Airy"));
-    assert!(!harness.shows("✓ Comfortable"));
-    harness.click("Compact");
+    harness.pick("Line Spacing");
+    assert!(harness.is_on("Airy"));
+    assert!(!harness.is_on("Comfortable"));
+    harness.click_exact("Compact");
     assert_eq!(harness.app().line_spacing, LineSpacing::Compact);
 }
 
@@ -255,13 +268,13 @@ fn full_width_is_ticked_only_while_the_column_fills_the_window() {
     let mut harness = UiHarness::with_three_docs();
     harness.app_mut().reading_width = ReadingWidth::new(900.0);
 
-    harness.click_exact("View");
-    assert!(!harness.shows("✓ Full Width"));
+    harness.open_more();
+    assert!(!harness.is_on("Full Width"));
     harness.click("Full Width");
     assert!(harness.app().reading_width.fits_window());
 
-    harness.click_exact("View");
-    assert!(harness.shows("✓ Full Width"));
+    harness.open_more();
+    assert!(harness.is_on("Full Width"));
     harness.click("Full Width");
     assert_eq!(harness.app().reading_width, ReadingWidth::DEFAULT);
 }

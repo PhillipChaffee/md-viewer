@@ -494,3 +494,14 @@ fn the_reader_registers_its_serif_for_the_document_and_leaves_the_chrome_its_san
         }
     }
 }
+
+#[test]
+fn text_sizes_step_one_class_at_a_time_and_stop_at_the_ends() {
+    let all = TextSizeClass::ALL;
+    for pair in all.windows(2) {
+        assert_eq!(pair[0].larger(), Some(pair[1]));
+        assert_eq!(pair[1].smaller(), Some(pair[0]));
+    }
+    assert_eq!(all[0].smaller(), None);
+    assert_eq!(all[all.len() - 1].larger(), None);
+}

@@ -114,6 +114,7 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     CtrlShift + E in Document => AppAction::ToggleExplorer,
     Ctrl + Q in Document => AppAction::Quit,
     CtrlNoShift + S in Document => AppAction::Save,
+    CtrlNoShift + E in Document => AppAction::ToggleEditMode,
 
     Ctrl + W in Document => AppAction::CloseTab,
     CtrlNoShift + Tab in Document => AppAction::NextTab,

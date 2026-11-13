@@ -23,12 +23,14 @@ use crate::theme::ThemeId;
 use crate::watcher::FileWatcher;
 
 mod action;
+mod appearance;
+mod chrome;
 mod content;
 mod explorer_panel;
 mod frame;
 mod lightbox;
-mod menu_bar;
 mod outline;
+mod overflow_menu;
 mod search_bar;
 mod settings;
 mod shortcuts;
@@ -37,6 +39,7 @@ mod tab_bar;
 mod tabs;
 #[cfg(test)]
 mod tests;
+mod top_bar;
 #[cfg(test)]
 mod ui_harness;
 mod watching;
@@ -131,8 +134,6 @@ pub(crate) struct MarkdownApp {
     // doesn't recursively walk the whole root subtree (issue: ~6s hang on a
     // huge home directory).
     watched_explorer_dirs: HashSet<PathBuf>,
-    // Tab being hovered for close button
-    hovered_tab: Option<usize>,
     // File explorer state
     file_explorer: FileExplorer,
     show_explorer: bool,

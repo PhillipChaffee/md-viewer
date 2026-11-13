@@ -8,6 +8,7 @@ use crate::app::MarkdownApp;
 use crate::layout::{
     keyboard_scroll_target, zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth,
 };
+use crate::system_fonts::TextSizeClass;
 use crate::theme::ThemeId;
 
 #[cfg(test)]
@@ -39,6 +40,8 @@ pub(crate) enum AppAction {
     CloseSearch,
     /// Write the active tab's unsaved edits to disk.
     Save,
+    /// Switch the active tab between the rendered document and its source.
+    ToggleEditMode,
     ToggleWatch,
     /// Switch to the next reading theme, wrapping around.
     NextTheme,
@@ -54,6 +57,8 @@ pub(crate) enum AppAction {
     /// Widen the text column by this many px, or narrow it if negative.
     StepReadingWidth(f32),
     SetLineSpacing(LineSpacing),
+    /// Set the document, and the chrome that follows it, in this size class.
+    SetTextSize(TextSizeClass),
     ToggleSmoothText,
     OpenColorSettings,
     OpenFontSettings,
@@ -87,6 +92,11 @@ impl MarkdownApp {
             AppAction::PreviousMatch => self.jump_match(-1),
             AppAction::CloseSearch => self.close_search(),
             AppAction::Save => self.save_active_tab(),
+            AppAction::ToggleEditMode => {
+                if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+                    tab.set_edit_mode(!tab.is_editing);
+                }
+            }
             AppAction::ToggleWatch => self.toggle_watching(),
             AppAction::NextTheme => self.theme = self.theme.next(),
             AppAction::SetTheme(theme) => self.theme = theme,
@@ -99,6 +109,7 @@ impl MarkdownApp {
                 self.set_reading_width(self.reading_width.stepped(delta, shown_in));
             }
             AppAction::SetLineSpacing(spacing) => self.set_line_spacing(spacing),
+            AppAction::SetTextSize(size) => self.text_size_class = size,
             AppAction::ToggleSmoothText => {
                 self.smooth_text_rendering = !self.smooth_text_rendering;
             }
