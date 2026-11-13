@@ -12,7 +12,6 @@ use crate::app::mcp;
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
-use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
 use crate::theme::Palette;
 
@@ -64,7 +63,7 @@ impl MarkdownApp {
         self.explorer_width = panel.response.rect.width();
         sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Left, palette);
         // Left panel: the draggable edge is its right border.
-        paint_sidebar_resize_affordance(
+        sidebar::paint_resize_affordance(
             ctx,
             panel.response.rect.right(),
             panel.response.rect.y_range(),

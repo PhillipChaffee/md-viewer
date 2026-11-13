@@ -6,7 +6,6 @@ use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
-use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::tab::Tab;
 use crate::theme::Palette;
@@ -143,7 +142,7 @@ impl MarkdownApp {
         self.outline_width = panel.response.rect.width();
         sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Right, palette);
         // Right panel: the draggable edge is its left border.
-        paint_sidebar_resize_affordance(
+        sidebar::paint_resize_affordance(
             ctx,
             panel.response.rect.left(),
             panel.response.rect.y_range(),
