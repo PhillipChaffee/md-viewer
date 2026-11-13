@@ -1,3 +1,5 @@
+//! A fast markdown viewer with tabs, a file explorer, and live reload.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::collections::{HashMap, HashSet};
