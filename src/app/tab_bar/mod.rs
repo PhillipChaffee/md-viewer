@@ -172,8 +172,7 @@ impl MarkdownApp {
     /// should close; "Close Others" is completed here, so it returns `None`.
     fn apply_tab_strip_actions(&mut self, actions: &TabStripActions) -> Option<usize> {
         if let Some(index) = actions.activate {
-            self.active_tab = index;
-            self.title_dirty = true;
+            self.focus_tab(index);
         }
         if let Some(keep) = actions.close_others {
             self.close_other_tabs(keep);

@@ -97,8 +97,7 @@ impl MarkdownApp {
         let path = path.canonicalize().unwrap_or(path);
         // Check if already open
         if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-            self.active_tab = idx;
-            self.title_dirty = true;
+            self.activate_tab(idx);
             if let (Some(fragment), Some(tab)) = (fragment, self.tabs.get_mut(idx)) {
                 tab.go_to_fragment(fragment);
             }
@@ -213,23 +212,27 @@ impl MarkdownApp {
 
     pub(crate) const fn next_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = next_index(self.active_tab, self.tabs.len());
-            self.title_dirty = true;
+            self.activate_tab(next_index(self.active_tab, self.tabs.len()));
         }
     }
 
     pub(crate) const fn prev_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = previous_index(self.active_tab, self.tabs.len());
-            self.title_dirty = true;
+            self.activate_tab(previous_index(self.active_tab, self.tabs.len()));
         }
     }
 
     pub(crate) const fn focus_tab(&mut self, idx: usize) {
         if idx < self.tabs.len() {
-            self.active_tab = idx;
-            self.title_dirty = true;
+            self.activate_tab(idx);
         }
+    }
+
+    /// Bring the tab at `index` to the front. The window is named after
+    /// the document in front, so the title follows.
+    const fn activate_tab(&mut self, index: usize) {
+        self.active_tab = index;
+        self.title_dirty = true;
     }
 
     pub(crate) fn get_open_tab_paths(&self) -> Vec<PathBuf> {
