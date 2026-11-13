@@ -2,15 +2,20 @@
 
 This project supports E2E testing via egui-mcp-bridge. Follow these rules when adding UI widgets to ensure testability.
 
+Every call to the bridge goes through `src/app/mcp/mod.rs`. That file is the only one that names the `mcp` feature. With the feature its functions pass their arguments to the bridge, and without it they do nothing.
+
 ## Quick Reference
 
 ```rust
+use crate::app::mcp;
+
 // Register widgets after creating them
 let btn = ui.small_button("⊞").on_hover_text("Expand all");
-#[cfg(feature = "mcp")]
-self.mcp_bridge.register_widget("Explorer: Expand All", "button", &btn, None);
+mcp::widget(&self.mcp, format_args!("Explorer: Expand All"), "button", &btn, None);
 if btn.clicked() { ... }
 ```
+
+The name is a `format_args!`, so a name built from data (`format_args!("File: {}", row.name)`) allocates nothing in the default build.
 
 ## When to Register Widgets
 
@@ -20,10 +25,12 @@ These widgets MUST be registered for MCP testing:
 
 | Widget Type | Registration | Example |
 | ------------- | -------------- | --------- |
-| Buttons | `register_widget(name, "button", &response, None)` | `register_widget("Save", "button", &btn, None)` |
-| Small buttons | `register_widget(name, "button", &response, None)` | `register_widget("Close Tab", "button", &btn, None)` |
-| Selectable labels | `register_widget(name, "tab", &response, value)` | `register_widget("Tab: README", "tab", &resp, Some("active"))` |
-| Checkboxes | `register_widget(name, "checkbox", &response, value)` | `register_widget("Dark Mode", "checkbox", &resp, Some("checked"))` |
+| Buttons | `mcp::widget(mcp, name, "button", &response, None)` | `mcp::widget(&self.mcp, format_args!("Save"), "button", &btn, None)` |
+| Small buttons | `mcp::widget(mcp, name, "button", &response, None)` | `mcp::widget(&self.mcp, format_args!("Close Tab"), "button", &btn, None)` |
+| Selectable labels | `mcp::widget(mcp, name, "tab", &response, value)` | `mcp::widget(&self.mcp, format_args!("Tab: README"), "tab", &resp, Some("active"))` |
+| Checkboxes | `mcp::widget(mcp, name, "checkbox", &response, value)` | `mcp::widget(&self.mcp, format_args!("Dark Mode"), "checkbox", &resp, Some("checked"))` |
+
+A widget that is only a rectangle on screen, with no `Response` to hand over, is registered with `mcp::rect(mcp, name, kind, rect, value)`.
 
 ### Register When Stateful (Informational)
 
@@ -31,12 +38,12 @@ Register labels/text that display testable state:
 
 ```rust
 // Directory with expand/collapse state
-#[cfg(feature = "mcp")]
-self.mcp_bridge.register_widget(
-    &format!("Toggle: {}", name),
+mcp::widget(
+    &self.mcp,
+    format_args!("Toggle: {name}"),
     "button",
     &toggle_response,
-    Some(if expanded { "expanded" } else { "collapsed" })
+    Some(if expanded { "expanded" } else { "collapsed" }),
 );
 ```
 
@@ -58,8 +65,7 @@ ui.small_button("×").clicked()
 
 // CORRECT - testable
 let btn = ui.small_button("×");
-#[cfg(feature = "mcp")]
-self.mcp_bridge.register_widget("Close Tab", "button", &btn, None);
+mcp::widget(&self.mcp, format_args!("Close Tab"), "button", &btn, None);
 if btn.clicked() { ... }
 ```
 
@@ -78,16 +84,17 @@ Use descriptive, unique names that identify the widget's purpose:
 
 ## Feature Flag Handling
 
-Use `#[cfg(feature = "mcp")]` to conditionally compile MCP registration:
+Never write `#[cfg(feature = "mcp")]` at a call site. The seam in `src/app/mcp/mod.rs` owns the feature, so a registration is one unconditional call:
 
 ```rust
 let btn = ui.button("Save");
-#[cfg(feature = "mcp")]
-self.mcp_bridge.register_widget("Save", "button", &btn, None);
+mcp::widget(&self.mcp, format_args!("Save"), "button", &btn, None);
 if btn.clicked() {
     save_file();
 }
 ```
+
+A function that has no `self` takes the bridge as a `&Mcp` argument (`&self.mcp` at its caller) and registers the same way.
 
 ## Testing Your Widgets
 
@@ -100,7 +107,7 @@ After adding widgets, verify they're testable:
 
 ## Checklist for New UI Code
 
-- [ ] Interactive widgets have `register_widget()` calls with `#[cfg(feature = "mcp")]`
+- [ ] Interactive widgets have `mcp::widget()` or `mcp::rect()` calls, with no `#[cfg]` at the call site
 - [ ] Icon-only buttons have descriptive names
 - [ ] Stateful widgets include value parameter (e.g., "expanded", "active")
 - [ ] Names are unique and descriptive
