@@ -71,7 +71,7 @@ src/watcher/mod.rs	watcher_retries_are_bounded	(current < MAX_WATCHER_RETRIES).t
 src/system_fonts/mod.rs	text_size_steps_are_ordered_and_reversible	Self::Large => Some(Self::ExtraLarge),	Self::Large => Some(Self::Huge),
 src/system_fonts/mod.rs	all_lists_the_sizes_in_step_order	Self::Huge => Some(Self::ExtraLarge),	Self::Huge => Some(Self::Large),
 src/headers/mod.rs	has_children_reads_only_the_next_heading	.is_some_and(|next| next.level > current.level)	.is_some_and(|next| next.level >= current.level)
-src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	    if index == 0 || index >= headers.len() {	    if index == 0 {
-src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	            search_level = h.level;	            search_level = search_level.min(h.level + 1);
-src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	        if h.level < search_level {	        if h.level <= search_level {
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	if hidden_below.is_some_and(|fold| level > fold) {	if hidden_below.is_some_and(|fold| level >= fold) {
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	hidden_below = is_collapsed(index).then_some(level);	hidden_below = hidden_below.or(is_collapsed(index).then_some(level));
+src/headers/mod.rs	a_heading_is_hidden_exactly_under_a_collapsed_ancestor	                return None;\n            }\n            hidden_below	                hidden_below = None;\n                return None;\n            }\n            hidden_below
 src/headers/mod.rs	heading_levels_are_one_to_six	HeadingLevel::H6 => 6,	HeadingLevel::H6 => 5,

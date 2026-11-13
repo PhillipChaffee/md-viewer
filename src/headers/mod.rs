@@ -123,43 +123,37 @@ pub(crate) fn parse_headers(content: &str) -> ParsedHeaders {
     }
 }
 
-/// Check if header at `index` should be hidden because an ancestor is collapsed.
-pub(crate) fn header_is_hidden(
-    headers: &[Header],
-    index: usize,
-    collapsed: &HashSet<usize>,
-) -> bool {
-    has_collapsed_ancestor(headers, index, |ancestor| collapsed.contains(&ancestor))
+/// The headers that no collapsed ancestor hides, in document order.
+pub(crate) fn visible_headers(headers: &[Header], collapsed: &HashSet<usize>) -> Vec<usize> {
+    visible_rows(headers.iter().map(|header| header.level), |index| {
+        collapsed.contains(&index)
+    })
+    .collect()
 }
 
-/// Whether some ancestor of the header at `index` is one `is_collapsed`
-/// names. A header's parent is the nearest header before it with a lower
-/// level, and its ancestors are its parent and that parent's ancestors.
-fn has_collapsed_ancestor(
-    headers: &[Header],
-    index: usize,
+/// The headings no collapsed ancestor hides, in document order, found in
+/// one pass over the `levels` of the headings. A collapsed heading hides
+/// every heading after it that is deeper than it, up to the next heading
+/// that is not; `is_collapsed` is asked about visible headings only.
+///
+/// The rows come one at a time and not as a list, so that the proof of
+/// this pass runs it without a heap.
+fn visible_rows(
+    levels: impl IntoIterator<Item = u8>,
     is_collapsed: impl Fn(usize) -> bool,
-) -> bool {
-    if index == 0 || index >= headers.len() {
-        return false;
-    }
-    let mut search_level = headers[index].level;
-    // Walk backwards to find ancestors
-    for i in (0..index).rev() {
-        let h = &headers[i];
-        // Only consider headers with lower level than what we're searching for
-        if h.level < search_level {
-            // Found an ancestor
-            if is_collapsed(i) {
-                return true;
+) -> impl Iterator<Item = usize> {
+    // The level of the collapsed heading whose subtree is being skipped.
+    let mut hidden_below: Option<u8> = None;
+    levels
+        .into_iter()
+        .enumerate()
+        .filter_map(move |(index, level)| {
+            if hidden_below.is_some_and(|fold| level > fold) {
+                return None;
             }
-            // This ancestor is not collapsed, but check its ancestors too
-            // Update search_level to only look for even lower level headers
-            search_level = h.level;
-        }
-        // Headers at same or higher level are siblings/cousins, skip them
-    }
-    false
+            hidden_below = is_collapsed(index).then_some(level);
+            Some(index)
+        })
 }
 
 /// Check if a header has any children (headers with higher level immediately following).

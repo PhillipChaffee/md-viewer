@@ -6,7 +6,7 @@ use egui_commonmark_extended::header_position_key;
 use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
-use crate::headers::{any_header_has_children, header_has_children, header_is_hidden, Header};
+use crate::headers::{any_header_has_children, header_has_children, visible_headers, Header};
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
 use crate::tab::Tab;
@@ -266,9 +266,7 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     // O(total-headers) per frame. On a 100k-line doc with ~15k
     // headers this is the difference between visibly laggy and
     // smooth outline interactions.
-    let visible_indices: Vec<usize> = (0..tab.outline_headers.len())
-        .filter(|&i| !header_is_hidden(&tab.outline_headers, i, &tab.collapsed_headers))
-        .collect();
+    let visible_indices = visible_headers(&tab.outline_headers, &tab.collapsed_headers);
     let show_fold_column = any_header_has_children(&tab.outline_headers);
     // The row that stands for the heading the reader is in: the heading
     // itself, or the folded heading that hides it.

@@ -129,11 +129,24 @@ the two halves of a step. That wiring is tested only.
 
 | Harness | Property | Inputs | Status |
 | --- | --- | --- | --- |
-| `headers::a_heading_is_hidden_exactly_under_a_collapsed_ancestor` | A heading is hidden if and only if its parent is collapsed or hidden; no index reads out of bounds. | Up to 5 headings, any levels, any collapsed set, any index | Bounded |
+| `headers::a_heading_is_hidden_exactly_under_a_collapsed_ancestor` | The one-pass fold lists a heading if and only if the walk back through its ancestors does not hide it, once each and in document order. By that walk a heading is hidden if and only if its parent is collapsed or hidden. No index reads out of bounds. | Up to 5 headings, any levels, any collapsed set, any index | Bounded |
 | `headers::has_children_reads_only_the_next_heading` | "Has children" agrees with the next heading's level and never reads out of bounds. | Same | Bounded |
 | `headers::heading_levels_are_one_to_six` | H1 to H6 map to 1 to 6. | All 6 | Proven |
 | `spy::heading_in_view_names_a_heading_or_none` | The binary search ends, never overflows, and returns a valid index or none, sorted input or not. | Up to 6 headings, any `f32` positions, finite view | Bounded |
 | `spy::heading_in_view_is_the_last_one_reached` | With headings in order, the result is the last one at or above the reading line. | Same, positions ascending | Bounded |
+
+The first harness holds shipped code to a specification that is not
+shipped. The app folds the outline with `headers::visible_rows`, one pass
+over the headings. `headers/proofs.rs` keeps `has_collapsed_ancestor`,
+the walk back through one heading's ancestors that the app ran before,
+and the harness proves two things: the pass lists a heading exactly when
+the walk does not hide it, and the walk obeys the parent rule. The second
+is a statement about the specification, not about the app. Both hold for
+outlines of up to 5 headings only. `headers/tests.rs` checks the pass
+against the parent rule, written a third way, on every outline of up to
+6 headings over four levels. `visible_headers`, which looks the folds up
+in a `HashSet` for the pass, is tested only.
+
 | `spy::the_end_of_the_document_is_the_last_heading` | At the end of the document the last heading is current. | Same | Bounded |
 | `room::the_outline_rule_survives_a_restart` | What a session saves about the outline restores to the same rule. | Every rule × shown | Proven |
 | `room::follow_reports_each_change_of_room_once` | The window never overrides a reader's choice; a change of room is reported once. | Every rule × room | Proven |
@@ -224,7 +237,7 @@ behavior.
 Two checks say no.
 
 - **Cover checks.** Every harness with symbolic inputs has `kani::cover!`
-  statements for its interesting cases (157 in all), and `run-proofs.sh`
+  statements for its interesting cases (162 in all), and `run-proofs.sh`
   fails if one is unreachable.
 - **Mutants.** `scripts/proof-mutants.tsv` lists 76 one-line faults in the
   shipped code, at least one for each harness but the one that pins

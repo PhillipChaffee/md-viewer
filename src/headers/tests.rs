@@ -104,9 +104,58 @@ fn outline() -> Vec<Header> {
 fn hidden(collapsed: &[usize]) -> Vec<bool> {
     let headers = outline();
     let collapsed: HashSet<usize> = collapsed.iter().copied().collect();
+    let visible = visible_headers(&headers, &collapsed);
     (0..headers.len())
-        .map(|index| header_is_hidden(&headers, index, &collapsed))
+        .map(|index| !visible.contains(&index))
         .collect()
+}
+
+/// Whether a collapsed ancestor hides the heading at `index`, by the rule
+/// itself: a heading's parent is the nearest heading before it with a
+/// lower level, and a heading is hidden when its parent is collapsed or
+/// hidden.
+fn hidden_by_an_ancestor(levels: &[u8], index: usize, collapsed: &[bool]) -> bool {
+    let parent = (0..index)
+        .rev()
+        .find(|&before| levels[before] < levels[index]);
+    parent
+        .is_some_and(|parent| collapsed[parent] || hidden_by_an_ancestor(levels, parent, collapsed))
+}
+
+/// Every outline of `len` headings whose levels are drawn from `choices`.
+fn outlines_of(len: u32, choices: &[u8]) -> impl Iterator<Item = Vec<u8>> + '_ {
+    (0..choices.len().pow(len)).map(move |code| {
+        (0..len)
+            .map(|place| choices[code / choices.len().pow(place) % choices.len()])
+            .collect()
+    })
+}
+
+#[test]
+fn the_one_pass_fold_agrees_with_the_ancestor_rule_on_every_small_outline() {
+    // Level 5 after level 3 skips a level, as `###` straight to `#####`.
+    let choices = [1, 2, 3, 5];
+    let mut hidden_rows = 0;
+    for len in 0..=6 {
+        for levels in outlines_of(len, &choices) {
+            for folds in 0..1_usize << len {
+                let collapsed: Vec<bool> = (0..len).map(|place| folds >> place & 1 == 1).collect();
+                let expected: Vec<usize> = (0..levels.len())
+                    .filter(|&index| !hidden_by_an_ancestor(&levels, index, &collapsed))
+                    .collect();
+
+                let visible: Vec<usize> =
+                    visible_rows(levels.iter().copied(), |index| collapsed[index]).collect();
+
+                assert_eq!(
+                    visible, expected,
+                    "levels {levels:?}, collapsed {collapsed:?}"
+                );
+                hidden_rows += levels.len() - visible.len();
+            }
+        }
+    }
+    assert!(hidden_rows > 0, "no generated outline folded anything away");
 }
 
 #[test]
@@ -132,8 +181,10 @@ fn collapsed_headings_beside_a_heading_do_not_hide_it() {
 #[test]
 fn positions_outside_the_outline_are_never_hidden_or_parents() {
     let headers = outline();
-    let all: HashSet<usize> = (0..headers.len()).collect();
-    assert!(!header_is_hidden(&headers, headers.len(), &all));
+    // A fold recorded for a position past the end hides nothing and is
+    // never a row.
+    let all: HashSet<usize> = (0..=headers.len()).collect();
+    assert_eq!(visible_headers(&headers, &all), [0, 4]);
     assert!(!header_has_children(&headers, headers.len()));
 }
 
