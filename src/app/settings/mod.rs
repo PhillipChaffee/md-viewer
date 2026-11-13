@@ -92,88 +92,69 @@ impl MarkdownApp {
         }
 
         let mut open = true;
-        // Set inside the window closure, applied after `.show()` returns —
-        // same one-shot-flag pattern the font/tab-close deferred actions use
-        // elsewhere in this file. Each row is independently resettable, so
-        // each gets its own flag.
-        let mut new_highlight_color: Option<Option<egui::Color32>> = None;
-        let mut new_link_color: Option<Option<egui::Color32>> = None;
+        // Set inside the window closure, applied after `.show()` returns.
+        // Each row is independently resettable.
+        let mut colors = self.colors;
 
         egui::Window::new("Colors")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Highlight Color:");
-                    // Read the currently *effective* color (override or
-                    // theme default — update() already applied Visuals for
-                    // this frame) rather than re-deriving egui's own
-                    // dark/light selection defaults by hand.
-                    let mut color = ui.visuals().selection.bg_fill;
-                    let color_btn = ui.color_edit_button_srgba(&mut color);
-                    mcp::widget(
-                        &self.mcp,
-                        format_args!("Colors Dialog: Highlight Color"),
-                        "color",
-                        &color_btn,
-                        None,
-                    );
-                    if color_btn.changed() {
-                        new_highlight_color = Some(Some(color));
-                    }
-
-                    let reset_btn =
-                        ui.add_enabled(self.colors.highlight.is_some(), egui::Button::new("Reset"));
-                    mcp::widget(
-                        &self.mcp,
-                        format_args!("Colors Dialog: Highlight Color Reset"),
-                        "button",
-                        &reset_btn,
-                        None,
-                    );
-                    if reset_btn.clicked() {
-                        new_highlight_color = Some(None);
-                    }
-                });
-
-                ui.horizontal(|ui| {
-                    ui.label("Link Color:");
-                    let mut color = ui.visuals().hyperlink_color;
-                    let color_btn = ui.color_edit_button_srgba(&mut color);
-                    mcp::widget(
-                        &self.mcp,
-                        format_args!("Colors Dialog: Link Color"),
-                        "color",
-                        &color_btn,
-                        None,
-                    );
-                    if color_btn.changed() {
-                        new_link_color = Some(Some(color));
-                    }
-
-                    let reset_btn =
-                        ui.add_enabled(self.colors.link.is_some(), egui::Button::new("Reset"));
-                    mcp::widget(
-                        &self.mcp,
-                        format_args!("Colors Dialog: Link Color Reset"),
-                        "button",
-                        &reset_btn,
-                        None,
-                    );
-                    if reset_btn.clicked() {
-                        new_link_color = Some(None);
-                    }
-                });
+                // Each row shows the currently *effective* color (override
+                // or theme default — update() already applied Visuals for
+                // this frame) rather than re-deriving egui's own dark/light
+                // selection defaults by hand.
+                let highlight = ui.visuals().selection.bg_fill;
+                colors.highlight =
+                    self.color_row(ui, "Highlight Color", highlight, colors.highlight);
+                let link = ui.visuals().hyperlink_color;
+                colors.link = self.color_row(ui, "Link Color", link, colors.link);
             });
 
         self.show_color_settings_dialog = open;
-        if let Some(color) = new_highlight_color {
-            self.colors.highlight = color;
-        }
-        if let Some(color) = new_link_color {
-            self.colors.link = color;
-        }
+        self.colors = colors;
+    }
+
+    /// One row of the Colors dialog: the color `name` is drawn in now, to
+    /// edit, and a reset that is live while `overridden` holds a color.
+    /// Returns the override the row leaves in force: `overridden` unless
+    /// the reader picked a color or reset to the theme's, which is `None`.
+    fn color_row(
+        &self,
+        ui: &mut egui::Ui,
+        name: &str,
+        mut color: egui::Color32,
+        overridden: Option<egui::Color32>,
+    ) -> Option<egui::Color32> {
+        let mut asked = overridden;
+        ui.horizontal(|ui| {
+            ui.label(format!("{name}:"));
+            let color_btn = ui.color_edit_button_srgba(&mut color);
+            mcp::widget(
+                &self.mcp,
+                format_args!("Colors Dialog: {name}"),
+                "color",
+                &color_btn,
+                None,
+            );
+            if color_btn.changed() {
+                asked = Some(color);
+            }
+
+            let reset_btn = ui.add_enabled(overridden.is_some(), egui::Button::new("Reset"));
+            mcp::widget(
+                &self.mcp,
+                format_args!("Colors Dialog: {name} Reset"),
+                "button",
+                &reset_btn,
+                None,
+            );
+            if reset_btn.clicked() {
+                asked = None;
+            }
+        });
+        asked
     }
 
     pub(crate) fn render_font_settings(&mut self, ctx: &egui::Context) {
