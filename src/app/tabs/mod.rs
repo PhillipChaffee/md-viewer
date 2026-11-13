@@ -1,5 +1,6 @@
 //! Opening, closing, switching, and navigating tabs.
 
+use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::app::MarkdownApp;
@@ -127,29 +128,20 @@ impl MarkdownApp {
             return;
         }
 
-        let changed = self
-            .tabs
-            .get_mut(self.active_tab)
-            .is_some_and(|tab| tab.navigate_to_path(path).unwrap_or(false));
-        if changed {
-            self.active_tab_navigated();
-        }
+        // A document that cannot be shown leaves the one in front, unsaid.
+        let _ = self.navigate_active(|tab| tab.navigate_to_path(path));
     }
 
     pub(crate) fn navigate_active_history(&mut self, go_back: bool) {
-        let result = self.tabs.get_mut(self.active_tab).map(|tab| {
+        let stepped = self.navigate_active(|tab| {
             if go_back {
                 tab.navigate_back()
             } else {
                 tab.navigate_forward()
             }
         });
-        match result {
-            Some(Ok(true)) => self.active_tab_navigated(),
-            Some(Err(error)) => {
-                self.error_message = Some(format!("Unable to navigate history: {error}"));
-            }
-            Some(Ok(false)) | None => {}
+        if let Err(error) = stepped {
+            self.error_message = Some(format!("Unable to navigate history: {error}"));
         }
     }
 
@@ -157,19 +149,12 @@ impl MarkdownApp {
     /// click shows its target in place, and `in_new_tab` gives the target
     /// a tab of its own.
     pub(crate) fn follow_link(&mut self, link: &str, in_new_tab: bool) {
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
-            return;
-        };
         let followed = if in_new_tab {
-            tab.link_target(link)
+            let active = self.tabs.get(self.active_tab);
+            active.map_or(Ok(None), |tab| tab.link_target(link))
         } else {
-            let from = tab.path.clone();
-            let followed = tab.navigate_to_link(link).map(|_| None);
-            // A link to a heading of this document moves no tab.
-            if tab.path != from {
-                self.active_tab_navigated();
-            }
-            followed
+            let shown = self.navigate_active(|tab| tab.navigate_to_link(link));
+            shown.map(|()| None)
         };
         match followed {
             Ok(Some((path, fragment))) => {
@@ -178,6 +163,22 @@ impl MarkdownApp {
             Ok(None) => {}
             Err(error) => self.error_message = Some(format!("Unable to open {link}: {error}")),
         }
+    }
+
+    /// Let `go` take the active tab to another document, and bring what
+    /// follows the tabs along when it did. What `go` reports of itself is
+    /// not asked: a link to a heading of the same document reports success
+    /// and moves no tab.
+    fn navigate_active(&mut self, go: impl FnOnce(&mut Tab) -> io::Result<bool>) -> io::Result<()> {
+        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+            return Ok(());
+        };
+        let from = tab.path.clone();
+        let outcome = go(tab);
+        if tab.path != from {
+            self.active_tab_navigated();
+        }
+        outcome.map(drop)
     }
 
     /// The active tab moved to another document: it is the most recent
