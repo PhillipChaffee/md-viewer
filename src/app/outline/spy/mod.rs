@@ -3,8 +3,8 @@
 use eframe::egui;
 use egui_commonmark_extended::header_position_key;
 
-use super::HEADER_SCROLL_MARGIN;
 use crate::layout::line_fraction;
+use crate::tab::scroll::HEADER_SCROLL_MARGIN;
 use crate::tab::Tab;
 
 #[cfg(kani)]

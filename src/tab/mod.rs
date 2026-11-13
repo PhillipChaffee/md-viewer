@@ -16,6 +16,7 @@ use crate::search::{find_matches, SearchMatch};
 
 #[cfg(kani)]
 mod proofs;
+pub(crate) mod scroll;
 #[cfg(test)]
 mod tests;
 

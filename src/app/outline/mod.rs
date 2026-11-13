@@ -9,6 +9,7 @@ use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
+use crate::tab::scroll::HEADER_SCROLL_MARGIN;
 use crate::tab::Tab;
 use crate::theme::Palette;
 
@@ -20,8 +21,6 @@ mod spy;
 #[cfg(test)]
 mod tests;
 
-/// Space left above a heading the document scrolls to.
-pub(super) const HEADER_SCROLL_MARGIN: f32 = 50.0;
 /// How far each heading level is pushed right of the one above it.
 const INDENT: f32 = 14.0;
 /// How far the fold control reaches past its chevron on each side.

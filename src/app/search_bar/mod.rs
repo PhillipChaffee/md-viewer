@@ -8,6 +8,7 @@ use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::layout::line_fraction;
 use crate::search::{stepped_match_index, SearchBarOutcome};
+use crate::tab::scroll::MATCH_INSET;
 
 #[cfg(test)]
 mod tests;
@@ -183,7 +184,7 @@ impl MarkdownApp {
         // schedules a corrective scroll next frame if this estimate was off.
         let estimated_y = line_fraction(m.line_number, tab.content_lines) * tab.last_content_height;
         let margin = if tab.last_viewport_height > 0.0 {
-            tab.last_viewport_height * 0.35
+            tab.last_viewport_height * MATCH_INSET
         } else {
             100.0
         };

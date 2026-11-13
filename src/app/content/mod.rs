@@ -12,12 +12,12 @@ use crate::app::action::AppAction;
 use crate::app::content::column::{resize_strips, Column};
 use crate::app::content::look::DocumentLook;
 use crate::app::mcp;
-use crate::app::outline::HEADER_SCROLL_MARGIN;
 use crate::app::MarkdownApp;
 use crate::diagram::diagram_colors;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::links::handle_local_link_click;
 use crate::search::take_search_correction_request;
+use crate::tab::scroll::{HEADER_SCROLL_MARGIN, MATCH_INSET};
 use crate::tab::Tab;
 
 mod column;
@@ -346,7 +346,7 @@ fn search_correction(match_y: f32, current_scroll: f32, viewport_height: f32) ->
         return None;
     }
     // Place the active match ~35% from the top of the viewport
-    let inset = viewport_height * 0.35;
+    let inset = viewport_height * MATCH_INSET;
     worth_scrolling((match_y - inset).max(0.0), current_scroll)
 }
 

@@ -9,6 +9,7 @@ use egui_commonmark_extended::header_position_key;
 
 use crate::headers::Header;
 use crate::layout::line_fraction;
+use crate::tab::scroll::HEADER_SCROLL_MARGIN;
 use crate::tab::Tab;
 
 #[cfg(test)]
@@ -95,11 +96,11 @@ pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
         FragmentTarget::Header(header) => {
             let key = header_position_key(header.source_start);
             if let Some(y_pos) = tab.cache.get_header_position(&key) {
-                tab.pending_scroll_offset = Some((y_pos - 50.0).max(0.0));
+                tab.pending_scroll_offset = Some((y_pos - HEADER_SCROLL_MARGIN).max(0.0));
             } else if tab.last_content_height > 0.0 && tab.content_lines > 0 {
                 let estimated_y =
                     line_fraction(header.line_number, tab.content_lines) * tab.last_content_height;
-                tab.pending_scroll_offset = Some((estimated_y - 50.0).max(0.0));
+                tab.pending_scroll_offset = Some((estimated_y - HEADER_SCROLL_MARGIN).max(0.0));
                 // The estimate only gets us near the target; one full paint
                 // records the exact position for the corrective pass.
                 tab.pending_header_click_key = Some(key);
