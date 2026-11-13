@@ -13,18 +13,6 @@ use crate::links::has_markdown_extension;
 #[cfg(test)]
 mod tests;
 
-/// Action from file explorer interaction.
-#[derive(Default)]
-pub(crate) struct ExplorerAction {
-    /// File selected with the primary mouse button. The caller decides whether
-    /// it replaces the active document or opens a tab from the Ctrl modifier.
-    pub(crate) file_to_open: Option<PathBuf>,
-    /// File to close (middle-click on open file).
-    pub(crate) file_to_close: Option<PathBuf>,
-    /// Directory to toggle expansion, once the rows are drawn.
-    pub(crate) dir_to_toggle: Option<PathBuf>,
-}
-
 /// Sort order for file explorer.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) enum SortOrder {
