@@ -243,7 +243,10 @@ Two checks say no.
 - **Mutants.** `scripts/proof-mutants.tsv` lists 76 one-line faults in the
   shipped code, at least one for each harness but the one that pins
   finding 1. `scripts/kill-proof-mutants.sh` plants each and expects Kani
-  to reject it. Last run: 76 killed, 0 survived, in 19 minutes.
+  to reject it. Last full run: 76 killed, 0 survived, in 19 minutes.
+  Three of the rows are newer than that run: they are faults in
+  `headers::visible_rows`, and replaced the three for the walk it took
+  over from. The five `headers` rows were run on their own and killed.
 
 The cover gate has already earned its place: it rejected the first
 version of `a_step_out_and_back_is_the_identity`, whose assumptions made
