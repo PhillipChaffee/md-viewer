@@ -10,6 +10,7 @@ use eframe::egui::{self, FontId, TextStyle};
 use egui_mcp_bridge::McpBridge;
 
 use crate::app::content::look::DocumentLook;
+use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
@@ -259,6 +260,8 @@ impl MarkdownApp {
             theme,
             zoom_level: persisted.zoom_level.unwrap_or(1.0).clamp(0.5, 3.0),
             show_outline: persisted.show_outline.unwrap_or(true),
+            outline_rule: OutlineRule::restored(persisted.show_outline),
+            heading_spy: HeadingSpy::default(),
             reading_width,
             document_pane_width: f32::INFINITY,
             column_drag_grab: None,
@@ -301,7 +304,8 @@ impl MarkdownApp {
             watched_explorer_dirs: HashSet::new(),
             hovered_tab: None,
             file_explorer,
-            show_explorer: persisted.show_explorer.unwrap_or(true),
+            // A fresh install opens on the document alone.
+            show_explorer: persisted.show_explorer.unwrap_or(false),
             explorer_width: restored_sidebar_width(
                 persisted.explorer_width,
                 EXPLORER_DEFAULT_WIDTH,
@@ -325,19 +329,25 @@ impl MarkdownApp {
             mcp_bridge,
         };
 
-        app.refresh_open_tab_paths();
+        app.begin_session(file, watch);
+        app
+    }
+
+    /// What a launch does once the state is built: note which documents
+    /// are open, remember the one named on the command line, and start
+    /// watching for changes.
+    fn begin_session(&mut self, file: Option<PathBuf>, watch: bool) {
+        self.refresh_open_tab_paths();
 
         // Record a CLI-provided file as recent (an explicit open). Session-restored
         // tabs are not treated as explicit opens, so they are not recorded here.
         if let Some(file) = file {
             let file = file.canonicalize().unwrap_or(file);
-            app.record_recent(&file);
+            self.record_recent(&file);
         }
 
         if watch {
-            app.start_watching();
+            self.start_watching();
         }
-
-        app
     }
 }

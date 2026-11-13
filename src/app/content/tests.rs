@@ -319,7 +319,8 @@ fn a_pane_narrower_than_the_column_narrows_it_and_keeps_the_margins() {
     let mut harness = reader(&title_and_long_paragraph());
     harness.app.show_explorer = true;
     harness.app.explorer_width = 500.0;
-    harness.app.show_outline = true;
+    // The reader's own choice: left to the room, the outline would hide.
+    harness.apply(AppAction::ToggleOutline);
     harness.idle();
     let output = harness.idle();
 

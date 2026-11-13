@@ -94,7 +94,8 @@ fn customized_session() -> Harness {
     app.open_in_new_tab(b);
     app.theme = ThemeId::Night;
     app.zoom_level = 1.25;
-    app.show_outline = false;
+    app.show_outline = true;
+    app.toggle_outline();
     app.reading_width = ReadingWidth::new(512.0);
     app.line_spacing = LineSpacing::Airy;
     app.math_scale = 1.5;
@@ -357,6 +358,7 @@ fn explorer_row(harness: &UiHarness, name: &str) -> egui::Pos2 {
 
 fn with_explorer_listed() -> UiHarness {
     let mut harness = UiHarness::with_three_docs();
+    harness.app_mut().show_explorer = true;
     harness.wait_until("the explorer scan", |harness| harness.shows("c.md"));
     harness
 }

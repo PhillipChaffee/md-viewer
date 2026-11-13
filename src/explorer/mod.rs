@@ -36,6 +36,10 @@ pub(crate) enum SortOrder {
 }
 
 impl SortOrder {
+    /// Every order, as the explorer's menu lists them.
+    pub(crate) const ALL: [Self; 4] =
+        [Self::NameAsc, Self::NameDesc, Self::DateAsc, Self::DateDesc];
+
     pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::NameAsc => "Name A-Z",

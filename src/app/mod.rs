@@ -32,6 +32,7 @@ mod outline;
 mod search_bar;
 mod settings;
 mod shortcuts;
+mod sidebar;
 mod startup;
 mod tab_bar;
 mod tabs;
@@ -61,7 +62,13 @@ pub(crate) struct MarkdownApp {
     /// The reading theme; its palette is every color the app paints.
     theme: ThemeId,
     zoom_level: f32,
+    /// Whether the outline is shown: the reader's choice, or until they
+    /// make one, whether the window has room for it beside the text.
     show_outline: bool,
+    /// Who decides that: the reader, once they have toggled it.
+    outline_rule: outline::OutlineRule,
+    /// The heading the reader is in, which the outline marks.
+    heading_spy: outline::HeadingSpy,
     /// Width of the text column, which sits centered in the document
     /// pane.
     reading_width: ReadingWidth,
@@ -160,7 +167,7 @@ pub(crate) struct MarkdownApp {
     lightbox_open_count: u64,
     // Find-bar state (current-document search)
     search: SearchState,
-    // Recently opened files (most-recent first), shown on the welcome page
+    // Recently opened files (most-recent first), shown on the home page
     recent_files: Vec<RecentEntry>,
     // Welcome page: whether the recent list is expanded ("Show more")
     welcome_show_all: bool,

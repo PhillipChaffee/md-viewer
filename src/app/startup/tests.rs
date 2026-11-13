@@ -7,6 +7,7 @@ use eframe::egui::{self, Color32};
 use eframe::Storage as _;
 
 use super::is_virtual_display;
+use crate::app::outline::OutlineRule;
 use crate::app::ui_harness::{launch, MemoryStorage, ScratchDir};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
@@ -39,8 +40,13 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
 
     assert!(app.tabs.is_empty());
     assert!(app.error_message.is_none());
+    assert!(!app.show_explorer, "a fresh install is the document alone");
     assert!(app.show_outline);
-    assert!(app.show_explorer);
+    assert_eq!(
+        app.outline_rule,
+        OutlineRule::Room { had_room: true },
+        "the outline shows while the window has room for it"
+    );
     assert_eq!(app.theme, ThemeId::Sepia);
     assert_eq!(app.reading_width, ReadingWidth::DEFAULT);
     assert_eq!(app.line_spacing, LineSpacing::Comfortable);
@@ -179,6 +185,7 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
     assert_eq!(app.theme, ThemeId::Night);
     assert_close(app.zoom_level, 3.0);
     assert!(!app.show_outline);
+    assert_eq!(app.outline_rule, OutlineRule::Reader);
     assert_close(app.reading_width.get(), ReadingWidth::MAX);
     assert_eq!(app.line_spacing, LineSpacing::Airy);
     assert_close(app.math_scale, 1.0);

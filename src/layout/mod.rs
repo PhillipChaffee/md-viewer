@@ -118,6 +118,17 @@ impl ReadingWidth {
         self.0 >= Self::MAX
     }
 
+    /// The width as one that does not follow the window: a column set to
+    /// fit the window has no width of its own, and stands at the default.
+    /// It is what the chrome measures by where it keeps to the column.
+    pub(crate) fn fixed(self) -> Self {
+        if self.fits_window() {
+            Self::DEFAULT
+        } else {
+            self
+        }
+    }
+
     /// The column actually used inside a pane of `available` px: the pane
     /// keeps a margin on each side, and a narrow pane narrows the column.
     pub(crate) fn resolve(self, available: f32) -> f32 {

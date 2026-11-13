@@ -1,22 +1,35 @@
 //! The file explorer sidebar.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use eframe::egui;
-#[cfg(feature = "mcp")]
-use egui_mcp_bridge::McpUiExt;
 
+use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
-use crate::icons::{paint_file_icon, paint_folder_icon, paint_sidebar_resize_affordance};
+use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
+use crate::theme::Palette;
 use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(test)]
 mod tests;
+
+/// How far each level of the tree is pushed right of the one above it.
+const INDENT: f32 = 14.0;
+
+/// What a pick from the explorer's menu asks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MenuPick {
+    ExpandAll,
+    CollapseAll,
+    Refresh,
+    Sort(SortOrder),
+}
 
 impl MarkdownApp {
     /// Render the file explorer sidebar.
@@ -28,27 +41,26 @@ impl MarkdownApp {
             return action;
         }
 
+        let palette = self.theme.palette();
+        let margin = egui::Margin {
+            left: 8,
+            right: EXPLORER_RIGHT_RESIZE_GUTTER,
+            top: 8,
+            bottom: 8,
+        };
         let panel = egui::SidePanel::left("file_explorer")
             .resizable(true)
+            .show_separator_line(false)
             .default_width(self.explorer_width)
             .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
-            .frame(
-                egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin {
-                    left: 8,
-                    right: EXPLORER_RIGHT_RESIZE_GUTTER,
-                    top: 8,
-                    bottom: 8,
-                }),
-            )
+            .frame(sidebar::frame(palette, margin))
             .show(ctx, |ui| {
-                // The header and controls stay outside the ScrollArea.
-                self.explorer_header(ui);
-                self.explorer_toolbar(ui);
-                self.explorer_sort_picker(ui);
-                ui.separator();
-                self.explorer_tree(ui, &mut action);
+                // The header stays outside the ScrollArea.
+                self.explorer_header(ui, palette);
+                self.explorer_tree(ui, palette, &mut action);
             });
         self.explorer_width = panel.response.rect.width();
+        sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Left, palette);
         // Left panel: the draggable edge is its right border.
         paint_sidebar_resize_affordance(
             ctx,
@@ -60,83 +72,45 @@ impl MarkdownApp {
         action
     }
 
-    fn explorer_header(&self, ui: &mut egui::Ui) {
-        let title = self
-            .file_explorer
-            .root
-            .as_deref()
-            .map_or_else(|| "No folder".to_owned(), folder_name);
-        ui.strong(title);
-    }
-
-    /// The expand-all, collapse-all, and refresh buttons.
-    fn explorer_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            let expand_btn = ui.small_button("⊞").on_hover_text("Expand all directories");
-            #[cfg(feature = "mcp")]
+    /// "FILES", the folder they are in, and the menu that holds what the
+    /// explorer can do to its listing.
+    fn explorer_header(&mut self, ui: &mut egui::Ui, palette: &Palette) {
+        let root = self.file_explorer.root.as_deref();
+        let folder = root.map_or(Cow::Borrowed("No folder"), folder_name);
+        let header = sidebar::Header {
+            caption: "FILES",
+            detail: Some(&folder),
+            menu: Some("Explorer options"),
+        };
+        let more = sidebar::header(ui, palette, &header);
+        #[cfg(feature = "mcp")]
+        if let Some(more) = &more {
             self.mcp_bridge
-                .register_widget("Explorer: Expand All", "button", &expand_btn, None);
-            if expand_btn.clicked() {
+                .register_widget("Explorer: Options", "button", more, None);
+        }
+
+        let sort_order = self.file_explorer.sort_order;
+        let picked = more
+            .and_then(|more| egui::Popup::menu(&more).show(|ui| explorer_menu(ui, sort_order)))
+            .and_then(|menu| menu.inner);
+        match picked {
+            Some(MenuPick::ExpandAll) => {
                 self.file_explorer.expand_all();
                 self.reconcile_explorer_watches();
             }
-
-            let collapse_btn = ui
-                .small_button("⊟")
-                .on_hover_text("Collapse all directories");
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge.register_widget(
-                "Explorer: Collapse All",
-                "button",
-                &collapse_btn,
-                None,
-            );
-            if collapse_btn.clicked() {
+            Some(MenuPick::CollapseAll) => {
                 self.file_explorer.collapse_all();
                 self.reconcile_explorer_watches();
             }
-
-            if ui.small_button("↻").on_hover_text("Refresh").clicked() {
-                self.file_explorer.refresh();
-            }
-        });
-    }
-
-    fn explorer_sort_picker(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Sort:");
-            #[cfg(feature = "mcp")]
-            let current_label = self.file_explorer.sort_order.label();
-            let combo_response = egui::ComboBox::from_id_salt("explorer_sort")
-                .selected_text(self.file_explorer.sort_order.label())
-                .show_ui(ui, |ui| {
-                    for order in [
-                        SortOrder::NameAsc,
-                        SortOrder::NameDesc,
-                        SortOrder::DateAsc,
-                        SortOrder::DateDesc,
-                    ] {
-                        let is_selected = self.file_explorer.sort_order == order;
-                        if ui.selectable_label(is_selected, order.label()).clicked() {
-                            self.file_explorer.set_sort_order(order);
-                        }
-                    }
-                });
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge.register_widget(
-                "Explorer: Sort Order",
-                "combobox",
-                &combo_response.response,
-                Some(current_label),
-            );
-            #[cfg(not(feature = "mcp"))]
-            let _ = combo_response;
-        });
+            Some(MenuPick::Refresh) => self.file_explorer.refresh(),
+            Some(MenuPick::Sort(order)) => self.file_explorer.set_sort_order(order),
+            None => {}
+        }
     }
 
     /// The scrollable file tree. Applies a directory toggle itself and
     /// records it, with any file click, in `action`.
-    fn explorer_tree(&mut self, ui: &mut egui::Ui, action: &mut ExplorerAction) {
+    fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette, action: &mut ExplorerAction) {
         // Pre-load children for all expanded dirs to avoid mutation during render
         let unloaded: Vec<PathBuf> = self
             .file_explorer
@@ -153,13 +127,20 @@ impl MarkdownApp {
         let tree = std::mem::take(&mut self.file_explorer.tree);
         // Clone the small set of open tab paths (avoids borrow conflict with &mut self)
         let open_paths = self.open_tab_paths.clone();
+        let active_tab = self.tabs.get(self.active_tab);
+        let listing = Listing {
+            palette,
+            open_paths: &open_paths,
+            current: active_tab.map(|tab| tab.path.as_path()),
+        };
 
-        egui::ScrollArea::both()
+        egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .id_salt("file_explorer")
             .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
                 for node in &tree {
-                    self.render_tree_node(ui, node, 0, &open_paths, action);
+                    self.render_tree_node(ui, node, 0, &listing, action);
                 }
             });
 
@@ -180,13 +161,13 @@ impl MarkdownApp {
         ui: &mut egui::Ui,
         node: &FileTreeNode,
         depth: u16,
-        open_paths: &HashSet<PathBuf>,
+        listing: &Listing<'_>,
         action: &mut ExplorerAction,
     ) {
         match node {
             FileTreeNode::File { path, name, .. } => {
                 let row = TreeRow { path, name, depth };
-                self.file_row(ui, &row, open_paths.contains(path), action);
+                self.file_row(ui, &row, listing, action);
             }
             FileTreeNode::Directory {
                 path,
@@ -196,10 +177,10 @@ impl MarkdownApp {
             } => {
                 let row = TreeRow { path, name, depth };
                 let is_expanded = self.file_explorer.is_expanded(path);
-                self.directory_row(ui, &row, is_expanded, action);
+                self.directory_row(ui, &row, is_expanded, listing.palette, action);
                 if is_expanded {
                     for child in children.iter().flatten() {
-                        self.render_tree_node(ui, child, depth + 1, open_paths, action);
+                        self.render_tree_node(ui, child, depth + 1, listing, action);
                     }
                 }
             }
@@ -210,48 +191,37 @@ impl MarkdownApp {
         &self,
         ui: &mut egui::Ui,
         row: &TreeRow<'_>,
-        is_open: bool,
+        listing: &Listing<'_>,
         action: &mut ExplorerAction,
     ) {
-        let response = ui
-            .horizontal(|ui| {
-                ui.add_space(row.indent());
+        let is_open = listing.open_paths.contains(row.path);
+        let shown = Row {
+            text: row.name,
+            indent: row.indent(),
+            current: listing.current == Some(row.path),
+            // A file's name lines up with the names of the folders beside it.
+            chevron: Chevron::Blank,
+        };
+        let response = sidebar::row(ui, listing.palette, &shown).response;
+        #[cfg(feature = "mcp")]
+        {
+            let state_value = if is_open { "open" } else { "" };
+            self.mcp_bridge.register_widget(
+                &format!("File: {}", row.name),
+                "button",
+                &response,
+                Some(state_value),
+            );
+        }
 
-                // File icon (vector-drawn — no emoji in app chrome)
-                paint_file_icon(ui, 14.0);
-
-                // Highlight if file is open in a tab
-                let text = if is_open {
-                    egui::RichText::new(row.name).strong()
-                } else {
-                    egui::RichText::new(row.name)
-                };
-
-                let response = ui.add(
-                    egui::Button::selectable(is_open, text).wrap_mode(egui::TextWrapMode::Extend),
-                );
-                #[cfg(feature = "mcp")]
-                {
-                    let state_value = if is_open { "open" } else { "" };
-                    self.mcp_bridge.register_widget(
-                        &format!("File: {}", row.name),
-                        "button",
-                        &response,
-                        Some(state_value),
-                    );
-                }
-
-                if response.clicked() {
-                    action.file_to_open = Some(row.path.to_path_buf());
-                }
-                // Middle-click to close tab (only if file is open)
-                if response.middle_clicked() && is_open {
-                    action.file_to_close = Some(row.path.to_path_buf());
-                }
-
-                response.context_menu(|ui| file_context_menu(ui, row.path));
-            })
-            .response;
+        if response.clicked() {
+            action.file_to_open = Some(row.path.to_path_buf());
+        }
+        // Middle-click to close tab (only if file is open)
+        if response.middle_clicked() && is_open {
+            action.file_to_close = Some(row.path.to_path_buf());
+        }
+        response.context_menu(|ui| file_context_menu(ui, row.path));
         self.paint_flash(ui, row.path, response.rect);
     }
 
@@ -260,46 +230,35 @@ impl MarkdownApp {
         ui: &mut egui::Ui,
         row: &TreeRow<'_>,
         is_expanded: bool,
+        palette: &Palette,
         action: &mut ExplorerAction,
     ) {
-        let response = ui
-            .horizontal(|ui| {
-                ui.add_space(row.indent());
+        let shown = Row {
+            text: row.name,
+            indent: row.indent(),
+            current: false,
+            chevron: if is_expanded {
+                Chevron::Open
+            } else {
+                Chevron::Closed
+            },
+        };
+        let response = sidebar::row(ui, palette, &shown).response;
+        #[cfg(feature = "mcp")]
+        {
+            let state_value = if is_expanded { "expanded" } else { "collapsed" };
+            self.mcp_bridge.register_widget(
+                &format!("Directory: {}", row.name),
+                "button",
+                &response,
+                Some(state_value),
+            );
+        }
 
-                // Expand/collapse indicator
-                let indicator = if is_expanded { "v" } else { ">" };
-
-                #[cfg(feature = "mcp")]
-                let expand_btn = ui.mcp_small_button(format!("Toggle: {}", row.name), indicator);
-                #[cfg(not(feature = "mcp"))]
-                let expand_btn = ui.small_button(indicator);
-
-                // Vector folder icon; expanded state shows in the fill.
-                paint_folder_icon(ui, 14.0, is_expanded);
-
-                let response = ui.add(
-                    egui::Label::new(row.name)
-                        .extend()
-                        .selectable(false)
-                        .sense(egui::Sense::click()),
-                );
-                #[cfg(feature = "mcp")]
-                {
-                    let state_value = if is_expanded { "expanded" } else { "collapsed" };
-                    self.mcp_bridge.register_widget(
-                        &format!("Directory: {}", row.name),
-                        "button",
-                        &response,
-                        Some(state_value),
-                    );
-                }
-
-                // The toggle is applied after the tree is put back (avoids a clone).
-                if expand_btn.clicked() || response.clicked() {
-                    action.dir_to_toggle = Some(row.path.to_path_buf());
-                }
-            })
-            .response;
+        // The toggle is applied after the tree is put back (avoids a clone).
+        if response.clicked() {
+            action.dir_to_toggle = Some(row.path.to_path_buf());
+        }
         self.paint_flash(ui, row.path, response.rect);
     }
 
@@ -320,6 +279,15 @@ impl MarkdownApp {
     }
 }
 
+/// What every row of one frame's listing is drawn with.
+struct Listing<'a> {
+    palette: &'a Palette,
+    /// The documents open in a tab.
+    open_paths: &'a HashSet<PathBuf>,
+    /// The document the active tab shows.
+    current: Option<&'a Path>,
+}
+
 /// One explorer row: the node it shows and how deep it sits in the tree.
 struct TreeRow<'a> {
     path: &'a Path,
@@ -329,16 +297,41 @@ struct TreeRow<'a> {
 
 impl TreeRow<'_> {
     fn indent(&self) -> f32 {
-        f32::from(self.depth) * 16.0
+        f32::from(self.depth) * INDENT
     }
 }
 
 /// The folder's own name, or the whole path for a root such as `/`.
-fn folder_name(root: &Path) -> String {
-    root.file_name().map_or_else(
-        || root.display().to_string(),
-        |name| name.to_string_lossy().into_owned(),
-    )
+fn folder_name(root: &Path) -> Cow<'_, str> {
+    root.file_name()
+        .map_or_else(|| root.to_string_lossy(), |name| name.to_string_lossy())
+}
+
+/// The explorer's menu: what it can do to its listing, and the order the
+/// listing is in. Returns what was picked this frame.
+fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
+    let actions = [
+        ("Expand All Folders", MenuPick::ExpandAll),
+        ("Collapse All Folders", MenuPick::CollapseAll),
+        ("Refresh", MenuPick::Refresh),
+    ];
+    sidebar::menu_text(ui);
+    let mut picked = None;
+    for (text, pick) in actions {
+        if ui.button(text).clicked() {
+            picked = Some(pick);
+        }
+    }
+    ui.separator();
+    for order in SortOrder::ALL {
+        if ui.radio(order == sort_order, order.label()).clicked() {
+            picked = Some(MenuPick::Sort(order));
+        }
+    }
+    if picked.is_some() {
+        ui.close();
+    }
+    picked
 }
 
 fn file_context_menu(ui: &mut egui::Ui, path: &Path) {
