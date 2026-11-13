@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 
@@ -42,9 +43,9 @@ impl MarkdownApp {
                     // dark/light selection defaults by hand.
                     let mut color = ui.visuals().selection.bg_fill;
                     let color_btn = ui.color_edit_button_srgba(&mut color);
-                    #[cfg(feature = "mcp")]
-                    self.mcp_bridge.register_widget(
-                        "Colors Dialog: Highlight Color",
+                    mcp::widget(
+                        &self.mcp,
+                        format_args!("Colors Dialog: Highlight Color"),
                         "color",
                         &color_btn,
                         None,
@@ -55,9 +56,9 @@ impl MarkdownApp {
 
                     let reset_btn =
                         ui.add_enabled(self.highlight_color.is_some(), egui::Button::new("Reset"));
-                    #[cfg(feature = "mcp")]
-                    self.mcp_bridge.register_widget(
-                        "Colors Dialog: Highlight Color Reset",
+                    mcp::widget(
+                        &self.mcp,
+                        format_args!("Colors Dialog: Highlight Color Reset"),
                         "button",
                         &reset_btn,
                         None,
@@ -71,9 +72,9 @@ impl MarkdownApp {
                     ui.label("Link Color:");
                     let mut color = ui.visuals().hyperlink_color;
                     let color_btn = ui.color_edit_button_srgba(&mut color);
-                    #[cfg(feature = "mcp")]
-                    self.mcp_bridge.register_widget(
-                        "Colors Dialog: Link Color",
+                    mcp::widget(
+                        &self.mcp,
+                        format_args!("Colors Dialog: Link Color"),
                         "color",
                         &color_btn,
                         None,
@@ -84,9 +85,9 @@ impl MarkdownApp {
 
                     let reset_btn =
                         ui.add_enabled(self.link_color.is_some(), egui::Button::new("Reset"));
-                    #[cfg(feature = "mcp")]
-                    self.mcp_bridge.register_widget(
-                        "Colors Dialog: Link Color Reset",
+                    mcp::widget(
+                        &self.mcp,
+                        format_args!("Colors Dialog: Link Color Reset"),
                         "button",
                         &reset_btn,
                         None,
@@ -154,9 +155,9 @@ impl MarkdownApp {
                 let preset_btn = ui
                     .selectable_label(active, preset.label())
                     .on_hover_text(preset.description());
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge.register_widget(
-                    &format!("Font Dialog: Preset: {}", preset.label()),
+                mcp::widget(
+                    &self.mcp,
+                    format_args!("Font Dialog: Preset: {}", preset.label()),
                     "button",
                     &preset_btn,
                     Some(if active { "selected" } else { "" }),
@@ -184,9 +185,9 @@ impl MarkdownApp {
                 let size_btn = ui
                     .selectable_label(active, size.label())
                     .on_hover_text("Base text size; headings and code scale with it");
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge.register_widget(
-                    &format!("Font Dialog: Size: {}", size.label()),
+                mcp::widget(
+                    &self.mcp,
+                    format_args!("Font Dialog: Size: {}", size.label()),
                     "button",
                     &size_btn,
                     Some(if active { "selected" } else { "" }),
@@ -202,11 +203,13 @@ impl MarkdownApp {
         ui.horizontal(|ui| {
             ui.label("Search:");
             let filter_edit = ui.text_edit_singleline(&mut self.font_filter);
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Font Dialog: Search", "textbox", &filter_edit, None);
-            #[cfg(not(feature = "mcp"))]
-            let _ = filter_edit;
+            mcp::widget(
+                &self.mcp,
+                format_args!("Font Dialog: Search"),
+                "textbox",
+                &filter_edit,
+                None,
+            );
         });
     }
 
@@ -288,9 +291,9 @@ impl MarkdownApp {
     fn system_default_row(&self, ui: &mut egui::Ui) -> bool {
         let default_selected = self.selected_font_family.is_none();
         let default_btn = ui.selectable_label(default_selected, "System Default");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge.register_widget(
-            "Font Dialog: System Default",
+        mcp::widget(
+            &self.mcp,
+            format_args!("Font Dialog: System Default"),
             "button",
             &default_btn,
             Some(if default_selected { "selected" } else { "" }),
