@@ -39,6 +39,6 @@ pub(crate) fn three_linked() -> Reader {
 pub(crate) fn kitchen_sink() -> Reader {
     Reader::with_docs(&[
         ("sink.md", KITCHEN_SINK),
-        ("guide.md", "# Guide\n\nHow to use the sink."),
+        ("guide.md", include_str!("../fixtures/guide.md")),
     ])
 }
