@@ -40,12 +40,27 @@ pub(crate) struct Args {
     no_detach: bool,
 }
 
+impl Args {
+    /// Whether the opened documents reload when their files change.
+    const fn watch(&self) -> bool {
+        !self.no_watch
+    }
+}
+
+/// Wayland `app_id` and X11 class of the window. GNOME matches running
+/// windows to pinned dock icons through it; without it the launcher shows a
+/// second generic icon (#62). Must match the `StartupWMClass` in the
+/// distributed .desktop file.
+pub(crate) const APP_ID: &str = "md-viewer";
+
 pub(crate) const fn should_detach(args: &Args, launched_from_terminal: bool) -> bool {
     launched_from_terminal && !args.foreground && !args.no_detach
 }
 
-pub(crate) fn launched_from_terminal() -> bool {
-    io::stdin().is_terminal() || io::stdout().is_terminal() || io::stderr().is_terminal()
+/// Whether any of the three standard streams is attached to a terminal, which
+/// is how a launch from a shell differs from one from a desktop launcher.
+pub(crate) fn launched_from_terminal(standard_streams: [&dyn IsTerminal; 3]) -> bool {
+    standard_streams.iter().any(|stream| stream.is_terminal())
 }
 
 fn child_args_with_no_detach<I>(args: I) -> Vec<OsString>
@@ -61,13 +76,14 @@ where
     child_args
 }
 
-pub(crate) fn spawn_detached_child() -> io::Result<()> {
-    let exe = std::env::current_exe()?;
-    let child_args = child_args_with_no_detach(std::env::args_os());
+/// Start `exe` again with this process's `args` (program name first), cut
+/// loose from the terminal: no standard streams, its own process group, and
+/// the marker that stops the copy from detaching once more.
+pub(crate) fn spawn_detached(exe: PathBuf, args: Vec<OsString>) -> io::Result<()> {
     let mut command = Command::new(exe);
 
     command
-        .args(child_args)
+        .args(child_args_with_no_detach(args))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -85,75 +101,102 @@ pub(crate) fn spawn_detached_child() -> io::Result<()> {
     Ok(())
 }
 
-/// Build the native options and hand the app to eframe. Called once per
-/// process: if the event loop cannot be created, winit forbids a second
-/// attempt (`RecreationAttempt`), which is why backend selection is settled
-/// up front instead of via retry.
-pub(crate) fn run_native_once(args: &Args) -> eframe::Result<()> {
+/// Start the viewer. A launch from a terminal hands over to a detached copy
+/// and returns at once, so the shell gets its prompt back; any other launch,
+/// and one whose hand-over fails, opens the window in this process.
+pub(crate) fn launch(
+    args: &Args,
+    from_terminal: bool,
+    spawn_detached_copy: &dyn Fn() -> io::Result<()>,
+    open_window: &dyn Fn(&Args) -> eframe::Result<()>,
+) -> eframe::Result<()> {
+    if should_detach(args, from_terminal) {
+        match spawn_detached_copy() {
+            Ok(()) => return Ok(()),
+            // `error` is the one level env_logger prints when `RUST_LOG` is
+            // unset, so whoever launched from the terminal still sees why
+            // the window stayed attached to it.
+            Err(err) => {
+                log::error!("Failed to detach md-viewer process: {err}. Running in foreground.");
+            }
+        }
+    }
+    open_window(args)
+}
+
+/// Window settings handed to eframe. eframe is started once per process: if
+/// the event loop cannot be created, winit forbids a second attempt
+/// (`RecreationAttempt`), which is why backend selection is settled up front
+/// instead of via retry.
+pub(crate) fn native_options() -> eframe::NativeOptions {
     // Calculate optimal window width assuming both sidebars are shown (the default)
     let optimal_width =
         CONTENT_OPTIMAL_WIDTH + EXPLORER_DEFAULT_WIDTH + OUTLINE_DEFAULT_WIDTH + PANEL_SEPARATORS;
 
-    let options = eframe::NativeOptions {
+    eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([optimal_width, OPTIMAL_WINDOW_HEIGHT])
             .with_min_inner_size([400.0, 300.0])
             .with_title("Markdown Viewer")
-            // Wayland app_id: GNOME matches running windows to pinned dock
-            // icons via app_id (the Wayland WM_CLASS equivalent); without it
-            // the launcher shows a second generic icon (#62). Must match the
-            // StartupWMClass in the distributed .desktop file.
-            .with_app_id("md-viewer")
+            .with_app_id(APP_ID)
             .with_drag_and_drop(true),
         ..Default::default()
-    };
+    }
+}
 
+/// The constructor eframe calls once the window exists: the app opens the
+/// file named on the command line and watches it unless told not to.
+pub(crate) fn app_creator(args: &Args) -> eframe::AppCreator<'static> {
     let file = args.file.clone();
-    let watch = !args.no_watch;
-
-    eframe::run_native(
-        "md-viewer",
-        options,
-        Box::new(move |cc| Ok(Box::new(MarkdownApp::new(cc, file, watch)))),
-    )
+    let watch = args.watch();
+    Box::new(move |cc| Ok(Box::new(MarkdownApp::new(cc, file, watch))))
 }
 
 /// winit 0.30 selects exactly one windowing backend from the environment and
 /// never falls back: a non-empty `WAYLAND_DISPLAY`/`WAYLAND_SOCKET` commits it to
 /// Wayland, and an unusable socket then aborts startup even when Xwayland is
 /// available (seen in strict snaps on Ubuntu 26.04, #65). Probe the socket
-/// before handing control to eframe; if it cannot be connected, clear the
-/// Wayland variables so winit picks X11 up front.
+/// before handing control to eframe; if it cannot be connected, the Wayland
+/// variables have to go so winit picks X11 up front.
+///
+/// Returns the environment variables to clear, which is none while Wayland
+/// is usable or was never configured. `var` reads an environment variable;
+/// clearing is left to the caller that owns the process environment.
 #[cfg(unix)]
-pub(crate) fn fall_back_to_x11_if_wayland_socket_is_dead() {
+pub(crate) fn dead_wayland_variables(
+    var: &dyn Fn(&'static str) -> Option<OsString>,
+) -> &'static [&'static str] {
     // An inherited WAYLAND_SOCKET fd cannot be probed without consuming it;
     // trust it and let libwayland report any problem.
-    if std::env::var_os("WAYLAND_SOCKET").is_some_and(|value| !value.is_empty()) {
-        return;
+    if var("WAYLAND_SOCKET").is_some_and(|value| !value.is_empty()) {
+        return &[];
     }
 
-    let display = std::env::var("WAYLAND_DISPLAY")
-        .ok()
-        .filter(|v| !v.is_empty());
-    let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_default();
+    let display = var("WAYLAND_DISPLAY")
+        .and_then(|value| value.into_string().ok())
+        .filter(|value| !value.is_empty());
+    let runtime_dir = var("XDG_RUNTIME_DIR").unwrap_or_default();
     let Some(path) = wayland_display_socket_path(display.as_deref(), &runtime_dir) else {
-        return;
+        return &[];
     };
 
     if UnixStream::connect(&path).is_ok() {
-        return;
+        return &[];
     }
 
     log::warn!(
         "WAYLAND_DISPLAY points at {}, which cannot be connected to; falling back to X11",
         path.display()
     );
-    std::env::remove_var("WAYLAND_DISPLAY");
-    std::env::remove_var("WAYLAND_SOCKET");
+    &["WAYLAND_DISPLAY", "WAYLAND_SOCKET"]
 }
 
 #[cfg(not(unix))]
-pub(crate) fn fall_back_to_x11_if_wayland_socket_is_dead() {}
+pub(crate) fn dead_wayland_variables(
+    _var: &dyn Fn(&'static str) -> Option<OsString>,
+) -> &'static [&'static str] {
+    &[]
+}
 
 /// Resolve the filesystem path of the Wayland socket from `WAYLAND_DISPLAY`
 /// and `XDG_RUNTIME_DIR`, mirroring libwayland's lookup rules: an absolute
