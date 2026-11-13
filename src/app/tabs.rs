@@ -56,20 +56,14 @@ impl MarkdownApp {
     /// Open a document in its own tab, optionally landing on the heading a
     /// `#fragment` names. An already-open document is focused *and* scrolled
     /// to the fragment — the tab-switch must not silently drop the anchor.
-    pub(crate) fn open_in_new_tab_with_fragment(
-        &mut self,
-        path: PathBuf,
-        fragment: Option<String>,
-    ) {
+    pub(crate) fn open_in_new_tab_with_fragment(&mut self, path: PathBuf, fragment: Option<&str>) {
         let path = path.canonicalize().unwrap_or(path);
         // Check if already open
         if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
             self.active_tab = idx;
             self.title_dirty = true;
-            if let Some(fragment) = &fragment {
-                if let Some(tab) = self.tabs.get_mut(idx) {
-                    apply_fragment_navigation(tab, fragment);
-                }
+            if let (Some(fragment), Some(tab)) = (fragment, self.tabs.get_mut(idx)) {
+                apply_fragment_navigation(tab, fragment);
             }
             return;
         }
@@ -82,7 +76,7 @@ impl MarkdownApp {
                 return;
             }
         };
-        if let Some(fragment) = &fragment {
+        if let Some(fragment) = fragment {
             apply_fragment_navigation(&mut tab, fragment);
         }
         self.record_recent(&path);
@@ -107,16 +101,8 @@ impl MarkdownApp {
             .tabs
             .get_mut(self.active_tab)
             .is_some_and(|tab| tab.navigate_to_path(path).unwrap_or(false));
-        if !changed {
-            return;
-        }
-
-        let opened_path = self.tabs[self.active_tab].path.clone();
-        self.record_recent(&opened_path);
-        self.title_dirty = true;
-        self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
+        if changed {
+            self.active_tab_navigated();
         }
     }
 
@@ -128,8 +114,26 @@ impl MarkdownApp {
                 tab.navigate_forward()
             }
         });
-        if let Some(Err(error)) = result {
-            self.error_message = Some(format!("Unable to navigate history: {error}"));
+        match result {
+            Some(Ok(true)) => self.active_tab_navigated(),
+            Some(Err(error)) => {
+                self.error_message = Some(format!("Unable to navigate history: {error}"));
+            }
+            Some(Ok(false)) | None => {}
+        }
+    }
+
+    /// Bring everything that mirrors tab paths back in line after the active
+    /// tab moved to another document: the recent list, the window title, the
+    /// explorer's open-file highlight, and the watched paths.
+    pub(crate) fn active_tab_navigated(&mut self) {
+        if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
+            self.record_recent(&path);
+        }
+        self.title_dirty = true;
+        self.refresh_open_tab_paths();
+        if self.watch_enabled {
+            self.update_watched_paths();
         }
     }
 
@@ -167,14 +171,14 @@ impl MarkdownApp {
         self.close_tab(self.active_tab);
     }
 
-    pub(crate) fn next_tab(&mut self) {
+    pub(crate) const fn next_tab(&mut self) {
         if self.tabs.len() > 1 {
             self.active_tab = (self.active_tab + 1) % self.tabs.len();
             self.title_dirty = true;
         }
     }
 
-    pub(crate) fn prev_tab(&mut self) {
+    pub(crate) const fn prev_tab(&mut self) {
         if self.tabs.len() > 1 {
             self.active_tab = if self.active_tab == 0 {
                 self.tabs.len() - 1
@@ -185,7 +189,7 @@ impl MarkdownApp {
         }
     }
 
-    pub(crate) fn focus_tab(&mut self, idx: usize) {
+    pub(crate) const fn focus_tab(&mut self, idx: usize) {
         if idx < self.tabs.len() {
             self.active_tab = idx;
             self.title_dirty = true;
@@ -200,7 +204,7 @@ impl MarkdownApp {
             .collect()
     }
 
-    /// Rebuild the cached open_tab_paths set (call after tab open/close/navigate)
+    /// Rebuild the cached `open_tab_paths` set (call after tab open/close/navigate).
     pub(crate) fn refresh_open_tab_paths(&mut self) {
         self.open_tab_paths.clear();
         for tab in &self.tabs {
