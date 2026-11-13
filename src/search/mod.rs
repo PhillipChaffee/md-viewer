@@ -64,7 +64,9 @@ pub(crate) fn find_matches(content: &str, query: &str) -> Vec<SearchMatch> {
     let content_lc = content.to_ascii_lowercase();
     let query_lc = query.to_ascii_lowercase();
     let query_len = query_lc.len();
-    let hidden_spans = non_rendered_spans(content);
+    // A pattern that failed to compile hides nothing: every match is offered.
+    let hidden_spans = markdown_link_pattern()
+        .map_or_else(Vec::new, |pattern| non_rendered_spans(pattern, content));
 
     let mut matches = Vec::new();
     let mut line_number = 1usize;
@@ -98,23 +100,28 @@ pub(crate) fn find_matches(content: &str, query: &str) -> Vec<SearchMatch> {
 }
 
 /// `(!?)[alt-or-text](url)`: group 1 is `!` for an image and empty for a link,
-/// group 2 the alt text or link text, group 3 the URL. `None` only if the
-/// pattern itself is rejected, which is logged once.
+/// group 2 the alt text or link text, group 3 the URL.
+const MARKDOWN_LINK_PATTERN: &str = r"(!?)\[([^\]]*)\]\(([^)]*)\)";
+
+/// The compiled `MARKDOWN_LINK_PATTERN`. `None` only if the pattern itself is
+/// rejected, which is logged once.
 fn markdown_link_pattern() -> Option<&'static Regex> {
-    static PATTERN: LazyLock<Option<Regex>> = LazyLock::new(|| {
-        Regex::new(r"(!?)\[([^\]]*)\]\(([^)]*)\)")
-            .inspect_err(|error| log::error!("Markdown link pattern does not compile: {error}"))
-            .ok()
-    });
+    static PATTERN: LazyLock<Option<Regex>> =
+        LazyLock::new(|| compile_pattern(MARKDOWN_LINK_PATTERN));
     PATTERN.as_ref()
 }
 
+/// Compile `pattern`, logging why when it is rejected.
+fn compile_pattern(pattern: &str) -> Option<Regex> {
+    Regex::new(pattern)
+        .inspect_err(|error| log::error!("Markdown link pattern does not compile: {error}"))
+        .ok()
+}
+
 /// Byte ranges of `content` that are markdown source but never shown as text:
-/// every link or image URL, and the alt text of images.
-fn non_rendered_spans(content: &str) -> Vec<Range<usize>> {
-    let Some(pattern) = markdown_link_pattern() else {
-        return Vec::new();
-    };
+/// every link or image URL, and the alt text of images, as `pattern` (the
+/// compiled `MARKDOWN_LINK_PATTERN`) finds them.
+fn non_rendered_spans(pattern: &Regex, content: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     for capture in pattern.captures_iter(content) {
         let is_image = capture.get(1).is_some_and(|bang| !bang.as_str().is_empty());
