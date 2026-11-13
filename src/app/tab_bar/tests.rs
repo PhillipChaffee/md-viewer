@@ -200,6 +200,33 @@ fn close_others_stops_watching_the_closed_documents() {
     );
 }
 
+#[test]
+fn close_others_counts_the_matches_of_the_document_it_keeps() {
+    let mut harness = LabelHarness::with_docs(&[
+        ("a.md", "needle"),
+        ("b.md", "needle needle"),
+        ("c.md", "# C"),
+    ]);
+    let (b, c) = (harness.path("b.md"), harness.path("c.md"));
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    app.open_in_new_tab(b);
+    app.open_in_new_tab(c);
+    app.focus_tab(0);
+    app.open_search();
+    app.search.query = "needle".to_owned();
+    harness.frames(2);
+    assert!(harness.query_by_label("1 / 1").is_some());
+
+    open_context_menu(&mut harness, "b.md");
+    harness.click("Close Others");
+    // The matches are found again in the frame after the close and
+    // counted in the one after that.
+    harness.frames(1);
+
+    assert!(harness.query_by_label("1 / 2").is_some());
+}
+
 /// Whether the strip is on screen: its open-file button is.
 fn shows_strip(harness: &LabelHarness) -> bool {
     harness.query_by_label("Open file in new tab").is_some()
