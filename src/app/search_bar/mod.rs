@@ -6,6 +6,9 @@ use crate::app::MarkdownApp;
 use crate::layout::line_fraction;
 use crate::search::SearchBarOutcome;
 
+#[cfg(test)]
+mod tests;
+
 impl MarkdownApp {
     /// Render the find bar while it is open. The returned clicks are applied
     /// by the caller once the panel is done.

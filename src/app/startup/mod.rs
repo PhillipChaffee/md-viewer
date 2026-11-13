@@ -18,6 +18,9 @@ use crate::search::SearchState;
 use crate::system_fonts::{scan_pickable_font_families, setup_fonts};
 use crate::tab::Tab;
 
+#[cfg(test)]
+mod tests;
+
 /// One-time egui setup that never changes at runtime.
 fn configure_context(ctx: &egui::Context) {
     // Clear stale egui widget data loaded from disk (scroll offsets, panel sizes, etc.)

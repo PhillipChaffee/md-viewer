@@ -7,6 +7,9 @@ use crate::links::apply_fragment_navigation;
 use crate::recent::{now_epoch_secs, push_recent};
 use crate::tab::Tab;
 
+#[cfg(test)]
+mod tests;
+
 /// Asks the user for a path, with the dialog starting in the given folder.
 /// `Ok(None)` means the user cancelled.
 pub(crate) type PathPicker = Box<dyn Fn(Option<&Path>) -> Result<Option<PathBuf>, String>>;

@@ -4,6 +4,9 @@ use eframe::egui;
 
 use crate::app::{zoom_percent, MarkdownApp};
 
+#[cfg(test)]
+mod tests;
+
 /// Margin kept between the image viewport and the edges of the screen.
 const VIEWPORT_PADDING: f32 = 40.0;
 

@@ -34,6 +34,8 @@ mod tab_bar;
 mod tabs;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod ui_harness;
 mod watching;
 mod welcome;
 

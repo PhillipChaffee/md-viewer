@@ -12,6 +12,9 @@ use crate::persist::{PersistedState, APP_KEY};
 use crate::system_fonts::setup_fonts;
 use crate::watcher::FLASH_DURATION_MS;
 
+#[cfg(test)]
+mod tests;
+
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         #[cfg(feature = "mcp")]
