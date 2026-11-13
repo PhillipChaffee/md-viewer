@@ -1,15 +1,6 @@
 use super::*;
 
 #[test]
-fn search_correction_request_is_consumed_even_without_a_rendered_match() {
-    let mut pending = true;
-
-    assert!(take_search_correction_request(&mut pending));
-    assert!(!pending);
-    assert!(!take_search_correction_request(&mut pending));
-}
-
-#[test]
 fn find_matches_empty_query_returns_none() {
     assert_eq!(find_matches("hello world", ""), vec![]);
 }

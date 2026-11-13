@@ -16,8 +16,7 @@ use crate::app::MarkdownApp;
 use crate::diagram::diagram_colors;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::links::handle_local_link_click;
-use crate::search::take_search_correction_request;
-use crate::tab::scroll::{HEADER_SCROLL_MARGIN, MATCH_INSET};
+use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
 use crate::tab::Tab;
 
 mod column;
@@ -50,14 +49,6 @@ struct PreviewSettings<'look> {
     force_full_render: bool,
 }
 
-/// One-shot requests to re-aim a scroll that was made from an estimate.
-struct ScrollCorrections {
-    /// The find bar jumped to a match this frame.
-    search: bool,
-    /// Position key of an outline header the user clicked.
-    header_key: Option<String>,
-}
-
 impl MarkdownApp {
     /// Render the active tab's content. Returns a path and optional
     /// `#fragment` when the renderer hook requests it be opened in a new tab.
@@ -78,16 +69,13 @@ impl MarkdownApp {
 
         push_search_ranges(tab, search_is_open, active_idx);
 
-        let corrections = ScrollCorrections {
-            // A search correction grants exactly one full-paint attempt. Some
-            // source matches (for example Markdown syntax markers) have no
-            // rendered glyph and therefore never record a Y; do not let those
-            // matches disable viewport clipping forever.
-            search: take_search_correction_request(&mut tab.correct_active_search_pending),
-            // A header click is corrected once too, in any mode: edit mode
-            // drops the request because it has no rendered headings.
-            header_key: tab.pending_header_click_key.take(),
-        };
+        // A search correction grants exactly one full-paint attempt. Some
+        // source matches (for example Markdown syntax markers) have no
+        // rendered glyph and therefore never record a Y; do not let those
+        // matches disable viewport clipping forever. A header click is
+        // corrected once too, in any mode: edit mode drops the request
+        // because it has no rendered headings.
+        let corrections = tab.take_corrections();
         let settings = PreviewSettings {
             look: &self.document_look,
             math_scale: self.math_scale,
@@ -316,7 +304,7 @@ fn scroll_correction(
     current_scroll: f32,
     corrections: &ScrollCorrections,
 ) -> Option<f32> {
-    // Gated by the one-shot `correct_active_search_pending` flag (set by
+    // Gated by the one-shot `ScrollCorrections::search` request (set by
     // `scroll_to_active_match`) so it fires at most once per jump — without
     // this gate the correction would re-trigger every frame the active match
     // is off-screen, fighting the user's wheel input and locking the view

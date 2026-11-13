@@ -89,7 +89,7 @@ fn a_jump_to_a_measured_heading_scrolls_to_just_above_it() {
     tab.jump_to_header(0);
 
     assert_eq!(tab.pending_scroll_offset, Some(350.0));
-    assert_eq!(tab.pending_header_click_key, None, "nothing to correct");
+    assert_eq!(tab.corrections.header_key, None, "nothing to correct");
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn a_jump_to_a_measured_heading_near_the_top_scrolls_to_the_top() {
     tab.jump_to_header(0);
 
     assert_eq!(tab.pending_scroll_offset, Some(0.0));
-    assert_eq!(tab.pending_header_click_key, None);
+    assert_eq!(tab.corrections.header_key, None);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn a_jump_to_an_unmeasured_heading_is_estimated_and_asks_to_be_corrected() {
     tab.jump_to_header(0);
 
     assert_eq!(tab.pending_scroll_offset, Some(950.0));
-    assert_eq!(tab.pending_header_click_key, Some(heading_key(&tab)));
+    assert_eq!(tab.corrections.header_key, Some(heading_key(&tab)));
 }
 
 #[test]
@@ -121,5 +121,20 @@ fn before_layout_a_jump_goes_to_the_top_and_asks_to_be_corrected() {
     tab.jump_to_header(0);
 
     assert_eq!(tab.pending_scroll_offset, Some(0.0));
-    assert_eq!(tab.pending_header_click_key, Some(heading_key(&tab)));
+    assert_eq!(tab.corrections.header_key, Some(heading_key(&tab)));
+}
+
+#[test]
+fn corrections_are_taken_whole_and_only_once() {
+    let (_dir, mut tab) = tab();
+    tab.corrections = ScrollCorrections {
+        search: true,
+        header_key: Some(heading_key(&tab)),
+    };
+
+    let taken = tab.take_corrections();
+
+    assert!(taken.search);
+    assert_eq!(taken.header_key, Some(heading_key(&tab)));
+    assert_eq!(tab.take_corrections(), ScrollCorrections::default());
 }

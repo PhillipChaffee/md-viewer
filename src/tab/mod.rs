@@ -13,6 +13,7 @@ use crate::links::{
     apply_fragment_navigation, parse_local_links, resolve_local_link_path, split_link_fragment,
 };
 use crate::search::{find_matches, SearchMatch};
+use crate::tab::scroll::ScrollCorrections;
 
 #[cfg(kani)]
 mod proofs;
@@ -87,20 +88,8 @@ pub(crate) struct Tab {
     pub(crate) outline: Outline,
     pub(crate) scroll_offset: f32,
     pub(crate) pending_scroll_offset: Option<f32>,
-    /// Composite header-position key (see `header_position_key`) waiting for
-    /// a corrective scroll. Set when the outline-click handler used the
-    /// line-ratio fallback because the cache didn't yet have the precise y
-    /// for this key. Cleared once the post-render corrective step has
-    /// snapped the viewport to the recorded position.
-    pub(crate) pending_header_click_key: Option<String>,
-    /// One-shot permission for the post-render corrective scroll that snaps
-    /// the active search match into view. Set by `scroll_to_active_match`
-    /// (`jump_match` / search-open / tab-switch / query-rebuild) and cleared
-    /// after the corrective block runs once. Without this gate, the block
-    /// would re-fire every frame while `active_search_y` remains populated,
-    /// fighting the user's wheel input and locking the view to the active
-    /// match (issue #19).
-    pub(crate) correct_active_search_pending: bool,
+    /// The jumps made from an estimate since the pane last took them.
+    pub(crate) corrections: ScrollCorrections,
     pub(crate) last_content_height: f32,
     pub(crate) last_viewport_height: f32,
     pub(crate) content_lines: usize,
@@ -156,8 +145,7 @@ impl Tab {
             outline: Outline::default(),
             scroll_offset: 0.0,
             pending_scroll_offset: None,
-            pending_header_click_key: None,
-            correct_active_search_pending: false,
+            corrections: ScrollCorrections::default(),
             last_content_height: 0.0,
             last_viewport_height: 0.0,
             content_lines: 0,

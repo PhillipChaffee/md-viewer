@@ -91,11 +91,11 @@ fn pending_scroll(harness: &Harness) -> Option<f32> {
 
 #[test]
 fn a_new_query_scrolls_its_first_match_a_third_of_the_way_down_the_pane() {
-    let harness = searching_measured(1000.0, 400.0);
+    let mut harness = searching_measured(1000.0, 400.0);
 
     // Line 5 of 10 sits at 500; 35% of the 400 pane stays above it.
     assert_close(pending_scroll(&harness).unwrap(), 360.0);
-    assert!(harness.app.tabs[0].correct_active_search_pending);
+    assert!(harness.app.tabs[0].take_corrections().search);
 }
 
 #[test]

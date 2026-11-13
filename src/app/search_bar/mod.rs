@@ -192,7 +192,7 @@ impl MarkdownApp {
         // Grant the next render one full-paint attempt to record an exact Y.
         // The request is consumed before that render even when the source
         // match has no visible glyph, so later frames return to clipping.
-        tab.correct_active_search_pending = true;
+        tab.corrections.search = true;
     }
 
     /// Rebuild the active tab's search matches if the query or active tab has changed.

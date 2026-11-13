@@ -301,15 +301,15 @@ fn same_document_fragment_scrolls_without_touching_history() {
     );
     assert!(tab.history_back.is_empty(), "no history entry for a scroll");
     assert!(
-        tab.pending_header_click_key.is_some() || tab.pending_scroll_offset.is_some(),
+        tab.corrections.header_key.is_some() || tab.pending_scroll_offset.is_some(),
         "the click must schedule the scroll"
     );
 
     // An unmatched fragment does nothing at all — no navigation, and the
     // scroll scheduled by the earlier match is left alone.
-    let key_before = tab.pending_header_click_key.clone();
+    let key_before = tab.corrections.header_key.clone();
     assert!(!tab.navigate_to_link("#no-such-anchor").unwrap());
-    assert_eq!(tab.pending_header_click_key, key_before);
+    assert_eq!(tab.corrections.header_key, key_before);
     assert_eq!(tab.path, original_path);
 }
 
@@ -326,7 +326,7 @@ fn cross_document_fragment_opens_and_lands_on_heading() {
     assert!(tab.navigate_to_link("guide.md#setup").unwrap());
     assert_eq!(tab.path, guide.canonicalize().unwrap());
     assert!(
-        tab.pending_header_click_key.is_some(),
+        tab.corrections.header_key.is_some(),
         "a fresh document has no cached heading positions, so the \
              corrective pass must be armed to land on the heading"
     );
@@ -573,7 +573,7 @@ mod fragment_scroll {
         assert!(apply_fragment_navigation(&mut tab, "title"));
 
         assert_close(tab.pending_scroll_offset.unwrap(), 0.0);
-        assert_eq!(tab.pending_header_click_key, None);
+        assert_eq!(tab.corrections.header_key, None);
     }
 
     #[test]
@@ -584,7 +584,7 @@ mod fragment_scroll {
         tab.cache.record_header_content_y(&key, 400.0);
         assert!(apply_fragment_navigation(&mut tab, "deep-section"));
         assert_close(tab.pending_scroll_offset.unwrap(), 400.0 - HEADROOM);
-        assert_eq!(tab.pending_header_click_key, None, "nothing to correct");
+        assert_eq!(tab.corrections.header_key, None, "nothing to correct");
 
         // A heading nearer the top than the headroom cannot scroll above 0.
         tab.cache.record_header_content_y(&key, 20.0);
@@ -602,7 +602,7 @@ mod fragment_scroll {
 
         // Line 8 of 10: eight tenths of the way down the rendered height.
         assert_close(tab.pending_scroll_offset.unwrap(), 800.0 - HEADROOM);
-        assert_eq!(tab.pending_header_click_key, Some(key));
+        assert_eq!(tab.corrections.header_key, Some(key));
     }
 
     #[test]
@@ -622,6 +622,6 @@ mod fragment_scroll {
         assert!(apply_fragment_navigation(&mut tab, "deep-section"));
 
         assert_eq!(tab.pending_scroll_offset, None);
-        assert_eq!(tab.pending_header_click_key, Some(key));
+        assert_eq!(tab.corrections.header_key, Some(key));
     }
 }

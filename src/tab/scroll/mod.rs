@@ -15,6 +15,19 @@ pub(crate) const HEADER_SCROLL_MARGIN: f32 = 50.0;
 /// of the viewport's height.
 pub(crate) const MATCH_INSET: f32 = 0.35;
 
+/// One-shot requests to re-aim a scroll that was made from an estimate.
+/// The pane takes them before it renders, so each is acted on once.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct ScrollCorrections {
+    /// The find bar jumped to a match. Asked for once per jump: a
+    /// correction that fired on every frame the match is off screen would
+    /// fight the wheel and lock the view to the match (issue #19).
+    pub(crate) search: bool,
+    /// Position key (see `header_position_key`) of a heading the document
+    /// jumped to before the renderer had measured where the heading is.
+    pub(crate) header_key: Option<String>,
+}
+
 /// How far a heading is from the top of its document.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct HeaderY {
@@ -51,7 +64,14 @@ impl Tab {
             // paint, so that the corrective pass can measure the heading.
             // The renderer records the same source-stable key, so formatting
             // and duplicate display titles cannot redirect the jump.
-            self.pending_header_click_key = Some(header_position_key(source_start));
+            self.corrections.header_key = Some(header_position_key(source_start));
         }
+    }
+
+    /// The corrections asked for since the last call. They are taken even
+    /// when nothing can act on them: the editor shows no headings, and a
+    /// match in Markdown syntax has no glyph whose position is recorded.
+    pub(crate) fn take_corrections(&mut self) -> ScrollCorrections {
+        std::mem::take(&mut self.corrections)
     }
 }

@@ -101,7 +101,7 @@ pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
                 // Nothing is painted to estimate from, so no offset is
                 // set: one full paint records the heading's position for
                 // the corrective pass.
-                tab.pending_header_click_key = Some(header_position_key(header.source_start));
+                tab.corrections.header_key = Some(header_position_key(header.source_start));
             }
             true
         }

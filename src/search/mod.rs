@@ -145,7 +145,3 @@ pub(crate) const fn stepped_match_index(current: usize, count: usize, direction:
         current - 1
     }
 }
-
-pub(crate) fn take_search_correction_request(pending: &mut bool) -> bool {
-    std::mem::take(pending)
-}

@@ -76,9 +76,8 @@ fn a_fragment_lands_on_its_heading_in_a_new_tab_and_in_an_open_one() {
         .app
         .open_in_new_tab_with_fragment(b.clone(), Some("details"));
     assert_eq!(harness.active_path(), b);
-    assert!(harness.app.tabs[1].pending_header_click_key.is_some());
+    assert!(harness.app.tabs[1].take_corrections().header_key.is_some());
 
-    harness.app.tabs[1].pending_header_click_key = None;
     harness.app.focus_tab(0);
     harness
         .app
@@ -86,13 +85,12 @@ fn a_fragment_lands_on_its_heading_in_a_new_tab_and_in_an_open_one() {
     assert_eq!(harness.active_path(), b);
     assert_eq!(harness.app.tabs.len(), 2);
     assert!(
-        harness.app.tabs[1].pending_header_click_key.is_some(),
+        harness.app.tabs[1].take_corrections().header_key.is_some(),
         "focusing the open tab still follows the anchor"
     );
 
-    harness.app.tabs[1].pending_header_click_key = None;
     harness.app.open_in_new_tab(b);
-    assert!(harness.app.tabs[1].pending_header_click_key.is_none());
+    assert!(harness.app.tabs[1].take_corrections().header_key.is_none());
 }
 
 #[test]
