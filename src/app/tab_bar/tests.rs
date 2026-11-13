@@ -34,6 +34,22 @@ fn one_tab(content: &str) -> LabelHarness {
     harness
 }
 
+/// Forty documents, each in a tab of its own with the last in front: more
+/// tabs than the window is wide.
+fn many_tabs() -> LabelHarness {
+    let names: Vec<String> = (1..=40).map(|n| format!("doc-{n:02}.md")).collect();
+    let docs: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "# Doc")).collect();
+    let mut harness = LabelHarness::with_docs(&docs);
+    let rest: Vec<PathBuf> = names[1..].iter().map(|name| harness.path(name)).collect();
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    for path in rest {
+        app.open_in_new_tab(path);
+    }
+    harness.frames(2);
+    harness
+}
+
 fn open_paths(harness: &LabelHarness) -> Vec<PathBuf> {
     let tabs = &harness.state().tabs;
     tabs.iter().map(|tab| tab.path.clone()).collect()
@@ -306,6 +322,19 @@ fn the_plus_button_opens_what_the_picker_returns_in_a_new_tab() {
 
     assert_eq!(open_paths(&harness).len(), 4);
     assert_eq!(active_path(&harness), other);
+}
+
+#[test]
+fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
+    let harness = many_tabs();
+
+    let open = harness.get_by_label("Open file in new tab").rect();
+    let toggle = harness.get_by_label("Preview").rect();
+
+    assert!(
+        open.right() <= toggle.left(),
+        "the button at {open:?} runs into the toggle at {toggle:?}"
+    );
 }
 
 #[test]

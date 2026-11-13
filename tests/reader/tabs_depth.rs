@@ -107,12 +107,7 @@ fn with_more_tabs_than_fit_the_strips_buttons_stay_in_the_window() {
     }
 }
 
-/// Known bug, listed in `tests/README.md`: with more tabs than fit, the
-/// button that opens a file is drawn over the Preview and Edit switch.
-/// This test states the right behavior and is expected to fail until the
-/// app has it.
 #[test]
-#[should_panic(expected = "the open button overlaps the edit switch")]
 fn with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch() {
     let reader = many_tabs(30);
 

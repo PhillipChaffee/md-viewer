@@ -104,14 +104,19 @@ impl MarkdownApp {
             .frame(chrome::bar_frame(palette))
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    self.tab_strip(ui, &mut actions);
-                    self.open_file_button(ui);
-                    if let Some(tab) = self.tabs.get_mut(self.active_tab) {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                             edit_mode_controls(ui, tab, palette);
+                        }
+                        // The tabs and the open-file button take what the
+                        // edit controls leave, and so stop short of them
+                        // however many tabs there are.
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            self.tab_strip(ui, &mut actions);
+                            self.open_file_button(ui);
                         });
-                    }
+                    });
                 });
             });
 
