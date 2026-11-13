@@ -17,8 +17,9 @@ use super::MarkdownApp;
 
 static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
 
-/// More frames than any single interaction needs to come to rest.
-const SETTLE_FRAMES: usize = 12;
+/// The frames an interaction gets to come to rest before the harness starts
+/// waiting on the clock for background work.
+const QUICK_FRAMES: usize = 12;
 
 /// The window size every harness frame is laid out in.
 const SCREEN: egui::Vec2 = egui::vec2(1200.0, 800.0);
@@ -174,11 +175,19 @@ impl UiHarness {
 
     /// Start the app over an already filled directory, on the file `name`
     /// when there is one.
+    ///
+    /// The scan of installed fonts is cut loose, so no test depends on which
+    /// fonts the machine has or on when the scan lands. A test of the family
+    /// list feeds `pending_font_family_scan` itself.
     pub(crate) fn open(dir: ScratchDir, name: Option<&str>) -> Self {
         let file = name.map(|name| dir.path(name));
-        let ui = egui_kittest::Harness::builder()
+        let mut ui = egui_kittest::Harness::builder()
             .with_size(SCREEN)
             .build_eframe(|creation| MarkdownApp::new(creation, file, false));
+        let app = ui.state_mut();
+        app.pending_font_family_scan = None;
+        app.available_font_families.clear();
+        app.available_font_families_lower.clear();
         Self {
             ui,
             dir,
@@ -227,16 +236,20 @@ impl UiHarness {
     }
 
     /// Run frames until the app stops asking for an immediate repaint.
+    ///
+    /// Under the harness clock a frame is longer than the 100 ms the app
+    /// waits between polls of a folder scan, so a poll counts as immediate
+    /// and the app is at rest only once the scan has landed. That takes
+    /// time rather than frames: past the first few frames, each one waits.
     pub(crate) fn settle(&mut self) {
-        let settled = (0..SETTLE_FRAMES).any(|_| {
+        let settled = (0..WAIT_FRAMES).any(|frame| {
+            std::thread::sleep(WAIT_STEP * u32::from(frame >= QUICK_FRAMES));
             self.step();
             let root = &self.ui.output().viewport_output[&egui::ViewportId::ROOT];
             !root.repaint_delay.is_zero()
         });
-        assert!(
-            settled,
-            "the app still asks for repaints after {SETTLE_FRAMES} frames"
-        );
+        let causes = self.ui.ctx.repaint_causes();
+        assert!(settled, "the app still asks for repaints: {causes:?}");
     }
 
     /// Run frames until `done`, for work that finishes on another thread,

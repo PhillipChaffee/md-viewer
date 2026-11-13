@@ -95,11 +95,8 @@ fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
 fn fonts_dialog_while_scanning() -> (UiHarness, Sender<Vec<String>>) {
     let mut harness = UiHarness::with_three_docs();
     let (scan_tx, scan_rx) = mpsc::channel();
-    let app = harness.app_mut();
-    app.available_font_families.clear();
-    app.available_font_families_lower.clear();
-    app.pending_font_family_scan = Some(scan_rx);
-    app.show_font_dialog = true;
+    harness.app_mut().pending_font_family_scan = Some(scan_rx);
+    harness.app_mut().show_font_dialog = true;
     harness.frames(2);
     (harness, scan_tx)
 }
