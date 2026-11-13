@@ -14,6 +14,9 @@ use crate::watcher::{
     MAX_WATCHER_RETRIES,
 };
 
+#[cfg(test)]
+mod tests;
+
 impl MarkdownApp {
     /// Start watching because of a user action or configuration change.
     pub(crate) fn start_watching(&mut self) {
