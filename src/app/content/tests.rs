@@ -10,6 +10,7 @@ use crate::layout::{centered_column_left, LineSpacing, ReadingWidth, READING_COL
 use crate::test_support::{assert_close, painted_shapes};
 use crate::theme::ThemeId;
 
+mod blocks;
 pub(crate) mod label_harness;
 
 /// The first text the document pane painted that starts with `prefix`,
@@ -426,7 +427,6 @@ fn the_reader_sets_body_headings_emphasis_and_code_each_in_its_own_face() {
     let code = text_format(&output, "mono");
     assert_eq!(code.font_id.family, egui::FontFamily::Monospace);
     assert_close(code.font_id.size, body.font_id.size * 0.875);
-    assert_eq!(code.background, harness.app.theme.palette().raised);
 }
 
 #[test]

@@ -87,3 +87,50 @@ fn the_document_is_a_centered_column_with_reader_block_styling() {
         "{heading_line_height}"
     );
 }
+
+#[test]
+fn tables_lists_and_code_chips_are_drawn_in_the_themes_colors() {
+    for theme in ThemeId::ALL {
+        let palette = theme.palette();
+        let blocks = look(theme, FontPreset::Reader).blocks;
+
+        let table = blocks.table.unwrap();
+        assert_eq!(table.rule, egui::Stroke::new(1.0_f32, palette.rule));
+        // The header rule is a hairline too, in a color of its own between
+        // the row rules and the muted text.
+        crate::test_support::assert_close(table.header_rule.width, 1.0);
+        assert_ne!(table.header_rule.color, palette.rule, "{theme:?}");
+        assert_ne!(table.header_rule.color, palette.muted, "{theme:?}");
+        assert!(table.fill_width);
+        assert!(table.cell_padding >= 8.0);
+
+        assert_eq!(blocks.list.unwrap().marker, palette.muted);
+        assert_eq!(blocks.inline_code_radius, Some(4.0));
+    }
+}
+
+#[test]
+fn headings_get_more_room_above_than_below_and_tight_lists_stay_tight() {
+    let rhythm = look(ThemeId::Sepia, FontPreset::Reader)
+        .blocks
+        .rhythm
+        .unwrap();
+
+    assert!(rhythm.heading_above > 2.0 * rhythm.heading_below);
+    assert!(rhythm.heading_below < rhythm.paragraph);
+    assert!(rhythm.tight_item < 0.5 * rhythm.paragraph);
+    // A paragraph gap is clearly less than a blank line of body text.
+    assert!(rhythm.paragraph < 1.0 && rhythm.paragraph <= rhythm.block);
+}
+
+#[test]
+fn the_room_for_figures_is_left_to_the_pane() {
+    // The look is built once per theme and font change; the pane's width
+    // is only known per frame.
+    assert_eq!(
+        look(ThemeId::Sepia, FontPreset::Reader)
+            .blocks
+            .figure_max_width,
+        None
+    );
+}

@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use crate::layout::{centered_column_left, ReadingWidth};
+use crate::layout::{centered_column_left, ReadingWidth, READING_COLUMN_MARGIN};
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -62,6 +62,14 @@ impl Column {
     /// Distance from the pane's left edge to the column's.
     pub(super) fn inset(self) -> f32 {
         centered_column_left(0.0, self.pane.width(), self.width)
+    }
+
+    /// The widest a figure may be shown: the pane less its margins, which
+    /// is what the column itself can be widened to.
+    pub(super) fn figure_room(self) -> f32 {
+        2.0_f32
+            .mul_add(-READING_COLUMN_MARGIN, self.pane.width())
+            .max(self.width)
     }
 
     fn edge_x(self, edge: Edge) -> f32 {

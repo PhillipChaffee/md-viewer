@@ -2015,6 +2015,36 @@ An empty first list is the assertion worth making. It also explains rises in the
 **Fix:** place the block with `scope_builder` at `ui.cursor().min`, then `end_row()` and `set_row_height(0.0)`.
 **Files:** `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`show_preamble`)
 
+### In a wrapping row, vertical space is a position, and `add_space` goes sideways
+
+**Context:** Paragraph gaps of 0.9 em, more space above a heading than below it.
+**Problem:** The renderer's column is a `left_to_right` wrapping layout. `ui.add_space(n)` there moves the cursor `n` px to the *right*, so the fork's `paragraph_spacing` and `heading_spacing_*` options had never changed a pixel. The real gap was two `ui.label("\n")` calls: one ends the row, the other is a blank row as tall as the body face's natural row height.
+**Fix:** start the next row at an exact y: `ui.advance_cursor_after_rect(Rect::from_min_size(pos2(ui.max_rect().left(), ui.min_rect().bottom() + gap), Vec2::ZERO))`, then `ui.set_row_height(0.0)`. A rect that misses the cursor's row starts a new row at its own height, and an empty rect always misses. Measuring from `min_rect().bottom()` makes the gap independent of what the row that ended contained.
+**Gotchas:** `ui.next_widget_position()` is the *bottom* of the cursor's row under `Align::BOTTOM`, which is why the old blank row and the recorded split points agreed. Decide a gap when the block *ends* (peek the next event), not when the next one starts, or a viewport slice that resumes at the next block has to know what came before it.
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/elements.rs` (`start_row_below`), `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`block_end`, `rhythm_gap_after`), `docs/devlog/071-reader-blocks.md`
+
+### A child ui placed in a row sits at the row's bottom
+
+**Context:** List items were 11 px apart with nothing asking for it.
+**Problem:** `ui.horizontal_wrapped` allocates its child `interact_size.y` tall and the row aligns it to the bottom. The list marker's slot had already made the row a full line tall, so the item text started `line height - 18` px below its row's top.
+**Fix:** reserve the slot's width only (`reserve_list_marker_styled(.., flat = true)`); the marker is painted from the text's baseline anyway. Same for the indent, which was a label of spaces as tall as a line.
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/elements.rs`, `vendor/egui_commonmark/egui_commonmark/src/lib.rs` (`List::start_item`)
+
+### `egui_extras` resizes a column by pushing the others; own the widths to move a boundary
+
+**Context:** Tables widened to the text column, with separators that still drag.
+**Problem:** `TableBuilder` grows the dragged column and leaves its neighbors alone, and the renderer caps that growth at the room the table leaves. A table that fills its bound leaves none, so no separator could be dragged right. The separator is also drawn in `widgets.{noninteractive,hovered,active}.bg_stroke`; a theme whose hovered outline is transparent hides it for good.
+**Fix:** `Column::exact(width)` with `.resizable(false)`, the widths kept in egui memory, and one `ui.interact` per boundary after the table is shown. The drag policy is a pure function (`drag_separator`).
+**Gotchas:** check `drag_stopped()` before skipping separators the pointer is not on: a drag held against a column's minimum ends wherever the pointer has got to. `Painter::with_clip_rect` *intersects* with the painter's clip, so a rule across the table cannot be painted from a cell's painter; use `ctx.layer_painter(ui.layer_id())`. A one pixel line off a pixel center is painted at half strength on two rows and nearly vanishes on paper colors.
+**Files:** `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`TableLook`, `drag_separator`)
+
+### A galley on a wrapping row starts at the ui's left edge
+
+**Context:** Tests asserting that a right-aligned cell starts further right than a left-aligned one passed on left-aligned cells.
+**Problem:** On a wrapping row a label's galley is anchored at `ui.max_rect().left()` and its first row carries the distance to the text as *leading space*. `galley.rect.left()` is the ui's edge for every label.
+**Fix:** read where the text starts from the first row: `pos.x + galley.rows[0].rect_without_leading_space().left()`. `rect.right()` and the vertical extent are what they look like.
+**Files:** `vendor/egui_commonmark/egui_commonmark/tests/reader_blocks.rs`
+
 ### Startup style writes after `setup_fonts` silently undo it
 
 **Context:** A session saved at text size Large came back at Normal.

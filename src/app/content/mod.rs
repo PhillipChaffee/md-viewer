@@ -256,16 +256,18 @@ fn preview_pane(
     ui.set_style(Arc::clone(&look.style));
     let kicker = tab.kicker.as_str();
     let preamble = |ui: &mut egui::Ui| document_preamble(ui, kicker, look.muted);
-    // The renderer centers the column in the pane; tables, code blocks,
-    // images and diagrams keep to it, and a table too wide for it scrolls
-    // sideways inside it (#110).
+    // The renderer centers the column in the pane; tables, code blocks and
+    // images keep to it, and a table too wide for it scrolls sideways
+    // inside it (#110). A diagram wider than the column may use the pane.
     let column_px = whole_pixels(column.width);
+    let mut blocks = look.blocks.clone();
+    blocks.figure_max_width = Some(column.figure_room());
     let output = CommonMarkViewer::new()
         .default_implicit_uri_scheme(&tab.base_uri)
         .max_image_width(Some(800))
         .default_width(Some(column_px))
         .table_max_width(Some(column_px))
-        .block_style(look.blocks.clone())
+        .block_style(blocks)
         .preamble(Some(&preamble))
         .indentation_spaces(2)
         .use_strong_font_family(true)
@@ -280,9 +282,6 @@ fn preview_pane(
         .syntax_theme_light(look.syntax_theme)
         .line_height(settings.line_height)
         .code_line_height(settings.code_line_height)
-        .paragraph_spacing(2.0)
-        .heading_spacing_above(2.0)
-        .heading_spacing_below(0.75)
         .content_version(tab.content_version)
         .pending_scroll_offset(pending)
         .force_full_render(settings.force_full_render)

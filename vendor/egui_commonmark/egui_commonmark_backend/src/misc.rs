@@ -804,6 +804,32 @@ pub struct CodeBlock {
     pub content: String,
 }
 
+/// The horizontal room a figure may take in place of the document column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FigureSpace {
+    /// The x the figure is centered on: the middle of the document column.
+    pub axis: f32,
+    /// The widest the figure may be shown.
+    pub width: f32,
+    /// The figure starts no further left than this, however wide it is.
+    pub min_left: f32,
+}
+
+impl FigureSpace {
+    /// Where a figure of natural size `natural` is shown on a row whose top
+    /// is `top`: never above natural size, scaled down to fit otherwise.
+    pub fn place(&self, natural: egui::Vec2, top: f32) -> egui::Rect {
+        let width = natural.x.min(self.width).max(1.0);
+        let height = if natural.x > 0.0 {
+            natural.y * width / natural.x
+        } else {
+            natural.y
+        };
+        let left = (self.axis - width / 2.0).max(self.min_left);
+        egui::Rect::from_min_size(egui::pos2(left, top), egui::vec2(width, height))
+    }
+}
+
 impl CodeBlock {
     pub fn end(
         &self,
@@ -813,9 +839,25 @@ impl CodeBlock {
         max_width: f32,
         id: egui::Id,
     ) {
+        self.end_as_figure(ui, cache, options, max_width, id, None);
+    }
+
+    /// [`CodeBlock::end`] for a block that, when it is a diagram, is shown
+    /// centered in `figure` instead of inline in the column.
+    pub fn end_as_figure(
+        &self,
+        ui: &mut Ui,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+        id: egui::Id,
+        figure: Option<FigureSpace>,
+    ) {
+        #[cfg(not(feature = "mermaid"))]
+        let _ = figure;
         #[cfg(feature = "mermaid")]
         if self.lang.as_deref() == Some("mermaid") {
-            self.render_mermaid(ui, cache, options, max_width);
+            self.render_mermaid(ui, cache, options, max_width, figure);
             return;
         }
 
@@ -885,6 +927,9 @@ impl CodeBlock {
 
 #[cfg(all(test, feature = "mermaid"))]
 mod mermaid_tests;
+
+#[cfg(test)]
+mod figure_tests;
 
 #[cfg(feature = "mermaid")]
 enum MermaidStatus {
@@ -1029,6 +1074,7 @@ impl CodeBlock {
         cache: &mut CommonMarkCache,
         options: &CommonMarkOptions,
         max_width: f32,
+        figure: Option<FigureSpace>,
     ) {
         let source = {
             let mut hasher = DefaultHasher::new();
@@ -1120,12 +1166,35 @@ impl CodeBlock {
             }
             Some((_, Some((texture, size)))) => {
                 let sized_texture = egui::load::SizedTexture::new(texture.id(), *size);
-                let response = ui.add(
-                    egui::Image::new(egui::ImageSource::Texture(sized_texture))
-                        .fit_to_original_size(1.0)
-                        .max_width(options.max_width(ui).min(max_width))
-                        .sense(egui::Sense::click()),
-                );
+                let image = egui::Image::new(egui::ImageSource::Texture(sized_texture));
+                let response = match figure {
+                    Some(space) => {
+                        // The row is as wide as the column and as tall as
+                        // the figure; the figure itself may reach past the
+                        // column on both sides. Its size depends only on the
+                        // texture and on `space.width`, so the pass that
+                        // measures the document and the pass that paints a
+                        // slice of it reserve the same height.
+                        let shown = space.place(*size, 0.0).size();
+                        let (row, row_response) = ui
+                            .allocate_exact_size(egui::vec2(max_width, shown.y), egui::Sense::hover());
+                        let rect = space.place(*size, row.top());
+                        if ui.is_rect_visible(rect) {
+                            image.paint_at(ui, rect);
+                        }
+                        let response =
+                            ui.interact(rect, row_response.id.with("figure"), egui::Sense::click());
+                        // What `egui::Image` reports of itself as a widget.
+                        response.widget_info(|| egui::WidgetInfo::new(egui::WidgetType::Image));
+                        response
+                    }
+                    None => ui.add(
+                        image
+                            .fit_to_original_size(1.0)
+                            .max_width(options.max_width(ui).min(max_width))
+                            .sense(egui::Sense::click()),
+                    ),
+                };
                 if response.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
@@ -2087,6 +2156,19 @@ fn render_math_with_layout(
                 img.paint_at(ui, egui::Rect::from_min_size(rect.min, *size));
             } else if is_inline {
                 ui.add(egui::Image::new(egui::ImageSource::Texture(sized_texture)));
+            } else if let Some(rhythm) = options.block_style.rhythm {
+                // The same air above and below, inside the formula's own
+                // block: the gaps around the block are the paragraph's.
+                let air = (rhythm.display_math * crate::elements::body_font_size(ui)).round();
+                ui.vertical_centered(|ui| {
+                    ui.add_space(air);
+                    ui.add(
+                        egui::Image::new(egui::ImageSource::Texture(sized_texture))
+                            .fit_to_original_size(1.0)
+                            .max_width(ui.available_width()),
+                    );
+                    ui.add_space(air);
+                });
             } else {
                 ui.add_space(8.0);
                 ui.vertical_centered(|ui| {
