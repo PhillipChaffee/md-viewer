@@ -240,6 +240,18 @@ impl Reader {
             .collect()
     }
 
+    /// The names of everything that starts at or right of `left` and at
+    /// or below `top`, in pixels, in reading order: what a sidebar on the
+    /// right lists under its header.
+    pub(crate) fn names_from(&self, left: f32, top: f32) -> Vec<String> {
+        let elements = self.elements().into_iter();
+        elements
+            .filter(|element| element.area.left >= left && element.area.top >= top)
+            .map(|element| element.name)
+            .filter(|name| !name.is_empty())
+            .collect()
+    }
+
     /// Whether `label` is on: a toggle that is switched on, or the chosen
     /// one of a group, such as the active tab or the theme in use.
     #[track_caller]
@@ -355,6 +367,40 @@ impl Reader {
             panic!("no painted text contains `{text}`\n{}", self.describe());
         };
         found.ink
+    }
+
+    /// The ink of every painted text that reads exactly `text`, in the
+    /// order painted: a tab, then the file of that name in the sidebar.
+    pub(crate) fn ink_of_each(&self, text: &str) -> Vec<Rgb> {
+        let painted = self.painted().into_iter();
+        painted
+            .filter(|painted| painted.text == text)
+            .map(|painted| painted.ink)
+            .collect()
+    }
+
+    /// The pieces of text painted on a marker, as find paints its matches:
+    /// each one's words and the marker's color, in the order painted.
+    pub(crate) fn marked(&self) -> Vec<(String, Rgb)> {
+        let painted = self.painted().into_iter();
+        painted
+            .filter_map(|painted| Some((painted.text, painted.marker?)))
+            .collect()
+    }
+
+    /// Every piece of text painted in the window, in the order painted.
+    pub(crate) fn all_text(&self) -> Vec<String> {
+        let painted = self.painted().into_iter();
+        painted.map(|painted| painted.text).collect()
+    }
+
+    /// Whether the keyboard is in a text field.
+    pub(crate) fn is_typing(&self) -> bool {
+        let mut fields = self
+            .elements()
+            .into_iter()
+            .filter(|element| matches!(element.role, Role::TextInput | Role::MultilineTextInput));
+        fields.any(|field| field.focused)
     }
 
     /// The two handles at the edges of the text column, left then right.

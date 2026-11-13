@@ -92,3 +92,7 @@ fails on the day the bug is fixed. Remove the marker then.
 | `lightbox::the_buttons_of_the_top_bar_do_not_act_while_a_picture_is_enlarged` | The enlarged view does not cover the top bar, so its buttons act on the window behind the picture |
 | `math::a_plain_sum_between_dollar_signs_is_a_formula` | `$b + c$` is taken for prose and shown as typed, less its closing dollar sign |
 | `diagrams::a_diagram_too_large_for_the_screen_does_not_stop_the_app` | A diagram drawn larger than the graphics card's biggest texture makes the app panic |
+| `find_depth::following_a_link_counts_the_document_arrived_at` | With the find bar open, a link followed in place leaves the bar on `0 matches` although the new page has matches |
+| `tabs_depth::the_tab_in_front_is_scrolled_into_the_strip` | With more tabs than fit, the strip does not scroll to the tab in front, so a document just opened has no tab on screen |
+| `tabs_depth::with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch` | With more tabs than fit, the open-file button is drawn over the Preview and Edit switch |
+| `editing_depth::ctrl_s_saves_from_the_preview_too` | Back in the preview the unsaved mark says to press Ctrl+S, and Ctrl+S saves nothing there |

@@ -36,6 +36,25 @@ impl Folder {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
     }
+
+    /// Make the folder `name` and the folders above it.
+    pub(crate) fn make_folder(&self, name: &str) {
+        fs::create_dir_all(self.path(name)).unwrap();
+    }
+
+    /// Date `name` as last changed `age` ago.
+    #[track_caller]
+    pub(crate) fn age(&self, name: &str, age: std::time::Duration) {
+        let file = fs::File::options().write(true).open(self.path(name));
+        let then = std::time::SystemTime::now() - age;
+        file.unwrap().set_modified(then).unwrap();
+    }
+
+    /// Make `name` a symbolic link to `target`.
+    #[cfg(unix)]
+    pub(crate) fn link(&self, name: &str, target: &str) {
+        std::os::unix::fs::symlink(self.path(target), self.path(name)).unwrap();
+    }
 }
 
 impl Drop for Folder {

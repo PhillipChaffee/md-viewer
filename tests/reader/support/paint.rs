@@ -132,6 +132,8 @@ pub(crate) struct Painted {
     pub(crate) struck_out: bool,
     /// Whether a line is drawn under any of it.
     pub(crate) underlined: bool,
+    /// The color laid behind its first glyph, when it is marked.
+    pub(crate) marker: Option<Rgb>,
     /// The middle of its first line, where a person would click on it. A
     /// text that wraps has its own middle off its words.
     pub(crate) first_line: Pos2,
@@ -182,12 +184,16 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                 let underlined = |section: &egui::text::LayoutSection| {
                     section.format.underline != egui::Stroke::NONE
                 };
+                let marker = section
+                    .map(|section| section.format.background)
+                    .filter(|behind| *behind != Color32::TRANSPARENT);
                 texts.push(Painted {
                     text: text.galley.text().to_owned(),
                     ink: Rgb::of(ink),
                     inks,
                     struck_out: sections.iter().any(struck),
                     underlined: sections.iter().any(underlined),
+                    marker: marker.map(Rgb::of),
                     first_line: first_line(text),
                 });
             }

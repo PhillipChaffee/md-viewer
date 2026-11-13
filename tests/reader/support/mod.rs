@@ -42,6 +42,9 @@ const QUICK_FRAMES: u32 = 12;
 const WAIT_FRAMES: u32 = 2000;
 const WAIT_STEP: Duration = Duration::from_millis(10);
 
+/// The name md-viewer keeps its session under in the settings file.
+const SESSION_KEY: &str = "md-viewer-state";
+
 /// What eframe keeps between runs, held in memory instead of in the
 /// user's data directory.
 #[derive(Default)]
@@ -119,6 +122,39 @@ impl Launch {
     /// relative path means what it means to the test process.
     pub(crate) fn raw_args(mut self, args: &[&str]) -> Self {
         self.args = args.iter().map(|arg| (*arg).to_owned()).collect();
+        self
+    }
+
+    /// Where `name` will be on disk, for a session that has to name it.
+    pub(crate) fn path(&self, name: &str) -> PathBuf {
+        self.folder.path(name)
+    }
+
+    /// Date the file `name` as last changed `seconds` ago.
+    #[track_caller]
+    pub(crate) fn aged(self, name: &str, seconds: u64) -> Self {
+        self.folder.age(name, Duration::from_secs(seconds));
+        self
+    }
+
+    /// Make `name` an empty folder before the app starts.
+    pub(crate) fn folder(self, name: &str) -> Self {
+        self.folder.make_folder(name);
+        self
+    }
+
+    /// Make `name` a symbolic link to `target`, another name in the folder.
+    #[cfg(unix)]
+    pub(crate) fn link(self, name: &str, target: &str) -> Self {
+        self.folder.link(name, target);
+        self
+    }
+
+    /// Start as if the last run had left `saved` as its session: the text
+    /// md-viewer keeps in its settings file between runs.
+    pub(crate) fn remembering(mut self, saved: &str) -> Self {
+        let saved = saved.to_owned();
+        self.session.0.insert(SESSION_KEY.to_owned(), saved);
         self
     }
 
@@ -273,10 +309,53 @@ impl Reader {
         self.folder.write(name, content);
     }
 
+    /// Write these exact bytes to `name` behind the app's back.
+    pub(crate) fn write_bytes(&self, name: &str, content: &[u8]) {
+        self.folder.write(name, content);
+    }
+
+    /// Replace `name` the way most editors save: write the new text beside
+    /// it, then rename that over it.
+    #[track_caller]
+    pub(crate) fn save_over(&self, name: &str, content: &str) {
+        let beside = format!("{name}.editor-swap");
+        self.folder.write(&beside, content);
+        self.rename_file(&beside, name);
+    }
+
+    /// Give the file or folder `from` the name `to` behind the app's back.
+    #[track_caller]
+    pub(crate) fn rename_file(&self, from: &str, to: &str) {
+        std::fs::rename(self.folder.path(from), self.folder.path(to)).unwrap();
+    }
+
+    /// Make the folder `name` behind the app's back.
+    pub(crate) fn make_folder(&self, name: &str) {
+        self.folder.make_folder(name);
+    }
+
     /// What `name` holds on disk now.
     #[track_caller]
     pub(crate) fn read_file(&self, name: &str) -> String {
         std::fs::read_to_string(self.folder.path(name)).unwrap()
+    }
+
+    /// The exact bytes `name` holds on disk now.
+    #[track_caller]
+    pub(crate) fn read_bytes(&self, name: &str) -> Vec<u8> {
+        std::fs::read(self.folder.path(name)).unwrap()
+    }
+
+    /// The names of everything in the folder `name` (`""` for the top),
+    /// sorted.
+    #[track_caller]
+    pub(crate) fn files_in(&self, name: &str) -> Vec<String> {
+        let entries = std::fs::read_dir(self.folder.path(name)).unwrap();
+        let mut names: Vec<String> = entries
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
     }
 
     /// Delete `name` behind the app's back.

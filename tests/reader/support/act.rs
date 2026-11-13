@@ -43,6 +43,14 @@ impl Reader {
     /// labelled exactly `label`, for a label the window shows twice.
     #[track_caller]
     pub(crate) fn click_nth(&mut self, label: &str, nth: usize) {
+        let at = self.nth_spot(label, nth);
+        self.click_at(at, PointerButton::Primary, Modifiers::NONE);
+    }
+
+    /// The middle of the `nth` (from zero, in reading order) of the
+    /// controls labelled exactly `label`.
+    #[track_caller]
+    fn nth_spot(&self, label: &str, nth: usize) -> Pos2 {
         let all = self.all(label);
         let Some(element) = all.get(nth) else {
             panic!(
@@ -51,8 +59,7 @@ impl Reader {
                 self.describe()
             );
         };
-        let at = element.area.center();
-        self.click_at(at, PointerButton::Primary, Modifiers::NONE);
+        element.area.center()
     }
 
     /// Click `label` with Ctrl held.
@@ -60,6 +67,22 @@ impl Reader {
     pub(crate) fn ctrl_click(&mut self, label: &str) {
         let at = self.spot(label);
         self.click_at(at, PointerButton::Primary, chord("Ctrl+A").0);
+    }
+
+    /// Click the `nth` of the controls labelled `label` with the right
+    /// mouse button.
+    #[track_caller]
+    pub(crate) fn right_click_nth(&mut self, label: &str, nth: usize) {
+        let at = self.nth_spot(label, nth);
+        self.click_at(at, PointerButton::Secondary, Modifiers::NONE);
+    }
+
+    /// Click the `nth` of the controls labelled `label` with the middle
+    /// mouse button.
+    #[track_caller]
+    pub(crate) fn middle_click_nth(&mut self, label: &str, nth: usize) {
+        let at = self.nth_spot(label, nth);
+        self.click_at(at, PointerButton::Middle, Modifiers::NONE);
     }
 
     /// Click `label` with the right mouse button, which opens its menu.
@@ -107,23 +130,8 @@ impl Reader {
     /// and let go.
     #[track_caller]
     pub(crate) fn drag(&mut self, label: &str, dx: f32, dy: f32) {
-        let from = self.to_points(self.spot(label));
-        let (dx, dy) = (dx / self.scale(), dy / self.scale());
-        let to = from + egui::vec2(dx, dy);
-        let button = |pos, pressed| egui::Event::PointerButton {
-            pos,
-            button: PointerButton::Primary,
-            pressed,
-            modifiers: Modifiers::NONE,
-        };
-        self.frame(Modifiers::NONE, vec![egui::Event::PointerMoved(from)]);
-        self.frame(Modifiers::NONE, vec![button(from, true)]);
-        // Two steps: the first tells a drag from a click, the second lands.
-        let midway = from + egui::vec2(dx, dy) / 2.0;
-        self.frame(Modifiers::NONE, vec![egui::Event::PointerMoved(midway)]);
-        self.frame(Modifiers::NONE, vec![egui::Event::PointerMoved(to)]);
-        self.frame(Modifiers::NONE, vec![button(to, false)]);
-        self.settle();
+        let from = self.spot(label);
+        self.drag_point(from.x, from.y, dx, dy);
     }
 
     /// Press on the slider `label` at `fraction` of its length (0 is its
@@ -192,6 +200,18 @@ impl Reader {
         self.settle();
     }
 
+    /// Turn the mouse wheel the other way, moving the page `pixels` toward
+    /// its start.
+    pub(crate) fn scroll_up(&mut self, pixels: f32) {
+        self.scroll_down(-pixels);
+    }
+
+    /// Paste `text` from the clipboard into whatever has the keyboard.
+    pub(crate) fn paste(&mut self, text: &str) {
+        self.frame(Modifiers::NONE, vec![egui::Event::Paste(text.to_owned())]);
+        self.settle();
+    }
+
     /// Hold files over the window without letting go.
     pub(crate) fn drag_files_over(&mut self, names: &[&str]) {
         let files = names.iter().map(|name| egui::HoveredFile {
@@ -207,14 +227,25 @@ impl Reader {
         self.drop_path(self.path(name));
     }
 
+    /// Drop several files from the folder onto the window in one go.
+    pub(crate) fn drop_files(&mut self, names: &[&str]) {
+        let paths = names.iter().map(|name| self.path(name)).collect();
+        self.drop_paths(paths);
+    }
+
     /// Drop a file from anywhere on disk onto the window.
     pub(crate) fn drop_path(&mut self, path: PathBuf) {
-        let input = self.kit.input_mut();
-        input.hovered_files.clear();
-        input.dropped_files = vec![egui::DroppedFile {
+        self.drop_paths(vec![path]);
+    }
+
+    fn drop_paths(&mut self, paths: Vec<PathBuf>) {
+        let dropped = paths.into_iter().map(|path| egui::DroppedFile {
             path: Some(path),
             ..Default::default()
-        }];
+        });
+        let input = self.kit.input_mut();
+        input.hovered_files.clear();
+        input.dropped_files = dropped.collect();
         self.frame(Modifiers::NONE, Vec::new());
         self.settle();
     }
