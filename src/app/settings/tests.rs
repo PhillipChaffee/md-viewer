@@ -86,7 +86,7 @@ fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
     harness.pick("Fonts");
     assert!(harness.shows("Text Size"));
     harness.click("Close window");
-    assert!(!harness.app().show_font_dialog);
+    assert!(!harness.app().font_picker.open);
     assert!(!harness.shows("Text Size"));
 }
 
@@ -95,8 +95,8 @@ fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
 fn fonts_dialog_while_scanning() -> (UiHarness, Sender<Vec<String>>) {
     let mut harness = UiHarness::with_three_docs();
     let (scan_tx, scan_rx) = mpsc::channel();
-    harness.app_mut().pending_font_family_scan = Some(scan_rx);
-    harness.app_mut().show_font_dialog = true;
+    harness.app_mut().font_picker.scan = Some(scan_rx);
+    harness.app_mut().font_picker.open = true;
     harness.frames(2);
     (harness, scan_tx)
 }
@@ -132,7 +132,7 @@ fn a_scan_that_dies_leaves_only_the_system_default() {
 
     assert!(!harness.shows("Scanning installed fonts"));
     assert!(harness.shows("System Default"));
-    assert!(harness.app().available_font_families.is_empty());
+    assert!(harness.app().font_picker.families.is_empty());
 }
 
 #[test]

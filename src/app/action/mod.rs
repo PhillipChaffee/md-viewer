@@ -110,7 +110,7 @@ impl MarkdownApp {
                 self.smooth_text_rendering = !self.smooth_text_rendering;
             }
             AppAction::OpenColorSettings => self.show_color_settings_dialog = true,
-            AppAction::OpenFontSettings => self.show_font_dialog = true,
+            AppAction::OpenFontSettings => self.font_picker.open = true,
             AppAction::ZoomBy(factor) => self.zoom_level = zoomed(self.zoom_level, factor),
             AppAction::ResetZoom => self.zoom_level = 1.0,
             AppAction::ZoomLightboxBy(factor) => {

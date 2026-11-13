@@ -216,7 +216,7 @@ fn a_virtual_display_gets_a_frame_rate_cap() {
 /// moment of its own choosing.
 fn at_rest() -> Harness {
     let mut harness = Harness::with_three_docs();
-    harness.app.pending_font_family_scan = None;
+    harness.app.font_picker.scan = None;
     frames_until(&mut harness, "the explorer scan", |app| {
         app.file_explorer.pending_scan.is_none()
     });

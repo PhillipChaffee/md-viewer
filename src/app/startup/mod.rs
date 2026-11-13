@@ -3,13 +3,13 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui::{self, FontId, TextStyle};
 
 use crate::app::content::look::DocumentLook;
 use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
+use crate::app::settings::FontPicker;
 use crate::app::watching::LiveReload;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
@@ -17,7 +17,7 @@ use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
 use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::search::SearchState;
-use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts, FontConfig};
+use crate::system_fonts::{document_fonts, setup_fonts, FontConfig};
 use crate::tab::Tab;
 use crate::theme::{ColorOverrides, ThemeId};
 
@@ -84,22 +84,6 @@ fn configure_context(ctx: &egui::Context) {
         // Reduce resize grab radius to prevent overlap with adjacent scrollbars
         style.interaction.resize_grab_radius_side = SIDEBAR_RESIZE_GRAB_RADIUS;
     });
-}
-
-/// Scan the picker's family list off the UI thread: probing every family's
-/// Latin coverage takes ~0.5s on a stock Arch system (see
-/// `scan_pickable_font_families`). Until the result lands, the font dialog
-/// shows "System Default" plus a scanning note. `None` means the thread
-/// could not be started, and the list stays empty.
-fn spawn_font_family_scan() -> Option<Receiver<Vec<String>>> {
-    let (font_family_tx, font_family_rx) = mpsc::channel();
-    std::thread::Builder::new()
-        .name("font-family-scan".to_owned())
-        .spawn(move || {
-            let _ = font_family_tx.send(scan_pickable_font_families());
-        })
-        .is_ok()
-        .then_some(font_family_rx)
 }
 
 /// The tabs to start with, and the message to show when the requested file
@@ -286,11 +270,7 @@ impl MarkdownApp {
             // in sync so update() doesn't redundantly reload fonts on frame 1.
             applied_fonts: Some(fonts.clone()),
             fonts,
-            available_font_families: Vec::new(),
-            available_font_families_lower: Vec::new(),
-            pending_font_family_scan: spawn_font_family_scan(),
-            show_font_dialog: false,
-            font_filter: String::new(),
+            font_picker: FontPicker::scanning(),
             smooth_text_rendering,
             file_picker: Box::new(pick_file),
             folder_picker: Box::new(pick_folder),

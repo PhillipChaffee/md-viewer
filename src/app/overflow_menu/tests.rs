@@ -70,10 +70,10 @@ fn the_dialog_items_open_their_dialogs() {
 
     harness.pick("Colors");
     assert!(harness.app().show_color_settings_dialog);
-    assert!(!harness.app().show_font_dialog);
+    assert!(!harness.app().font_picker.open);
 
     harness.pick("Fonts");
-    assert!(harness.app().show_font_dialog);
+    assert!(harness.app().font_picker.open);
 }
 
 #[test]

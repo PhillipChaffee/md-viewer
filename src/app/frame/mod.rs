@@ -1,7 +1,6 @@
 //! The eframe integration: input hook, persistence, and the per-frame update sequence.
 
 use std::path::PathBuf;
-use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
 use eframe::egui;
@@ -83,7 +82,7 @@ impl MarkdownApp {
         }
 
         let theme_changed = self.apply_theme(ctx);
-        self.poll_font_family_scan();
+        self.font_picker.poll(&self.egui_ctx);
         let fonts_changed = self.apply_fonts(ctx);
         if theme_changed || fonts_changed {
             self.rebuild_document_look(ctx);
@@ -165,32 +164,6 @@ impl MarkdownApp {
     pub(crate) fn relayout_documents(&mut self) {
         for tab in &mut self.tabs {
             tab.cache.mark_layout_changed();
-        }
-    }
-
-    /// Collect the background font-family scan (async phase: poll the
-    /// channel, never block the UI thread). Fills the picker's family
-    /// list once, then drops the channel.
-    fn poll_font_family_scan(&mut self) {
-        let Some(scan) = &self.pending_font_family_scan else {
-            return;
-        };
-        match scan.try_recv() {
-            Ok(names) => {
-                self.available_font_families_lower =
-                    names.iter().map(|name| name.to_ascii_lowercase()).collect();
-                self.available_font_families = names;
-                self.pending_font_family_scan = None;
-                // The list may have landed while the font dialog was
-                // already open; repaint so it appears without input.
-                self.egui_ctx.request_repaint();
-            }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => {
-                // Sender dropped without sending (thread spawn raced or
-                // panicked) — stop polling, keep whatever list we have.
-                self.pending_font_family_scan = None;
-            }
         }
     }
 

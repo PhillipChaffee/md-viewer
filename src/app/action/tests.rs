@@ -41,9 +41,9 @@ fn menu_only_actions_change_their_own_setting() {
     assert!(!harness.app.show_color_settings_dialog);
     harness.apply(AppAction::OpenColorSettings);
     assert!(harness.app.show_color_settings_dialog);
-    assert!(!harness.app.show_font_dialog);
+    assert!(!harness.app.font_picker.open);
     harness.apply(AppAction::OpenFontSettings);
-    assert!(harness.app.show_font_dialog);
+    assert!(harness.app.font_picker.open);
 }
 
 #[test]

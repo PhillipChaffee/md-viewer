@@ -1,13 +1,82 @@
 //! The color and font settings dialogs.
 
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+
 use eframe::egui;
 
 use crate::app::mcp;
 use crate::app::MarkdownApp;
-use crate::system_fonts::{FontPreset, TextSizeClass};
+use crate::system_fonts::{scan_pickable_font_families, FontPreset, TextSizeClass};
 
 #[cfg(test)]
 mod tests;
+
+/// The font dialog's own state: whether it shows, and the families it
+/// offers. None of it is saved.
+#[derive(Default)]
+pub(super) struct FontPicker {
+    pub(super) open: bool,
+    // Body-font families the picker offers, scanned in a background thread:
+    // one canonical name per family, only families that can actually serve
+    // as the body font. Empty until the scan lands (the dialog shows a
+    // scanning note; "System Default" always works).
+    families: Vec<String>,
+    // Lowercased copy of `families`, precomputed once so the search filter
+    // doesn't re-lowercase every name on every frame it's open: never
+    // allocate in the render loop what can be cached.
+    families_lower: Vec<String>,
+    // In-flight background scan producing `families`.
+    pub(super) scan: Option<Receiver<Vec<String>>>,
+    // The search text.
+    filter: String,
+}
+
+impl FontPicker {
+    /// A closed picker whose family list is being scanned off the UI
+    /// thread: probing every family's Latin coverage takes ~0.5s on a stock
+    /// Arch system (see `scan_pickable_font_families`). Until the result
+    /// lands, the font dialog shows "System Default" plus a scanning note.
+    /// Where the thread could not be started, the list stays empty.
+    pub(super) fn scanning() -> Self {
+        let (font_family_tx, font_family_rx) = mpsc::channel();
+        let scan = std::thread::Builder::new()
+            .name("font-family-scan".to_owned())
+            .spawn(move || {
+                let _ = font_family_tx.send(scan_pickable_font_families());
+            })
+            .is_ok()
+            .then_some(font_family_rx);
+        Self {
+            scan,
+            ..Self::default()
+        }
+    }
+
+    /// Collect the background font-family scan (async phase: poll the
+    /// channel, never block the UI thread). Fills the family list once,
+    /// then drops the channel.
+    pub(super) fn poll(&mut self, ctx: &egui::Context) {
+        let Some(scan) = &self.scan else {
+            return;
+        };
+        match scan.try_recv() {
+            Ok(names) => {
+                self.families_lower = names.iter().map(|name| name.to_ascii_lowercase()).collect();
+                self.families = names;
+                self.scan = None;
+                // The list may have landed while the font dialog was
+                // already open; repaint so it appears without input.
+                ctx.request_repaint();
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                // Sender dropped without sending (thread spawn raced or
+                // panicked) — stop polling, keep whatever list we have.
+                self.scan = None;
+            }
+        }
+    }
+}
 
 /// A row clicked in the font dialog's family list.
 enum FamilyChoice {
@@ -108,13 +177,13 @@ impl MarkdownApp {
     }
 
     pub(crate) fn render_font_settings(&mut self, ctx: &egui::Context) {
-        if !self.show_font_dialog {
+        if !self.font_picker.open {
             return;
         }
 
         let mut open = true;
         // Set inside the window closure, applied after `.show()` returns —
-        // the list rows borrow `available_font_families` while the closure
+        // the list rows borrow the picker's families while the closure
         // runs, so a picked name can't mutate `self` in place.
         let mut picked_family: Option<FamilyChoice> = None;
 
@@ -137,7 +206,7 @@ impl MarkdownApp {
                 picked_family = self.font_family_list(ui);
             });
 
-        self.show_font_dialog = open;
+        self.font_picker.open = open;
         match picked_family {
             Some(FamilyChoice::SystemDefault) => self.fonts.family = None,
             Some(FamilyChoice::Family(name)) => self.fonts.family = Some(name),
@@ -202,7 +271,7 @@ impl MarkdownApp {
     fn font_family_search(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Search:");
-            let filter_edit = ui.text_edit_singleline(&mut self.font_filter);
+            let filter_edit = ui.text_edit_singleline(&mut self.font_picker.filter);
             mcp::widget(
                 &self.mcp,
                 format_args!("Font Dialog: Search"),
@@ -213,20 +282,21 @@ impl MarkdownApp {
         });
     }
 
-    /// Positions in `available_font_families` that match the search text, or
+    /// Positions in the picker's families that match the search text, or
     /// `None` when there is no search text and every family is listed.
     ///
     /// Only the empty-filter (common) case avoids allocating: it reuses
-    /// `available_font_families` directly. A non-empty filter needs one
+    /// the family list directly. A non-empty filter needs one
     /// `Vec<usize>` of matching indices, built from the precomputed lowercase
     /// names (no per-name allocation).
     fn filtered_font_indices(&self) -> Option<Vec<usize>> {
-        let filter = self.font_filter.to_ascii_lowercase();
+        let filter = self.font_picker.filter.to_ascii_lowercase();
         if filter.is_empty() {
             return None;
         }
         Some(
-            self.available_font_families_lower
+            self.font_picker
+                .families_lower
                 .iter()
                 .enumerate()
                 .filter(|(_, lower)| lower.contains(&filter))
@@ -240,7 +310,7 @@ impl MarkdownApp {
         // One canonical name per body-capable family, scanned once in
         // the background at startup. While the scan is running, only
         // "System Default" is offered.
-        if self.available_font_families.is_empty() && self.pending_font_family_scan.is_some() {
+        if self.font_picker.families.is_empty() && self.font_picker.scan.is_some() {
             ui.horizontal(|ui| {
                 ui.spinner();
                 ui.label("Scanning installed fonts…");
@@ -250,7 +320,7 @@ impl MarkdownApp {
         let filtered_indices = self.filtered_font_indices();
         let match_count = filtered_indices
             .as_ref()
-            .map_or(self.available_font_families.len(), Vec::len);
+            .map_or(self.font_picker.families.len(), Vec::len);
         let mut clicked = None;
 
         let row_height = ui.spacing().interact_size.y;
@@ -275,7 +345,7 @@ impl MarkdownApp {
                         let font_index = filtered_indices
                             .as_ref()
                             .map_or(family_row, |indices| indices[family_row]);
-                        let name = &self.available_font_families[font_index];
+                        let name = &self.font_picker.families[font_index];
                         let is_selected = self.fonts.family.as_deref() == Some(name.as_str());
                         if ui.selectable_label(is_selected, name).clicked() {
                             clicked = Some(FamilyChoice::Family(name.clone()));

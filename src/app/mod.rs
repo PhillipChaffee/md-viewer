@@ -3,7 +3,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
 use eframe::egui;
@@ -104,22 +103,9 @@ pub(crate) struct MarkdownApp {
     /// The document's font family, preset and size class. Every preset
     /// shares the one size class.
     fonts: FontConfig,
-    // Body-font families the picker offers, scanned in a background thread:
-    // one canonical name per family, only families that can actually serve
-    // as the body font. Empty until the scan lands (the dialog shows a
-    // scanning note; "System Default" always works).
-    available_font_families: Vec<String>,
-    // Lowercased copy of `available_font_families`, precomputed once so the
-    // font-picker search filter doesn't re-lowercase every name on every
-    // frame it's open: never allocate in the render loop what can be cached.
-    available_font_families_lower: Vec<String>,
-    // In-flight background scan producing `available_font_families`.
-    pending_font_family_scan: Option<Receiver<Vec<String>>>,
     // The `fonts` egui last loaded: fonts are reloaded only when they differ.
     applied_fonts: Option<FontConfig>,
-    show_font_dialog: bool,
-    // Transient UI-only search text for the font picker (not persisted).
-    font_filter: String,
+    font_picker: settings::FontPicker,
     // Disables egui's glyph pixel-snapping when true. Applied unconditionally
     // every frame (see ctx.set_zoom_factor below) since it's a single write
     // into egui's own memory, not worth a last-applied change-gate.

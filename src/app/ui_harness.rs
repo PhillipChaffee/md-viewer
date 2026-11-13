@@ -10,6 +10,7 @@ use eframe::egui::{self, accesskit};
 use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
+use super::settings::FontPicker;
 use super::tests::Harness;
 use super::MarkdownApp;
 
@@ -159,16 +160,14 @@ impl UiHarness {
     ///
     /// The scan of installed fonts is cut loose, so no test depends on which
     /// fonts the machine has or on when the scan lands. A test of the family
-    /// list feeds `pending_font_family_scan` itself.
+    /// list feeds the font picker's `scan` itself.
     pub(crate) fn open(dir: ScratchDir, name: Option<&str>) -> Self {
         let file = name.map(|name| dir.path(name));
         let mut ui = egui_kittest::Harness::builder()
             .with_size(SCREEN)
             .build_eframe(|creation| MarkdownApp::new(creation, file, false));
         let app = ui.state_mut();
-        app.pending_font_family_scan = None;
-        app.available_font_families.clear();
-        app.available_font_families_lower.clear();
+        app.font_picker = FontPicker::default();
         Self {
             ui,
             dir,

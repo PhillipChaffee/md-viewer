@@ -244,11 +244,11 @@ fn the_three_steps_set_the_line_spacing_and_show_the_one_in_force() {
 #[test]
 fn fonts_opens_the_font_dialog_and_puts_the_popover_away() {
     let mut harness = popover();
-    assert!(!harness.app().show_font_dialog);
+    assert!(!harness.app().font_picker.open);
 
     harness.click("Fonts…");
 
-    assert!(harness.app().show_font_dialog);
+    assert!(harness.app().font_picker.open);
     assert!(!is_open(&harness));
 }
 
