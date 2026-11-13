@@ -7,7 +7,7 @@ use super::*;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{frame_on, painted_text};
 use crate::layout::{centered_column_left, LineSpacing, ReadingWidth, READING_COLUMN_MARGIN};
-use crate::test_support::{assert_close, painted_shapes};
+use crate::test_support::{assert_close, painted_shapes, painted_text_starting_below};
 use crate::theme::ThemeId;
 
 mod blocks;
@@ -17,19 +17,8 @@ pub(crate) mod label_harness;
 /// with where it was painted. The top bar above the pane repeats the
 /// document's title, and is passed over.
 #[track_caller]
-fn painted_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
-    let in_the_pane = painted_shapes(output)
-        .into_iter()
-        .find_map(|shape| match shape {
-            egui::Shape::Text(text)
-                if text.pos.y >= crate::app::chrome::BAR_HEIGHT
-                    && text.galley.text().starts_with(prefix) =>
-            {
-                Some(text)
-            }
-            _ => None,
-        });
-    in_the_pane.expect("the document pane painted no text starting with the prefix")
+fn pane_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
+    painted_text_starting_below(output, prefix, crate::app::chrome::BAR_HEIGHT)
 }
 
 /// One document that links to `b.md` and to a file that does not exist.
@@ -348,7 +337,7 @@ fn pointer_button(pos: egui::Pos2, pressed: bool) -> Event {
 /// The font and color of the first run of the painted text starting with
 /// `prefix`.
 fn text_format(output: &egui::FullOutput, prefix: &str) -> egui::TextFormat {
-    let text = painted_text_starting(output, prefix);
+    let text = pane_text_starting(output, prefix);
     text.galley.job.sections[0].format.clone()
 }
 
@@ -367,9 +356,9 @@ fn the_document_is_set_in_a_centered_column_of_the_reading_width() {
         let output = harness.idle();
 
         let left = column_left(column);
-        let body = painted_text_starting(&output, "word");
+        let body = pane_text_starting(&output, "word");
         assert_close(body.pos.x, left);
-        assert_close(painted_text_starting(&output, "Title").pos.x, left);
+        assert_close(pane_text_starting(&output, "Title").pos.x, left);
         // The paragraph wraps at the column's right edge, not short of it.
         let widest_line = body.galley.size().x;
         assert!(
@@ -404,7 +393,7 @@ fn a_pane_narrower_than_the_column_narrows_it_and_keeps_the_margins() {
         column,
         (2.0_f32.mul_add(-READING_COLUMN_MARGIN, pane)).floor(),
     );
-    let widest_line = painted_text_starting(&output, "word").galley.size().x;
+    let widest_line = pane_text_starting(&output, "word").galley.size().x;
     assert!(widest_line <= column + 0.5, "{widest_line} in {column}");
 }
 
@@ -413,9 +402,9 @@ fn a_meta_line_with_the_file_name_and_reading_time_sits_above_the_title() {
     let mut harness = reader("# Title\n\nBody.");
     let output = harness.idle();
 
-    let kicker = painted_text_starting(&output, "a.md \u{b7}");
+    let kicker = pane_text_starting(&output, "a.md \u{b7}");
     assert_eq!(kicker.galley.text(), "a.md · 1 min read");
-    let title = painted_text_starting(&output, "Title");
+    let title = pane_text_starting(&output, "Title");
     assert_close(kicker.pos.x, title.pos.x);
     assert!(kicker.pos.y < title.pos.y);
     // Small, muted, and in the chrome's sans whatever the document is set in.
@@ -432,8 +421,8 @@ fn the_meta_line_keeps_its_room_whether_all_or_a_slice_of_the_document_is_painte
     ));
     let positions = |output: &egui::FullOutput| {
         (
-            painted_text_starting(output, "a.md \u{b7}").pos.y,
-            painted_text_starting(output, "Title").pos.y,
+            pane_text_starting(output, "a.md \u{b7}").pos.y,
+            pane_text_starting(output, "Title").pos.y,
         )
     };
     // By now the renderer paints only the slice of the document in view.
@@ -527,7 +516,7 @@ fn a_code_block_is_a_rounded_borderless_box_in_the_themes_raised_color() {
             "{:?}",
             block.rect
         );
-        let code = painted_text_starting(&output, "fn main");
+        let code = pane_text_starting(&output, "fn main");
         assert_close(code.pos.x - block.rect.left(), 16.0);
         // One line of code and the padding: no empty line under it.
         assert_eq!(code.galley.rows.len(), 1);
@@ -566,7 +555,7 @@ fn line_spacing_sets_the_pitch_of_body_lines_and_the_length_of_the_page() {
         harness.apply(AppAction::SetLineSpacing(spacing));
         harness.idle();
         let output = harness.idle();
-        let galley = painted_text_starting(&output, "word").galley;
+        let galley = pane_text_starting(&output, "word").galley;
         let pitch = galley.rows[1].pos.y - galley.rows[0].pos.y;
         (pitch, harness.app.tabs[0].last_content_height)
     };
@@ -601,7 +590,7 @@ fn dragging_a_column_edge_resizes_the_column_about_the_pane_center() {
     // The next frame lays the document out at the new width and says so.
     let dragging = frame_on(&mut harness, Vec::new());
     assert_close(
-        painted_text_starting(&dragging, "word").pos.x,
+        pane_text_starting(&dragging, "word").pos.x,
         column_left(780.0),
     );
     assert!(painted_text(&dragging).contains(&"780 px".to_owned()));
@@ -658,7 +647,7 @@ fn the_editor_is_as_wide_as_the_column_and_centered_like_it() {
     harness.idle();
     let output = harness.idle();
 
-    let source = painted_text_starting(&output, "# Title");
+    let source = pane_text_starting(&output, "# Title");
     let left = column_left(680.0);
     assert!(
         (left..=left + 12.0).contains(&source.pos.x),
@@ -685,7 +674,7 @@ fn a_table_squeezed_by_a_narrow_column_spreads_out_again_when_the_column_widens(
             harness.idle();
         }
         let output = harness.idle();
-        painted_text_starting(&output, "Share").galley.rows.len()
+        pane_text_starting(&output, "Share").galley.rows.len()
     };
 
     assert_eq!(header_lines(680.0), 1);
