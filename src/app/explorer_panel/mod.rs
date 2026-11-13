@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::mcp;
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
@@ -85,10 +86,14 @@ impl MarkdownApp {
             menu: Some("Explorer options"),
         };
         let more = sidebar::header(ui, palette, &header);
-        #[cfg(feature = "mcp")]
         if let Some(more) = &more {
-            self.mcp_bridge
-                .register_widget("Explorer: Options", "button", more, None);
+            mcp::widget(
+                &self.mcp,
+                format_args!("Explorer: Options"),
+                "button",
+                more,
+                None,
+            );
         }
 
         let sort_order = self.file_explorer.sort_order;
@@ -205,16 +210,14 @@ impl MarkdownApp {
             chevron: Chevron::Blank,
         };
         let response = sidebar::row(ui, listing.palette, &shown).response;
-        #[cfg(feature = "mcp")]
-        {
-            let state_value = if is_open { "open" } else { "" };
-            self.mcp_bridge.register_widget(
-                &format!("File: {}", row.name),
-                "button",
-                &response,
-                Some(state_value),
-            );
-        }
+        let state_value = if is_open { "open" } else { "" };
+        mcp::widget(
+            &self.mcp,
+            format_args!("File: {}", row.name),
+            "button",
+            &response,
+            Some(state_value),
+        );
 
         if response.clicked() {
             action.file_to_open = Some(row.path.to_path_buf());
@@ -246,16 +249,14 @@ impl MarkdownApp {
             },
         };
         let response = sidebar::row(ui, palette, &shown).response;
-        #[cfg(feature = "mcp")]
-        {
-            let state_value = if is_expanded { "expanded" } else { "collapsed" };
-            self.mcp_bridge.register_widget(
-                &format!("Directory: {}", row.name),
-                "button",
-                &response,
-                Some(state_value),
-            );
-        }
+        let state_value = if is_expanded { "expanded" } else { "collapsed" };
+        mcp::widget(
+            &self.mcp,
+            format_args!("Directory: {}", row.name),
+            "button",
+            &response,
+            Some(state_value),
+        );
 
         // The toggle is applied after the tree is put back (avoids a clone).
         if response.clicked() {
