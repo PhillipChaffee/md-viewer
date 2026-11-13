@@ -61,7 +61,7 @@ fn zoom_percent(zoom: f32) -> i32 {
 
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is an independent on/off setting or a per-frame latch, not a state of one machine"
+    reason = "each flag is an independent choice of the reader's, or a fact about the display, not a state of one machine"
 )]
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,
