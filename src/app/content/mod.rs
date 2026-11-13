@@ -1,6 +1,5 @@
 //! The document pane: rendered markdown, edit mode, and link handling.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use eframe::egui;
@@ -15,9 +14,8 @@ use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::diagram::diagram_colors;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
-use crate::links::handle_local_link_click;
 use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
-use crate::tab::Tab;
+use crate::tab::{LinkTarget, Tab};
 
 mod column;
 pub(crate) mod look;
@@ -56,7 +54,7 @@ impl MarkdownApp {
         &mut self,
         ui: &mut egui::Ui,
         ctrl_held: bool,
-    ) -> Option<(PathBuf, Option<String>)> {
+    ) -> Option<LinkTarget> {
         // Snapshot search state before taking a mutable borrow on the active tab
         let search_is_open = self.search.is_open;
         let active_idx = self.search.active_match_index;
@@ -153,14 +151,17 @@ fn follow_clicked_link(
     tab: &mut Tab,
     ctrl_held: bool,
     error_message: &mut Option<String>,
-) -> Option<(PathBuf, Option<String>)> {
-    let clicked_link = tab.check_link_hooks()?;
-    let (open_in_new_tab, navigation_error) =
-        handle_local_link_click(tab, &clicked_link, ctrl_held);
-    if let Some(error) = navigation_error {
-        *error_message = Some(error);
-    }
-    open_in_new_tab
+) -> Option<LinkTarget> {
+    let link = tab.check_link_hooks()?;
+    let followed = if ctrl_held {
+        tab.link_target(&link)
+    } else {
+        tab.navigate_to_link(&link).map(|_| None)
+    };
+    followed.unwrap_or_else(|error| {
+        *error_message = Some(format!("Unable to open {link}: {error}"));
+        None
+    })
 }
 
 /// Hands the find bar's matches to the renderer, which paints the highlights.

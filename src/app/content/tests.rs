@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use eframe::egui::accesskit::Role;
 use eframe::egui::{Event, Key, Modifiers, MouseWheelUnit};
 use egui_kittest::kittest::Queryable as _;
@@ -98,8 +100,26 @@ fn a_link_to_a_missing_document_is_reported_and_changes_nothing() {
     harness.click("nowhere");
 
     assert_eq!(open_paths(&harness), [harness.path("a.md")]);
-    let message = harness.state().error_message.clone().unwrap();
-    assert!(message.contains("gone.md"), "{message}");
+    assert_eq!(harness.state().error_message, Some(gone_md_error(&harness)));
+}
+
+/// What the error bar says of the link to `gone.md`.
+fn gone_md_error(harness: &LabelHarness) -> String {
+    let cause = harness.path("gone.md").canonicalize().unwrap_err();
+    format!("Unable to open gone.md: {cause}")
+}
+
+#[test]
+fn ctrl_clicking_a_link_to_a_missing_document_reports_it_the_same_way() {
+    let mut harness = linked_docs();
+
+    harness
+        .get_by_label("nowhere")
+        .click_modifiers(Modifiers::CTRL);
+    harness.frames(2);
+
+    assert_eq!(open_paths(&harness), [harness.path("a.md")]);
+    assert_eq!(harness.state().error_message, Some(gone_md_error(&harness)));
 }
 
 #[test]

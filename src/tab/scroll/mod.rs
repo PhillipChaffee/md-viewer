@@ -6,6 +6,7 @@ use egui_commonmark_extended::header_position_key;
 use super::Tab;
 use crate::headers::Header;
 use crate::layout::{keyboard_scroll_target, line_fraction, KeyboardScrollAction};
+use crate::links::{find_fragment_target, FragmentTarget};
 
 #[cfg(test)]
 mod tests;
@@ -126,6 +127,32 @@ impl Tab {
             // and duplicate display titles cannot redirect the jump.
             self.corrections.header_key = Some(header_position_key(source_start));
         }
+    }
+
+    /// Point the tab at the heading a `#fragment` names, as a click on the
+    /// heading in the outline does. In a document that is not laid out yet
+    /// the scroll is left where it is, for the corrective pass to aim once
+    /// the document has been painted. Returns whether the fragment named
+    /// a heading.
+    pub(crate) fn go_to_fragment(&mut self, fragment: &str) -> bool {
+        let title = self.document_title.as_deref();
+        match find_fragment_target(title, self.outline.headers(), fragment) {
+            FragmentTarget::DocumentTop => self.scroll_to(0.0),
+            FragmentTarget::Header(index) => {
+                let header = &self.outline.headers()[index];
+                let is_laid_out = self.last_content_height > 0.0 && self.content_lines > 0;
+                if is_laid_out || !self.header_y(header).is_estimate {
+                    self.jump_to_header(index);
+                } else {
+                    // Nothing is painted to estimate from, so no offset is
+                    // set: one full paint records the heading's position.
+                    let key = header_position_key(header.source_start);
+                    self.corrections.header_key = Some(key);
+                }
+            }
+            FragmentTarget::Missing => return false,
+        }
+        true
     }
 
     /// The corrections asked for since the last call. They are taken even

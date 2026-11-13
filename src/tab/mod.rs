@@ -9,9 +9,7 @@ use eframe::egui;
 use egui_commonmark_extended::CommonMarkCache;
 
 use crate::headers::{parse_headers, Outline};
-use crate::links::{
-    apply_fragment_navigation, parse_local_links, resolve_local_link_path, split_link_fragment,
-};
+use crate::links::{parse_local_links, resolve_local_link_path, split_link_fragment};
 use crate::search::{find_matches, SearchMatch};
 use crate::tab::scroll::ScrollCorrections;
 
@@ -74,6 +72,9 @@ fn record_visit<T>(back: &mut Vec<T>, forward: &mut Vec<T>, left: T) {
     forward.clear();
 }
 
+/// A document to open, and the `#fragment` in it to land on.
+pub(crate) type LinkTarget = (PathBuf, Option<String>);
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
@@ -87,9 +88,9 @@ pub(crate) struct Tab {
     /// The headings of the document and which of them are folded.
     pub(crate) outline: Outline,
     pub(crate) scroll_offset: f32,
-    pub(crate) pending_scroll_offset: Option<f32>,
+    pending_scroll_offset: Option<f32>,
     /// The jumps made from an estimate since the pane last took them.
-    pub(crate) corrections: ScrollCorrections,
+    corrections: ScrollCorrections,
     pub(crate) last_content_height: f32,
     pub(crate) last_viewport_height: f32,
     pub(crate) content_lines: usize,
@@ -273,7 +274,7 @@ impl Tab {
         // outline. Unmatched fragments do nothing rather than error: the
         // document opened fine, the anchor simply does not exist.
         if let Some(fragment) = link.strip_prefix('#') {
-            return Ok(apply_fragment_navigation(self, fragment));
+            return Ok(self.go_to_fragment(fragment));
         }
 
         // Share resolution and error handling with the ctrl+click path. These
@@ -292,7 +293,7 @@ impl Tab {
         // not just the document. Applied after the load, which resets the
         // scroll and would otherwise clear it.
         if let (true, Some(fragment)) = (visited, fragment) {
-            apply_fragment_navigation(self, fragment);
+            self.go_to_fragment(fragment);
         }
         Ok(visited)
     }
@@ -364,6 +365,14 @@ impl Tab {
             current_path,
         );
         Ok(true)
+    }
+
+    /// The document `link` names and the `#fragment` after it, for opening
+    /// in another tab. `None` for a link that names no local document.
+    pub(crate) fn link_target(&self, link: &str) -> io::Result<Option<LinkTarget>> {
+        let (destination, fragment) = split_link_fragment(link);
+        let path = self.resolve_link(destination)?;
+        Ok(path.map(|path| (path, fragment.map(str::to_owned))))
     }
 
     pub(crate) fn resolve_link(&self, link: &str) -> io::Result<Option<PathBuf>> {

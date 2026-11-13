@@ -3,7 +3,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::app::MarkdownApp;
-use crate::links::apply_fragment_navigation;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
 use crate::tab::Tab;
 
@@ -101,7 +100,7 @@ impl MarkdownApp {
             self.active_tab = idx;
             self.title_dirty = true;
             if let (Some(fragment), Some(tab)) = (fragment, self.tabs.get_mut(idx)) {
-                apply_fragment_navigation(tab, fragment);
+                tab.go_to_fragment(fragment);
             }
             return;
         }
@@ -115,7 +114,7 @@ impl MarkdownApp {
             }
         };
         if let Some(fragment) = fragment {
-            apply_fragment_navigation(&mut tab, fragment);
+            tab.go_to_fragment(fragment);
         }
         self.tabs.push(tab);
         self.record_recent(&path);
