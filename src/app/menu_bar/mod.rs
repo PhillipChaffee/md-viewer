@@ -6,6 +6,9 @@ use crate::app::action::AppAction;
 use crate::app::{zoom_percent, MarkdownApp};
 use crate::layout::ZOOM_STEP;
 
+#[cfg(test)]
+mod tests;
+
 /// Record `action` as the menu bar's pick for this frame and close the menu
 /// when `item` was clicked.
 fn pick(ui: &egui::Ui, item: &egui::Response, action: AppAction, picked: &mut Option<AppAction>) {

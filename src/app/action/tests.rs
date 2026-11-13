@@ -61,6 +61,37 @@ fn document_zoom_stays_within_its_bounds() {
 }
 
 #[test]
+fn a_save_that_cannot_be_written_is_reported_and_flagged() {
+    let mut harness = Harness::with_docs(&[("a.md", "original")]);
+    harness.app.tabs[0].set_edit_mode(true);
+    harness.app.tabs[0].content = "edited".to_owned();
+    std::fs::remove_dir_all(&harness.dir).unwrap();
+
+    harness.apply(AppAction::Save);
+
+    assert!(matches!(harness.app.tabs[0].save_flash, Some((false, _))));
+    let message = harness.app.error_message.clone().unwrap();
+    assert!(
+        message.contains("a.md"),
+        "the message names the file: {message}"
+    );
+}
+
+#[test]
+fn document_actions_without_a_document_do_nothing() {
+    let mut harness = Harness::with_three_docs();
+    harness.apply(AppAction::CloseTab);
+    assert!(harness.app.tabs.is_empty());
+
+    harness.apply(AppAction::Save);
+    harness.apply(AppAction::Scroll(KeyboardScrollAction::PageDown));
+    harness.apply(AppAction::CloseTab);
+
+    assert!(harness.app.tabs.is_empty());
+    assert!(harness.app.error_message.is_none());
+}
+
+#[test]
 fn lightbox_zoom_actions_do_nothing_without_a_lightbox() {
     let mut harness = Harness::with_three_docs();
 

@@ -5,6 +5,9 @@ use eframe::egui;
 use crate::app::MarkdownApp;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 
+#[cfg(test)]
+mod tests;
+
 /// A row clicked in the font dialog's family list.
 enum FamilyChoice {
     /// The pinned first row: the auto-detected system sans-serif.

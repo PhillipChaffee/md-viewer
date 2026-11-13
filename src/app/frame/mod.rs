@@ -12,6 +12,9 @@ use crate::persist::{PersistedState, APP_KEY};
 use crate::system_fonts::setup_fonts;
 use crate::watcher::FLASH_DURATION_MS;
 
+#[cfg(test)]
+mod tests;
+
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         #[cfg(feature = "mcp")]
@@ -254,7 +257,10 @@ impl MarkdownApp {
             return;
         }
         self.title_dirty = false;
-        let title = self.window_title();
+        let title = self.tabs.get(self.active_tab).map_or_else(
+            || "Markdown Viewer".to_string(),
+            |tab| format!("{} - Markdown Viewer", tab.title()),
+        );
         if title != self.last_window_title {
             self.last_window_title = title;
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.last_window_title.clone()));
@@ -358,30 +364,30 @@ impl MarkdownApp {
         }
     }
 
+    /// Show `texture` enlarged at 100% in a fresh lightbox.
+    fn open_lightbox(&mut self, texture: LightboxTexture, base_size: egui::Vec2) {
+        self.lightbox_open_count += 1;
+        self.lightbox = Some(LightboxState {
+            texture,
+            base_size,
+            zoom: 1.0,
+            open_id: self.lightbox_open_count,
+            scroll_offset: egui::Vec2::ZERO,
+        });
+    }
+
     /// The lightbox, the settings dialogs, and the drag-and-drop overlay.
     fn render_overlays(&mut self, ctx: &egui::Context) {
         // Check if a mermaid diagram was clicked → open lightbox
         // Texture is pre-rasterized at 2x by background thread — no work on click
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
-            if let Some((texture, base_size)) = tab.cache.take_clicked_mermaid() {
-                self.lightbox_open_count += 1;
-                self.lightbox = Some(LightboxState {
-                    texture: LightboxTexture::Owned(texture),
-                    base_size,
-                    zoom: 1.0,
-                    open_id: self.lightbox_open_count,
-                    scroll_offset: egui::Vec2::ZERO,
-                });
+            let mermaid = tab.cache.take_clicked_mermaid();
+            let image = tab.cache.take_clicked_image();
+            if let Some((texture, base_size)) = mermaid {
+                self.open_lightbox(LightboxTexture::Owned(texture), base_size);
             }
-            if let Some((tex_id, base_size)) = tab.cache.take_clicked_image() {
-                self.lightbox_open_count += 1;
-                self.lightbox = Some(LightboxState {
-                    texture: LightboxTexture::Loaded(tex_id),
-                    base_size,
-                    zoom: 1.0,
-                    open_id: self.lightbox_open_count,
-                    scroll_offset: egui::Vec2::ZERO,
-                });
+            if let Some((texture_id, base_size)) = image {
+                self.open_lightbox(LightboxTexture::Loaded(texture_id), base_size);
             }
         }
 
