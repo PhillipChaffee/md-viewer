@@ -76,12 +76,12 @@ fn a_file_that_could_not_be_opened_is_not_listed_as_read() {
 #[test]
 fn a_file_that_is_not_utf8_opens_with_its_bad_bytes_marked() {
     let reader = Reader::launch()
-        .bytes("latin.md", b"# Caf\xe9 menu\n\nSoup of the day.")
+        .bytes("latin.md", b"# Men\xfc card\n\nSoup of the day.")
         .args(&["latin.md"])
         .open();
 
     reader.assert_hides("Unable to open");
-    reader.assert_sees("Caf\u{fffd} menu");
+    reader.assert_sees("Men\u{fffd} card");
     reader.assert_sees("Soup of the day.");
     assert_eq!(reader.title(), "latin.md - Markdown Viewer");
 }
