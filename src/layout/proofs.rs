@@ -185,8 +185,10 @@ fn a_step_out_and_back_is_the_identity() {
     assert!(back.get() == shown);
     assert!(back.resolve(available) == shown);
 
-    kani::cover!(width.fits_window());
-    kani::cover!(!width.fits_window());
+    // A column set to fit the window has no room for a step more, so it
+    // never gets here; a width with a fraction does, shown a pixel short.
+    kani::cover!(shown == width.get());
+    kani::cover!(shown < width.get());
 }
 
 /// Dragging an edge anywhere gives a valid width, and an edge on the

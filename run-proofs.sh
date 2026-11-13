@@ -12,8 +12,10 @@
 # example `./run-proofs.sh --harness layout::proofs`; the count check is
 # skipped then.
 #
-# PROOF_JOBS is how many harnesses run at once (default 2; the largest
-# takes about 3 GB). PROOF_TIMEOUT bounds one harness (default 15m).
+# PROOF_JOBS is how many harnesses run at once (default 2; each is a
+# solver process that can take gigabytes, so raise it only with memory
+# to spare). PROOF_TIMEOUT bounds one harness (default 15m).
+# PROOF_LOG names a file to keep Kani's full output in.
 
 set -u -o pipefail
 
@@ -28,6 +30,7 @@ cargo kani -Z unstable-options \
 	"$@" >"$log" 2>&1
 status=$?
 elapsed=$(($(date +%s) - started))
+[ -z "${PROOF_LOG:-}" ] || cp "$log" "$PROOF_LOG"
 
 fail() {
 	grep -vE 'register_tool|unstable feature|^ *\||^ *= note|^ *--> <crate|^$|^ *Compiling ' "$log"
