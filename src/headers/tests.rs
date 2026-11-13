@@ -226,6 +226,18 @@ fn folding_a_heading_twice_shows_what_is_under_it_again() {
 }
 
 #[test]
+fn a_hidden_heading_is_stood_for_by_the_folded_heading_above_it() {
+    // Linux is folded, so the rows are Setup, Linux, Windows, Usage.
+    let outline = folded(&[1]);
+    let rows: Vec<Option<usize>> = (0..5)
+        .map(|index| outline.row_standing_for(index))
+        .collect();
+    assert_eq!(rows, [Some(0), Some(1), Some(1), Some(2), Some(3)]);
+
+    assert_eq!(Outline::default().row_standing_for(0), None);
+}
+
+#[test]
 fn collapse_all_folds_the_headings_with_children_and_expand_all_none() {
     let mut outline = folded(&[]);
 

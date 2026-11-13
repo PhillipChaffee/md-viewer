@@ -147,6 +147,14 @@ impl Outline {
         &self.visible
     }
 
+    /// Which of the visible rows stands for the heading at `index`: the
+    /// heading itself, or the folded heading that hides it.
+    pub(crate) fn row_standing_for(&self, index: usize) -> Option<usize> {
+        self.visible
+            .partition_point(|&visible| visible <= index)
+            .checked_sub(1)
+    }
+
     /// Whether some heading has children, so that there is anything to fold.
     pub(crate) const fn has_folds(&self) -> bool {
         self.has_folds

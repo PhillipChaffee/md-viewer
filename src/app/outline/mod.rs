@@ -50,8 +50,9 @@ struct OutlineUi<'a> {
     /// The heading the reader is in, or the nearest one above it that no
     /// folded heading hides.
     current: Option<usize>,
-    /// The reader moved to another heading, so the list scrolls to show it.
-    follow: bool,
+    /// The row of that heading, when the reader has just moved to it, so
+    /// that the list scrolls to show it.
+    follow_row: Option<usize>,
     click: Option<OutlineClick>,
     mcp: &'a Mcp,
 }
@@ -147,12 +148,13 @@ impl MarkdownApp {
         }
 
         let palette = self.theme.palette();
-        let (current, follow) = self.heading_spy.look(tab);
+        let (heading, follow) = self.heading_spy.look(tab);
+        let current_row = heading.and_then(|heading| tab.outline.row_standing_for(heading));
         let mut outline = OutlineUi {
             palette,
             is_dragging: ctx.input(|i| i.pointer.any_down()),
-            current,
-            follow,
+            current: current_row.map(|row| tab.outline.visible()[row]),
+            follow_row: current_row.filter(|_| follow),
             click: None,
             mcp: &self.mcp,
         };
@@ -256,23 +258,8 @@ fn row_top(row: usize) -> f32 {
 
 /// The scrollable list of headers that no collapsed ancestor hides.
 fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
-    // Pre-compute the visible header indices (skip those hidden
-    // by collapsed ancestors). This lets us virtualize via
-    // show_rows, paying O(visible-on-screen) instead of
-    // O(total-headers) per frame. On a 100k-line doc with ~15k
-    // headers this is the difference between visibly laggy and
-    // smooth outline interactions.
     let visible_indices = tab.outline.visible();
     let show_fold_column = tab.outline.has_folds();
-    // The row that stands for the heading the reader is in: the heading
-    // itself, or the folded heading that hides it.
-    let current_row = outline.current.and_then(|current| {
-        visible_indices
-            .partition_point(|&index| index <= current)
-            .checked_sub(1)
-    });
-    outline.current = current_row.map(|row| visible_indices[row]);
-    let follow_row = current_row.filter(|_| outline.follow);
 
     // Rows touch, so that the wash under the pointer never falls between
     // two of them; show_rows adds this spacing to the row height.
@@ -285,7 +272,7 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
             sidebar::ROW_HEIGHT,
             visible_indices.len(),
             |ui, row_range| {
-                if let Some(row) = follow_row {
+                if let Some(row) = outline.follow_row {
                     // The list starts `row_range.start` rows above this
                     // ui, which holds only the rows on screen.
                     let top = ui.max_rect().top() + row_top(row) - row_top(row_range.start);
