@@ -8,6 +8,7 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, STRIP_HEIGHT};
+use crate::app::mcp::{self, Mcp};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::tab::Tab;
@@ -32,10 +33,6 @@ const OPEN_BUTTON_ROOM: f32 = 40.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
 const UNSAVED_DOT: f32 = 7.0;
 
-/// A widget recorded for the MCP bridge: name, widget type, rect, value.
-#[cfg(feature = "mcp")]
-type McpWidget = (String, &'static str, egui::Rect, Option<String>);
-
 /// What the user asked of the tab strip during one frame.
 ///
 /// The fields are independent because a primary click (activate) and a
@@ -45,8 +42,6 @@ struct TabStripActions {
     activate: Option<usize>,
     close: Option<usize>,
     close_others: Option<usize>,
-    #[cfg(feature = "mcp")]
-    widgets: Vec<McpWidget>,
 }
 
 /// One tab as the strip draws it.
@@ -124,13 +119,6 @@ impl MarkdownApp {
                 });
             });
 
-        // Register all collected widgets with MCP bridge
-        #[cfg(feature = "mcp")]
-        for (name, widget_type, rect, value) in std::mem::take(&mut actions.widgets) {
-            self.mcp_bridge
-                .register_widget_rect(&name, widget_type, rect, value.as_deref());
-        }
-
         self.apply_tab_strip_actions(&actions)
     }
 
@@ -153,7 +141,7 @@ impl MarkdownApp {
                         title,
                         is_active: index == self.active_tab,
                     };
-                    let tab = tab_label(ui, &label, palette, actions);
+                    let tab = tab_label(ui, &label, palette, &self.mcp, actions);
                     if reveal && label.is_active {
                         scroll_into_strip(ui, tab.rect);
                     }
@@ -168,9 +156,13 @@ impl MarkdownApp {
         let open = QuietButton::icon(Icon::Plus, "Open file in new tab")
             .show(ui, self.theme.palette())
             .on_hover_text("Open File… (Ctrl+T)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Open File in New Tab", "button", &open, None);
+        mcp::widget(
+            &self.mcp,
+            format_args!("Open File in New Tab"),
+            "button",
+            &open,
+            None,
+        );
         if open.clicked() {
             self.apply_action(ui.ctx(), AppAction::OpenFile);
         }
@@ -224,6 +216,7 @@ fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
     palette: &'static Palette,
+    mcp: &Mcp,
     actions: &mut TabStripActions,
 ) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
@@ -243,18 +236,14 @@ fn tab_label(
         )
     });
 
-    // Collect tab widget data for MCP
-    #[cfg(feature = "mcp")]
-    actions.widgets.push((
-        format!("Tab: {}", label.title),
+    let state = if label.is_active { "active" } else { "" };
+    mcp::rect(
+        mcp,
+        format_args!("Tab: {}", label.title),
         "tab",
         rect,
-        Some(if label.is_active {
-            "active".to_string()
-        } else {
-            String::new()
-        }),
-    ));
+        Some(&state),
+    );
 
     // The pointer counts as over the tab while it is over the close button
     // too, which takes the hover for itself.
@@ -285,7 +274,7 @@ fn tab_label(
         actions.close = Some(label.index);
     }
     if pointed {
-        tab_close_button(ui, &response, label, palette, actions);
+        tab_close_button(ui, &response, label, palette, mcp, actions);
     }
 
     egui::Popup::context_menu(&response)
@@ -300,6 +289,7 @@ fn tab_close_button(
     tab: &egui::Response,
     label: &TabLabel<'_>,
     palette: &Palette,
+    mcp: &Mcp,
     actions: &mut TabStripActions,
 ) {
     let square = egui::Rect::from_center_size(
@@ -312,14 +302,13 @@ fn tab_close_button(
     let close = ui.interact(square, tab.id.with("close"), egui::Sense::click());
     close.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close tab"));
 
-    // Collect close button widget data for MCP
-    #[cfg(feature = "mcp")]
-    actions.widgets.push((
-        format!("Close Tab: {}", label.title),
+    mcp::rect(
+        mcp,
+        format_args!("Close Tab: {}", label.title),
         "button",
         square,
         None,
-    ));
+    );
 
     let color = if close.hovered() {
         palette.text
