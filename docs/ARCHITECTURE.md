@@ -12,14 +12,16 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
   - `line_spacing: LineSpacing` - body line height (Compact 1.45, Comfortable 1.6, Airy 1.8)
   - `document_look: DocumentLook` - the document pane's fonts and block styling, rebuilt when the theme or the fonts change
   - `zoom_level: f32` - global zoom (0.5 to 3.0)
-  - `show_outline: bool` - toggle outline sidebar visibility
-  - `show_explorer: bool` - toggle file explorer visibility
+  - `show_outline: bool` - outline sidebar visibility; `outline_rule: OutlineRule` says whether the reader set it or it follows the room in the window
+  - `heading_spy: HeadingSpy` - the heading the reader is in, which the outline marks
+  - `show_explorer: bool` - toggle file explorer visibility (hidden on a fresh install)
   - `file_explorer: FileExplorer` - file explorer state
   - `watch_enabled: bool` - file watching state
   - `watcher` + `watcher_rx` - file watching via mpsc channel
   - `watched_paths: HashSet<PathBuf>` - unified watcher for all open tabs
   - `recent_files: Vec<RecentEntry>` - recently opened files for the welcome page
-  - `welcome_show_all: bool` - whether the welcome page's recent list is expanded
+  - `welcome_show_all: bool` - whether the home page's recent list is expanded
+  - `home_list: Option<HomeList>` - the home page's rows, built when the recent files change
 
 - **Tab**: Per-tab state for a document. Each tab has:
   - `id: egui::Id` - unique identifier
@@ -37,13 +39,13 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
   - `reading_width: Option<f32>` (`full_width_content: Option<bool>` is still read from older sessions: `true` maps to fit-window)
   - `line_spacing: Option<LineSpacing>`
   - `zoom_level: Option<f32>`
-  - `show_outline: Option<bool>`
+  - `show_outline: Option<bool>` - `None` until the reader toggles the outline
   - `show_explorer: Option<bool>` - file explorer visibility
   - `explorer_root: Option<PathBuf>` - file explorer root directory
   - `expanded_dirs: Option<Vec<PathBuf>>` - expanded directories in explorer
   - `open_tabs: Option<Vec<PathBuf>>` - restore tabs on startup
   - `active_tab: Option<usize>` - restore active tab position
-  - `recent_files: Option<Vec<RecentEntry>>` - recently opened files (welcome page)
+  - `recent_files: Option<Vec<RecentEntry>>` - recently opened files (home page); each carries the `title`, `excerpt` and `word_count` taken from the document when it was recorded, all absent in older sessions
 
 - **FileExplorer**: Left sidebar showing markdown files in a directory tree:
   - `root: Option<PathBuf>` - root directory to display
@@ -56,7 +58,9 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 
 - **File Watching**: Uses `notify-debouncer-mini` with 200ms debounce. Watches all open tab paths. On change, reloads matching tabs. Auto-recovers up to 3 times on watcher failure.
 
-- **Header Outline**: `parse_headers()` returns a `ParsedHeaders` struct containing `document_title` (first h1) and `outline_headers` (remaining headers). Rendered as a resizable left sidebar.
+- **Header Outline**: `parse_headers()` returns a `ParsedHeaders` struct containing `document_title` (first h1) and `outline_headers` (remaining headers). Rendered as a resizable right sidebar headed "CONTENTS". `HeadingSpy` (`src/app/outline/spy/`) finds the heading the reader is in from the scroll position and the heading positions the renderer recorded, only when the view or the document changed; the outline inks that entry and scrolls its list to keep it on screen. Until the reader toggles the outline, `OutlineRule::Room` shows it while `room::has_room` says the window holds it beside the text column (window width, less an open explorer and the outline's default width, at least the column and its two margins).
+
+- **Sidebar parts**: `src/app/sidebar/` draws what the explorer and the outline share: the `surface` frame with no stroke, one hairline on the edge next to the page, the spaced-capitals header with an optional "⋯" menu button, and 28 px rows (current row in `text`, others `muted`, a rounded `raised` wash under the pointer, an optional chevron, elided text with the whole text on hover).
 
 - **Link Navigation**: Uses egui_commonmark's link hook mechanism. Ctrl+Click opens links in new tabs, regular click navigates within the current tab.
 
@@ -125,7 +129,7 @@ The tab system uses a simple `Vec<Tab>` with an `active_tab` index:
 - Regular click navigates within the current tab
 - Each tab maintains independent navigation history (Alt+Left/Right)
 - Session restore opens previously open tabs and restores active tab
-- Closing the last tab is allowed; `tabs` may be empty, which renders the **welcome page** (issue #28). `render_welcome` (shown from `render_tab_content` when no tab is active) has Open File / Open Folder buttons and a recent-files list. `push_recent`/`record_recent` maintain `recent_files` (deduped, capped at `RECENT_FILES_CAP`, persisted). A fresh launch with no file shows it too — the old built-in sample document was removed.
+- Closing the last tab is allowed; `tabs` may be empty, which renders the **home page** (issue #28). `render_welcome` (shown from `render_tab_content` when no tab is active) draws, in the column a document would have, the wordmark, Open File / Open Folder as quiet text buttons, and the recently read documents: a serif title, a sans meta line (`folder · N min read · opened 2h ago`), a two-line excerpt, hairlines between rows, a wash and a click on the whole row. `record_recent` summarizes the document from its loaded tab (`DocumentSummary::of`: first h1, first paragraph of body text as plain text cut to 220 characters, word count) and `push_recent` stores it in `recent_files` (deduped, capped at `RECENT_FILES_CAP`, persisted). `HomeList::current` turns the entries into rows when they change, never while painting. A fresh launch with no file shows the page too — the old built-in sample document was removed.
 
 ## File Explorer
 
@@ -138,8 +142,8 @@ Left sidebar showing all markdown files in a hierarchical directory tree:
 - Skip hidden files (starting with .)
 - Only shows directories containing markdown files
 - Sorted: directories first, then files, alphabetically
-- Toggle visibility with Ctrl+Shift+E
-- Click file to open in new tab (or focus if already open)
-- Expand/collapse directories with arrow buttons
-- Refresh button to rescan directory
+- Hidden on a fresh install; toggle visibility with Ctrl+Shift+E
+- Click a file to show it in the active tab; Ctrl+Click opens it in a new tab
+- Click a directory's row to expand or collapse it
+- The "⋯" menu in the header holds Expand All Folders, Collapse All Folders, Refresh and the sort order
 - Session persistence for: visibility, root directory, expanded directories

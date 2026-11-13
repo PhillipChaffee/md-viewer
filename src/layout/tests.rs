@@ -63,6 +63,13 @@ fn only_the_widest_width_fits_the_window() {
 }
 
 #[test]
+fn a_width_that_fits_the_window_is_fixed_at_the_default() {
+    assert_eq!(ReadingWidth::FIT_WINDOW.fixed(), ReadingWidth::DEFAULT);
+    assert_eq!(ReadingWidth::new(512.0).fixed(), ReadingWidth::new(512.0));
+    assert_eq!(ReadingWidth::DEFAULT.fixed(), ReadingWidth::DEFAULT);
+}
+
+#[test]
 fn a_step_starts_from_the_column_that_is_shown() {
     let step = ReadingWidth::STEP;
     assert_close(ReadingWidth::DEFAULT.stepped(step, 1_200.0).get(), 720.0);

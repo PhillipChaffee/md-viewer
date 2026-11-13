@@ -56,7 +56,7 @@ impl eframe::App for MarkdownApp {
             theme: Some(self.theme),
             dark_mode: None,
             zoom_level: Some(self.zoom_level),
-            show_outline: Some(self.show_outline),
+            show_outline: self.outline_rule.saved(self.show_outline),
             reading_width: Some(self.reading_width.get()),
             full_width_content: None,
             line_spacing: Some(self.line_spacing),

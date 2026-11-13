@@ -1,22 +1,37 @@
-//! Recently opened files shown on the welcome page.
+//! Recently opened files shown on the home page.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub(crate) use summary::DocumentSummary;
+
+mod summary;
 #[cfg(test)]
 mod tests;
 
-// Welcome page recent-files: how many to keep, and how many to show before "Show more".
+// Home page recent files: how many to keep, and how many to show before "Show more".
 pub(crate) const RECENT_FILES_CAP: usize = 20;
 pub(crate) const RECENT_SHOWN: usize = 6;
 
-/// A recently opened file, for the welcome page's "Recent" list.
-#[derive(Serialize, Deserialize, Clone)]
+/// A recently opened file, for the home page's "Recently read" list.
+///
+/// The fields after `last_opened` are what the list shows of the document.
+/// A session saved before the list showed them has none, and loads with
+/// each of them `None`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RecentEntry {
     pub(crate) path: PathBuf,
     /// Seconds since the Unix epoch when the file was last opened.
     pub(crate) last_opened: u64,
+    /// The document's first level-one heading.
+    #[serde(default)]
+    pub(crate) title: Option<String>,
+    /// The start of the document's first paragraph, as plain text.
+    #[serde(default)]
+    pub(crate) excerpt: Option<String>,
+    #[serde(default)]
+    pub(crate) word_count: Option<u32>,
 }
 
 /// Current time in seconds since the Unix epoch (0 if the clock is before epoch).
@@ -27,13 +42,34 @@ pub(crate) fn now_epoch_secs() -> u64 {
 }
 
 /// Push a path to the front of the recent list, deduped and capped (most-recent first).
-pub(crate) fn push_recent(list: &mut Vec<RecentEntry>, path: &Path, now: u64) {
-    list.retain(|e| e.path.as_path() != path);
+///
+/// `summary` is what the document says now. `None` means it could not be
+/// read, and what the list already knew about it is kept.
+pub(crate) fn push_recent(
+    list: &mut Vec<RecentEntry>,
+    path: &Path,
+    now: u64,
+    summary: Option<DocumentSummary>,
+) {
+    let known = list
+        .iter()
+        .position(|entry| entry.path.as_path() == path)
+        .map(|index| list.remove(index));
+    let summary = summary.unwrap_or_else(|| {
+        known.map_or_else(DocumentSummary::default, |entry| DocumentSummary {
+            title: entry.title,
+            excerpt: entry.excerpt,
+            word_count: entry.word_count,
+        })
+    });
     list.insert(
         0,
         RecentEntry {
             path: path.to_path_buf(),
             last_opened: now,
+            title: summary.title,
+            excerpt: summary.excerpt,
+            word_count: summary.word_count,
         },
     );
     list.truncate(RECENT_FILES_CAP);

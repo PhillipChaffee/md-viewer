@@ -26,6 +26,8 @@ pub(crate) struct PersistedState {
     #[serde(default, skip_serializing)]
     pub(crate) dark_mode: Option<bool>,
     pub(crate) zoom_level: Option<f32>,
+    /// `None` until the reader toggles the outline: it then shows while
+    /// the window has room for it beside the text.
     pub(crate) show_outline: Option<bool>,
     /// Width of the text column in px. `None` in a session saved before
     /// the column was resizable; see `full_width_content`.
@@ -59,6 +61,7 @@ pub(crate) struct PersistedState {
     pub(crate) open_tabs: Option<Vec<PathBuf>>,
     pub(crate) active_tab: Option<usize>,
     // File explorer state
+    /// `None` on a fresh install, where the explorer starts hidden.
     pub(crate) show_explorer: Option<bool>,
     pub(crate) explorer_root: Option<PathBuf>,
     pub(crate) expanded_dirs: Option<Vec<PathBuf>>,

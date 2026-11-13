@@ -1,11 +1,19 @@
 use super::*;
 
+fn summary(title: &str) -> DocumentSummary {
+    DocumentSummary {
+        title: Some(title.to_owned()),
+        excerpt: Some(format!("{title} begins.")),
+        word_count: Some(460),
+    }
+}
+
 #[test]
 fn push_recent_dedupes_and_moves_to_front() {
     let mut v = Vec::new();
-    push_recent(&mut v, Path::new("/a.md"), 100);
-    push_recent(&mut v, Path::new("/b.md"), 200);
-    push_recent(&mut v, Path::new("/a.md"), 300); // re-open a → moves to front, no dup
+    push_recent(&mut v, Path::new("/a.md"), 100, None);
+    push_recent(&mut v, Path::new("/b.md"), 200, None);
+    push_recent(&mut v, Path::new("/a.md"), 300, None); // re-open a → moves to front, no dup
     assert_eq!(v.len(), 2);
     assert_eq!(v[0].path, PathBuf::from("/a.md"));
     assert_eq!(v[0].last_opened, 300);
@@ -16,7 +24,7 @@ fn push_recent_dedupes_and_moves_to_front() {
 fn push_recent_caps_length_keeping_newest() {
     let mut v = Vec::new();
     for i in 0..(RECENT_FILES_CAP + 5) {
-        push_recent(&mut v, Path::new(&format!("/f{i}.md")), i as u64);
+        push_recent(&mut v, Path::new(&format!("/f{i}.md")), i as u64, None);
     }
     assert_eq!(v.len(), RECENT_FILES_CAP);
     // The most recently pushed entry is at the front.
@@ -24,6 +32,52 @@ fn push_recent_caps_length_keeping_newest() {
         v[0].path,
         PathBuf::from(format!("/f{}.md", RECENT_FILES_CAP + 4))
     );
+}
+
+#[test]
+fn a_pushed_file_carries_what_the_document_says() {
+    let mut list = Vec::new();
+
+    push_recent(&mut list, Path::new("/a.md"), 100, Some(summary("Alpha")));
+
+    assert_eq!(
+        list,
+        [RecentEntry {
+            path: PathBuf::from("/a.md"),
+            last_opened: 100,
+            title: Some("Alpha".to_owned()),
+            excerpt: Some("Alpha begins.".to_owned()),
+            word_count: Some(460),
+        }]
+    );
+}
+
+#[test]
+fn reopening_a_file_replaces_what_the_list_knew_about_it() {
+    let mut list = Vec::new();
+    push_recent(&mut list, Path::new("/a.md"), 100, Some(summary("Alpha")));
+
+    push_recent(&mut list, Path::new("/a.md"), 200, Some(summary("Renamed")));
+
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].title.as_deref(), Some("Renamed"));
+    assert_eq!(list[0].last_opened, 200);
+}
+
+#[test]
+fn a_file_that_could_not_be_read_keeps_what_the_list_knew_about_it() {
+    let mut list = Vec::new();
+    push_recent(&mut list, Path::new("/a.md"), 100, Some(summary("Alpha")));
+    push_recent(&mut list, Path::new("/b.md"), 150, Some(summary("Beta")));
+
+    push_recent(&mut list, Path::new("/a.md"), 200, None);
+
+    assert_eq!(list[0].path, PathBuf::from("/a.md"));
+    assert_eq!(list[0].last_opened, 200);
+    assert_eq!(list[0].title.as_deref(), Some("Alpha"));
+    assert_eq!(list[0].excerpt.as_deref(), Some("Alpha begins."));
+    assert_eq!(list[0].word_count, Some(460));
+    assert_eq!(list[1].title.as_deref(), Some("Beta"));
 }
 
 #[test]

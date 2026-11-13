@@ -101,7 +101,7 @@ impl MarkdownApp {
             AppAction::NextTheme => self.theme = self.theme.next(),
             AppAction::SetTheme(theme) => self.theme = theme,
             AppAction::ToggleExplorer => self.show_explorer = !self.show_explorer,
-            AppAction::ToggleOutline => self.show_outline = !self.show_outline,
+            AppAction::ToggleOutline => self.toggle_outline(),
             AppAction::ToggleFullWidth => self.toggle_full_width(),
             AppAction::SetReadingWidth(px) => self.set_reading_width(ReadingWidth::new(px)),
             AppAction::StepReadingWidth(delta) => {

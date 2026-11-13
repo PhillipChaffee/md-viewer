@@ -3,26 +3,40 @@
 use eframe::egui;
 use egui_commonmark_extended::header_position_key;
 
+use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{any_header_has_children, header_has_children, header_is_hidden, Header};
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
 use crate::tab::Tab;
+use crate::theme::Palette;
 
+pub(crate) use room::OutlineRule;
+pub(crate) use spy::HeadingSpy;
+
+mod room;
+mod spy;
 #[cfg(test)]
 mod tests;
 
 /// Space left above a heading the document scrolls to.
 pub(super) const HEADER_SCROLL_MARGIN: f32 = 50.0;
+/// How far each heading level is pushed right of the one above it.
+const INDENT: f32 = 14.0;
+/// How far the fold control reaches past its chevron on each side.
+const FOLD_REACH: f32 = 3.0;
 
 /// A widget recorded for the MCP bridge: name, widget type, rect, value.
 #[cfg(feature = "mcp")]
 type McpWidget = (String, &'static str, egui::Rect, Option<String>);
 
 /// What a click in the outline asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OutlineClick {
     /// Fold or unfold the header at this index.
     ToggleFold(usize),
+    ExpandAll,
+    CollapseAll,
     /// Scroll the document to a heading.
     JumpTo {
         /// Byte offset of the heading in the document source.
@@ -32,9 +46,15 @@ enum OutlineClick {
 }
 
 /// State shared by the outline's widgets while one frame is drawn.
-struct OutlineUi {
+struct OutlineUi<'a> {
+    palette: &'a Palette,
     /// A pressed pointer may be resizing the panel, so clicks are ignored.
     is_dragging: bool,
+    /// The heading the reader is in, or the nearest one above it that no
+    /// folded heading hides.
+    current: Option<usize>,
+    /// The reader moved to another heading, so the list scrolls to show it.
+    follow: bool,
     click: Option<OutlineClick>,
     #[cfg(feature = "mcp")]
     widgets: Vec<McpWidget>,
@@ -63,6 +83,25 @@ impl Fold {
             Self::Expanded
         }
     }
+
+    const fn chevron(self) -> Chevron {
+        match self {
+            Self::NoColumn => Chevron::None,
+            Self::Leaf => Chevron::Blank,
+            Self::Collapsed => Chevron::Closed,
+            Self::Expanded => Chevron::Open,
+        }
+    }
+
+    /// What a click on the fold control does, for a screen reader. `None`
+    /// for a row with nothing to fold.
+    const fn verb(self) -> Option<&'static str> {
+        match self {
+            Self::Collapsed => Some("Expand"),
+            Self::Expanded => Some("Collapse"),
+            Self::NoColumn | Self::Leaf => None,
+        }
+    }
 }
 
 /// One outline entry as a row draws it.
@@ -82,9 +121,27 @@ struct HeaderJump {
 }
 
 impl MarkdownApp {
+    /// Show or hide the outline, as the reader's own choice from now on.
+    pub(crate) const fn toggle_outline(&mut self) {
+        self.show_outline = !self.show_outline;
+        self.outline_rule = OutlineRule::Reader;
+    }
+
+    /// Until the reader has chosen, show the outline while the window has
+    /// room for it beside the text.
+    fn follow_room(&mut self, ctx: &egui::Context) {
+        let explorer = self.show_explorer.then_some(self.explorer_width);
+        let window = ctx.content_rect().width();
+        let has_room = room::has_room(window, explorer, self.reading_width);
+        if let Some(shown) = self.outline_rule.follow(has_room) {
+            self.show_outline = shown;
+        }
+    }
+
     /// Render the outline sidebar (right panel).
     /// Rendered at top level for proper layout space allocation.
     pub(crate) fn render_outline(&mut self, ctx: &egui::Context) {
+        self.follow_room(ctx);
         let Some(tab) = self.tabs.get_mut(self.active_tab) else {
             return;
         };
@@ -93,33 +150,36 @@ impl MarkdownApp {
             return;
         }
 
+        let palette = self.theme.palette();
+        let (current, follow) = self.heading_spy.look(tab);
         let mut outline = OutlineUi {
+            palette,
             is_dragging: ctx.input(|i| i.pointer.any_down()),
+            current,
+            follow,
             click: None,
             #[cfg(feature = "mcp")]
             widgets: Vec::new(),
         };
 
+        let margin = egui::Margin {
+            left: 8,
+            right: 8,
+            top: 8,
+            bottom: 8,
+        };
         let panel = egui::SidePanel::right("outline")
             .resizable(true)
+            .show_separator_line(false)
             .default_width(self.outline_width)
             .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
-            .frame(
-                egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin {
-                    left: 8,
-                    right: 0,
-                    top: 8,
-                    bottom: 0,
-                }),
-            )
+            .frame(sidebar::frame(palette, margin))
             .show(ctx, |ui| {
-                #[cfg(feature = "mcp")]
-                outline_toolbar(ui, tab, &mut outline.widgets);
-                #[cfg(not(feature = "mcp"))]
-                outline_toolbar(ui, tab);
+                outline_header(ui, tab, &mut outline);
                 outline_rows(ui, tab, &mut outline);
             });
         self.outline_width = panel.response.rect.width();
+        sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Right, palette);
         // Right panel: the draggable edge is its left border.
         paint_sidebar_resize_affordance(
             ctx,
@@ -135,65 +195,80 @@ impl MarkdownApp {
                 .register_widget_rect(&name, widget_type, rect, value.as_deref());
         }
 
-        match outline.click {
-            Some(OutlineClick::ToggleFold(index)) => toggle_fold(tab, index),
-            Some(OutlineClick::JumpTo {
-                source_start,
-                line_number,
-            }) => jump_to_header(tab, source_start, line_number),
-            None => {}
+        if let Some(click) = outline.click {
+            apply_click(tab, click);
         }
     }
 }
 
-/// Expand All / Collapse All, shown only when some header has children.
-fn outline_toolbar(
-    ui: &mut egui::Ui,
-    tab: &mut Tab,
-    #[cfg(feature = "mcp")] widgets: &mut Vec<McpWidget>,
-) {
-    if !any_header_has_children(&tab.outline_headers) {
-        return;
-    }
-    ui.horizontal(|ui| {
-        ui.add_space(6.0);
-        let expand_btn = ui.small_button("Expand All");
-
-        // Collect Expand All button for MCP
-        #[cfg(feature = "mcp")]
-        widgets.push((
-            "Outline: Expand All".to_string(),
-            "button",
-            expand_btn.rect,
-            None,
-        ));
-
-        if expand_btn.clicked() {
-            tab.collapsed_headers.clear();
-        }
-
-        let collapse_btn = ui.small_button("Collapse All");
-
-        // Collect Collapse All button for MCP
-        #[cfg(feature = "mcp")]
-        widgets.push((
-            "Outline: Collapse All".to_string(),
-            "button",
-            collapse_btn.rect,
-            None,
-        ));
-
-        if collapse_btn.clicked() {
+fn apply_click(tab: &mut Tab, click: OutlineClick) {
+    match click {
+        OutlineClick::ToggleFold(index) => toggle_fold(tab, index),
+        OutlineClick::ExpandAll => tab.collapsed_headers.clear(),
+        OutlineClick::CollapseAll => {
             let headers = &tab.outline_headers;
             tab.collapsed_headers
                 .extend((0..headers.len()).filter(|&index| header_has_children(headers, index)));
         }
-    });
-    ui.separator();
+        OutlineClick::JumpTo {
+            source_start,
+            line_number,
+        } => jump_to_header(tab, source_start, line_number),
+    }
+}
+
+/// "CONTENTS", and where some header has children, the menu that folds and
+/// unfolds all of them.
+fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
+    let can_fold = any_header_has_children(&tab.outline_headers);
+    let header = sidebar::Header {
+        caption: "CONTENTS",
+        detail: None,
+        menu: can_fold.then_some("Outline options"),
+    };
+    let Some(more) = sidebar::header(ui, outline.palette, &header) else {
+        return;
+    };
+    #[cfg(feature = "mcp")]
+    outline
+        .widgets
+        .push(("Outline: Options".to_string(), "button", more.rect, None));
+    let picked = egui::Popup::menu(&more).show(outline_menu);
+    if let Some(click) = picked.and_then(|menu| menu.inner) {
+        outline.click = Some(click);
+    }
+}
+
+/// The outline's menu. Returns what was picked this frame.
+fn outline_menu(ui: &mut egui::Ui) -> Option<OutlineClick> {
+    let items = [
+        ("Expand All", OutlineClick::ExpandAll),
+        ("Collapse All", OutlineClick::CollapseAll),
+    ];
+    sidebar::menu_text(ui);
+    let mut picked = None;
+    for (text, click) in items {
+        if ui.button(text).clicked() {
+            picked = Some(click);
+        }
+    }
+    if picked.is_some() {
+        ui.close();
+    }
+    picked
+}
+
+/// Distance from the top of the list to the top of its row `row`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a document has far fewer headings than f32 counts exactly, and the result only aims a scroll"
+)]
+fn row_top(row: usize) -> f32 {
+    row as f32 * sidebar::ROW_HEIGHT
 }
 
 /// The scrollable list of headers that no collapsed ancestor hides.
-fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi) {
+fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     // Pre-compute the visible header indices (skip those hidden
     // by collapsed ancestors). This lets us virtualize via
     // show_rows, paying O(visible-on-screen) instead of
@@ -204,91 +279,98 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi) {
         .filter(|&i| !header_is_hidden(&tab.outline_headers, i, &tab.collapsed_headers))
         .collect();
     let show_fold_column = any_header_has_children(&tab.outline_headers);
-    // Row height: fold indicator is 20px tall, fold-indicator-less
-    // rows fall back to the standard interact_size which is
-    // typically 18–20px anyway. A small fudge keeps neighboring
-    // rows from clipping into each other.
-    let row_height = ui.spacing().interact_size.y.max(20.0);
-
-    egui::ScrollArea::both()
-        .auto_shrink([false, false])
-        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-        .id_salt("outline")
-        .show_rows(ui, row_height, visible_indices.len(), |ui, row_range| {
-            for &index in &visible_indices[row_range] {
-                let row = OutlineRow {
-                    index,
-                    header: &tab.outline_headers[index],
-                    fold: Fold::of(tab, index, show_fold_column),
-                };
-                outline_row(ui, &row, outline);
-            }
-        });
-}
-
-fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi) {
-    ui.horizontal(|ui| {
-        // Indent based on header level (h2 = 0, h3 = 1 indent, etc.)
-        let indent = f32::from(row.header.level.saturating_sub(2)) * 12.0;
-        if indent > 0.0 {
-            ui.add_space(indent);
-        }
-
-        fold_indicator(ui, row, outline);
-
-        let response = ui.add(
-            egui::Button::selectable(false, &row.header.title)
-                .wrap_mode(egui::TextWrapMode::Extend),
-        );
-
-        // Collect header for MCP
-        #[cfg(feature = "mcp")]
-        outline.widgets.push((
-            format!("Header: {}", row.header.title),
-            "header",
-            response.rect,
-            Some(format!("h{}", row.header.level)),
-        ));
-
-        if !outline.is_dragging && response.clicked() {
-            outline.click = Some(OutlineClick::JumpTo {
-                source_start: row.header.source_start,
-                line_number: row.header.line_number,
-            });
-        }
+    // The row that stands for the heading the reader is in: the heading
+    // itself, or the folded heading that hides it.
+    let current_row = outline.current.and_then(|current| {
+        visible_indices
+            .partition_point(|&index| index <= current)
+            .checked_sub(1)
     });
+    outline.current = current_row.map(|row| visible_indices[row]);
+    let follow_row = current_row.filter(|_| outline.follow);
+
+    // Rows touch, so that the wash under the pointer never falls between
+    // two of them; show_rows adds this spacing to the row height.
+    ui.spacing_mut().item_spacing.y = 0.0;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .id_salt("outline")
+        .show_rows(
+            ui,
+            sidebar::ROW_HEIGHT,
+            visible_indices.len(),
+            |ui, row_range| {
+                if let Some(row) = follow_row {
+                    // The list starts `row_range.start` rows above this
+                    // ui, which holds only the rows on screen.
+                    let top = ui.max_rect().top() + row_top(row) - row_top(row_range.start);
+                    let rows = top..=top + sidebar::ROW_HEIGHT;
+                    let rect = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), rows);
+                    ui.scroll_to_rect(rect, None);
+                }
+                for &index in &visible_indices[row_range] {
+                    let row = OutlineRow {
+                        index,
+                        header: &tab.outline_headers[index],
+                        fold: Fold::of(tab, index, show_fold_column),
+                    };
+                    outline_row(ui, &row, outline);
+                }
+            },
+        );
 }
 
-/// Draws the fold column of a row: a fixed-width slot, with a clickable
-/// `+` or `-` when the header has children.
-fn fold_indicator(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi) {
-    if row.fold == Fold::NoColumn {
-        return;
-    }
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
-    let (indicator, verb) = match row.fold {
-        Fold::Collapsed => ("+", "Expand"),
-        Fold::Expanded => ("-", "Collapse"),
-        Fold::NoColumn | Fold::Leaf => return,
+fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<'_>) {
+    let shown = Row {
+        text: &row.header.title,
+        // Indent based on header level (h2 = 0, h3 = 1 indent, etc.)
+        indent: f32::from(row.header.level.saturating_sub(2)) * INDENT,
+        current: outline.current == Some(row.index),
+        chevron: row.fold.chevron(),
     };
-    // The indicator is painted, not a widget with text, so it names itself
+    let laid_out = sidebar::row(ui, outline.palette, &shown);
+
+    // Collect header for MCP
+    #[cfg(feature = "mcp")]
+    outline.widgets.push((
+        format!("Header: {}", row.header.title),
+        "header",
+        laid_out.response.rect,
+        Some(format!("h{}", row.header.level)),
+    ));
+
+    if !outline.is_dragging && laid_out.response.clicked() {
+        outline.click = Some(OutlineClick::JumpTo {
+            source_start: row.header.source_start,
+            line_number: row.header.line_number,
+        });
+    }
+    fold_control(ui, row, laid_out.chevron, outline);
+}
+
+/// Makes the chevron of a row that has children a control of its own, laid
+/// over the row: a click on it folds, a click beside it jumps.
+fn fold_control(
+    ui: &egui::Ui,
+    row: &OutlineRow<'_>,
+    chevron: egui::Rect,
+    outline: &mut OutlineUi<'_>,
+) {
+    let Some(verb) = row.fold.verb() else {
+        return;
+    };
+    let rect = chevron.expand2(egui::vec2(FOLD_REACH, 0.0));
+    let response = ui.interact(
+        rect,
+        ui.id().with(("fold", row.index)),
+        egui::Sense::click(),
+    );
+    // The chevron is painted, not a widget with text, so it names itself
     // for screen readers.
     response.widget_info(|| {
         let name = format!("{verb} {}", row.header.title);
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
-    let text_color = if response.hovered() {
-        ui.visuals().strong_text_color()
-    } else {
-        ui.visuals().text_color()
-    };
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        indicator,
-        egui::FontId::monospace(16.0),
-        text_color,
-    );
 
     // Collect fold indicator for MCP
     #[cfg(feature = "mcp")]
