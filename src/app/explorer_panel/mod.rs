@@ -114,14 +114,10 @@ impl MarkdownApp {
             self.file_explorer.load_children(dir);
         }
 
-        // Take tree to iterate without cloning, then put it back
-        let tree = std::mem::take(&mut self.file_explorer.tree);
-        // Clone the small set of open tab paths (avoids borrow conflict with &mut self)
-        let open_paths = self.open_tab_paths.clone();
         let active_tab = self.tabs.get(self.active_tab);
         let listing = Listing {
             palette,
-            open_paths: &open_paths,
+            open_paths: &self.open_tab_paths,
             current: active_tab.map(|tab| tab.path.as_path()),
         };
 
@@ -130,13 +126,13 @@ impl MarkdownApp {
             .id_salt("file_explorer")
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                for node in &tree {
+                for node in &self.file_explorer.tree {
                     self.render_tree_node(ui, node, 0, &listing, action);
                 }
             });
 
-        // Put tree back and apply deferred toggle
-        self.file_explorer.tree = tree;
+        // The rows only read the tree; the toggle is applied once they are
+        // drawn.
         if let Some(ref dir_path) = action.dir_to_toggle {
             self.file_explorer.toggle_expanded(dir_path);
             // Keep the non-recursive explorer watches in sync with the
@@ -242,7 +238,7 @@ impl MarkdownApp {
             Some(state_value),
         );
 
-        // The toggle is applied after the tree is put back (avoids a clone).
+        // The toggle is applied after the rows are drawn.
         if response.clicked() {
             action.dir_to_toggle = Some(row.path.to_path_buf());
         }

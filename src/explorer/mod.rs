@@ -21,7 +21,7 @@ pub(crate) struct ExplorerAction {
     pub(crate) file_to_open: Option<PathBuf>,
     /// File to close (middle-click on open file).
     pub(crate) file_to_close: Option<PathBuf>,
-    /// Directory to toggle expansion (deferred to avoid clone).
+    /// Directory to toggle expansion, once the rows are drawn.
     pub(crate) dir_to_toggle: Option<PathBuf>,
 }
 
