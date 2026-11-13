@@ -1,8 +1,10 @@
 //! A fast markdown viewer with tabs, a file explorer, and live reload.
 //!
-//! The `md-viewer` binary is a thin caller of [`run`]. Every module is
+//! The `md-viewer` binary is a thin caller of [`run`]. [`app`] builds the
+//! same app without a window, for the tests in `tests/`. Every module is
 //! private to this crate.
 
+use std::ffi::OsString;
 use std::io;
 
 use clap::Parser;
@@ -31,9 +33,11 @@ mod test_support;
 mod theme;
 mod watcher;
 
-/// Runs `md-viewer` as the process it was started in: wires the process's
-/// own arguments, streams, environment, executable, and the native event
-/// loop into `cli`, which holds every decision made with them.
+/// Runs `md-viewer` as the process it was started in.
+///
+/// Wires the process's own arguments, streams, environment, executable, and
+/// the native event loop into `cli`, which holds every decision made with
+/// them.
 ///
 /// # Errors
 ///
@@ -51,4 +55,30 @@ pub fn run() -> eframe::Result<()> {
         }
         eframe::run_native(APP_ID, native_options(), app_creator(args))
     })
+}
+
+/// Builds the app `md-viewer <args>` shows, once eframe has made its window.
+///
+/// `args` are the command line as typed, without the program name. The last
+/// session is read from `creation.storage`, and the app writes the next one
+/// through [`eframe::App::save`].
+///
+/// This is the seam the tests in `tests/` drive the app through. It never
+/// detaches from the terminal and opens no window.
+///
+/// # Errors
+///
+/// Returns the usage error when `args` is not a command line `md-viewer`
+/// accepts, and what `--help` or `--version` would print when asked for.
+pub fn app<I, T>(
+    args: I,
+    creation: &eframe::CreationContext<'_>,
+) -> Result<Box<dyn eframe::App>, Box<dyn std::error::Error + Send + Sync>>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString>,
+{
+    let command_line = std::iter::once(OsString::from(APP_ID)).chain(args.into_iter().map(T::into));
+    let args = Args::try_parse_from(command_line)?;
+    app_creator(&args)(creation)
 }
