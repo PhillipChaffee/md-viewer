@@ -1,264 +1,284 @@
 # md-viewer
 
-[![Crates.io](https://img.shields.io/crates/v/md-viewer.svg)](https://crates.io/crates/md-viewer)
-[![AUR](https://img.shields.io/aur/version/md-viewer-git)](https://aur.archlinux.org/packages/md-viewer-git)
-[![Snap](https://img.shields.io/badge/snap-md--viewer-blue?logo=snapcraft)](https://snapcraft.io/md-viewer)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/aydiler/md-viewer)](https://github.com/aydiler/md-viewer/stargazers)
+A desktop reader for Markdown. It opens a `.md` file and shows it the way a
+good read-later app shows an article: one sheet of paper, a centered column
+of serif text, and nothing else on screen until you ask for it.
 
-A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed for distraction-free reading with excellent typography, syntax highlighting, and LaTeX math — from quick notes to scientific papers.
+It is a native app written in Rust with [egui](https://github.com/emilk/egui).
+It renders LaTeX math, Mermaid diagrams, tables and syntax-highlighted code,
+and reloads the page when the file changes on disk.
 
-![md-viewer rendering a LaTeX-heavy scientific paper](screenshots/math-rendering.png)
+![An article open in md-viewer on the sepia theme](screenshots/reader/sepia-article.png)
+
+## What it looks like
+
+### Four themes
+
+Paper, Sepia, Dusk and Night. Each one is a single palette that every part of
+the window draws from, and body text keeps at least 7:1 contrast on all four.
+Press `Ctrl+D` to step through them.
+
+| Sepia | Paper |
+| --- | --- |
+| ![Sepia theme](screenshots/reader/sepia-math-and-diagram.png) | ![Paper theme](screenshots/reader/paper.png) |
+| **Dusk** | **Night** |
+| ![Dusk theme](screenshots/reader/dusk.png) | ![Night theme](screenshots/reader/night.png) |
+
+### A column as wide as you want
+
+Drag either edge of the text and the column follows, from 280 px up to the
+whole window. A small pill shows the width while you drag. Double-click an
+edge to go back to the default.
+
+| Dragging the edge out to 1026 px | Narrowed to about 300 px |
+| --- | --- |
+| ![Dragging the column edge wider](screenshots/reader/column-drag-wide.png) | ![A narrow column](screenshots/reader/column-narrow.png) |
+
+### One popover for how the page reads
+
+The **Aa** button holds the theme swatches, the text size, a width slider
+with **Fit window** and **Reset**, and three line spacings. Every control
+acts as you touch it.
+
+![The appearance popover](screenshots/reader/appearance-popover.png)
+
+### Math, diagrams, tables and code
+
+LaTeX formulas and Mermaid diagrams are drawn as ink on the page in the
+theme's own colors, so they never sit in a white box. A diagram wider than
+the column may use the room beside it. Tables have hairlines between rows
+and honor the column alignment the Markdown asks for.
+
+![A table, a code block, lists and a sequence diagram](screenshots/reader/sepia-table-code-lists.png)
+
+### Sidebars when you need them
+
+A file list on the left and a table of contents on the right. The contents
+list marks the heading you are reading. Both are hidden or shown with one
+click and can be resized.
+
+![The files and contents sidebars](screenshots/reader/sidebars.png)
+
+### A home page of what you read last
+
+With no document open, md-viewer lists recent documents with their title,
+folder, reading time and opening lines.
+
+![The home page listing recently read documents](screenshots/reader/home.png)
 
 ## Features
 
-### Rendering
+**Reading**
 
-- **GitHub Flavored Markdown** - Full GFM support including tables, task lists, footnotes, and recognized emoji shortcodes such as `:pushpin:`
-- **LaTeX Math** - Inline `$…$` and display `$$…$$` equations rendered via typst + mitex — fractions, sub/superscripts, `\boxed`, accents, matrices, and more — sized and baseline-aligned to the surrounding text
-- **Syntax Highlighting** - 200+ languages via syntect with beautiful color schemes
-- **Mermaid Diagrams** - Flowcharts, sequence diagrams, and more rendered natively via [merman](https://github.com/Latias94/merman) (click to enlarge)
-- **Tables that fit their content** - Column widths follow what each column actually needs, cell text wraps instead of clipping, and widths are optimized so rows wrap less; drag the dividers to override
-- **HTML Tables** - Rendered as formatted grids with proper cell padding
-- **YAML Frontmatter** - A leading `---` block renders as a key/value table instead of raw text
-- **Images & SVG** - Embedded and remote image support (PNG, JPEG, GIF, SVG, HTTP URLs)
-- **Unicode Support** - System font fallbacks (Noto, DejaVu) for emojis, CJK, and non-Latin scripts
-- **60 FPS Rendering** - Viewport virtualization keeps scroll smooth on 100k+ line docs
-- **Typography** - 1.5x line height for optimal readability (WCAG 2.1 compliant)
+- Four themes, a resizable centered column, three line spacings, five text
+  sizes and 50% to 300% zoom.
+- Documents are set in the bundled
+  [Source Serif 4](https://github.com/adobe-fonts/source-serif). Other font
+  presets and any installed font family are under **Aa → Fonts…**.
+- A `file-name · N min read` line above the title.
 
-*200+ languages via syntect, and mermaid diagrams rendered natively*
+**Rendering**
 
-![Syntax highlighting and a mermaid sequence diagram](screenshots/syntax-highlighting.png)
+- GitHub Flavored Markdown: tables, task lists, footnotes, strikethrough and
+  emoji shortcodes such as `:pushpin:`.
+- LaTeX math, inline `$…$` and display `$$…$$`.
+- Mermaid diagrams: flowcharts, sequence, class, state, ER, gantt and pie.
+  Click a diagram to enlarge it.
+- Syntax highlighting for 200+ languages, with a color scheme per theme.
+- Images (PNG, JPEG, GIF, SVG, local or over HTTP), HTML tables and YAML
+  frontmatter.
+- System font fallbacks for CJK and other non-Latin scripts.
 
-*Wide tables, same document and same window width. In v0.1.17 the last three columns were cut off at the pane edge and reachable only by scrolling the table sideways; in 0.2.0 every column fits and long cell text wraps instead of being clipped*
+**Getting around**
 
-| v0.1.17 | 0.2.0 |
-|---|---|
-| ![Table columns clipped in v0.1.17](screenshots/tables-before.png) | ![Table columns fitted in 0.2.0](screenshots/tables-after.png) |
+- Tabs, with back and forward history in each tab.
+- Find in document (`Ctrl+F`) with highlighted matches.
+- Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
+- Drag a file onto the window to open it.
+- Live reload when the file changes on disk.
+- An edit mode (`Ctrl+E`) that shows the source and saves with `Ctrl+S`.
+- The session is remembered: open tabs, theme, column width, sidebars.
 
-*A leading `---` block renders as a key/value table rather than raw text; nested items and folded scalars keep their source spelling*
+## Install
 
-![YAML frontmatter rendered as a key/value table](screenshots/frontmatter.png)
-
-### Navigation
-
-- **Tab System** - Open multiple documents with tab bar (Ctrl+Click links to open in new tab)
-- **In-Document Search (Ctrl+F)** - Find bar with inline highlights, Enter/Shift+Enter to cycle matches
-- **File Explorer** - Hierarchical sidebar with lazy-loading directories and sorting options; freely resizable, width remembered
-- **Open Folder** - Use ⋯ → Open Folder… to choose and persist the file explorer root
-- **Outline Sidebar** - Click-to-navigate table of contents from document headers; freely resizable, width remembered
-- **Top Bar** - One quiet row of line icons around the document title: explorer, back and forward on the left; appearance (Aa), find, outline and the ⋯ menu on the right
-- **Per-Tab History** - Independent back/forward navigation within each tab (Alt+Left/Right)
-- **Internal Links** - Navigate between markdown files with relative links
-
-*Find bar with inline highlights and a match counter; Enter and Shift+Enter cycle*
-
-![In-document search](screenshots/search.png)
-
-### View
-
-- **Four Reading Themes** - Paper, Sepia, Dusk and Night; step through them with Ctrl+D or pick one from the swatches under **Aa**
-- **Appearance Popover (Aa)** - Theme, text size, column width (a slider, Fit window and Reset) and line spacing in one place; every control takes effect as you use it
-- **Zoom** - 50% to 300% zoom (Ctrl++/-/0, Ctrl+Scroll, or the zoom row of the ⋯ menu)
-- **Resizable Text Column** - The text sits in a centered column: drag either edge to any width, step it with Ctrl+Alt+←/→, or switch to Full Width; prose, tables and code follow it together
-- **Reader Typography** - Documents are set in the bundled Source Serif 4 by default, with three line spacings; the other font presets and any installed family remain a click away
-- **Formula Size** - Scale rendered math from 100% to 150% (⋯ → Formula Size), independent of UI zoom
-- **Keyboard Scrolling** - Scroll documents with ↑/↓ by line or Page Up/Page Down by page when the find bar is closed
-- **Live Reload** - Auto-refresh on file changes (enabled by default)
-- **Custom Colors** - Customize highlight and link text colors (⋯ → Colors…)
-- **Font Selection** - Browse and apply installed system fonts via Fonts… in the Aa popover or the ⋯ menu (searchable, persistent)
-- **Smooth Text Rendering** - Optional toggle (⋯ → Smooth Text Rendering) that disables glyph pixel-snapping for less jagged-looking text at fractional zoom levels
-
-*Everything the top bar has no button for lives in the ⋯ menu*
-
-![The ⋯ menu](screenshots/overflow-menu.png)
-
-*The same document on both themes — syntax highlighting, mermaid diagrams and both sidebars*
-
-| Dark | Light |
-|---|---|
-| ![Dark mode](screenshots/dark-mode.png) | ![Light mode](screenshots/light-mode.png) |
-
-### Usability
-
-- **Drag and Drop** - Drop markdown files onto the window to open
-- **Native Dialogs** - System file and folder picker integration
-- **Welcome Page & Recent Files** - Open files or folders from the idle screen and reopen recent documents
-- **Session Persistence** - Remembers open tabs, theme, zoom, and sidebar state
-- **Cross-Platform** - Works on X11 and Wayland
-
-## Keyboard Shortcuts
-
-### Tab Management
-
-| Shortcut | Action |
-| ---------- | -------- |
-| Ctrl+T | Open file in new tab |
-| Ctrl+W | Close current tab |
-| Ctrl+Tab | Next tab |
-| Ctrl+Shift+Tab | Previous tab |
-| Ctrl+1-9 | Switch to tab 1-9 |
-
-### Navigation
-
-| Shortcut | Action |
-| ---------- | -------- |
-| Ctrl+O | Open file in new tab |
-| Alt+Left | Navigate back in history |
-| Alt+Right | Navigate forward in history |
-| Click link | Navigate in current tab |
-| Ctrl+Click link | Open link in new tab |
-
-### Search
-
-| Shortcut | Action |
-| ---------- | -------- |
-| Ctrl+F | Open find bar (or refocus if already open) |
-| Enter / ↓ | Jump to next match |
-| Shift+Enter / ↑ | Jump to previous match |
-| Esc | Close find bar and clear highlights |
-
-### View
-
-| Shortcut | Action |
-| ---------- | -------- |
-| Ctrl+D | Next theme |
-| Ctrl+Alt+← / Ctrl+Alt+→ | Narrow / widen the text column |
-| Ctrl+Shift+E | Toggle file explorer |
-| Ctrl+Shift+O | Toggle outline sidebar |
-| Ctrl++ / Ctrl+= | Zoom in |
-| Ctrl+- | Zoom out |
-| Ctrl+0 | Reset zoom to 100% |
-| ↑ / ↓ (when find bar is closed) | Scroll document up/down by line |
-| Page Up / Page Down | Scroll document up/down by page |
-| Ctrl+Scroll | Zoom with mouse wheel |
-| Shift+Scroll over a wide table | Scroll the table horizontally |
-
-### File Operations
-
-| Shortcut | Action |
-|----------|--------|
-| F5 | Toggle file watching |
-| Ctrl+Q | Quit application |
-
-## Installation
-
-### Quick Install (Linux / macOS) — recommended
-
-Downloads the prebuilt binary for your platform, verifies its SHA256, and installs the binary to `~/.local/bin` plus bundled third-party notices under `~/.local/share/licenses/md-viewer`. No compilation, takes seconds.
+This repository builds from source. You need a Rust toolchain; the version is
+pinned in `rust-toolchain.toml` and `rustup` installs it on the first build.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aydiler/md-viewer/main/scripts/install.sh | sh
+git clone https://github.com/PhillipChaffee/md-viewer
 ```
 
-Supports Linux x86_64 and macOS arm64 (Apple Silicon). Set `INSTALL_DIR=/usr/local/bin` to install elsewhere. Intel Macs need to build from source via `cargo install md-viewer`.
-
-On Linux, **Open File** and **Open Folder** need either a working XDG Desktop
-Portal FileChooser (plus the `gdbus` command used to detect it), or Python 3
-with Tkinter for the fallback dialog. You can check the fallback with
-`python3 -c 'import tkinter'`. Common Tkinter package names are `python3-tk` on
-Debian/Ubuntu, `python3-tkinter` on Fedora/RHEL, and `python` plus `tk` on Arch.
-
-> **macOS Gatekeeper note:** binaries are not yet signed/notarized. If macOS refuses to run the app, run:
-> `xattr -d com.apple.quarantine ~/.local/bin/md-viewer`
-
-### Snap Store
-
 ```bash
-sudo snap install md-viewer
-```
-
-Auto-updates via snapd.
-
-### Arch Linux (AUR)
-
-```bash
-yay -S md-viewer-git    # or: paru -S md-viewer-git
-```
-
-Builds from the latest `main` commit (rolling) — your system update grabs new versions automatically.
-
-### Flatpak / Flathub
-
-Once published to Flathub:
-
-```bash
-flatpak install flathub io.github.aydiler.md-viewer
-```
-
-(Flathub submission in progress — see `flatpak/` and `PUBLISHING.md`.)
-
-### Windows
-
-Download `md-viewer-<version>-windows-x86_64.zip` from the [latest release](https://github.com/aydiler/md-viewer/releases/latest), extract `md-viewer.exe`, and run it. Verify the included `.sha256` if you'd like.
-
-### Cargo (crates.io) — slower, builds from source
-
-```bash
-cargo install md-viewer
-```
-
-Compiles locally (~2–3 minutes). Update with `cargo install --force md-viewer`. Requires the system dependencies listed below.
-
-### From Source
-
-```bash
-git clone https://github.com/aydiler/md-viewer
 cd md-viewer
-cargo build --release
-make install     # installs to ~/.local/bin (optional)
-make uninstall   # removes the local installation
 ```
-
-### System Dependencies (Arch Linux)
-
-Only needed for `cargo install` / building from source:
 
 ```bash
-sudo pacman -S --needed \
-    base-devel clang pkg-config \
-    libxcb libxkbcommon openssl \
-    gtk3 fontconfig dbus zenity \
-    xdg-desktop-portal xdg-desktop-portal-gtk \
-    python tk
+cargo build --release
 ```
+
+The binary is `target/release/md-viewer`. To copy it to `~/.local/bin`:
+
+```bash
+make install
+```
+
+### System packages
+
+**Debian and Ubuntu**
+
+```bash
+sudo apt-get install -y clang pkg-config libxcb1-dev libxcb-render0-dev \
+    libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-0 \
+    libssl-dev libgtk-3-dev libfontconfig1-dev libdbus-1-dev
+```
+
+**Arch Linux**
+
+```bash
+sudo pacman -S --needed base-devel clang pkg-config libxcb libxkbcommon \
+    openssl gtk3 fontconfig dbus zenity xdg-desktop-portal \
+    xdg-desktop-portal-gtk python tk
+```
+
+**Open File** and **Open Folder** use the desktop's file chooser portal, and
+fall back to a Tk dialog when there is none (`python3 -c 'import tkinter'`
+tells you whether Tk is installed).
+
+### Platforms
+
+| Platform | State |
+| --- | --- |
+| Linux, X11 | Built and run for every change here |
+| Linux, Wayland | Supported by the windowing backend; not exercised in this repository's checks |
+| macOS, Windows | CI type-checks the code for both; the reader redesign has not been run on either |
+
+### Packaged builds
+
+md-viewer started as [aydiler/md-viewer](https://github.com/aydiler/md-viewer),
+which publishes to crates.io, the Snap Store and the AUR. Those packages are
+the upstream project. They do not include the reader redesign in this
+repository, so build from source to get what the screenshots show.
 
 ## Usage
 
 ```bash
-# Open a file and return the terminal prompt (live reload is enabled by default)
-md-viewer README.md
-
-# Keep the viewer attached to the terminal for debugging/logs
-md-viewer --foreground README.md
-
-# Disable live reload
-md-viewer README.md --no-watch
+md-viewer notes.md
 ```
 
-Run `md-viewer` with no file to start on the welcome page, then choose Open File, Open Folder, or a recent document. Opening a file always creates or focuses its tab; use the `+` button, File → Open File in New Tab…, Ctrl+T, or Ctrl+O. Use File → Open Folder… to choose the file explorer root.
+| Command | What it does |
+| --- | --- |
+| `md-viewer` | Opens the home page |
+| `md-viewer file.md` | Opens the file and returns the terminal prompt |
+| `md-viewer --foreground file.md` | Stays attached to the terminal, for logs |
+| `md-viewer file.md --no-watch` | Opens without live reload |
 
-When launched from a terminal, `md-viewer` detaches by default so the shell prompt is available while the window stays open. Use `--foreground` when you want terminal logs or blocking process behavior.
+## Keyboard shortcuts
 
-## Technical Details
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+O` | Open a file |
+| `Ctrl+W` | Close the tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Alt+←` / `Alt+→` | Back / forward |
+| `Ctrl+F` | Find in document |
+| `Ctrl+D` | Next theme |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Narrow / widen the column |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in / out / reset |
+| `Ctrl+Shift+E` | Files sidebar |
+| `Ctrl+Shift+O` | Contents sidebar |
+| `Ctrl+E` | Edit mode |
+| `Ctrl+Q` | Quit |
 
-- **Binary size**: ~35 MB (includes syntax highlighting, mermaid renderer, math rendering, image support, X11+Wayland). ~7 MB as snap.
-- **Startup time**: < 200ms
-- **Rendering**: 60 FPS with viewport-based clipping
-- **Memory**: Uses mimalloc for improved allocation performance
-- **Platform**: Linux (X11 and Wayland via glow backend)
+The full list is in [docs/KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md).
 
-### Built With
+## How it is built
 
-- [eframe/egui](https://github.com/emilk/egui) - Immediate mode GUI framework
-- [egui_commonmark](https://github.com/lampsitter/egui_commonmark) - Markdown rendering (vendored fork with typography, math, and alignment improvements)
-- [emojis](https://crates.io/crates/emojis) - GitHub/gemoji shortcode lookup data (`(MIT OR Apache-2.0) AND Unicode-3.0`; see `THIRD_PARTY_NOTICES`)
-- [typst](https://github.com/typst/typst) + [mitex](https://github.com/mitex-rs/mitex) - LaTeX math rendering (LaTeX → typst → rasterized inline)
-- [merman](https://github.com/Latias94/merman) - Mermaid diagram rendering
-- [syntect](https://github.com/trishume/syntect) - Syntax highlighting
-- [notify](https://github.com/notify-rs/notify) - File watching
-- [rfd](https://github.com/PolyMeilex/rfd) - Native file dialogs
+```mermaid
+flowchart LR
+    F[Markdown file] --> T[Tab: text, headings, links]
+    T --> R[Vendored renderer]
+    P[Theme palette] --> R
+    C[Column width] --> R
+    R --> W[Window]
+    N[File watcher] -->|file changed| T
+```
+
+| Path | What lives there |
+| --- | --- |
+| `src/app/` | The window: top bar, popover, tabs, sidebars, home page, document pane |
+| `src/theme/` | The four palettes. No other code names a color |
+| `src/layout/` | The reading column and line spacing |
+| `src/tab/`, `src/links/`, `src/headers/`, `src/search/` | One document: loading, link resolution, outline, find |
+| `src/explorer/`, `src/watcher/` | The file tree and live reload |
+| `src/system_fonts/` | Font discovery and the bundled faces |
+| `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
+| `vendor/epaint/` | A patched copy of egui's painter |
+
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes each part, and
+[docs/LESSONS.md](docs/LESSONS.md) records the problems that took time to
+find.
+
+## Development
+
+The application crate runs under the Rust baseline from
+[full-lint](https://github.com/PhillipChaffee/full-lint). One command runs
+every check:
+
+```bash
+./run-gates.sh
+```
+
+| Gate | Rule |
+| --- | --- |
+| Lint | clippy `all`, `pedantic`, `nursery` and `cargo`, as errors |
+| Docs | rustdoc's lints denied; every public item documented |
+| Complexity | No function above cognitive complexity 15 |
+| File length | No file above 1000 effective lines |
+| Coverage | At least 95% of lines, regions and functions |
+| Tests | No test shares a file with the code it tests |
+| Dependencies | cargo-deny, osv-scanner and cargo-shear |
+| Hygiene | Spelling, Markdown, links, secrets, duplication, shell and workflow lint |
+
+The tests drive the real app without a window, clicking controls by their
+accessible labels. To run them alone:
+
+```bash
+cargo test
+```
+
+Two things to know before you rely on those gates:
+
+- **The vendored renderer is outside them.** `vendor/egui_commonmark` has its
+  own lint run and its own tests, but not the complexity, file-length or
+  coverage gates. It holds a good share of the layout code.
+- **Each exception is listed.** The table in
+  [docs/devlog/069-full-lint-retrofit.md](docs/devlog/069-full-lint-retrofit.md)
+  names every ignored advisory, skipped duplicate and allowed lint, with the
+  reason.
+
+## Known limits
+
+- Color emoji fonts are drawn in one color.
+- Very large documents (tens of thousands of lines) scroll less smoothly.
+- In edit mode the source is plain text with no highlighting.
+- A mouse wheel step scrolls farther than in most apps.
+
+## Credits
+
+- [aydiler/md-viewer](https://github.com/aydiler/md-viewer), the project this
+  one grew from.
+- [egui and eframe](https://github.com/emilk/egui) for the GUI.
+- [egui_commonmark](https://github.com/lampsitter/egui_commonmark) for the
+  Markdown renderer this repository forks.
+- [typst](https://github.com/typst/typst) and
+  [mitex](https://github.com/mitex-rs/mitex) for math.
+- [merman](https://github.com/Latias94/merman) for Mermaid diagrams.
+- [syntect](https://github.com/trishume/syntect) for syntax highlighting.
+- [Source Serif 4](https://github.com/adobe-fonts/source-serif) by Adobe,
+  under the SIL Open Font License.
+
+Third-party license texts are in `THIRD_PARTY_NOTICES`.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
