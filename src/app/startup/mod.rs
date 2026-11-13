@@ -15,7 +15,7 @@ use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
-use crate::persist::{PersistedState, APP_KEY};
+use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
 use crate::tab::Tab;
@@ -328,6 +328,36 @@ impl MarkdownApp {
 
         app.begin_session(file, watch);
         app
+    }
+
+    /// What this session saves, for `from_persisted` to start the next
+    /// one from.
+    pub(crate) fn persisted(&self) -> PersistedState {
+        PersistedState {
+            theme: Some(self.theme),
+            dark_mode: None,
+            zoom_level: Some(self.zoom_level),
+            show_outline: self.outline_rule.saved(self.show_outline),
+            reading_width: Some(self.reading_width.get()),
+            full_width_content: None,
+            line_spacing: Some(self.line_spacing),
+            math_scale: Some(self.math_scale),
+            highlight_color: self.highlight_color.map(color_to_persisted),
+            link_color: self.link_color.map(color_to_persisted),
+            selected_font_family: self.selected_font_family.clone(),
+            smooth_text_rendering: Some(self.smooth_text_rendering),
+            font_preset: Some(self.font_preset),
+            text_size_class: Some(self.text_size_class),
+            open_tabs: Some(self.get_open_tab_paths()),
+            active_tab: Some(self.active_tab),
+            show_explorer: Some(self.show_explorer),
+            explorer_root: self.file_explorer.root.clone(),
+            expanded_dirs: Some(self.file_explorer.expanded_dirs.iter().cloned().collect()),
+            explorer_sort_order: Some(self.file_explorer.sort_order),
+            explorer_width: Some(self.explorer_width),
+            outline_width: Some(self.outline_width),
+            recent_files: Some(self.recent_files.clone()),
+        }
     }
 
     /// What a launch does once the state is built: note which documents

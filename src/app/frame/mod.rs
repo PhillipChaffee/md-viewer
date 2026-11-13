@@ -13,7 +13,7 @@ use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
+use crate::persist::APP_KEY;
 use crate::system_fonts::{document_fonts, setup_fonts};
 use crate::theme::{self, ColorOverrides};
 
@@ -49,32 +49,7 @@ impl eframe::App for MarkdownApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        let state = PersistedState {
-            theme: Some(self.theme),
-            dark_mode: None,
-            zoom_level: Some(self.zoom_level),
-            show_outline: self.outline_rule.saved(self.show_outline),
-            reading_width: Some(self.reading_width.get()),
-            full_width_content: None,
-            line_spacing: Some(self.line_spacing),
-            math_scale: Some(self.math_scale),
-            highlight_color: self.highlight_color.map(color_to_persisted),
-            link_color: self.link_color.map(color_to_persisted),
-            selected_font_family: self.selected_font_family.clone(),
-            smooth_text_rendering: Some(self.smooth_text_rendering),
-            font_preset: Some(self.font_preset),
-            text_size_class: Some(self.text_size_class),
-            open_tabs: Some(self.get_open_tab_paths()),
-            active_tab: Some(self.active_tab),
-            show_explorer: Some(self.show_explorer),
-            explorer_root: self.file_explorer.root.clone(),
-            expanded_dirs: Some(self.file_explorer.expanded_dirs.iter().cloned().collect()),
-            explorer_sort_order: Some(self.file_explorer.sort_order),
-            explorer_width: Some(self.explorer_width),
-            outline_width: Some(self.outline_width),
-            recent_files: Some(self.recent_files.clone()),
-        };
-        eframe::set_value(storage, APP_KEY, &state);
+        eframe::set_value(storage, APP_KEY, &self.persisted());
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
