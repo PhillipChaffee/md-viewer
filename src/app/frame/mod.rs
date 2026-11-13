@@ -7,6 +7,7 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::app::content::look::DocumentLook;
+use crate::app::drop;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
@@ -50,7 +51,7 @@ impl eframe::App for MarkdownApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.begin_frame(ctx);
         self.handle_keyboard_shortcuts(ctx);
-        self.handle_dropped_files(ctx);
+        let files_hover = self.handle_dropped_files(ctx);
 
         // Get ctrl state for link handling
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
@@ -58,7 +59,7 @@ impl eframe::App for MarkdownApp {
         self.render_top_bar(ctx);
         self.render_top_bars(ctx);
         self.render_panels(ctx, ctrl_held);
-        self.render_overlays(ctx);
+        self.render_overlays(ctx, files_hover);
 
         // Capture AccessKit output for MCP bridge
         mcp::capture(&mut self.mcp, ctx);
@@ -329,8 +330,9 @@ impl MarkdownApp {
         });
     }
 
-    /// The lightbox, the settings dialogs, and the drag-and-drop overlay.
-    fn render_overlays(&mut self, ctx: &egui::Context) {
+    /// The lightbox, the settings dialogs, and the hint that shows while
+    /// files hover over the window.
+    fn render_overlays(&mut self, ctx: &egui::Context, files_hover: bool) {
         // Check if a mermaid diagram was clicked → open lightbox
         // Texture is pre-rasterized at 2x by background thread — no work on click
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
@@ -352,23 +354,8 @@ impl MarkdownApp {
         // Document font picker window
         self.render_font_settings(ctx);
 
-        // Drag and drop overlay
-        if self.is_dragging {
-            let screen_rect = ctx.available_rect();
-            let painter = ctx.layer_painter(egui::LayerId::new(
-                egui::Order::Foreground,
-                egui::Id::new("drop_overlay"),
-            ));
-
-            painter.rect_filled(screen_rect, 0.0, theme::SCRIM);
-
-            painter.text(
-                screen_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                "Drop markdown file here",
-                egui::FontId::proportional(24.0),
-                theme::ON_SCRIM,
-            );
+        if files_hover {
+            drop::paint_hint(ctx);
         }
     }
 }

@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use eframe::egui;
 
 use crate::app::tests::Harness;
-use crate::app::ui_harness::frame_with;
+use crate::app::ui_harness::{frame_with, painted_text};
+use crate::theme;
 
+const HINT: &str = "Drop markdown file here";
 const REFUSAL: &str = "Unsupported file type. Please drop a markdown file (.md, .markdown, .txt)";
 
 fn dropping(paths: Vec<Option<PathBuf>>) -> egui::RawInput {
@@ -23,12 +25,12 @@ fn a_dropped_markdown_file_opens_in_a_new_tab() {
     let mut harness = Harness::with_three_docs();
     let b = harness.path("b.md");
 
-    frame_with(&mut harness, dropping(vec![None, Some(b.clone())]));
+    let output = frame_with(&mut harness, dropping(vec![None, Some(b.clone())]));
 
     assert_eq!(harness.app.tabs.len(), 2);
     assert_eq!(harness.active_path(), b);
     assert!(harness.app.error_message.is_none());
-    assert!(!harness.app.is_dragging);
+    assert!(!painted_text(&output).contains(&HINT.to_owned()));
 }
 
 #[test]
@@ -69,16 +71,35 @@ fn a_dropped_file_is_judged_by_its_extension_in_any_letter_case() {
 }
 
 #[test]
-fn the_drag_state_lasts_only_while_files_hover() {
+fn files_dragged_over_the_window_get_a_drop_hint() {
+    let mut harness = Harness::with_three_docs();
+    let hint = HINT.to_owned();
+    let dragging = egui::RawInput {
+        hovered_files: vec![egui::HoveredFile::default()],
+        ..Default::default()
+    };
+
+    let output = frame_with(&mut harness, dragging);
+    assert!(painted_text(&output).contains(&hint));
+
+    let output = harness.idle();
+    assert!(!painted_text(&output).contains(&hint));
+}
+
+#[test]
+fn the_drop_target_dims_the_window_with_the_scrim() {
     let mut harness = Harness::with_three_docs();
     let hovering = egui::RawInput {
         hovered_files: vec![egui::HoveredFile::default()],
         ..Default::default()
     };
 
-    frame_with(&mut harness, hovering);
-    assert!(harness.app.is_dragging);
+    let output = frame_with(&mut harness, hovering);
 
-    harness.idle();
-    assert!(!harness.app.is_dragging);
+    let dimmed = crate::test_support::painted_shapes(&output)
+        .into_iter()
+        .any(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == theme::SCRIM));
+    assert!(dimmed);
+    let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
+    assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
 }

@@ -303,7 +303,6 @@ impl MarkdownApp {
             folder_picker: Box::new(pick_folder),
             live_reload: LiveReload::new(watch),
             error_message: startup_error,
-            is_dragging: false,
             file_explorer,
             show_explorer,
             explorer_width,

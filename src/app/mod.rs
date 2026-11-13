@@ -135,7 +135,6 @@ pub(crate) struct MarkdownApp {
     folder_picker: PathPicker,
     live_reload: LiveReload,
     error_message: Option<String>,
-    is_dragging: bool,
     // File explorer state
     file_explorer: FileExplorer,
     show_explorer: bool,

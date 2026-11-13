@@ -13,14 +13,14 @@ use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{
-    frame_on, frame_with, frames_until, launch, painted_text, MemoryStorage, ScratchDir, UiHarness,
+    frame_on, frames_until, launch, MemoryStorage, ScratchDir, UiHarness,
 };
 use crate::app::MarkdownApp;
 use crate::explorer::{ExplorerScanResult, SortOrder};
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::assert_close;
-use crate::theme::{self, ThemeId};
+use crate::theme::ThemeId;
 
 const LONG_DOCUMENT_PARAGRAPHS: usize = 400;
 
@@ -307,22 +307,6 @@ fn the_window_title_follows_the_active_tab_down_to_no_tab() {
 }
 
 #[test]
-fn files_dragged_over_the_window_get_a_drop_hint() {
-    let mut harness = Harness::with_three_docs();
-    let hint = "Drop markdown file here".to_owned();
-    let dragging = egui::RawInput {
-        hovered_files: vec![egui::HoveredFile::default()],
-        ..Default::default()
-    };
-
-    let output = frame_with(&mut harness, dragging);
-    assert!(painted_text(&output).contains(&hint));
-
-    let output = harness.idle();
-    assert!(!painted_text(&output).contains(&hint));
-}
-
-#[test]
 fn the_tab_close_button_closes_its_tab() {
     let mut harness = UiHarness::with_three_docs();
     let b = harness.path("b.md");
@@ -557,22 +541,4 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     assert_close(body_size(&harness), 18.0);
     assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);
     assert!(revision(&harness) > settled);
-}
-
-#[test]
-fn the_drop_target_dims_the_window_with_the_scrim() {
-    let mut harness = Harness::with_three_docs();
-    let hovering = egui::RawInput {
-        hovered_files: vec![egui::HoveredFile::default()],
-        ..Default::default()
-    };
-
-    let output = frame_with(&mut harness, hovering);
-
-    let dimmed = crate::test_support::painted_shapes(&output)
-        .into_iter()
-        .any(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == theme::SCRIM));
-    assert!(dimmed);
-    let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
-    assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
 }
