@@ -61,11 +61,7 @@ fn each_kind_of_picture_is_shown_at_its_own_size_in_its_own_colors() {
     }
 }
 
-/// Known bug, listed in `tests/README.md`: a GIF is looked for under its
-/// name with a frame number on the end, is not found, and a warning sign
-/// is shown in its place.
 #[test]
-#[should_panic(expected = "the GIF is not shown")]
 fn a_gif_is_shown() {
     let mut reader = framed("![a picture](green.gif)");
     reader.idle_for(std::time::Duration::from_millis(500));

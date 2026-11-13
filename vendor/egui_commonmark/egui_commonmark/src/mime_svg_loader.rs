@@ -175,6 +175,12 @@ impl ImageLoader for MimeSvgLoader {
             return Err(LoadError::NotSupported);
         }
 
+        // egui asks for a GIF or WebP under its address with a frame number
+        // on the end (`picture.gif#0`). Nothing is stored under that
+        // address: asking for its bytes fails, and that failure would end
+        // the search for a loader before the one that reads GIFs is tried.
+        let uri = egui::decode_animated_image_uri(uri).map_or(uri, |(uri, _frame)| uri);
+
         let key = (uri.to_owned(), size_hint);
         let cached = {
             let mut cache = self.cache.lock();
@@ -332,6 +338,21 @@ mod tests {
             .entries
             .keys()
             .all(|(uri, _)| uri == "https://example.com/other"));
+    }
+
+    #[test]
+    fn a_frame_of_an_animated_picture_is_left_to_the_loader_that_reads_it() {
+        let ctx = egui::Context::default();
+        ctx.include_bytes("bytes://picture.gif", b"GIF89a".as_slice());
+        let loader = MimeSvgLoader::default();
+
+        let frame = loader.load(&ctx, "bytes://picture.gif#0", SizeHint::default());
+
+        assert!(
+            matches!(frame, Err(egui::load::LoadError::NotSupported)),
+            "{:?}",
+            frame.err()
+        );
     }
 
     #[test]
