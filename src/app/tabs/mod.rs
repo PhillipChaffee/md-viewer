@@ -198,7 +198,7 @@ impl MarkdownApp {
     /// place can hold another document after any of these, the first place
     /// included when a document opens into an empty strip.
     fn tab_documents_changed(&mut self) {
-        self.title_dirty = true;
+        self.window_title.mark_stale();
         self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
@@ -262,7 +262,7 @@ impl MarkdownApp {
     /// the document in front, so the title follows.
     const fn activate_tab(&mut self, index: usize) {
         self.active_tab = index;
-        self.title_dirty = true;
+        self.window_title.mark_stale();
     }
 
     pub(crate) fn get_open_tab_paths(&self) -> Vec<PathBuf> {

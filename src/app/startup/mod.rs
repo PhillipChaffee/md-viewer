@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use eframe::egui::{self, FontId, TextStyle};
 
 use crate::app::content::look::DocumentLook;
+use crate::app::frame::WindowTitle;
 use crate::app::lightbox::Lightbox;
 use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
@@ -271,8 +272,7 @@ impl MarkdownApp {
             is_virtual_display: is_virtual_display(std::env::var("DISPLAY").ok().as_deref()),
             egui_ctx: ctx.clone(),
             last_applied_zoom_level: None,
-            last_window_title: String::new(),
-            title_dirty: true,
+            window_title: WindowTitle::unset(),
             open_tab_paths: HashSet::new(),
             lightbox: Lightbox::default(),
             search: SearchState::default(),

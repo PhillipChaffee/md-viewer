@@ -16,6 +16,29 @@ use crate::theme;
 #[cfg(test)]
 mod tests;
 
+/// The title in the window's frame, which names the document in front.
+pub(crate) struct WindowTitle {
+    /// The title the window was last given.
+    shown: String,
+    /// Whether the document in front may have changed since.
+    stale: bool,
+}
+
+impl WindowTitle {
+    /// The title of a window that has not been given one yet.
+    pub(crate) const fn unset() -> Self {
+        Self {
+            shown: String::new(),
+            stale: true,
+        }
+    }
+
+    /// Have the next frame work the title out again.
+    pub(crate) const fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+}
+
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         mcp::raw_input(&mut self.mcp, raw_input);
@@ -166,17 +189,16 @@ impl MarkdownApp {
 
     /// Send the window title to the viewport once a tab change made it stale.
     fn apply_window_title(&mut self, ctx: &egui::Context) {
-        if !self.title_dirty {
+        if !std::mem::take(&mut self.window_title.stale) {
             return;
         }
-        self.title_dirty = false;
         let title = self.tabs.get(self.active_tab).map_or_else(
             || "Markdown Viewer".to_string(),
             |tab| format!("{} - Markdown Viewer", tab.title()),
         );
-        if title != self.last_window_title {
-            self.last_window_title = title;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.last_window_title.clone()));
+        if title != self.window_title.shown {
+            self.window_title.shown.clone_from(&title);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         }
     }
 
