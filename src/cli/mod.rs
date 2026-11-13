@@ -24,30 +24,28 @@ mod tests;
 #[command(version)]
 #[command(about = "A lightweight markdown viewer", long_about = None)]
 pub(crate) struct Args {
-    /// Markdown file to open
+    /// Markdown file to open.
     file: Option<PathBuf>,
 
-    /// Disable live reload (watching is enabled by default)
+    /// Disable live reload (watching is enabled by default).
     #[arg(long)]
     no_watch: bool,
 
-    /// Keep the GUI process attached to the terminal for debugging/logs
+    /// Keep the GUI process attached to the terminal for debugging/logs.
     #[arg(long)]
     foreground: bool,
 
-    /// Internal marker used by the detached child process to avoid respawn loops
+    /// Internal marker used by the detached child process to avoid respawn loops.
     #[arg(long, hide = true)]
     no_detach: bool,
 }
 
-pub(crate) fn should_detach(args: &Args, launched_from_terminal: bool) -> bool {
+pub(crate) const fn should_detach(args: &Args, launched_from_terminal: bool) -> bool {
     launched_from_terminal && !args.foreground && !args.no_detach
 }
 
 pub(crate) fn launched_from_terminal() -> bool {
-    std::io::stdin().is_terminal()
-        || std::io::stdout().is_terminal()
-        || std::io::stderr().is_terminal()
+    io::stdin().is_terminal() || io::stdout().is_terminal() || io::stderr().is_terminal()
 }
 
 fn child_args_with_no_detach<I>(args: I) -> Vec<OsString>
@@ -121,7 +119,7 @@ pub(crate) fn run_native_once(args: &Args) -> eframe::Result<()> {
 }
 
 /// winit 0.30 selects exactly one windowing backend from the environment and
-/// never falls back: a non-empty WAYLAND_DISPLAY/WAYLAND_SOCKET commits it to
+/// never falls back: a non-empty `WAYLAND_DISPLAY`/`WAYLAND_SOCKET` commits it to
 /// Wayland, and an unusable socket then aborts startup even when Xwayland is
 /// available (seen in strict snaps on Ubuntu 26.04, #65). Probe the socket
 /// before handing control to eframe; if it cannot be connected, clear the

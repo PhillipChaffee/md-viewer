@@ -33,10 +33,14 @@ fn main() -> eframe::Result<()> {
     let args = Args::parse();
 
     if should_detach(&args, launched_from_terminal()) {
-        if let Err(err) = spawn_detached_child() {
-            eprintln!("Failed to detach md-viewer process: {err}. Running in foreground.");
-        } else {
-            return Ok(());
+        match spawn_detached_child() {
+            Ok(()) => return Ok(()),
+            // `error` is the one level env_logger prints when `RUST_LOG` is
+            // unset, so whoever launched from the terminal still sees why
+            // the window stayed attached to it.
+            Err(err) => {
+                log::error!("Failed to detach md-viewer process: {err}. Running in foreground.");
+            }
         }
     }
 
