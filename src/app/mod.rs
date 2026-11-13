@@ -171,6 +171,9 @@ pub(crate) struct MarkdownApp {
     recent_files: Vec<RecentEntry>,
     // Welcome page: whether the recent list is expanded ("Show more")
     welcome_show_all: bool,
+    /// The home page's rows, built from `recent_files` when they change
+    /// and not while painting. `None` until the page next shows.
+    home_list: Option<welcome::HomeList>,
     // MCP bridge for E2E testing
     #[cfg(feature = "mcp")]
     mcp_bridge: McpBridge,

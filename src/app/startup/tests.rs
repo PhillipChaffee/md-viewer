@@ -47,6 +47,7 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
         OutlineRule::Room { had_room: true },
         "the outline shows while the window has room for it"
     );
+    assert!(app.home_list.is_none());
     assert_eq!(app.theme, ThemeId::Sepia);
     assert_eq!(app.reading_width, ReadingWidth::DEFAULT);
     assert_eq!(app.line_spacing, LineSpacing::Comfortable);
@@ -159,6 +160,9 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
     let recent = RecentEntry {
         path: PathBuf::from("/notes/todo.md"),
         last_opened: 1_700_000_000,
+        title: None,
+        excerpt: None,
+        word_count: None,
     };
     let persisted = PersistedState {
         theme: Some(ThemeId::Night),

@@ -24,11 +24,12 @@ const WORDS_PER_MINUTE: usize = 230;
 
 /// Minutes it takes to read `content`: at least one, rounded up.
 pub(crate) fn reading_minutes(content: &str) -> usize {
-    content
-        .split_whitespace()
-        .count()
-        .div_ceil(WORDS_PER_MINUTE)
-        .max(1)
+    minutes_for_words(content.split_whitespace().count())
+}
+
+/// Minutes it takes to read `words` words: at least one, rounded up.
+pub(crate) fn minutes_for_words(words: usize) -> usize {
+    words.div_ceil(WORDS_PER_MINUTE).max(1)
 }
 
 /// The file name of `path` as shown to the user.

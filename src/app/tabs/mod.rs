@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::MarkdownApp;
 use crate::links::apply_fragment_navigation;
-use crate::recent::{now_epoch_secs, push_recent};
+use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
 use crate::tab::Tab;
 
 #[cfg(test)]
@@ -85,8 +85,8 @@ impl MarkdownApp {
         if let Some(fragment) = fragment {
             apply_fragment_navigation(&mut tab, fragment);
         }
-        self.record_recent(&path);
         self.tabs.push(tab);
+        self.record_recent(&path);
         self.active_tab = self.tabs.len() - 1;
         self.title_dirty = true;
         self.refresh_open_tab_paths();
@@ -143,9 +143,15 @@ impl MarkdownApp {
         }
     }
 
-    /// Record a file in the recent list (most-recent first, deduped, capped).
+    /// Record a file in the recent list (most-recent first, deduped, capped),
+    /// with what the home list shows of it. The document is summarized here,
+    /// once per load, from the tab that holds it.
     pub(crate) fn record_recent(&mut self, path: &Path) {
-        push_recent(&mut self.recent_files, path, now_epoch_secs());
+        let loaded = self.tabs.iter().find(|tab| tab.path == path);
+        let summary =
+            loaded.map(|tab| DocumentSummary::of(&tab.content, tab.document_title.as_deref()));
+        push_recent(&mut self.recent_files, path, now_epoch_secs(), summary);
+        self.home_list = None;
     }
 
     pub(crate) fn close_tab(&mut self, idx: usize) {

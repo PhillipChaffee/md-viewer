@@ -325,6 +325,7 @@ impl MarkdownApp {
             search: SearchState::default(),
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,
+            home_list: None,
             #[cfg(feature = "mcp")]
             mcp_bridge,
         };
