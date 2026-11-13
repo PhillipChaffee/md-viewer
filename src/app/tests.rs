@@ -356,14 +356,14 @@ fn ctrl_q_asks_the_window_to_close() {
 #[test]
 fn f5_toggles_file_watching() {
     let mut harness = Harness::with_three_docs();
-    assert!(harness.app.watcher.is_none());
+    assert!(!harness.app.live_reload.is_live());
 
     harness.press(Modifiers::NONE, Key::F5);
-    assert!(harness.app.watcher.is_some());
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.is_live());
+    assert!(harness.app.live_reload.is_enabled());
     harness.press(Modifiers::NONE, Key::F5);
-    assert!(harness.app.watcher.is_none());
-    assert!(!harness.app.watch_enabled);
+    assert!(!harness.app.live_reload.is_live());
+    assert!(!harness.app.live_reload.is_enabled());
 }
 
 #[test]

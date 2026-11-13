@@ -57,7 +57,7 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert_eq!(app.highlight_color, None);
     assert_eq!(app.font_preset, FontPreset::Reader);
     assert_eq!(app.text_size_class, TextSizeClass::Normal);
-    assert!(app.watcher.is_none());
+    assert!(!app.live_reload.is_live());
     assert_eq!(
         app.file_explorer.root,
         std::env::current_dir().ok(),
@@ -233,8 +233,8 @@ fn launching_with_watch_starts_live_reload() {
 
     let app = launch(&MemoryStorage::default(), Some(a), true);
 
-    assert!(app.watch_enabled);
-    assert!(app.watcher.is_some());
+    assert!(app.live_reload.is_enabled());
+    assert!(app.live_reload.is_live());
 }
 
 #[test]

@@ -19,7 +19,8 @@ impl MarkdownApp {
     /// What the running watcher holds, for the tests of every module that
     /// changes it; `None` while no watcher runs.
     pub(in crate::app) fn watched(&self) -> Option<&Watched> {
-        self.watcher.as_ref().map(FileWatcher::watched)
+        let running = self.live_reload.running.as_ref()?;
+        Some(running.watcher.watched())
     }
 
     /// The documents the running watcher holds.
@@ -83,7 +84,7 @@ fn fail_watcher(harness: &mut Harness) {
     events
         .send(Err(notify::Error::generic("disk on fire")))
         .unwrap();
-    harness.app.watcher_rx = Some(receiver);
+    harness.app.live_reload.running.as_mut().unwrap().events = receiver;
 }
 
 fn explorer_root_names(harness: &Harness) -> Vec<&str> {
@@ -116,7 +117,7 @@ fn stopping_live_reload_forgets_what_was_watched() {
 
     harness.apply(AppAction::ToggleWatch);
 
-    assert!(harness.app.watcher.is_none());
+    assert!(!harness.app.live_reload.is_live());
     assert!(harness.app.watched().is_none());
 }
 
@@ -247,13 +248,13 @@ fn live_reload_waits_while_there_is_nothing_to_watch() {
     for _ in 0..=MAX_WATCHER_RETRIES {
         harness.idle();
     }
-    assert!(harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_none());
+    assert!(harness.app.live_reload.enabled);
+    assert!(!harness.app.live_reload.is_live());
     assert_eq!(harness.app.error_message, None);
 
     harness.app.open_in_new_tab(harness.path("a.md"));
     harness.idle();
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -270,7 +271,7 @@ fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
     }
 
     assert_eq!(harness.app.error_message, None);
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.enabled);
 }
 
 #[test]
@@ -282,8 +283,7 @@ fn a_watcher_that_cannot_start_is_reported_in_the_error_bar() {
 
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.contains("file watcher"), "{message}");
-    assert!(harness.app.watcher.is_none());
-    assert!(harness.app.watcher_rx.is_none());
+    assert!(!harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn a_local_document_beside_remote_ones_starts_the_inotify_backend() {
 }
 
 fn running_watcher(harness: &mut Harness) -> &mut FileWatcher {
-    harness.app.watcher.as_mut().unwrap()
+    &mut harness.app.live_reload.running.as_mut().unwrap().watcher
 }
 
 #[test]
@@ -320,7 +320,7 @@ fn a_watcher_error_restarts_the_watcher() {
 
     fail_watcher(&mut harness);
     harness.idle();
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.enabled);
     assert_eq!(harness.app.error_message, None);
 
     fs::write(harness.path("a.md"), "new").unwrap();
@@ -337,14 +337,14 @@ fn live_reload_turns_off_after_three_failed_restarts() {
     for _ in 0..MAX_WATCHER_RETRIES {
         fail_watcher(&mut harness);
         harness.idle();
-        assert!(harness.app.watch_enabled);
+        assert!(harness.app.live_reload.enabled);
     }
 
     fail_watcher(&mut harness);
     harness.idle();
 
-    assert!(!harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_none());
+    assert!(!harness.app.live_reload.enabled);
+    assert!(!harness.app.live_reload.is_live());
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.contains("3 retries"), "{message}");
     assert!(message.contains("disk on fire"), "{message}");
@@ -359,14 +359,14 @@ fn a_reported_change_restores_the_retry_budget() {
     }
     let (events, receiver) = mpsc::channel();
     events.send(Ok(Vec::new())).unwrap();
-    harness.app.watcher_rx = Some(receiver);
+    harness.app.live_reload.running.as_mut().unwrap().events = receiver;
     harness.idle();
 
     fail_watcher(&mut harness);
     harness.idle();
 
-    assert!(harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.enabled);
+    assert!(harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -376,7 +376,7 @@ fn a_watcher_that_stopped_is_restarted_on_the_next_frame() {
     harness.app.stop_watching();
     harness.idle();
 
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -390,7 +390,7 @@ fn a_watcher_that_keeps_stopping_turns_live_reload_off() {
     harness.app.stop_watching();
     harness.idle();
 
-    assert!(!harness.app.watch_enabled);
+    assert!(!harness.app.live_reload.enabled);
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.ends_with("3 retries"), "{message}");
 }

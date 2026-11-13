@@ -10,6 +10,7 @@ use eframe::egui::{self, FontId, TextStyle};
 use crate::app::content::look::DocumentLook;
 use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
+use crate::app::watching::LiveReload;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
@@ -307,12 +308,9 @@ impl MarkdownApp {
             text_size_class,
             file_picker: Box::new(pick_file),
             folder_picker: Box::new(pick_folder),
-            watch_enabled: watch,
+            live_reload: LiveReload::new(watch),
             error_message: startup_error,
             is_dragging: false,
-            watcher: None,
-            watcher_rx: None,
-            watcher_retry_count: 0,
             file_explorer,
             // A fresh install opens on the document alone.
             show_explorer: persisted.show_explorer.unwrap_or(false),

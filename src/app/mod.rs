@@ -12,6 +12,7 @@ use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::LightboxState;
 use crate::app::mcp::Mcp;
 use crate::app::tabs::PathPicker;
+use crate::app::watching::LiveReload;
 use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::recent::RecentEntry;
@@ -19,7 +20,6 @@ use crate::search::SearchState;
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::tab::Tab;
 use crate::theme::ThemeId;
-use crate::watcher::FileWatcher;
 
 mod action;
 mod appearance;
@@ -131,13 +131,9 @@ pub(crate) struct MarkdownApp {
     // a test can answer in the user's place.
     file_picker: PathPicker,
     folder_picker: PathPicker,
-    watch_enabled: bool,
+    live_reload: LiveReload,
     error_message: Option<String>,
     is_dragging: bool,
-    // File watcher state (inotify for local, poll for GVFS/remote)
-    watcher: Option<FileWatcher>,
-    watcher_rx: Option<Receiver<Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>>>,
-    watcher_retry_count: u32,
     // File explorer state
     file_explorer: FileExplorer,
     show_explorer: bool,

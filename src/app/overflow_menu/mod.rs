@@ -138,7 +138,7 @@ impl MarkdownApp {
             .enabled(active.is_some());
         self.item(ui, edit, AppAction::ToggleEditMode, picked);
         let live = MenuRow::new("Live Reload")
-            .checked(self.watcher.is_some())
+            .checked(self.live_reload.is_live())
             .shortcut("F5");
         self.item(ui, live, AppAction::ToggleWatch, picked);
     }

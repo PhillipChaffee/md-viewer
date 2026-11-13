@@ -75,7 +75,7 @@ impl MarkdownApp {
                 self.show_explorer = true;
                 // Rebuild the watcher so the new root is watched recursively
                 // (`update_watched_paths` only reconciles tab paths, not the root).
-                if self.watch_enabled {
+                if self.live_reload.is_enabled() {
                     self.start_watching();
                 }
             }

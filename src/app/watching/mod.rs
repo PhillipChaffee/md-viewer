@@ -16,22 +16,60 @@ use crate::watcher::{
 #[cfg(test)]
 mod tests;
 
+/// Live reload: the reader's setting, and the watcher while one runs.
+///
+/// On with nothing running means either that there is nothing to watch, or
+/// that the watcher failed and the next frame tries to restart it.
+pub(super) struct LiveReload {
+    enabled: bool,
+    /// Restarts tried since the watcher last started on request or reported
+    /// a change.
+    retries: u32,
+    running: Option<Running>,
+}
+
+/// A watcher (inotify for local paths, polling for GVFS) and the channel
+/// its events arrive on.
+struct Running {
+    watcher: FileWatcher,
+    events: Receiver<DebounceEventResult>,
+}
+
+impl LiveReload {
+    pub(super) const fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            retries: 0,
+            running: None,
+        }
+    }
+
+    pub(super) const fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Whether a watcher runs: what the live indicator shows.
+    pub(super) const fn is_live(&self) -> bool {
+        self.running.is_some()
+    }
+}
+
 impl MarkdownApp {
     /// Turns live reload off while a watcher runs, and on otherwise: also
     /// when it is on already with nothing to watch.
     pub(crate) fn toggle_watching(&mut self) {
-        if self.watcher.is_some() {
+        if self.live_reload.is_live() {
             self.stop_watching();
-            self.watch_enabled = false;
+            self.live_reload.enabled = false;
         } else {
-            self.watch_enabled = true;
+            self.live_reload.enabled = true;
             self.start_watching();
         }
     }
 
     /// Start watching because of a user action or configuration change.
     pub(crate) fn start_watching(&mut self) {
-        self.watcher_retry_count = 0;
+        self.live_reload.retries = 0;
         self.start_watching_attempt();
     }
 
@@ -85,29 +123,27 @@ impl MarkdownApp {
         let accepted = watcher.watched();
         let (files, dirs) = (accepted.files.len(), accepted.explorer_dirs.len());
         log::info!("Started watching {files} files and {dirs} explorer dirs");
-        self.watcher = Some(watcher);
-        self.watcher_rx = Some(events);
-        self.watch_enabled = true;
+        self.live_reload.running = Some(Running { watcher, events });
+        self.live_reload.enabled = true;
     }
 
     pub(crate) fn stop_watching(&mut self) {
-        if self.watcher.is_some() {
+        if self.live_reload.is_live() {
             log::info!("Stopped watching files");
         }
-        self.watcher = None;
-        self.watcher_rx = None;
+        self.live_reload.running = None;
     }
 
     pub(crate) fn update_watched_paths(&mut self) {
-        if !self.watch_enabled {
+        if !self.live_reload.enabled {
             return;
         }
 
         let open_files: HashSet<PathBuf> = self.get_open_tab_paths().into_iter().collect();
-        let Some(watcher) = &mut self.watcher else {
+        let Some(running) = &mut self.live_reload.running else {
             return;
         };
-        if watcher.sync_files(open_files).is_err() {
+        if running.watcher.sync_files(open_files).is_err() {
             log::info!("Watcher type mismatch, restarting watchers");
             self.start_watching();
         }
@@ -118,7 +154,7 @@ impl MarkdownApp {
     /// `update_watched_paths`'s incremental diff so expand/collapse doesn't tear
     /// down and rebuild the debouncer + bridge thread.
     pub(crate) fn reconcile_explorer_watches(&mut self) {
-        if !self.watch_enabled {
+        if !self.live_reload.enabled {
             return;
         }
 
@@ -127,18 +163,18 @@ impl MarkdownApp {
             &self.file_explorer.expanded_dirs,
             Path::is_dir,
         );
-        if let Some(watcher) = &mut self.watcher {
-            watcher.sync_explorer_dirs(desired);
+        if let Some(running) = &mut self.live_reload.running {
+            running.watcher.sync_explorer_dirs(desired);
         }
     }
 
     pub(crate) fn check_file_changes(&mut self) -> Vec<PathBuf> {
-        let Some(rx) = &self.watcher_rx else {
+        let Some(running) = &self.live_reload.running else {
             // No watcher runs. With live reload on, that is a failure to
             // recover from only when there is something to watch; the plan
             // is rebuilt from the tabs and the explorer, since what the
             // watcher held went with it.
-            if self.watch_enabled && self.watch_plan().is_some() {
+            if self.live_reload.enabled && self.watch_plan().is_some() {
                 self.recover_watcher(None);
             }
             return Vec::new();
@@ -146,18 +182,17 @@ impl MarkdownApp {
 
         let mut changed_paths = Vec::new();
 
-        while let Ok(result) = rx.try_recv() {
+        while let Ok(result) = running.events.try_recv() {
             match result {
                 Ok(events) => {
-                    self.watcher_retry_count = 0;
+                    self.live_reload.retries = 0;
                     changed_paths.extend(settled_paths(events).inspect(|path| {
                         log::debug!("File change detected: {}", path.display());
                     }));
                 }
                 Err(error) => {
                     log::error!("File watcher error: {error}");
-                    self.watcher = None;
-                    self.watcher_rx = None;
+                    self.live_reload.running = None;
                     self.recover_watcher(Some(&error));
                     return Vec::new();
                 }
@@ -171,8 +206,8 @@ impl MarkdownApp {
     /// retry budget is spent. `cause` is the error that stopped it, if one
     /// was reported.
     fn recover_watcher(&mut self, cause: Option<&notify::Error>) {
-        if let Some(attempt) = next_watcher_retry(self.watcher_retry_count) {
-            self.watcher_retry_count = attempt;
+        if let Some(attempt) = next_watcher_retry(self.live_reload.retries) {
+            self.live_reload.retries = attempt;
             log::info!("Attempting to recover file watcher (attempt {attempt})");
             self.start_watching_attempt();
             self.egui_ctx.request_repaint_after(Duration::from_secs(2));
@@ -181,7 +216,7 @@ impl MarkdownApp {
             self.error_message = Some(format!(
                 "File watcher failed after {MAX_WATCHER_RETRIES} retries{detail}"
             ));
-            self.watch_enabled = false;
+            self.live_reload.enabled = false;
         }
     }
 

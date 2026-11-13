@@ -253,7 +253,7 @@ impl MarkdownApp {
             palette.muted
         };
         ui.painter().galley(rect.min, galley, color);
-        let live = self.watcher.is_some();
+        let live = self.live_reload.is_live();
         response.on_hover_ui(|ui| title_hover(ui, tab, live, palette));
     }
 }

@@ -183,12 +183,12 @@ fn live_reload_turns_file_watching_on_and_off_and_is_ticked_while_on() {
     assert!(!harness.is_on("Live Reload"));
 
     harness.click("Live Reload");
-    assert!(harness.app().watcher.is_some());
+    assert!(harness.app().live_reload.is_live());
     harness.open_more();
     assert!(harness.is_on("Live Reload"));
 
     harness.click("Live Reload");
-    assert!(harness.app().watcher.is_none());
+    assert!(!harness.app().live_reload.is_live());
 }
 
 #[test]
