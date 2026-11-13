@@ -17,6 +17,18 @@ use crate::watcher::{
 mod tests;
 
 impl MarkdownApp {
+    /// Turns live reload off while a watcher runs, and on otherwise: also
+    /// when it is on already with nothing to watch.
+    pub(crate) fn toggle_watching(&mut self) {
+        if self.watcher.is_some() {
+            self.stop_watching();
+            self.watch_enabled = false;
+        } else {
+            self.watch_enabled = true;
+            self.start_watching();
+        }
+    }
+
     /// Start watching because of a user action or configuration change.
     pub(crate) fn start_watching(&mut self) {
         self.watcher_retry_count = 0;

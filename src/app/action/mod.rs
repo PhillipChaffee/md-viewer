@@ -160,16 +160,6 @@ impl MarkdownApp {
         self.relayout_documents();
     }
 
-    fn toggle_watching(&mut self) {
-        if self.watcher.is_some() {
-            self.stop_watching();
-            self.watch_enabled = false;
-        } else {
-            self.watch_enabled = true;
-            self.start_watching();
-        }
-    }
-
     /// Persist the active tab's unsaved edits, from the editor or from the
     /// preview of them: the unsaved mark is shown in both. With nothing
     /// unsaved it does nothing; the flash label beside the mode toggle
