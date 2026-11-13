@@ -28,7 +28,6 @@
   },
   "globs": ["**/*.md"],
   // vendor/ holds upstream documents kept byte-comparable with upstream;
-  // target/ is build output; docs/devlog/ and docs/superpowers/ are dated
-  // working notes that are append-only history, not maintained prose
-  "ignores": ["vendor/**", "target/**", "docs/devlog/**", "docs/superpowers/**"]
+  // target/ is build output
+  "ignores": ["vendor/**", "target/**"]
 }

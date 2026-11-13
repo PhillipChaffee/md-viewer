@@ -1,100 +1,60 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
+Guidance for Claude Code when working in this repository.
 
-## Tech Stack
+## What this is
+
+A desktop Markdown reader written in Rust with egui. `README.md` describes
+the app; `GATES.md` lists every quality gate and each exception to one.
 
 | Component | Technology |
-| ----------- | ------------ |
-| Language | Rust |
-| GUI Framework | egui 0.33 + eframe (glow backend) |
-| Markdown | egui_commonmark 0.22 (vendored with custom typography) |
-| File Watching | notify 6.1 + notify-debouncer-mini |
-| File Dialogs | rfd |
-| CLI | clap |
-| Allocator | mimalloc |
+| --- | --- |
+| GUI | egui 0.33 + eframe (glow backend) |
+| Markdown, math, diagrams | `vendor/egui_commonmark` (a fork), typst + mitex, merman |
+| Painter | `vendor/epaint` (a patched copy) |
+| File watching | notify 6.1 + notify-debouncer-mini |
+| Fonts | fontique; Source Serif 4 bundled in `assets/fonts/` |
 
-**Binary:** ~35 MB release build (includes syntect, mermaid renderer, math rendering, image support, Wayland+X11). ~7 MB compressed as snap.
+## Layout
 
-## Before You Code
+| Path | Owns |
+| --- | --- |
+| `src/app/` | The window: top bar, appearance popover, tabs, sidebars, home page, document pane |
+| `src/theme/` | The four palettes. No other code names a color |
+| `src/layout/` | The reading column and line spacing |
+| `src/tab/`, `src/links/`, `src/headers/`, `src/search/` | One document |
+| `src/explorer/`, `src/watcher/` | The file tree and live reload |
+| `src/system_fonts/` | Font discovery and the bundled faces |
+| `vendor/` | Forked upstream crates, outside the app crate's gates |
 
-**STOP and do these checks first:**
+## Rules
 
-1. **Check branch:** `git branch --show-current` (must not be `main`)
-2. **Read files you'll modify** (use Read tool, don't rely on memory)
-3. **Search LESSONS.md:** `grep -i "keyword" docs/LESSONS.md`
-4. **Check recent changes:** `git log --oneline -5`
+1. **Never work on `main`.** Check `git branch --show-current` first.
+2. **A test never lives in the file it tests.** `foo/mod.rs` has its tests
+   in `foo/tests.rs`, declared `#[cfg(test)] mod tests;`.
+3. **Never weaken a gate to pass it.** No threshold changes, no new entries
+   in the lint tables or `clippy.toml`. A one-off suppression is
+   `#[expect(lint, reason = "...")]` and goes in `GATES.md`.
+4. **Tests assert behavior.** Drive the app through the harnesses in
+   `src/app/tests.rs` and `src/app/ui_harness.rs`, and break the code once
+   to see the test fail.
+5. **egui is immediate mode.** Compute when data changes, never per frame.
+   UI code picks an `AppAction` (`src/app/action/`); it is applied after
+   rendering. `CommonMarkCache` lives in `Tab` and is reset only on load.
+6. **Read a file before changing it,** and edit it in place.
 
-**For feature work, follow the egui immediate-mode pattern:**
-
-```text
-State → Logic → UI → Async
-```
-
-See `docs/EGUI_WORKFLOW.md` for the complete guide.
-
-## Project Structure
-
-This is a **bare repository** setup. The git database lives in `.bare/` and all working copies are in `worktrees/`.
-
-```text
-~/markdown-viewer/
-├── .bare/                      # Bare git repository (don't edit directly)
-├── .claude -> worktrees/main/.claude  # Symlink to tracked config
-├── worktrees/
-│   └── main/
-│       ├── .claude/            # Claude Code config (tracked in git)
-│       │   ├── settings.json
-│       │   ├── hooks/          # Branch protection hook
-│       │   └── rules/          # Auto-loaded instructions
-│       ├── CLAUDE.md           # This file
-│       └── docs/               # Evolving docs (versioned with code)
-│           ├── ARCHITECTURE.md
-│           ├── KEYBOARD_SHORTCUTS.md
-│           ├── TARGET_METRICS.md
-│           ├── DEVELOPMENT_PLAN.md
-│           ├── LESSONS.md
-│           └── devlog/
-└── CLAUDE.md -> worktrees/main/CLAUDE.md  # Symlink
-```
-
-## Documentation
-
-**Auto-loaded** (from `.claude/rules/`):
-
-- `egui-patterns.md` - **Critical** - Never parse in UI code, State→Logic→UI→Async
-- `build-commands.md` - cargo build, run, clippy, make install
-- `devlog-workflow.md` - How to document feature implementations
-- `worktree-workflow.md` - How to create and manage worktrees
-- `system-dependencies.md` - Arch Linux packages
-- `refactoring-rules.md` - **Read before refactoring** - prevent regressions
-- `context-awareness.md` - **Read before coding** - ensure fresh context
-
-**Imported** (via `@path`):
-
-- @docs/EGUI_WORKFLOW.md - **Read before coding** - State→Logic→UI→Async pattern
-- @docs/ARCHITECTURE.md - Core components, libraries, rendering flow
-- @docs/KEYBOARD_SHORTCUTS.md - All keyboard shortcuts
-- @docs/TARGET_METRICS.md - Performance targets and planned features
-- @docs/LESSONS.md - **Check before debugging** - reusable fixes and gotchas
-
-## Quick Reference
+## Commands
 
 ```bash
-# Build
-cargo build
-cargo run -- file.md       # File watching enabled by default
-
-# Worktrees
-git -C ~/markdown-viewer/.bare worktree list
-
-git -C ~/markdown-viewer/.bare worktree add \
-    ~/markdown-viewer/worktrees/<name> -b feature/<name> main
-
-git -C ~/markdown-viewer/.bare worktree remove \
-    ~/markdown-viewer/worktrees/<name>
+cargo run -- file.md        # run the app
+cargo test                  # the app crate's tests
+./run-gates.sh              # every gate, in parallel
 ```
 
-## Branch Protection
+The renderer fork has its own workspace and its own tests:
 
-A Claude Code hook prevents editing files on `main` branch. Create a feature worktree for all new work.
+```bash
+cargo test --manifest-path vendor/egui_commonmark/Cargo.toml
+```
+
+Other guidance is in `.claude/rules/`.

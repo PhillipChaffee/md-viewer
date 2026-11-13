@@ -77,7 +77,7 @@ pub(crate) struct Tab {
     /// after the corrective block runs once. Without this gate, the block
     /// would re-fire every frame while `active_search_y` remains populated,
     /// fighting the user's wheel input and locking the view to the active
-    /// match — see issue #19 / docs/devlog/031-search-scroll-lock.md.
+    /// match (issue #19).
     pub(crate) correct_active_search_pending: bool,
     pub(crate) last_content_height: f32,
     pub(crate) last_viewport_height: f32,

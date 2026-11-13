@@ -249,8 +249,8 @@ impl MarkdownApp {
 
     /// Reload fonts only when the selected family, preset, or size class
     /// actually changes — rescanning the system font collection on every
-    /// frame would be expensive and is unnecessary (see
-    /// `docs/EGUI_WORKFLOW.md`). Returns whether it reloaded them.
+    /// frame would be expensive and is unnecessary. Returns whether it
+    /// reloaded them.
     fn apply_fonts(&mut self, ctx: &egui::Context) -> bool {
         let font_config = (
             self.selected_font_family.clone(),

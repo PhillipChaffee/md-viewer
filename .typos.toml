@@ -6,10 +6,6 @@ recieve = "recieve"
 calender = "calender"
 # the pane image handle in the scroll-regression script's embedded python
 pn = "pn"
-# docs/LESSONS.md: to comment a line out again
-recomment = "recomment"
-# hyphenated prefix in the devlogs: mis-serializes, mis-parsed
-mis = "mis"
 # the `writeable` crate (ICU), named in deny.toml's duplicate list
 writeable = "writeable"
 

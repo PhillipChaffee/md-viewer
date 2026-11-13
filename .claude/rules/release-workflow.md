@@ -14,8 +14,6 @@ the existing ones: what changed, why, and the PR reference.
 
 Recovery if it was run anyway: `git checkout CHANGELOG.md`.
 
-See `docs/LESSONS.md`, "CHANGELOG.md is hand-curated".
-
 ## Before tagging
 
 1. **Everything intended for the release is merged to `main`,** and `main` is

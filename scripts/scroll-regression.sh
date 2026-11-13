@@ -91,7 +91,7 @@ if [ -z "$DOC" ]; then
 	# cell text of varying length so row heights differ, and a nested index list
 	# at the top. Both properties are load-bearing — a fixture of five identical
 	# 40-row tables reaches the bottom three times sooner and never goes blank
-	# on a build that is visibly broken. See docs/LESSONS.md.
+	# on a build that is visibly broken.
 	SIZES=(6 23 11 4 51 9 5 7 30 4 38 18 4 12 26 4 33 8 15 44)
 	{
 		echo "# Scroll regression fixture"

@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["markdown", "viewer", "egui", "linux", "desktop"]
 categories = ["command-line-utilities", "gui", "visualization"]
 exclude = [
-    "docs/devlog/*",
-    "docs/superpowers/*",
     "screenshots/*",
     ".claude/*",
     "vendor/*",

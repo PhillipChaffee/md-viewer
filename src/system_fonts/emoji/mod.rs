@@ -15,7 +15,6 @@ mod tests;
 /// the color font lacks. Appended last so it only supplies glyphs nothing
 /// else covers. Compiled into the binary, so an installed copy has it
 /// wherever it is run from.
-/// (See docs/devlog/014-font-fallback.md.)
 const MONOCHROME_EMOJI_FONT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/fonts/NotoEmoji-Regular.ttf"

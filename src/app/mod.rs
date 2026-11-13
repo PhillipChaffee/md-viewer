@@ -104,8 +104,7 @@ pub(crate) struct MarkdownApp {
     available_font_families: Vec<String>,
     // Lowercased copy of `available_font_families`, precomputed once so the
     // font-picker search filter doesn't re-lowercase every name on every
-    // frame it's open (see docs/EGUI_WORKFLOW.md: never allocate in the
-    // render loop what can be cached).
+    // frame it's open: never allocate in the render loop what can be cached.
     available_font_families_lower: Vec<String>,
     // In-flight background scan producing `available_font_families`.
     pending_font_family_scan: Option<Receiver<Vec<String>>>,

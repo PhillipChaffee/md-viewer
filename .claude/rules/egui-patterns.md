@@ -54,5 +54,3 @@ fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
     }
 }
 ```
-
-See `docs/EGUI_WORKFLOW.md` for complete guide.

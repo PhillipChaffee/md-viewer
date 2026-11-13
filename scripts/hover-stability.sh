@@ -29,8 +29,7 @@
 #
 # Run it twice — once on the build under test and once on a control — and
 # compare. A run that reports zero unstable positions means nothing on its own
-# unless the control run reports some; see the "which way it cannot fail" family
-# in docs/LESSONS.md.
+# unless the control run reports some.
 #
 # Requires: Xvfb, xdotool, ImageMagick (import), python3 with Pillow, and
 # python-xlib for the cursor sampling (the cursor half is skipped without it).

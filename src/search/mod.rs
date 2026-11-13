@@ -42,8 +42,7 @@ pub(crate) struct SearchState {
 /// Find all occurrences of `query` in `content`, case-insensitive (ASCII only).
 ///
 /// Byte offsets are 1:1 with `content` because `to_ascii_lowercase` does not change
-/// byte length. Non-ASCII letters match literally (`É` does not match `é`) — see the
-/// devlog future-improvements list for the case-toggle and full Unicode case folding.
+/// byte length. Non-ASCII letters match literally (`É` does not match `é`).
 ///
 /// Matches spanning a newline are excluded (a search bar should not jump to results
 /// the user cannot interpret as a single line).

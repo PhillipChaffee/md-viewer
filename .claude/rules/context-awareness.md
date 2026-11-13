@@ -28,8 +28,6 @@ When the user asks to implement a feature or fix a bug, **automatically perform 
    git log --oneline -5
    ```
 
-4. **Search LESSONS.md** for keywords related to the task.
-
 Report findings briefly before proceeding. Use `/session-start` to run this explicitly if needed.
 
 ## Before Implementing ANY Feature
@@ -58,17 +56,7 @@ ALWAYS use the Read tool on files you plan to modify:
 
 **Never rely on memory or assumptions about file contents.**
 
-### 3. Check LESSONS.md
-
-Before debugging or implementing in an area:
-
-```bash
-grep -i "keyword" docs/LESSONS.md
-```
-
-LESSONS.md contains hard-won fixes and gotchas. Ignoring it wastes time re-discovering solved problems.
-
-### 4. Preserve Patterns You See
+### 3. Preserve Patterns You See
 
 If existing code uses a pattern, new code must follow it:
 
@@ -95,14 +83,6 @@ git log --oneline HEAD..origin/main
 # If output is NOT empty, rebase first:
 git rebase origin/main
 ```
-
-### Read Architecture Docs
-
-Skim these before major changes:
-
-- `docs/ARCHITECTURE.md` - understand component structure
-- `docs/LESSONS.md` - know the gotchas
-- Recent devlogs in `docs/devlog/` - understand recent changes
 
 ## Red Flags - You're Missing Context
 
@@ -131,6 +111,5 @@ Conversation context may be stale. Re-read the actual file.
 
 - [ ] Read the file(s) I'm about to modify
 - [ ] Checked `git log -5` for recent changes
-- [ ] Searched LESSONS.md for relevant gotchas
 - [ ] Identified patterns in existing code to preserve
 - [ ] Verified my branch is based on latest main

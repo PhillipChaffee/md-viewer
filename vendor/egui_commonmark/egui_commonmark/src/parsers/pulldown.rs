@@ -2381,7 +2381,7 @@ impl CommonMarkViewerInternal {
                 // `sc.events` (without-math), so the viewport-skip path lands
                 // iteration at an unrelated event — often `Tag::Item` with no
                 // matching `Tag::List` start → `List::start_item` panics
-                // (`lib.rs:566 unreachable!()`). See docs/devlog/027.
+                // (`lib.rs:566 unreachable!()`).
                 let math_enabled =
                     options.math_fn.is_some() || cfg!(feature = "math");
                 // Must produce byte-identical events to the cache-fill parse

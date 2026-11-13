@@ -189,8 +189,6 @@ md-viewer notes.md
 | `Ctrl+E` | Edit mode |
 | `Ctrl+Q` | Quit |
 
-The full list is in [docs/KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md).
-
 ## How it is built
 
 ```mermaid
@@ -213,10 +211,6 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
-
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes each part, and
-[docs/LESSONS.md](docs/LESSONS.md) records the problems that took time to
-find.
 
 ## Development
 
@@ -251,10 +245,8 @@ Two things to know before you rely on those gates:
 - **The vendored renderer is outside them.** `vendor/egui_commonmark` has its
   own lint run and its own tests, but not the complexity, file-length or
   coverage gates. It holds a good share of the layout code.
-- **Each exception is listed.** The table in
-  [docs/devlog/069-full-lint-retrofit.md](docs/devlog/069-full-lint-retrofit.md)
-  names every ignored advisory, skipped duplicate and allowed lint, with the
-  reason.
+- **Each exception is listed.** [GATES.md](GATES.md) names every ignored
+  advisory, skipped duplicate and allowed lint, with the reason.
 
 ## Known limits
 

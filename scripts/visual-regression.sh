@@ -5,8 +5,7 @@
 # The renderer paints the first frame of a document in full (the "bootstrap"
 # pass) and every later frame as a viewport slice. A slice that lays out at a
 # different column, or that overflows its rect, produces content shifted
-# sideways or a blank page below a large block — see docs/LESSONS.md,
-# "Viewport slices must reproduce the bootstrap's layout".
+# sideways or a blank page below a large block.
 #
 # This lives here rather than in `cargo test` on purpose: the failure does not
 # reproduce in the crate's headless tests. It was chased through five headless
@@ -216,8 +215,7 @@ for path, (content, edge) in zip(shots, results):
         failures.append(f"{path}: only {content} content pixels — frame is effectively blank")
     # Content must stay in the same column at every scroll position.
     # Tolerance, deliberately loose. The defect this guard exists for moved
-    # content by 38 px (docs/LESSONS.md, "Viewport slices must reproduce the
-    # bootstrap's layout"). A 2 px bound was far tighter than that needs and
+    # content by 38 px. A 2 px bound was far tighter than that needs and
     # flagged legitimate layout instead: #164 gives Markdown table cells 4 px
     # of inset per side, so any frame showing a table reports a 4-6 px "shift"
     # against a baseline frame that shows flush-left prose. The metric compares

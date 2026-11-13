@@ -36,9 +36,7 @@ git log --oneline -5
 git status --short
 ```
 
-1. List any relevant gotchas from LESSONS.md by searching for keywords related to what the user mentioned they want to work on.
-
-2. Summarize:
+1. Summarize:
    - Current branch and status
    - Whether rebase is recommended
    - Any uncommitted changes

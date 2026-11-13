@@ -1,8 +1,7 @@
 # Link-check configuration. Retry then fail: a timeout must not pass
 # silently. Exclusions carry reasons: vendor/ holds upstream READMEs whose
-# relative links resolve only in the upstream repository layout, target/ is
-# build output, and docs/superpowers/ and docs/devlog/ are dated working
-# notes that quote paths as they were on the day.
+# relative links resolve only in the upstream repository layout, and target/
+# is build output.
 max_retries = 2
 timeout = 20
-exclude_path = ["./vendor", "./target", "./docs/devlog", "./docs/superpowers"]
+exclude_path = ["./vendor", "./target"]
