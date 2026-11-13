@@ -5,84 +5,29 @@ use eframe::egui;
 use crate::app::MarkdownApp;
 use crate::search::SearchBarOutcome;
 
+/// How far down the document `line` sits, as a fraction of `total_lines`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a scroll estimate: line counts past f32's 24-bit mantissa lose a rounding error, not a position"
+)]
+fn line_ratio(line: usize, total_lines: usize) -> f32 {
+    line as f32 / total_lines as f32
+}
+
 impl MarkdownApp {
-    /// Outcome of rendering the find bar (consumed after panel renders, before global input handler runs)
+    /// Render the find bar while it is open. The returned clicks are applied
+    /// by the caller once the panel is done.
     pub(crate) fn render_search_bar(&mut self, ctx: &egui::Context) -> SearchBarOutcome {
         let mut outcome = SearchBarOutcome::default();
         if !self.search.is_open {
             return outcome;
         }
 
-        let input_id = egui::Id::new("search_input");
-        let total_matches = self
-            .tabs
-            .get(self.active_tab)
-            .map(|t| t.search_matches.len())
-            .unwrap_or(0);
-        let active_idx = self.search.active_match_index;
-
         egui::TopBottomPanel::top("search_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let text_edit = egui::TextEdit::singleline(&mut self.search.query)
-                    .id(input_id)
-                    .hint_text("Find in document")
-                    .desired_width(280.0);
-                let response = ui.add(text_edit);
-
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge
-                    .register_widget("Search: Input", "textbox", &response, None);
-
-                if self.search.focus_requested {
-                    response.request_focus();
-                    self.search.focus_requested = false;
-                }
-
+                self.search_query_input(ui);
                 ui.add_space(8.0);
-
-                let label_text = if self.search.query.is_empty() {
-                    String::new()
-                } else if total_matches == 0 {
-                    "0 matches".to_string()
-                } else {
-                    format!("{} / {}", active_idx + 1, total_matches)
-                };
-                let label_response = ui.label(
-                    egui::RichText::new(&label_text)
-                        .color(ui.style().visuals.weak_text_color())
-                        .small(),
-                );
-
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge.register_widget(
-                    "Search: Match Count",
-                    "label",
-                    &label_response,
-                    Some(&label_text),
-                );
-                #[cfg(not(feature = "mcp"))]
-                let _ = label_response;
-
-                ui.add_space(4.0);
-                let prev_btn = ui
-                    .add_enabled(total_matches > 0, egui::Button::new("↑").small())
-                    .on_hover_text("Previous match (Shift+Enter / ↑)");
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge
-                    .register_widget("Search: Previous", "button", &prev_btn, None);
-                if prev_btn.clicked() {
-                    outcome.prev_clicked = true;
-                }
-
-                let next_btn = ui
-                    .add_enabled(total_matches > 0, egui::Button::new("↓").small())
-                    .on_hover_text("Next match (Enter / ↓)");
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge
-                    .register_widget("Search: Next", "button", &next_btn, None);
-                if next_btn.clicked() {
-                    outcome.next_clicked = true;
-                }
+                self.search_match_controls(ui, &mut outcome);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let close_btn = ui.small_button("✕").on_hover_text("Close (Esc)");
@@ -99,6 +44,78 @@ impl MarkdownApp {
         outcome
     }
 
+    /// The query text field, focused on the frame after the bar opens.
+    fn search_query_input(&mut self, ui: &mut egui::Ui) {
+        let text_edit = egui::TextEdit::singleline(&mut self.search.query)
+            .id(egui::Id::new("search_input"))
+            .hint_text("Find in document")
+            .desired_width(280.0);
+        let response = ui.add(text_edit);
+
+        #[cfg(feature = "mcp")]
+        self.mcp_bridge
+            .register_widget("Search: Input", "textbox", &response, None);
+
+        if self.search.focus_requested {
+            response.request_focus();
+            self.search.focus_requested = false;
+        }
+    }
+
+    /// The "2 / 7" match counter and the previous and next buttons.
+    fn search_match_controls(&self, ui: &mut egui::Ui, outcome: &mut SearchBarOutcome) {
+        let total_matches = self.active_tab_match_count();
+        let label_text = if self.search.query.is_empty() {
+            String::new()
+        } else if total_matches == 0 {
+            "0 matches".to_string()
+        } else {
+            format!("{} / {}", self.search.active_match_index + 1, total_matches)
+        };
+        let label_response = ui.label(
+            egui::RichText::new(&label_text)
+                .color(ui.style().visuals.weak_text_color())
+                .small(),
+        );
+
+        #[cfg(feature = "mcp")]
+        self.mcp_bridge.register_widget(
+            "Search: Match Count",
+            "label",
+            &label_response,
+            Some(&label_text),
+        );
+        #[cfg(not(feature = "mcp"))]
+        let _ = label_response;
+
+        ui.add_space(4.0);
+        let prev_btn = ui
+            .add_enabled(total_matches > 0, egui::Button::new("↑").small())
+            .on_hover_text("Previous match (Shift+Enter / ↑)");
+        #[cfg(feature = "mcp")]
+        self.mcp_bridge
+            .register_widget("Search: Previous", "button", &prev_btn, None);
+        if prev_btn.clicked() {
+            outcome.prev_clicked = true;
+        }
+
+        let next_btn = ui
+            .add_enabled(total_matches > 0, egui::Button::new("↓").small())
+            .on_hover_text("Next match (Enter / ↓)");
+        #[cfg(feature = "mcp")]
+        self.mcp_bridge
+            .register_widget("Search: Next", "button", &next_btn, None);
+        if next_btn.clicked() {
+            outcome.next_clicked = true;
+        }
+    }
+
+    fn active_tab_match_count(&self) -> usize {
+        self.tabs
+            .get(self.active_tab)
+            .map_or(0, |tab| tab.search_matches.len())
+    }
+
     /// Show the find bar, or refocus its input when it is already open.
     pub(crate) const fn open_search(&mut self) {
         self.search.is_open = true;
@@ -108,11 +125,7 @@ impl MarkdownApp {
     /// Move the active match index forward (dir > 0) or backward (dir < 0), wrapping
     /// around, and request a scroll-to-line via `pending_scroll_offset`.
     pub(crate) fn jump_match(&mut self, dir: i32) {
-        let n = self
-            .tabs
-            .get(self.active_tab)
-            .map(|t| t.search_matches.len())
-            .unwrap_or(0);
+        let n = self.active_tab_match_count();
         if n == 0 {
             return;
         }
@@ -134,9 +147,8 @@ impl MarkdownApp {
     /// leaving the view at wherever the user previously scrolled).
     fn scroll_to_active_match(&mut self) {
         let idx = self.search.active_match_index;
-        let tab = match self.tabs.get_mut(self.active_tab) {
-            Some(t) => t,
-            None => return,
+        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+            return;
         };
         let Some(m) = tab.search_matches.get(idx) else {
             return;
@@ -147,8 +159,7 @@ impl MarkdownApp {
         // Line-ratio estimate gets the view roughly in the right area. The renderer
         // records the actual y of the active match during paint; render_tab_content
         // schedules a corrective scroll next frame if this estimate was off.
-        let estimated_y =
-            (m.line_number as f32 / tab.content_lines as f32) * tab.last_content_height;
+        let estimated_y = line_ratio(m.line_number, tab.content_lines) * tab.last_content_height;
         let margin = if tab.last_viewport_height > 0.0 {
             tab.last_viewport_height * 0.35
         } else {
@@ -200,7 +211,7 @@ impl MarkdownApp {
         self.search.last_tab = None;
         self.search.focus_requested = false;
         self.search.active_match_index = 0;
-        for tab in self.tabs.iter_mut() {
+        for tab in &mut self.tabs {
             tab.search_matches.clear();
             tab.cache.clear_search_ranges();
         }
