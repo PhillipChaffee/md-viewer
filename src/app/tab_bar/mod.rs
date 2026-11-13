@@ -2,24 +2,18 @@
 //! something to choose between. A lone document's edit controls go in the
 //! top bar instead, so starting an edit does not move the page.
 
-use std::time::Duration;
-
 use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, STRIP_HEIGHT};
-use crate::app::explorer_panel::FLASH_DURATION_MS;
+use crate::app::edit_controls::edit_mode_controls;
 use crate::app::mcp::{self, Mcp};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::tab::{SaveOutcome, Tab};
 use crate::theme::Palette;
 
 #[cfg(test)]
-mod tests;
-
-/// How long a save's outcome stays beside the mode toggle.
-const SAVE_FLASH: Duration = Duration::from_millis(FLASH_DURATION_MS * 3);
+pub(super) mod tests;
 
 /// Space between a tab's edge and its title.
 const TAB_PADDING: f32 = 10.0;
@@ -31,7 +25,6 @@ const UNDERLINE: f32 = 2.0;
 /// Width the strip keeps for the open-file button after the tabs.
 const OPEN_BUTTON_ROOM: f32 = 40.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
-const UNSAVED_DOT: f32 = 7.0;
 
 /// What the user asked of the tab strip during one frame.
 ///
@@ -51,39 +44,11 @@ struct TabLabel<'a> {
     is_active: bool,
 }
 
-/// Whether `tab` has something to show beside the mode toggle even when it
-/// is the only tab: an edit in progress, unsaved changes, or a save's
-/// outcome.
-fn has_edit_state(tab: &Tab) -> bool {
-    tab.is_editing || tab.is_dirty() || tab.save_flash.is_some()
-}
-
 impl MarkdownApp {
     /// Whether the strip earns its row: with one document open there is
     /// nothing to choose.
     const fn shows_tab_bar(&self) -> bool {
         self.tabs.len() > 1
-    }
-
-    /// The edit controls of a lone document, which has no strip to hold
-    /// them, laid out in the top bar from the right end of `room`. Returns
-    /// their left edge when there are any.
-    pub(crate) fn lone_document_edit_controls(
-        &mut self,
-        ui: &mut egui::Ui,
-        room: egui::Rect,
-    ) -> Option<f32> {
-        let palette = self.theme.palette();
-        let [tab] = self.tabs.as_mut_slice() else {
-            return None;
-        };
-        if !has_edit_state(tab) {
-            return None;
-        }
-        let layout = egui::Layout::right_to_left(egui::Align::Center);
-        let builder = egui::UiBuilder::new().max_rect(room).layout(layout);
-        let controls = ui.scope_builder(builder, |ui| edit_mode_controls(ui, tab, palette));
-        Some(controls.response.rect.left())
     }
 
     /// Render the tab strip when it has something to show. Returns the
@@ -326,49 +291,4 @@ fn tab_context_menu(
     {
         actions.close_others = Some(label.index);
     }
-}
-
-/// The Preview|Edit toggle, the unsaved-changes marker, and the outcome of
-/// the last save. The caller lays these out right to left.
-fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
-    ui.spacing_mut().item_spacing.x = 8.0;
-    let modes = [(false, "Preview"), (true, "Edit")];
-    if let Some(to_edit) = chrome::segmented(ui, palette, &modes, tab.is_editing, false) {
-        tab.set_edit_mode(to_edit);
-    }
-    if tab.is_dirty() {
-        let (dot, response) =
-            ui.allocate_exact_size(egui::Vec2::splat(UNSAVED_DOT), egui::Sense::hover());
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "Unsaved changes")
-        });
-        ui.painter()
-            .circle_filled(dot.center(), UNSAVED_DOT / 2.0, palette.warning);
-        response.on_hover_text("Unsaved changes: press Ctrl+S to save");
-    }
-    save_flash_label(ui, tab, palette);
-}
-
-/// Shows the outcome of the last save until it expires, then forgets it.
-fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
-    let Some((outcome, at)) = tab.save_flash else {
-        return;
-    };
-    // The strip may be on screen only for this outcome, so it has to be
-    // drawn again once the outcome has had its time.
-    let left = SAVE_FLASH.saturating_sub(at.elapsed());
-    ui.ctx().request_repaint_after(left);
-    if left.is_zero() {
-        tab.save_flash = None;
-        return;
-    }
-    let (label, color) = match outcome {
-        SaveOutcome::Saved => ("Saved", palette.positive),
-        SaveOutcome::Failed => ("Save failed", palette.warning),
-    };
-    ui.label(
-        egui::RichText::new(label)
-            .font(chrome::small_font())
-            .color(color),
-    );
 }

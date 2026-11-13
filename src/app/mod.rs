@@ -25,6 +25,7 @@ mod appearance;
 mod chrome;
 mod content;
 mod drop;
+mod edit_controls;
 mod error_bar;
 mod explorer_panel;
 mod frame;
