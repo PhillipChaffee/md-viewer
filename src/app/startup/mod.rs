@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use eframe::egui::{self, FontId, TextStyle};
 
 use crate::app::content::look::DocumentLook;
+use crate::app::lightbox::Lightbox;
 use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::settings::FontPicker;
@@ -273,9 +274,7 @@ impl MarkdownApp {
             last_window_title: String::new(),
             title_dirty: true,
             open_tab_paths: HashSet::new(),
-            lightbox: None,
-            lightbox_scroll: 0.0,
-            lightbox_open_count: 0,
+            lightbox: Lightbox::default(),
             search: SearchState::default(),
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,

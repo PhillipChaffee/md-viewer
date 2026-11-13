@@ -8,7 +8,7 @@ use std::time::Instant;
 use eframe::egui;
 
 use crate::app::content::look::DocumentLook;
-use crate::app::lightbox::LightboxState;
+use crate::app::lightbox::Lightbox;
 use crate::app::mcp::Mcp;
 use crate::app::tabs::PathPicker;
 use crate::app::watching::LiveReload;
@@ -136,12 +136,8 @@ pub(crate) struct MarkdownApp {
     title_dirty: bool,
     /// Cached set of open tab paths for file explorer highlighting (avoids per-frame syscalls).
     open_tab_paths: HashSet<PathBuf>,
-    // Lightbox overlay for enlarged mermaid diagrams
-    lightbox: Option<LightboxState>,
-    // Scroll delta captured from raw_input_hook for lightbox zoom (stripped from RawInput)
-    lightbox_scroll: f32,
-    // Counter for unique lightbox IDs (prevents stale egui state between opens)
-    lightbox_open_count: u64,
+    /// The overlay that shows a clicked diagram or image enlarged.
+    lightbox: Lightbox,
     // Find-bar state (current-document search)
     search: SearchState,
     // Recently opened files (most-recent first), shown on the home page

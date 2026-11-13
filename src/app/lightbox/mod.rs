@@ -49,6 +49,50 @@ pub(crate) struct LightboxState {
     pub(crate) scroll_offset: egui::Vec2,
 }
 
+/// The overlay that shows one picture enlarged.
+#[derive(Default)]
+pub(crate) struct Lightbox {
+    /// The picture being shown, while one is.
+    pub(crate) open: Option<LightboxState>,
+    /// How far the wheel turned this frame over a shown picture, which
+    /// zooms by it.
+    wheel: f32,
+    /// How many pictures have been shown. Each takes the count as its
+    /// `open_id`.
+    opened: u64,
+}
+
+impl Lightbox {
+    /// While a picture is shown, take the wheel out of the frame's input
+    /// before egui reads it: the document under the picture must not
+    /// scroll, and the picture zooms by what was taken.
+    pub(crate) fn capture_wheel(&mut self, raw_input: &mut egui::RawInput) {
+        self.wheel = 0.0;
+        if self.open.is_some() {
+            for event in &raw_input.events {
+                if let egui::Event::MouseWheel { delta, .. } = event {
+                    self.wheel += delta.y;
+                }
+            }
+            raw_input
+                .events
+                .retain(|e| !matches!(e, egui::Event::MouseWheel { .. }));
+        }
+    }
+
+    /// Show `texture` enlarged at 100%, in place of any picture shown now.
+    fn show(&mut self, texture: LightboxTexture, base_size: egui::Vec2) {
+        self.opened += 1;
+        self.open = Some(LightboxState {
+            texture,
+            base_size,
+            zoom: 1.0,
+            open_id: self.opened,
+            scroll_offset: egui::Vec2::ZERO,
+        });
+    }
+}
+
 /// What this frame's clicks on the picture's canvas ask for.
 struct CanvasClicks {
     /// A click landed on the canvas but not on the picture: close.
@@ -262,8 +306,27 @@ fn close_button_clicked(ctx: &egui::Context, screen_rect: egui::Rect, open_id: u
 }
 
 impl MarkdownApp {
+    /// Open the diagram or the image the reader clicked in the document
+    /// this frame. Its texture is already on the GPU, so the click costs
+    /// nothing.
+    pub(crate) fn open_clicked_picture(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            let mermaid = tab.cache.take_clicked_mermaid();
+            let image = tab.cache.take_clicked_image();
+            if let Some((texture, base_size)) = mermaid {
+                self.lightbox
+                    .show(LightboxTexture::Owned(texture), base_size);
+            }
+            if let Some((texture_id, base_size)) = image {
+                self.lightbox
+                    .show(LightboxTexture::Loaded(texture_id), base_size);
+            }
+        }
+    }
+
     pub(crate) fn render_lightbox(&mut self, ctx: &egui::Context) {
-        let Some(lightbox) = &mut self.lightbox else {
+        let wheel = self.lightbox.wheel;
+        let Some(lightbox) = &mut self.lightbox.open else {
             return;
         };
 
@@ -279,9 +342,9 @@ impl MarkdownApp {
 
         // Apply scroll-wheel zoom (proportional to scroll amount for smooth feel)
         let old_zoom = lightbox.zoom;
-        if self.lightbox_scroll != 0.0 {
+        if wheel != 0.0 {
             // ~10% per scroll notch, smooth with proportional delta
-            lightbox.zoom_by(self.lightbox_scroll.mul_add(0.08, 1.0).clamp(0.5, 2.0));
+            lightbox.zoom_by(wheel.mul_add(0.08, 1.0).clamp(0.5, 2.0));
         }
         let zoom_changed = (lightbox.zoom - old_zoom).abs() > f32::EPSILON;
 
@@ -311,7 +374,7 @@ impl MarkdownApp {
         should_close |= ctx.input(|i| i.key_pressed(egui::Key::Escape));
 
         if should_close {
-            self.lightbox = None;
+            self.lightbox.open = None;
         }
     }
 }

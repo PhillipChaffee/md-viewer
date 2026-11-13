@@ -113,12 +113,12 @@ impl MarkdownApp {
             AppAction::ZoomBy(factor) => self.zoom_level = zoomed(self.zoom_level, factor),
             AppAction::ResetZoom => self.zoom_level = 1.0,
             AppAction::ZoomLightboxBy(factor) => {
-                if let Some(lightbox) = &mut self.lightbox {
+                if let Some(lightbox) = &mut self.lightbox.open {
                     lightbox.zoom_by(factor);
                 }
             }
             AppAction::ResetLightboxZoom => {
-                if let Some(lightbox) = &mut self.lightbox {
+                if let Some(lightbox) = &mut self.lightbox.open {
                     lightbox.zoom = 1.0;
                 }
             }

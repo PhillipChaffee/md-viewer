@@ -7,7 +7,6 @@ use eframe::egui;
 use crate::app::content::look::DocumentLook;
 use crate::app::drop;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::persist::APP_KEY;
@@ -20,21 +19,7 @@ mod tests;
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         mcp::raw_input(&mut self.mcp, raw_input);
-
-        // When lightbox is open, intercept scroll events before they reach InputState.
-        // This prevents the document's ScrollArea from scrolling while letting us
-        // use the captured delta for lightbox zoom.
-        self.lightbox_scroll = 0.0;
-        if self.lightbox.is_some() {
-            for event in &raw_input.events {
-                if let egui::Event::MouseWheel { delta, .. } = event {
-                    self.lightbox_scroll += delta.y;
-                }
-            }
-            raw_input
-                .events
-                .retain(|e| !matches!(e, egui::Event::MouseWheel { .. }));
-        }
+        self.lightbox.capture_wheel(raw_input);
     }
 
     fn persist_egui_memory(&self) -> bool {
@@ -233,35 +218,10 @@ impl MarkdownApp {
         }
     }
 
-    /// Show `texture` enlarged at 100% in a fresh lightbox.
-    fn open_lightbox(&mut self, texture: LightboxTexture, base_size: egui::Vec2) {
-        self.lightbox_open_count += 1;
-        self.lightbox = Some(LightboxState {
-            texture,
-            base_size,
-            zoom: 1.0,
-            open_id: self.lightbox_open_count,
-            scroll_offset: egui::Vec2::ZERO,
-        });
-    }
-
     /// The lightbox, the settings dialogs, and the hint that shows while
     /// files hover over the window.
     fn render_overlays(&mut self, ctx: &egui::Context, files_hover: bool) {
-        // Check if a mermaid diagram was clicked → open lightbox
-        // Texture is pre-rasterized at 2x by background thread — no work on click
-        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
-            let mermaid = tab.cache.take_clicked_mermaid();
-            let image = tab.cache.take_clicked_image();
-            if let Some((texture, base_size)) = mermaid {
-                self.open_lightbox(LightboxTexture::Owned(texture), base_size);
-            }
-            if let Some((texture_id, base_size)) = image {
-                self.open_lightbox(LightboxTexture::Loaded(texture_id), base_size);
-            }
-        }
-
-        // Lightbox overlay for enlarged diagrams or images
+        self.open_clicked_picture();
         self.render_lightbox(ctx);
 
         // Highlight color picker window

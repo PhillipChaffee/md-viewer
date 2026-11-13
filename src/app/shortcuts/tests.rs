@@ -196,7 +196,7 @@ fn a_pinch_zooms_the_document_but_not_under_a_lightbox() {
     frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
     assert_close(harness.app.zoom_level, 1.5);
 
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,

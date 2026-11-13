@@ -127,7 +127,7 @@ fn lightbox_zoom_actions_do_nothing_without_a_lightbox() {
     harness.apply(AppAction::ZoomLightboxBy(1.25));
     harness.apply(AppAction::ResetLightboxZoom);
 
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
     assert!((harness.app.zoom_level - 1.0).abs() < 1e-6);
 }
 

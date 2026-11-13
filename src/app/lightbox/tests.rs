@@ -103,7 +103,7 @@ fn with_lightbox(base_size: Vec2) -> Harness {
 /// new overlay in one frame and shows it from the next.
 fn showing(state: LightboxState) -> Harness {
     let mut harness = Harness::with_three_docs();
-    harness.app.lightbox = Some(state);
+    harness.app.lightbox.open = Some(state);
     harness.idle();
     harness.idle();
     harness
@@ -126,11 +126,11 @@ fn overlay_rects(harness: &Harness) -> [Rect; 3] {
 }
 
 fn zoom_of(harness: &Harness) -> f32 {
-    harness.app.lightbox.as_ref().unwrap().zoom
+    harness.app.lightbox.open.as_ref().unwrap().zoom
 }
 
 fn pan_of(harness: &Harness) -> Vec2 {
-    harness.app.lightbox.as_ref().unwrap().scroll_offset
+    harness.app.lightbox.open.as_ref().unwrap().scroll_offset
 }
 
 #[test]
@@ -139,10 +139,10 @@ fn a_click_on_the_picture_keeps_the_lightbox_and_a_click_beside_it_closes() {
     let [_, viewport, _] = overlay_rects(&harness);
 
     click_on(&mut harness, viewport.center());
-    assert!(harness.app.lightbox.is_some());
+    assert!(harness.app.lightbox.open.is_some());
 
     click_on(&mut harness, viewport.left_top() + egui::vec2(10.0, 10.0));
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
 }
 
 #[test]
@@ -154,20 +154,20 @@ fn a_click_on_the_dimmed_margin_closes_the_lightbox() {
 
     click_on(&mut harness, margin);
 
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
 }
 
 #[test]
 fn a_click_on_a_top_bar_button_reaches_the_scrim_and_not_the_button() {
     let mut harness = UiHarness::with_three_docs();
-    harness.app_mut().lightbox = Some(lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO));
+    harness.app_mut().lightbox.open = Some(lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO));
     harness.frames(FADE_IN_FRAMES);
 
     harness.click_exact("Find in document");
 
     assert!(!harness.app().search.is_open, "the button behind acted");
     assert!(
-        harness.app().lightbox.is_none(),
+        harness.app().lightbox.open.is_none(),
         "the scrim was not clicked"
     );
 }
@@ -186,7 +186,7 @@ fn the_close_button_shows_a_hand_and_closes_the_lightbox() {
     );
 
     click_on(&mut harness, close_button.center());
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn the_zoom_level_is_shown_unless_it_is_one_hundred_percent() {
     let mut harness = with_lightbox(egui::vec2(100.0, 100.0));
     assert!(!painted_text(&harness.idle()).contains(&"100%".to_owned()));
 
-    harness.app.lightbox.as_mut().unwrap().zoom = 1.25;
+    harness.app.lightbox.open.as_mut().unwrap().zoom = 1.25;
 
     assert!(painted_text(&harness.idle()).contains(&"125%".to_owned()));
 }
@@ -274,7 +274,7 @@ fn a_diagram_is_painted_from_the_texture_the_lightbox_owns() {
     let diagram_id = diagram.id();
     let mut state = lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO);
     state.texture = LightboxTexture::Owned(diagram);
-    harness.app.lightbox = Some(state);
+    harness.app.lightbox.open = Some(state);
     harness.idle();
 
     let output = harness.idle();
@@ -293,7 +293,7 @@ fn painted_with(
     let mut harness = Harness::with_three_docs();
     let mut state = lightbox(egui::vec2(100.0, 100.0), 1.0, Vec2::ZERO);
     state.texture = texture(&harness.ctx);
-    harness.app.lightbox = Some(state);
+    harness.app.lightbox.open = Some(state);
     // A new overlay fades in over its first frames, tinting what it paints.
     for _ in 0..FADE_IN_FRAMES {
         harness.idle();

@@ -287,14 +287,14 @@ fn scroll_keys_move_the_document_until_the_find_bar_takes_the_arrows() {
 fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     let mut harness = Harness::with_three_docs();
     let theme = harness.app.theme;
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,
         open_id: 1,
         scroll_offset: egui::Vec2::ZERO,
     });
-    let lightbox_zoom = |harness: &Harness| harness.app.lightbox.as_ref().unwrap().zoom;
+    let lightbox_zoom = |harness: &Harness| harness.app.lightbox.open.as_ref().unwrap().zoom;
 
     harness.press(Modifiers::CTRL, Key::Plus);
     assert!((lightbox_zoom(&harness) - 1.25).abs() < 1e-6);
@@ -311,7 +311,7 @@ fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     assert_eq!(harness.app.tabs.len(), 1);
 
     harness.press(Modifiers::NONE, Key::Escape);
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
 }
 
 #[test]

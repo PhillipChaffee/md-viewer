@@ -221,7 +221,7 @@ fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let focus = if self.lightbox.is_some() {
+        let focus = if self.lightbox.open.is_some() {
             Focus::Lightbox
         } else if egui::Popup::is_any_open(ctx) {
             Focus::Popup

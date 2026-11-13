@@ -67,7 +67,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     let scrolled = scroll_offset_at_rest(&mut harness);
     assert!(scrolled > 0.0, "the wheel scrolled {scrolled}");
 
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,
@@ -77,7 +77,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     frame_on(&mut harness, vec![wheel(-3.0)]);
 
     assert_close(scroll_offset_at_rest(&mut harness), scrolled);
-    let zoom = harness.app.lightbox.as_ref().unwrap().zoom;
+    let zoom = harness.app.lightbox.open.as_ref().unwrap().zoom;
     assert!(
         zoom < 1.0,
         "scrolling down zoomed the lightbox out to {zoom}"
@@ -441,12 +441,12 @@ fn with_picture(markdown: &str) -> UiHarness {
 #[test]
 fn clicking_a_picture_opens_it_in_the_lightbox_at_full_size() {
     let mut harness = with_picture("![a picture](picture.svg)\n");
-    assert!(harness.app().lightbox.is_none());
+    assert!(harness.app().lightbox.open.is_none());
 
     let picture = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(picture);
 
-    let lightbox = harness.app().lightbox.as_ref().unwrap();
+    let lightbox = harness.app().lightbox.open.as_ref().unwrap();
     assert_close(lightbox.zoom, 1.0);
     assert_eq!(lightbox.base_size, egui::vec2(64.0, 48.0));
     assert_eq!(lightbox.open_id, 1);
@@ -462,7 +462,7 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
     let diagram = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(diagram);
 
-    let lightbox = harness.app().lightbox.as_ref().unwrap();
+    let lightbox = harness.app().lightbox.open.as_ref().unwrap();
     assert!(matches!(lightbox.texture, LightboxTexture::Owned(_)));
     assert!(lightbox.base_size.x > 0.0 && lightbox.base_size.y > 0.0);
 }
@@ -472,7 +472,7 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
 fn enlarged_diagram(harness: &mut UiHarness) -> egui::TextureId {
     let diagram = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(diagram);
-    harness.app_mut().lightbox.take().unwrap().texture.id()
+    harness.app_mut().lightbox.open.take().unwrap().texture.id()
 }
 
 #[test]
