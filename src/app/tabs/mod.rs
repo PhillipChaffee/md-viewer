@@ -118,14 +118,7 @@ impl MarkdownApp {
         self.tabs.push(tab);
         self.record_recent(&path);
         self.active_tab = self.tabs.len() - 1;
-        self.title_dirty = true;
-        // A first document takes the place the find bar searched while it
-        // was empty.
-        self.search.invalidate();
-        self.refresh_open_tab_paths();
-
-        // Update watcher if enabled
-        self.update_watched_paths();
+        self.tab_documents_changed();
     }
 
     pub(crate) fn navigate_active_tab_to(&mut self, path: &Path) {
@@ -160,16 +153,25 @@ impl MarkdownApp {
         }
     }
 
-    /// Bring everything that mirrors tab paths back in line after the active
-    /// tab moved to another document: the recent list, the window title, the
-    /// find bar's matches, the explorer's open-file highlight, and the
-    /// watched paths.
+    /// The active tab moved to another document: it is the most recent
+    /// one, and what mirrors the tabs follows.
     pub(crate) fn active_tab_navigated(&mut self) {
         if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
             self.record_recent(&path);
         }
+        self.tab_documents_changed();
+    }
+
+    /// Bring everything that mirrors which document each tab holds back in
+    /// line, after a tab opened, closed, or moved to another document: the
+    /// window title, the find bar's matches, the explorer's open-file
+    /// highlight, and the watched paths.
+    ///
+    /// The find bar holds its matches by a tab's place in the strip. A
+    /// place can hold another document after any of these, the first place
+    /// included when a document opens into an empty strip.
+    fn tab_documents_changed(&mut self) {
         self.title_dirty = true;
-        // The same tab, another document: what the find bar counted is gone.
         self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
@@ -192,18 +194,19 @@ impl MarkdownApp {
         }
 
         self.tabs.remove(idx);
-        self.title_dirty = true;
-        // The tabs after the closed one moved down a place, so the place
-        // the find bar searched may hold another document now.
-        self.search.invalidate();
-        self.refresh_open_tab_paths();
-
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
         // which renders the welcome page (active_tab kept in range / at 0).
         self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
+        self.tab_documents_changed();
+    }
 
-        // Update watcher
-        self.update_watched_paths();
+    /// Close every tab but the one at `keep`, which comes to the front.
+    pub(crate) fn close_other_tabs(&mut self, keep: usize) {
+        let kept = self.tabs.remove(keep);
+        self.tabs.clear();
+        self.tabs.push(kept);
+        self.active_tab = 0;
+        self.tab_documents_changed();
     }
 
     pub(crate) fn close_active_tab(&mut self) {
@@ -243,7 +246,7 @@ impl MarkdownApp {
             .collect()
     }
 
-    /// Rebuild the cached `open_tab_paths` set (call after tab open/close/navigate).
+    /// Rebuild the cached `open_tab_paths` set.
     pub(crate) fn refresh_open_tab_paths(&mut self) {
         self.open_tab_paths.clear();
         for tab in &self.tabs {

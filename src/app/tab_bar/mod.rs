@@ -180,19 +180,6 @@ impl MarkdownApp {
         }
         actions.close
     }
-
-    fn close_other_tabs(&mut self, keep: usize) {
-        let kept = self.tabs.remove(keep);
-        self.tabs.clear();
-        self.tabs.push(kept);
-        self.active_tab = 0;
-        self.title_dirty = true;
-        // The kept tab moved to the first place, which the find bar may
-        // have searched while it held another document.
-        self.search.invalidate();
-        self.refresh_open_tab_paths();
-        self.update_watched_paths();
-    }
 }
 
 /// One screen pixel, in points. egui sets the scrolled row on whole pixels,
