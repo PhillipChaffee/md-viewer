@@ -531,3 +531,162 @@ fn a_machine_with_no_fonts_still_gets_a_font_list() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// The families of the viewer `preset` emulates, body then code.
+fn emulated_families(preset: FontPreset) -> (&'static [&'static str], &'static [&'static str]) {
+    (
+        preset.body_families().unwrap_or_default(),
+        preset.mono_families(),
+    )
+}
+
+#[test]
+fn each_preset_names_its_viewers_families_in_the_stylesheets_order() {
+    let none: &[&str] = &[];
+    assert_eq!(emulated_families(FontPreset::Reader), (none, none));
+    assert_eq!(emulated_families(FontPreset::Current), (none, none));
+    assert_eq!(
+        emulated_families(FontPreset::Github),
+        (
+            &[
+                "Mona Sans VF",
+                "Mona Sans",
+                "Segoe UI",
+                "Adwaita Sans",
+                "Noto Sans",
+                "Helvetica",
+                "Arial",
+            ][..],
+            &[
+                "Noto Sans Mono",
+                "DejaVu Sans Mono",
+                "SFMono-Regular",
+                "SF Mono",
+                "Menlo",
+                "Consolas",
+                "Liberation Mono",
+            ][..],
+        )
+    );
+    assert_eq!(
+        emulated_families(FontPreset::Vscode),
+        (
+            &[
+                "Segoe WPC",
+                "Segoe UI",
+                "Adwaita Sans",
+                "Cantarell",
+                "Ubuntu",
+                "Droid Sans",
+            ][..],
+            &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"][..],
+        )
+    );
+}
+
+/// The chains and faces one preset installs.
+#[derive(Debug, PartialEq)]
+struct InstalledChains {
+    proportional: Vec<String>,
+    monospace: Vec<String>,
+    strong: Vec<String>,
+    body: Vec<String>,
+    /// The egui face whose bytes the primary sans holds.
+    sans_face: &'static str,
+    /// The egui face whose bytes the preset's code face holds.
+    code_face: Option<&'static str>,
+}
+
+fn face_behind(definitions: &FontDefinitions, key: &str) -> Option<&'static str> {
+    let data = &definitions.font_data.get(key)?.font;
+    [LATIN_FACE, MONO_FACE]
+        .into_iter()
+        .find(|face| bundled_face(face) == data.as_ref())
+}
+
+fn installed_chains(fonts: &mut Fonts, preset: FontPreset) -> InstalledChains {
+    let definitions = fonts.definitions(None, preset);
+    InstalledChains {
+        proportional: chain(&definitions, &FontFamily::Proportional),
+        monospace: chain(&definitions, &FontFamily::Monospace),
+        strong: chain(&definitions, &FontFamily::Name(STRONG_FONT_FAMILY.into())),
+        body: chain(&definitions, &FontFamily::Name("MarkdownBody".into())),
+        sans_face: face_behind(&definitions, "SystemSans").expect("a primary sans"),
+        code_face: face_behind(&definitions, "PresetMono"),
+    }
+}
+
+#[test]
+fn each_preset_installs_its_own_faces_in_a_fixed_order() {
+    let mut fonts = Fonts::multilingual();
+    // One family from each emulated stack, told apart by the face behind it.
+    fonts.register(&bundled_face(MONO_FACE), "Noto Sans", FontWeight::NORMAL);
+    fonts.register(&bundled_face(MONO_FACE), "Ubuntu", FontWeight::NORMAL);
+    fonts.register(
+        &bundled_face(LATIN_FACE),
+        "Noto Sans Mono",
+        FontWeight::NORMAL,
+    );
+    fonts.register(
+        &bundled_face(MONO_FACE),
+        "Droid Sans Mono",
+        FontWeight::NORMAL,
+    );
+    let led_by = |lead: &[&str], rest: &[&str]| -> Vec<String> {
+        lead.iter().chain(rest).map(|&key| key.to_owned()).collect()
+    };
+    let proportional = [
+        "SystemSans",
+        "Ubuntu-Light",
+        "NotoEmoji-Regular",
+        "emoji-icon-font",
+        "SystemHanFallback",
+        "NotoEmoji",
+    ];
+    let monospace = [
+        "Hack",
+        "Ubuntu-Light",
+        "NotoEmoji-Regular",
+        "emoji-icon-font",
+        "SystemSans",
+        "SystemHanFallback",
+        "NotoEmoji",
+    ];
+    // Strong text is chained before the bundled emoji face goes in.
+    let strong = &proportional[..5];
+    let expected = |strong_lead: &[&str], body_lead: &[&str], sans_face, code_face: Option<_>| {
+        let code_lead: &[&str] = code_face.map_or(&[], |_| &["PresetMono"]);
+        InstalledChains {
+            proportional: led_by(&[], &proportional),
+            monospace: led_by(code_lead, &monospace),
+            strong: led_by(strong_lead, strong),
+            body: led_by(body_lead, &proportional),
+            sans_face,
+            code_face,
+        }
+    };
+
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Reader),
+        expected(
+            &["ReaderSemibold", "SystemSansBold"],
+            &["ReaderRegular"],
+            LATIN_FACE,
+            None
+        )
+    );
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Current),
+        expected(&["SystemSansBold"], &[], LATIN_FACE, None)
+    );
+    // GitHub takes "Noto Sans" and "Noto Sans Mono"; neither has a bold face.
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Github),
+        expected(&[], &[], MONO_FACE, Some(LATIN_FACE))
+    );
+    // VS Code takes "Ubuntu" and "Droid Sans Mono".
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Vscode),
+        expected(&[], &[], MONO_FACE, Some(MONO_FACE))
+    );
+}
