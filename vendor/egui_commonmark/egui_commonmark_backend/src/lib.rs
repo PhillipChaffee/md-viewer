@@ -8,6 +8,7 @@ pub mod alerts;
 pub mod elements;
 #[doc(hidden)]
 pub mod html_table;
+mod mermaid_theme;
 #[doc(hidden)]
 pub mod misc;
 #[doc(hidden)]
@@ -29,6 +30,8 @@ pub use {
 
 // The only struct that is allowed to use directly. (If one does not need egui_commonmark)
 pub use misc::CommonMarkCache;
+
+pub use mermaid_theme::MermaidColors;
 
 #[cfg(feature = "math")]
 pub use misc::{cached_inline_math_height, render_math, render_math_in_table};
