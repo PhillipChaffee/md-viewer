@@ -313,8 +313,6 @@ impl MarkdownApp {
             watcher: None,
             watcher_rx: None,
             watcher_retry_count: 0,
-            watched_paths: HashSet::new(),
-            watched_explorer_dirs: HashSet::new(),
             file_explorer,
             // A fresh install opens on the document alone.
             show_explorer: persisted.show_explorer.unwrap_or(false),

@@ -235,18 +235,18 @@ fn the_watcher_follows_tabs_as_they_open_navigate_and_close() {
         harness.path("c.md"),
     );
     harness.apply(AppAction::ToggleWatch);
-    assert!(harness.app.watched_paths.contains(&a));
+    assert!(harness.app.watched_files().contains(&a));
 
     harness.app.open_in_new_tab(b.clone());
-    assert!(harness.app.watched_paths.contains(&b));
+    assert!(harness.app.watched_files().contains(&b));
 
     harness.app.navigate_active_tab_to(&c);
-    assert!(harness.app.watched_paths.contains(&c));
-    assert!(!harness.app.watched_paths.contains(&b));
+    assert!(harness.app.watched_files().contains(&c));
+    assert!(!harness.app.watched_files().contains(&b));
 
     harness.app.close_active_tab();
-    assert!(!harness.app.watched_paths.contains(&c));
-    assert!(harness.app.watched_paths.contains(&a));
+    assert!(!harness.app.watched_files().contains(&c));
+    assert!(harness.app.watched_files().contains(&a));
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn the_folder_dialog_starts_in_the_explorer_root_and_repoints_it() {
     assert_eq!(harness.app.file_explorer.root, Some(folder.clone()));
     assert!(harness.app.show_explorer);
     assert!(
-        harness.app.watched_explorer_dirs.contains(&folder),
+        harness.app.watched_explorer_dirs().contains(&folder),
         "live reload follows the explorer to its new root"
     );
 }

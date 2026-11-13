@@ -11,8 +11,27 @@ use eframe::egui::{Key, Modifiers};
 
 use crate::app::action::AppAction;
 use crate::app::tests::Harness;
+use crate::app::MarkdownApp;
 use crate::explorer::FileTreeNode;
-use crate::watcher::{FileWatcher, WatchPlan, MAX_WATCHER_RETRIES};
+use crate::watcher::{Backend, FileWatcher, WatchPlan, Watched, MAX_WATCHER_RETRIES};
+
+impl MarkdownApp {
+    /// What the running watcher holds, for the tests of every module that
+    /// changes it; `None` while no watcher runs.
+    pub(in crate::app) fn watched(&self) -> Option<&Watched> {
+        self.watcher.as_ref().map(FileWatcher::watched)
+    }
+
+    /// The documents the running watcher holds.
+    pub(in crate::app) fn watched_files(&self) -> &HashSet<PathBuf> {
+        &self.watched().unwrap().files
+    }
+
+    /// The explorer directories the running watcher holds.
+    pub(in crate::app) fn watched_explorer_dirs(&self) -> &HashSet<PathBuf> {
+        &self.watched().unwrap().explorer_dirs
+    }
+}
 
 /// How long a test waits for the watcher before it fails.
 const EVENT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -81,11 +100,11 @@ fn starting_live_reload_watches_the_open_document_and_the_explorer_root() {
     let harness = watching(&[("a.md", "# A")]);
 
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
     assert_eq!(
-        harness.app.watched_explorer_dirs,
+        *harness.app.watched_explorer_dirs(),
         HashSet::from([harness.dir.clone()])
     );
     assert_eq!(harness.app.error_message, None);
@@ -98,8 +117,7 @@ fn stopping_live_reload_forgets_what_was_watched() {
     harness.apply(AppAction::ToggleWatch);
 
     assert!(harness.app.watcher.is_none());
-    assert!(harness.app.watched_paths.is_empty());
-    assert!(harness.app.watched_explorer_dirs.is_empty());
+    assert!(harness.app.watched().is_none());
 }
 
 #[test]
@@ -150,7 +168,7 @@ fn a_document_opened_while_watching_is_reloaded_too() {
     // watch can report the change.
     let doc = write_doc(&harness, "sub/b.md", "old");
     harness.app.open_in_new_tab(doc.clone());
-    assert!(harness.app.watched_paths.contains(&doc));
+    assert!(harness.app.watched_files().contains(&doc));
 
     fs::write(&doc, "new").unwrap();
 
@@ -167,7 +185,7 @@ fn closing_a_tab_stops_watching_its_document() {
     harness.apply(AppAction::CloseTab);
 
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
 }
@@ -191,7 +209,7 @@ fn an_expanded_folder_is_watched_until_it_is_collapsed() {
 
     harness.app.file_explorer.expanded_dirs.insert(sub.clone());
     harness.app.reconcile_explorer_watches();
-    assert!(harness.app.watched_explorer_dirs.contains(&sub));
+    assert!(harness.app.watched_explorer_dirs().contains(&sub));
     let created = write_doc(&harness, "sub/new.md", "# New");
     run_until(&mut harness, "the change in sub/ to be seen", |harness| {
         harness.app.flashing_paths.contains_key(&created)
@@ -200,7 +218,7 @@ fn an_expanded_folder_is_watched_until_it_is_collapsed() {
     harness.app.file_explorer.expanded_dirs.remove(&sub);
     harness.app.reconcile_explorer_watches();
     assert_eq!(
-        harness.app.watched_explorer_dirs,
+        *harness.app.watched_explorer_dirs(),
         HashSet::from([harness.dir.clone()])
     );
 }
@@ -216,7 +234,7 @@ fn folders_are_not_watched_while_live_reload_is_off() {
     harness.app.file_explorer.expanded_dirs.insert(sub);
     harness.app.reconcile_explorer_watches();
 
-    assert!(harness.app.watched_explorer_dirs.is_empty());
+    assert!(harness.app.watched().is_none());
 }
 
 #[test]
@@ -281,13 +299,13 @@ fn a_local_document_beside_remote_ones_starts_the_inotify_backend() {
     harness
         .app
         .adopt_watcher(FileWatcher::start(&remote_only, handler), receiver);
-    assert!(running_watcher(&mut harness).inotify_watcher().is_none());
+    assert!(!running_watcher(&mut harness).runs(Backend::Inotify));
 
     harness.app.update_watched_paths();
 
-    assert!(running_watcher(&mut harness).inotify_watcher().is_some());
+    assert!(running_watcher(&mut harness).runs(Backend::Inotify));
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
 }

@@ -138,13 +138,6 @@ pub(crate) struct MarkdownApp {
     watcher: Option<FileWatcher>,
     watcher_rx: Option<Receiver<Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>>>,
     watcher_retry_count: u32,
-    // Set of paths being watched (individual tab files)
-    watched_paths: HashSet<PathBuf>,
-    // Explorer directories being watched non-recursively: the root plus each
-    // currently-expanded directory. Mirrors the lazy explorer tree so startup
-    // doesn't recursively walk the whole root subtree (issue: ~6s hang on a
-    // huge home directory).
-    watched_explorer_dirs: HashSet<PathBuf>,
     // File explorer state
     file_explorer: FileExplorer,
     show_explorer: bool,

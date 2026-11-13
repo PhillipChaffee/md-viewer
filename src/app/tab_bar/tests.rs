@@ -188,13 +188,13 @@ fn close_others_stops_watching_the_closed_documents() {
     let mut harness = three_tabs();
     harness.key_press(Key::F5);
     harness.frames(2);
-    assert_eq!(harness.state().watched_paths.len(), 3);
+    assert_eq!(harness.state().watched_files().len(), 3);
 
     open_context_menu(&mut harness, "b.md");
     harness.click("Close Others");
 
     assert_eq!(
-        harness.state().watched_paths,
+        *harness.state().watched_files(),
         HashSet::from([harness.path("b.md")])
     );
 }

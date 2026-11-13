@@ -175,13 +175,13 @@ fn an_opened_folder_is_watched_while_live_reload_is_on() {
     harness.key_press(Key::F5);
     harness.frames(2);
     let sub = harness.path("sub");
-    assert!(!harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(!harness.state().watched_explorer_dirs().contains(&sub));
 
     harness.click("sub");
-    assert!(harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(harness.state().watched_explorer_dirs().contains(&sub));
 
     harness.click("sub");
-    assert!(!harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(!harness.state().watched_explorer_dirs().contains(&sub));
 }
 
 #[test]
@@ -215,11 +215,11 @@ fn expand_all_and_collapse_all_keep_the_watched_folders_in_step() {
     harness.frames(2);
 
     pick(&mut harness, "Expand All Folders");
-    let watched = &harness.state().watched_explorer_dirs;
+    let watched = harness.state().watched_explorer_dirs();
     assert!(watched.contains(&harness.path("sub/deep")));
 
     pick(&mut harness, "Collapse All Folders");
-    let watched = &harness.state().watched_explorer_dirs;
+    let watched = harness.state().watched_explorer_dirs();
     assert_eq!(watched, &HashSet::from([harness.dir.clone()]));
 }
 

@@ -9,9 +9,8 @@ use notify_debouncer_mini::DebounceEventResult;
 
 use crate::app::MarkdownApp;
 use crate::watcher::{
-    ancestors_within, explorer_watch_dirs, listing_to_refresh, needs_backend_restart,
-    next_watcher_retry, settled_paths, watch_diff, FileWatcher, WatchPlan, Watched,
-    MAX_WATCHER_RETRIES,
+    ancestors_within, explorer_watch_dirs, listing_to_refresh, next_watcher_retry, settled_paths,
+    FileWatcher, WatchPlan, MAX_WATCHER_RETRIES,
 };
 
 #[cfg(test)]
@@ -63,20 +62,19 @@ impl MarkdownApp {
     /// arrive on, or reports that no backend could start.
     fn adopt_watcher(
         &mut self,
-        started: Option<(FileWatcher, Watched)>,
+        started: Option<FileWatcher>,
         events: Receiver<DebounceEventResult>,
     ) {
-        let Some((watcher, accepted)) = started else {
+        let Some(watcher) = started else {
             log::error!("Failed to create any file watcher");
             self.error_message = Some("Failed to create file watcher".to_string());
             return;
         };
+        let accepted = watcher.watched();
         let (files, dirs) = (accepted.files.len(), accepted.explorer_dirs.len());
         log::info!("Started watching {files} files and {dirs} explorer dirs");
         self.watcher = Some(watcher);
         self.watcher_rx = Some(events);
-        self.watched_paths = accepted.files;
-        self.watched_explorer_dirs = accepted.explorer_dirs;
         self.watch_enabled = true;
     }
 
@@ -86,8 +84,6 @@ impl MarkdownApp {
         }
         self.watcher = None;
         self.watcher_rx = None;
-        self.watched_paths.clear();
-        self.watched_explorer_dirs.clear();
     }
 
     pub(crate) fn update_watched_paths(&mut self) {
@@ -95,20 +91,14 @@ impl MarkdownApp {
             return;
         }
 
-        let current_paths: HashSet<PathBuf> = self.get_open_tab_paths().into_iter().collect();
-
-        if let Some(fw) = &mut self.watcher {
-            let has_inotify = fw.inotify_watcher().is_some();
-            let has_poll = fw.poll_watcher().is_some();
-            if needs_backend_restart(&current_paths, has_inotify, has_poll) {
-                log::info!("Watcher type mismatch, restarting watchers");
-                self.start_watching();
-                return;
-            }
-            fw.apply(&watch_diff(&current_paths, &self.watched_paths), "file");
+        let open_files: HashSet<PathBuf> = self.get_open_tab_paths().into_iter().collect();
+        let Some(watcher) = &mut self.watcher else {
+            return;
+        };
+        if watcher.sync_files(open_files).is_err() {
+            log::info!("Watcher type mismatch, restarting watchers");
+            self.start_watching();
         }
-
-        self.watched_paths = current_paths;
     }
 
     /// Reconcile the non-recursive explorer-directory watches (root + expanded
@@ -125,21 +115,17 @@ impl MarkdownApp {
             &self.file_explorer.expanded_dirs,
             Path::is_dir,
         );
-        if let Some(fw) = &mut self.watcher {
-            fw.apply(
-                &watch_diff(&desired, &self.watched_explorer_dirs),
-                "explorer dir",
-            );
+        if let Some(watcher) = &mut self.watcher {
+            watcher.sync_explorer_dirs(desired);
         }
-        self.watched_explorer_dirs = desired;
     }
 
     pub(crate) fn check_file_changes(&mut self) -> Vec<PathBuf> {
         let Some(rx) = &self.watcher_rx else {
             // No watcher runs. With live reload on, that is a failure to
             // recover from only when there is something to watch; the plan
-            // is rebuilt from the tabs and the explorer, not from
-            // `watched_paths`, which is empty after a failure.
+            // is rebuilt from the tabs and the explorer, since what the
+            // watcher held went with it.
             if self.watch_enabled && self.watch_plan().is_some() {
                 self.recover_watcher(None);
             }
