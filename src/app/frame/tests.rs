@@ -11,14 +11,12 @@ use crate::app::action::AppAction;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{
-    frame_on, frames_until, launch, MemoryStorage, ScratchDir, UiHarness,
-};
+use crate::app::ui_harness::{frame_on, frames_until, launch, MemoryStorage, UiHarness};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
-use crate::test_support::assert_close;
+use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
 
 const LONG_DOCUMENT_PARAGRAPHS: usize = 400;
@@ -428,8 +426,8 @@ const PICTURE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64"
 /// A document showing one picture, with the picture loaded.
 fn with_picture(markdown: &str) -> UiHarness {
     let dir = ScratchDir::new();
-    dir.write("a.md", markdown);
-    dir.write("picture.svg", PICTURE_SVG);
+    dir.file("a.md", markdown);
+    dir.file("picture.svg", PICTURE_SVG);
     let mut harness = UiHarness::open(dir, Some("a.md"));
     harness.wait_until("the picture", |harness| {
         let pictures = harness.centers_with_role(accesskit::Role::Image);

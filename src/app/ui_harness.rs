@@ -13,6 +13,7 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use super::settings::FontPicker;
 use super::tests::Harness;
 use super::MarkdownApp;
+use crate::test_support::ScratchDir;
 
 /// The frames an interaction gets to come to rest before the harness starts
 /// waiting on the clock for background work.
@@ -25,35 +26,6 @@ const SCREEN: egui::Vec2 = egui::vec2(1200.0, 800.0);
 /// apart, is ten seconds.
 const WAIT_FRAMES: usize = 1000;
 const WAIT_STEP: Duration = Duration::from_millis(10);
-
-/// A directory of one test's files, removed when dropped: the crate's
-/// scratch directory under the names the app-shell tests call it by.
-pub(crate) struct ScratchDir(crate::test_support::ScratchDir);
-
-impl ScratchDir {
-    pub(crate) fn new() -> Self {
-        Self(crate::test_support::ScratchDir::new())
-    }
-
-    /// Where `name` lives in this directory, whether or not it exists.
-    pub(crate) fn path(&self, name: &str) -> PathBuf {
-        self.0.path().join(name)
-    }
-
-    /// Write a file and return its path.
-    pub(crate) fn write(&self, name: &str, content: impl AsRef<[u8]>) -> PathBuf {
-        self.0.file(name, content)
-    }
-
-    /// Create a subdirectory and return its path.
-    pub(crate) fn subdir(&self, name: &str) -> PathBuf {
-        self.0.dir(name)
-    }
-
-    pub(crate) fn root(&self) -> PathBuf {
-        self.0.path().to_path_buf()
-    }
-}
 
 /// The settings store eframe hands the app, kept in memory instead of in the
 /// user's data directory.
@@ -150,7 +122,7 @@ impl UiHarness {
     pub(crate) fn with_docs(docs: &[(&str, &str)]) -> Self {
         let dir = ScratchDir::new();
         for (name, content) in docs {
-            dir.write(name, content);
+            dir.file(name, content);
         }
         Self::open(dir, docs.first().map(|(name, _)| *name))
     }
@@ -162,7 +134,7 @@ impl UiHarness {
     /// fonts the machine has or on when the scan lands. A test of the family
     /// list feeds the font picker's `scan` itself.
     pub(crate) fn open(dir: ScratchDir, name: Option<&str>) -> Self {
-        let file = name.map(|name| dir.path(name));
+        let file = name.map(|name| dir.path().join(name));
         let mut ui = egui_kittest::Harness::builder()
             .with_size(SCREEN)
             .build_eframe(|creation| MarkdownApp::new(creation, file, false));
@@ -189,7 +161,7 @@ impl UiHarness {
     }
 
     pub(crate) fn path(&self, name: &str) -> PathBuf {
-        self.dir.path(name)
+        self.dir.path().join(name)
     }
 
     /// The document the active tab shows.
