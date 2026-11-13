@@ -244,6 +244,8 @@ impl FileExplorer {
         if spawn(thread_name, work).is_ok() {
             self.pending_scan = Some(rx);
         } else {
+            // An older scan still running would overwrite this newer tree.
+            self.pending_scan = None;
             self.tree = scan.run().tree;
         }
     }

@@ -347,6 +347,26 @@ fn root_is_scanned_in_place_when_no_thread_can_be_started() {
 }
 
 #[test]
+fn scan_in_place_is_not_overwritten_by_an_older_scan_still_running() {
+    let dir = ScratchDir::new();
+    dir.file("fresh.md", "# Fresh");
+    let (mut explorer, older_scan) = explorer_awaiting_scan(dir.path());
+
+    explorer.scan_root(dir.path().to_path_buf(), "explorer-refresh", |_, _| {
+        Err(io::Error::other("out of threads"))
+    });
+    // The older worker may already be gone by the time it reports.
+    let _ = older_scan.send(ExplorerScanResult {
+        root: dir.path().to_path_buf(),
+        sort_order: SortOrder::NameAsc,
+        tree: vec![file_node("stale.md", None)],
+    });
+
+    assert!(!explorer.poll_pending_scan());
+    assert_eq!(names(&explorer.tree), ["fresh.md"]);
+}
+
+#[test]
 fn refresh_picks_up_files_added_to_the_root() {
     let dir = ScratchDir::new();
     dir.file("old.md", "# Old");
