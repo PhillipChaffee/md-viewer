@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 
 use crate::explorer::SortOrder;
@@ -85,6 +86,16 @@ pub(crate) fn restored_zoom(saved: Option<f32>) -> f32 {
 /// The formula size a saved session comes back at, relative to the text.
 pub(crate) fn restored_math_scale(saved: Option<f32>) -> f32 {
     saved.unwrap_or(1.0).clamp(MATH_SCALE_MIN, MATH_SCALE_MAX)
+}
+
+/// A color as the settings file holds it: its premultiplied RGBA bytes.
+pub(crate) const fn color_to_persisted(color: Color32) -> [u8; 4] {
+    [color.r(), color.g(), color.b(), color.a()]
+}
+
+/// The color the settings file holds as `bytes`.
+pub(crate) const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> Color32 {
+    Color32::from_rgba_premultiplied(r, g, b, a)
 }
 
 pub(crate) fn restored_sidebar_width(width: Option<f32>, default: f32) -> f32 {

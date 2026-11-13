@@ -100,3 +100,18 @@ fn the_settings_the_reader_replaced_are_read_but_never_written() {
     assert!(!written.contains("full_width_content"), "{written}");
     assert!(written.contains("theme"), "{written}");
 }
+
+#[test]
+fn a_color_comes_back_from_its_saved_bytes_unchanged() {
+    // Half-transparent, so the bytes differ from the unmultiplied color's.
+    let color = Color32::from_rgba_unmultiplied(200, 120, 40, 128);
+
+    let bytes = color_to_persisted(color);
+
+    assert_eq!(bytes, [color.r(), color.g(), color.b(), color.a()]);
+    assert_eq!(color_from_persisted(bytes), color);
+    assert_eq!(
+        color_from_persisted([10, 20, 30, 255]),
+        Color32::from_rgb(10, 20, 30)
+    );
+}

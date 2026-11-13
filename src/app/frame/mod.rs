@@ -13,7 +13,7 @@ use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::persist::{PersistedState, APP_KEY};
+use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::system_fonts::{document_fonts, setup_fonts};
 use crate::theme::{self, ColorOverrides};
 
@@ -58,8 +58,8 @@ impl eframe::App for MarkdownApp {
             full_width_content: None,
             line_spacing: Some(self.line_spacing),
             math_scale: Some(self.math_scale),
-            highlight_color: self.highlight_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
-            link_color: self.link_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
+            highlight_color: self.highlight_color.map(color_to_persisted),
+            link_color: self.link_color.map(color_to_persisted),
             selected_font_family: self.selected_font_family.clone(),
             smooth_text_rendering: Some(self.smooth_text_rendering),
             font_preset: Some(self.font_preset),

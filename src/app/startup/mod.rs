@@ -18,7 +18,8 @@ use crate::layout::{
     ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS,
 };
 use crate::persist::{
-    restored_math_scale, restored_sidebar_width, restored_zoom, PersistedState, APP_KEY,
+    color_from_persisted, restored_math_scale, restored_sidebar_width, restored_zoom,
+    PersistedState, APP_KEY,
 };
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
@@ -198,10 +199,6 @@ fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, D
 /// none.
 fn restored_active_tab(saved: Option<usize>, tab_count: usize) -> usize {
     saved.unwrap_or(0).min(tab_count.saturating_sub(1))
-}
-
-const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {
-    egui::Color32::from_rgba_premultiplied(r, g, b, a)
 }
 
 impl MarkdownApp {
