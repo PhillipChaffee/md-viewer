@@ -117,15 +117,57 @@ fn spawn_named_thread(name: &str, work: Work) -> io::Result<()> {
 /// File explorer state.
 #[derive(Default)]
 pub(crate) struct FileExplorer {
-    pub(crate) root: Option<PathBuf>,
-    pub(crate) tree: Vec<FileTreeNode>,
-    pub(crate) expanded_dirs: HashSet<PathBuf>,
-    pub(crate) sort_order: SortOrder,
+    root: Option<PathBuf>,
+    tree: Vec<FileTreeNode>,
+    expanded_dirs: HashSet<PathBuf>,
+    sort_order: SortOrder,
     /// Receiver for asynchronous root-directory scan results.
-    pub(crate) pending_scan: Option<Receiver<ExplorerScanResult>>,
+    pending_scan: Option<Receiver<ExplorerScanResult>>,
 }
 
 impl FileExplorer {
+    /// The explorer as a session left it: its order and its open folders
+    /// are in place before `root` is scanned, so the scan reads them.
+    pub(crate) fn restored(
+        sort_order: SortOrder,
+        expanded_dirs: HashSet<PathBuf>,
+        root: Option<PathBuf>,
+    ) -> Self {
+        let mut explorer = Self {
+            expanded_dirs,
+            sort_order,
+            ..Self::default()
+        };
+        if let Some(root) = root {
+            explorer.set_root(root);
+        }
+        explorer
+    }
+
+    /// The folder the explorer lists.
+    pub(crate) fn root(&self) -> Option<&Path> {
+        self.root.as_deref()
+    }
+
+    /// The listing, as far as it has been read.
+    pub(crate) fn tree(&self) -> &[FileTreeNode] {
+        &self.tree
+    }
+
+    /// The folders left open, whether or not the listing reaches them.
+    pub(crate) const fn expanded_dirs(&self) -> &HashSet<PathBuf> {
+        &self.expanded_dirs
+    }
+
+    pub(crate) const fn sort_order(&self) -> SortOrder {
+        self.sort_order
+    }
+
+    /// Whether a scan of the root is still to be collected.
+    pub(crate) const fn is_scanning(&self) -> bool {
+        self.pending_scan.is_some()
+    }
+
     /// Scan a directory shallowly - only one level, subdirectories marked as unloaded.
     fn scan_directory_shallow(path: &Path, sort_order: SortOrder) -> Vec<FileTreeNode> {
         let Ok(entries) = fs::read_dir(path) else {

@@ -118,7 +118,7 @@ impl MarkdownApp {
         }
 
         // Poll for asynchronous Explorer root scan completion.
-        if self.file_explorer.pending_scan.is_some() {
+        if self.file_explorer.is_scanning() {
             if self.file_explorer.poll_pending_scan() {
                 log::info!("Explorer directory scan completed");
             }

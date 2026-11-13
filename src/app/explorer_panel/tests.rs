@@ -100,7 +100,7 @@ fn the_explorer_is_titled_with_its_folder() {
         .to_owned();
     assert!(is_listed(&harness, &format!("FILES {folder}")));
 
-    harness.state_mut().file_explorer.root = None;
+    harness.state_mut().file_explorer = crate::explorer::FileExplorer::default();
     harness.frames(1);
 
     assert!(is_listed(&harness, "FILES No folder"));
@@ -189,8 +189,13 @@ fn a_folder_left_open_in_the_last_session_lists_its_files() {
     let mut harness = explorer();
     let sub = harness.path("sub");
 
-    harness.state_mut().file_explorer.expanded_dirs.insert(sub);
-    harness.frames(2);
+    let last_session = crate::explorer::FileExplorer::restored(
+        SortOrder::default(),
+        HashSet::from([sub]),
+        Some(harness.dir.clone()),
+    );
+    harness.state_mut().file_explorer = last_session;
+    harness.wait_for_explorer_scan();
 
     assert!(is_listed(&harness, "c.md"));
 }

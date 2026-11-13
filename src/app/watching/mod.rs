@@ -97,8 +97,8 @@ impl MarkdownApp {
     /// root.
     fn watch_plan(&self) -> Option<WatchPlan> {
         let explorer_dirs = explorer_watch_dirs(
-            self.file_explorer.root.as_deref(),
-            &self.file_explorer.expanded_dirs,
+            self.file_explorer.root(),
+            self.file_explorer.expanded_dirs(),
             Path::is_dir,
         );
         let plan = WatchPlan::new(
@@ -159,8 +159,8 @@ impl MarkdownApp {
         }
 
         let desired = explorer_watch_dirs(
-            self.file_explorer.root.as_deref(),
-            &self.file_explorer.expanded_dirs,
+            self.file_explorer.root(),
+            self.file_explorer.expanded_dirs(),
             Path::is_dir,
         );
         if let Some(running) = &mut self.live_reload.running {
@@ -226,7 +226,7 @@ impl MarkdownApp {
 
         for path in changed_paths {
             self.flash_changed_path(&path, now);
-            if let Some(root) = &self.file_explorer.root {
+            if let Some(root) = self.file_explorer.root() {
                 // The change can alter one listing: that of the directory
                 // holding the path, when it is inside the explorer.
                 let listing = ancestors_within(&path, root).next();
@@ -254,7 +254,7 @@ impl MarkdownApp {
         // The explorer looks rows up by canonical path.
         let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         self.flashing_paths.insert(canonical(path), now);
-        if let Some(root) = &self.file_explorer.root {
+        if let Some(root) = self.file_explorer.root() {
             for dir in ancestors_within(path, root) {
                 self.flashing_paths.insert(canonical(dir), now);
             }

@@ -100,7 +100,7 @@ impl MarkdownApp {
     /// "FILES", the folder they are in, and the menu that holds what the
     /// explorer can do to its listing.
     fn explorer_header(&mut self, ui: &mut egui::Ui, palette: &Palette) {
-        let root = self.file_explorer.root.as_deref();
+        let root = self.file_explorer.root();
         let folder = root.map_or(Cow::Borrowed("No folder"), folder_name);
         let header = sidebar::Header {
             caption: "FILES",
@@ -118,7 +118,7 @@ impl MarkdownApp {
             );
         }
 
-        let sort_order = self.file_explorer.sort_order;
+        let sort_order = self.file_explorer.sort_order();
         let picked = more
             .and_then(|more| egui::Popup::menu(&more).show(|ui| explorer_menu(ui, sort_order)))
             .and_then(|menu| menu.inner);
@@ -143,7 +143,7 @@ impl MarkdownApp {
         // Pre-load children for all expanded dirs to avoid mutation during render
         let unloaded: Vec<PathBuf> = self
             .file_explorer
-            .expanded_dirs
+            .expanded_dirs()
             .iter()
             .filter(|dir| self.file_explorer.get_children(dir).is_none())
             .cloned()
@@ -165,7 +165,7 @@ impl MarkdownApp {
             .id_salt("file_explorer")
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                for node in &self.file_explorer.tree {
+                for node in self.file_explorer.tree() {
                     self.render_tree_node(ui, node, 0, &listing, &mut clicks);
                 }
             });

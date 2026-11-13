@@ -274,14 +274,17 @@ fn without_a_tab_the_file_dialog_starts_in_the_explorer_root() {
         "a cancelled dialog opens nothing"
     );
     assert!(harness.app.error_message.is_none());
-    assert_eq!(*started_in.borrow(), harness.app.file_explorer.root);
+    assert_eq!(
+        started_in.borrow().as_deref(),
+        harness.app.file_explorer.root()
+    );
     assert!(started_in.borrow().is_some());
 }
 
 #[test]
 fn a_dialog_that_fails_to_open_is_reported() {
     let mut harness = Harness::with_three_docs();
-    let root = harness.app.file_explorer.root.clone();
+    let root = harness.app.file_explorer.root().map(PathBuf::from);
     harness.app.file_picker = answer_with(Err("no portal".to_owned())).0;
     harness.app.folder_picker = answer_with(Err("no display".to_owned())).0;
 
@@ -293,7 +296,7 @@ fn a_dialog_that_fails_to_open_is_reported() {
     let folder_error = harness.app.error_message.take().unwrap();
     assert!(folder_error.contains("no display"));
     assert_eq!(harness.app.tabs.len(), 1);
-    assert_eq!(harness.app.file_explorer.root, root);
+    assert_eq!(harness.app.file_explorer.root(), root.as_deref());
 }
 
 #[test]
@@ -309,7 +312,7 @@ fn the_folder_dialog_starts_in_the_explorer_root_and_repoints_it() {
     harness.apply(AppAction::OpenFolder);
 
     assert_eq!(*started_in.borrow(), Some(harness.dir.clone()));
-    assert_eq!(harness.app.file_explorer.root, Some(folder.clone()));
+    assert_eq!(harness.app.file_explorer.root(), Some(folder.as_path()));
     assert!(harness.app.show_explorer);
     assert!(
         harness.app.watched_explorer_dirs().contains(&folder),
@@ -325,7 +328,10 @@ fn a_cancelled_folder_dialog_leaves_the_explorer_alone() {
 
     harness.apply(AppAction::OpenFolder);
 
-    assert_eq!(harness.app.file_explorer.root, Some(harness.dir.clone()));
+    assert_eq!(
+        harness.app.file_explorer.root(),
+        Some(harness.dir.as_path())
+    );
     assert!(!harness.app.show_explorer);
     assert!(harness.app.error_message.is_none());
 }

@@ -125,13 +125,6 @@ fn initial_explorer(
     persisted_root: Option<PathBuf>,
     expanded_dirs: Option<Vec<PathBuf>>,
 ) -> FileExplorer {
-    let mut file_explorer = FileExplorer::default();
-
-    // Restore sort order before scanning (so initial scan uses correct order)
-    if let Some(sort_order) = sort_order {
-        file_explorer.sort_order = sort_order;
-    }
-
     let root = file
         .and_then(Path::parent)
         .map(Path::to_path_buf)
@@ -142,15 +135,8 @@ fn initial_explorer(
                 .map(Path::to_path_buf)
         })
         .or_else(|| std::env::current_dir().ok());
-    if let Some(root) = root {
-        file_explorer.set_root(root);
-    }
-
-    // Restore expanded directories (children will lazy-load on first render)
-    if let Some(expanded) = expanded_dirs {
-        file_explorer.expanded_dirs = expanded.into_iter().collect();
-    }
-    file_explorer
+    let expanded_dirs = expanded_dirs.into_iter().flatten().collect();
+    FileExplorer::restored(sort_order.unwrap_or_default(), expanded_dirs, root)
 }
 
 /// Whether `display`, the value of `DISPLAY`, names a virtual display (e.g.,
@@ -322,9 +308,9 @@ impl MarkdownApp {
             open_tabs: Some(self.get_open_tab_paths()),
             active_tab: Some(self.active_tab),
             show_explorer: Some(self.show_explorer),
-            explorer_root: self.file_explorer.root.clone(),
-            expanded_dirs: Some(self.file_explorer.expanded_dirs.iter().cloned().collect()),
-            explorer_sort_order: Some(self.file_explorer.sort_order),
+            explorer_root: self.file_explorer.root().map(Path::to_path_buf),
+            expanded_dirs: Some(self.file_explorer.expanded_dirs().iter().cloned().collect()),
+            explorer_sort_order: Some(self.file_explorer.sort_order()),
             explorer_width: Some(self.explorer_width),
             outline_width: Some(self.outline_width),
             recent_files: Some(self.recent_files.clone()),

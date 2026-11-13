@@ -52,10 +52,9 @@ impl MarkdownApp {
             .tabs
             .get(self.active_tab)
             .and_then(|tab| tab.path.parent())
-            .map(Path::to_path_buf)
-            .or_else(|| self.file_explorer.root.clone());
+            .or_else(|| self.file_explorer.root());
 
-        match (self.file_picker)(initial_dir.as_deref()) {
+        match (self.file_picker)(initial_dir) {
             Ok(Some(path)) => self.open_in_new_tab(path),
             Ok(None) => {}
             Err(error) => {
@@ -68,7 +67,7 @@ impl MarkdownApp {
     /// Open a native folder picker and point the file explorer at the chosen
     /// directory (issue #28). The chosen root is persisted via `save()`.
     pub(crate) fn open_folder_dialog(&mut self) {
-        match (self.folder_picker)(self.file_explorer.root.as_deref()) {
+        match (self.folder_picker)(self.file_explorer.root()) {
             Ok(Some(path)) => {
                 self.file_explorer.set_root(path);
                 // Make sure the explorer is visible so the result is seen.

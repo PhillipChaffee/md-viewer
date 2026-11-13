@@ -294,6 +294,39 @@ fn polling_reports_nothing_until_a_scan_lands() {
 }
 
 #[test]
+fn a_restored_explorer_lists_its_root_in_its_order_with_its_folders_open() {
+    let dir = ScratchDir::new();
+    let docs = dir.dir("docs");
+    dir.file("docs/guide.md", "# Guide");
+    dir.file("a.md", "# A");
+    dir.file("b.md", "# B");
+
+    let mut explorer = FileExplorer::restored(
+        SortOrder::NameDesc,
+        HashSet::from([docs.clone()]),
+        Some(dir.path().to_path_buf()),
+    );
+    assert!(explorer.is_scanning());
+    wait_for_scan(&mut explorer);
+
+    assert!(!explorer.is_scanning());
+    assert_eq!(explorer.root(), Some(dir.path()));
+    assert!(explorer.sort_order() == SortOrder::NameDesc);
+    assert_eq!(explorer.expanded_dirs(), &HashSet::from([docs.clone()]));
+    assert_eq!(names(explorer.tree()), ["docs", "b.md", "a.md"]);
+    assert!(lists(&explorer, &docs, "guide.md"));
+}
+
+#[test]
+fn an_explorer_restored_without_a_root_scans_nothing() {
+    let explorer = FileExplorer::restored(SortOrder::NameAsc, HashSet::new(), None);
+
+    assert!(!explorer.is_scanning());
+    assert_eq!(explorer.root(), None);
+    assert!(explorer.tree().is_empty());
+}
+
+#[test]
 fn local_root_scan_runs_asynchronously_and_restores_expansion() {
     let dir = ScratchDir::new();
     let expanded = dir.dir("docs");

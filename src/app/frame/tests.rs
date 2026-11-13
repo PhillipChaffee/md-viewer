@@ -2,7 +2,6 @@
 //! the clicks its panels report turn into navigation.
 
 use std::fs;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, accesskit, Color32, Modifiers, PointerButton};
@@ -16,7 +15,7 @@ use crate::app::ui_harness::{
     frame_on, frames_until, launch, MemoryStorage, ScratchDir, UiHarness,
 };
 use crate::app::MarkdownApp;
-use crate::explorer::{ExplorerScanResult, SortOrder};
+use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::assert_close;
@@ -106,8 +105,8 @@ fn customized_session() -> Harness {
     app.fonts.preset = FontPreset::Vscode;
     app.fonts.size = TextSizeClass::Large;
     app.show_explorer = false;
-    app.file_explorer.expanded_dirs.insert(guides);
-    app.file_explorer.sort_order = SortOrder::NameDesc;
+    app.file_explorer.toggle_expanded(&guides);
+    app.file_explorer.set_sort_order(SortOrder::NameDesc);
     app.explorer_width = 301.0;
     app.outline_width = 187.0;
     harness
@@ -134,9 +133,9 @@ fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
         (app.fonts.family.clone(), app.fonts.preset, app.fonts.size),
         (app.get_open_tab_paths(), app.active_tab),
         (
-            app.file_explorer.root.clone(),
-            app.file_explorer.expanded_dirs.clone(),
-            app.file_explorer.sort_order == SortOrder::NameDesc,
+            app.file_explorer.root().map(ToOwned::to_owned),
+            app.file_explorer.expanded_dirs().clone(),
+            app.file_explorer.sort_order() == SortOrder::NameDesc,
         ),
     )
 }
@@ -218,7 +217,7 @@ fn at_rest() -> Harness {
     let mut harness = Harness::with_three_docs();
     harness.app.font_picker.scan = None;
     frames_until(&mut harness, "the explorer scan", |app| {
-        app.file_explorer.pending_scan.is_none()
+        !app.file_explorer.is_scanning()
     });
     harness.idle();
     harness
@@ -233,17 +232,16 @@ fn a_scan_still_running_keeps_the_frames_coming() {
     const POLL_INTERVAL: Duration = Duration::from_millis(100);
     let mut harness = at_rest();
     assert!(repaint_delay(&harness.idle()) > POLL_INTERVAL);
-    let (scan_tx, scan_rx) = mpsc::channel::<ExplorerScanResult>();
-    harness.app.file_explorer.pending_scan = Some(scan_rx);
 
+    harness.app.file_explorer.refresh();
     let output = harness.idle();
     assert!(repaint_delay(&output) <= POLL_INTERVAL);
-    assert!(harness.app.file_explorer.pending_scan.is_some());
 
-    drop(scan_tx);
-    harness.idle();
-    assert!(harness.app.file_explorer.pending_scan.is_none());
-    assert_eq!(harness.app.file_explorer.tree.len(), 3, "the listing stays");
+    frames_until(&mut harness, "the explorer scan", |app| {
+        !app.file_explorer.is_scanning()
+    });
+    assert!(repaint_delay(&harness.idle()) > POLL_INTERVAL);
+    assert_eq!(harness.app.file_explorer.tree().len(), 3);
 }
 
 #[test]
@@ -272,10 +270,10 @@ fn the_explorer_lists_the_folder_once_its_scan_lands() {
     let mut harness = Harness::with_three_docs();
 
     frames_until(&mut harness, "the explorer scan", |app| {
-        app.file_explorer.pending_scan.is_none()
+        !app.file_explorer.is_scanning()
     });
 
-    assert_eq!(harness.app.file_explorer.tree.len(), 3);
+    assert_eq!(harness.app.file_explorer.tree().len(), 3);
 }
 
 #[test]

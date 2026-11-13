@@ -12,7 +12,7 @@ use eframe::egui::{Key, Modifiers};
 use crate::app::action::AppAction;
 use crate::app::tests::Harness;
 use crate::app::MarkdownApp;
-use crate::explorer::FileTreeNode;
+use crate::explorer::{FileExplorer, FileTreeNode, SortOrder};
 use crate::watcher::{Backend, FileWatcher, WatchPlan, Watched, MAX_WATCHER_RETRIES};
 
 impl MarkdownApp {
@@ -64,7 +64,7 @@ fn watching(docs: &[(&str, &str)]) -> Harness {
     let mut harness = open(docs);
     harness.apply(AppAction::ToggleWatch);
     run_until(&mut harness, "the explorer scan", |harness| {
-        harness.app.file_explorer.pending_scan.is_none()
+        !harness.app.file_explorer.is_scanning()
     });
     harness
 }
@@ -87,13 +87,18 @@ fn fail_watcher(harness: &mut Harness) {
     harness.app.live_reload.running.as_mut().unwrap().events = receiver;
 }
 
+/// An explorer with nothing open, pointed at `root`.
+fn explorer_on(root: impl Into<PathBuf>) -> FileExplorer {
+    FileExplorer::restored(SortOrder::default(), HashSet::new(), Some(root.into()))
+}
+
 fn explorer_root_names(harness: &Harness) -> Vec<&str> {
     fn name(node: &FileTreeNode) -> &str {
         match node {
             FileTreeNode::File { name, .. } | FileTreeNode::Directory { name, .. } => name,
         }
     }
-    harness.app.file_explorer.tree.iter().map(name).collect()
+    harness.app.file_explorer.tree().iter().map(name).collect()
 }
 
 #[test]
@@ -208,7 +213,7 @@ fn an_expanded_folder_is_watched_until_it_is_collapsed() {
     write_doc(&harness, "sub/x.md", "# X");
     let sub = harness.path("sub");
 
-    harness.app.file_explorer.expanded_dirs.insert(sub.clone());
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
     assert!(harness.app.watched_explorer_dirs().contains(&sub));
     let created = write_doc(&harness, "sub/new.md", "# New");
@@ -216,7 +221,7 @@ fn an_expanded_folder_is_watched_until_it_is_collapsed() {
         harness.app.flashing_paths.contains_key(&created)
     });
 
-    harness.app.file_explorer.expanded_dirs.remove(&sub);
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
     assert_eq!(
         *harness.app.watched_explorer_dirs(),
@@ -232,7 +237,7 @@ fn folders_are_not_watched_while_live_reload_is_off() {
         .unwrap()
         .to_path_buf();
 
-    harness.app.file_explorer.expanded_dirs.insert(sub);
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
 
     assert!(harness.app.watched().is_none());
@@ -242,7 +247,7 @@ fn folders_are_not_watched_while_live_reload_is_off() {
 fn live_reload_waits_while_there_is_nothing_to_watch() {
     let mut harness = open(&[("a.md", "# A")]);
     harness.apply(AppAction::CloseTab);
-    harness.app.file_explorer.root = None;
+    harness.app.file_explorer = FileExplorer::default();
 
     harness.apply(AppAction::ToggleWatch);
     for _ in 0..=MAX_WATCHER_RETRIES {
@@ -262,8 +267,7 @@ fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
     let mut harness = open(&[("a.md", "# A")]);
     harness.apply(AppAction::CloseTab);
     // GVFS folders are never watched, so this leaves nothing to register.
-    harness.app.file_explorer.root =
-        Some(PathBuf::from("/run/user/1000/gvfs/sftp:host=example/notes"));
+    harness.app.file_explorer = explorer_on("/run/user/1000/gvfs/sftp:host=example/notes");
 
     harness.apply(AppAction::ToggleWatch);
     for _ in 0..=MAX_WATCHER_RETRIES {
@@ -488,7 +492,7 @@ fn a_change_outside_the_explorer_root_flashes_only_the_file() {
         .parent()
         .unwrap()
         .to_path_buf();
-    harness.app.file_explorer.root = Some(elsewhere);
+    harness.app.file_explorer = explorer_on(elsewhere);
 
     fs::write(&doc, "new").unwrap();
     harness.app.reload_changed_tabs(vec![doc.clone()]);
@@ -502,7 +506,7 @@ fn a_change_outside_the_explorer_root_flashes_only_the_file() {
 fn a_change_is_reloaded_without_an_explorer_root() {
     let mut harness = open(&[("a.md", "old")]);
     let doc = harness.path("a.md");
-    harness.app.file_explorer.root = None;
+    harness.app.file_explorer = FileExplorer::default();
 
     fs::write(&doc, "new").unwrap();
     harness.app.reload_changed_tabs(vec![doc.clone()]);

@@ -225,7 +225,7 @@ fn open_folder_points_the_explorer_at_the_picked_folder() {
 
     harness.pick("Open Folder");
 
-    assert_eq!(harness.app().file_explorer.root, Some(folder));
+    assert_eq!(harness.app().file_explorer.root(), Some(folder.as_path()));
     assert!(harness.app().show_explorer, "the new root is put on screen");
 }
 

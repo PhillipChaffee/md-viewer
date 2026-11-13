@@ -59,8 +59,8 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert_eq!(app.fonts.size, TextSizeClass::Normal);
     assert!(!app.live_reload.is_live());
     assert_eq!(
-        app.file_explorer.root,
-        std::env::current_dir().ok(),
+        app.file_explorer.root(),
+        std::env::current_dir().ok().as_deref(),
         "with nothing else to go on, the explorer shows the working directory"
     );
 }
@@ -81,7 +81,7 @@ fn a_file_on_the_command_line_wins_over_the_last_session() {
 
     assert_eq!(tab_paths(&app), std::slice::from_ref(&a));
     assert_eq!(app.active_tab, 0);
-    assert_eq!(app.file_explorer.root, Some(dir.root()));
+    assert_eq!(app.file_explorer.root(), Some(dir.root().as_path()));
     assert_eq!(recent_paths(&app), [a], "an explicit open is a recent file");
     assert!(app.error_message.is_none());
 }
@@ -129,7 +129,7 @@ fn the_last_session_tabs_return_without_the_ones_that_no_longer_open() {
         recent_paths(&app).is_empty(),
         "a restored tab is not a fresh open"
     );
-    assert_eq!(app.file_explorer.root, Some(dir.root()));
+    assert_eq!(app.file_explorer.root(), Some(dir.root().as_path()));
 }
 
 #[test]
@@ -147,14 +147,14 @@ fn the_saved_explorer_root_is_used_while_it_exists() {
     };
 
     let app = relaunch(&session(saved_root.root()), None);
-    assert_eq!(app.file_explorer.root, Some(saved_root.root()));
-    assert!(app.file_explorer.expanded_dirs.contains(&expanded));
-    assert!(app.file_explorer.sort_order == SortOrder::DateDesc);
+    assert_eq!(app.file_explorer.root(), Some(saved_root.root().as_path()));
+    assert!(app.file_explorer.expanded_dirs().contains(&expanded));
+    assert!(app.file_explorer.sort_order() == SortOrder::DateDesc);
 
     let app = relaunch(&session(saved_root.path("gone")), None);
     assert_eq!(
-        app.file_explorer.root,
-        Some(docs.root()),
+        app.file_explorer.root(),
+        Some(docs.root().as_path()),
         "a root that vanished gives way to the first tab's folder"
     );
 }

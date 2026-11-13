@@ -66,7 +66,7 @@ impl LabelHarness {
     /// the listing has landed.
     pub(crate) fn wait_for_explorer_scan(&mut self) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while self.kit.state().file_explorer.pending_scan.is_some() {
+        while self.kit.state().file_explorer.is_scanning() {
             assert!(
                 std::time::Instant::now() < deadline,
                 "the explorer scan of {} never finished",
