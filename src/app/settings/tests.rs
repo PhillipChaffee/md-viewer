@@ -30,7 +30,7 @@ fn change_color(harness: &mut UiHarness, index: usize) {
 fn picking_a_color_overrides_the_theme_color_it_belongs_to() {
     let mut harness = UiHarness::with_three_docs();
     let (theme_highlight, theme_link) = drawn_colors(&harness);
-    harness.pick("View", "Colors");
+    harness.pick("Colors");
 
     change_color(&mut harness, 0);
 
@@ -51,7 +51,7 @@ fn picking_a_color_overrides_the_theme_color_it_belongs_to() {
 fn reset_is_offered_per_override_and_brings_the_theme_color_back() {
     let mut harness = UiHarness::with_three_docs();
     let (theme_highlight, theme_link) = drawn_colors(&harness);
-    harness.pick("View", "Colors");
+    harness.pick("Colors");
     assert_eq!(harness.enabled("Reset"), [false, false]);
 
     harness.app_mut().highlight_color = Some(RED);
@@ -77,13 +77,13 @@ fn reset_is_offered_per_override_and_brings_the_theme_color_back() {
 fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
     let mut harness = UiHarness::with_three_docs();
 
-    harness.pick("View", "Colors");
+    harness.pick("Colors");
     assert!(harness.shows("Highlight Color:"));
     harness.click("Close window");
     assert!(!harness.app().show_color_settings_dialog);
     assert!(!harness.shows("Highlight Color:"));
 
-    harness.pick("View", "Fonts");
+    harness.pick("Fonts");
     assert!(harness.shows("Text Size"));
     harness.click("Close window");
     assert!(!harness.app().show_font_dialog);

@@ -328,7 +328,7 @@ fn the_error_bar_shows_the_message_until_it_is_dismissed() {
     harness.settle();
     assert!(harness.shows("Unable to open notes.md"));
 
-    harness.click_exact("✕");
+    harness.click_exact("Dismiss");
 
     assert_eq!(harness.app().error_message, None);
     assert!(!harness.shows("Unable to open notes.md"));
@@ -341,7 +341,11 @@ fn the_tab_close_button_closes_its_tab() {
     harness.app_mut().open_in_new_tab(b);
     harness.settle();
 
-    harness.click_exact("×");
+    // Of everything that reads `b.md`, the tab is the topmost.
+    let named = harness.labelled("b.md");
+    let tab = named.iter().map(|(center, _)| *center);
+    harness.hover_at(tab.min_by(|a, b| a.y.total_cmp(&b.y)).unwrap());
+    harness.click_exact("Close tab");
 
     assert_eq!(harness.app().tabs.len(), 1);
     assert_eq!(harness.active_path(), harness.path("a.md"));
@@ -598,4 +602,43 @@ fn the_drop_target_dims_the_window_with_the_scrim() {
     assert!(dimmed);
     let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
     assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
+}
+
+#[test]
+fn the_error_bar_opens_with_a_warning_sign_and_keeps_its_dismiss_button_in_the_window() {
+    let mut harness = UiHarness::with_three_docs();
+    let long = "Unable to open a file with a very long name. ".repeat(12);
+    harness.app_mut().error_message = Some(long);
+    harness.settle();
+    let warning = ThemeId::Sepia.palette().warning;
+    let top = crate::app::chrome::BAR_HEIGHT;
+    let strip = top..=top + crate::app::chrome::STRIP_HEIGHT;
+
+    let dismiss = harness.labelled("Dismiss")[0].0;
+    assert_close(dismiss.x, harness.labelled("More")[0].0.x);
+    assert!(strip.contains(&dismiss.y));
+
+    let shapes = crate::test_support::painted_shapes(harness.ui.output());
+    let sign = shapes.iter().find_map(|shape| match shape {
+        egui::Shape::Circle(ring) if ring.stroke.color == warning => Some(ring.center),
+        _ => None,
+    });
+    let sign = sign.expect("no ringed sign in the warning color");
+    assert!(strip.contains(&sign.y));
+    let message = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(text) if text.galley.text().starts_with("Unable to open") => {
+                Some(text)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        message.galley.elided,
+        "cut short, not wrapped or pushed out"
+    );
+    assert!(sign.x < message.pos.x);
+    let right = message.pos.x + message.galley.size().x;
+    assert!(right < dismiss.x, "{right} runs under the button");
 }

@@ -174,6 +174,28 @@ impl TextSizeClass {
         }
     }
 
+    /// The next size down, if there is one.
+    pub(crate) const fn smaller(self) -> Option<Self> {
+        match self {
+            Self::Small => None,
+            Self::Normal => Some(Self::Small),
+            Self::Large => Some(Self::Normal),
+            Self::ExtraLarge => Some(Self::Large),
+            Self::Huge => Some(Self::ExtraLarge),
+        }
+    }
+
+    /// The next size up, if there is one.
+    pub(crate) const fn larger(self) -> Option<Self> {
+        match self {
+            Self::Small => Some(Self::Normal),
+            Self::Normal => Some(Self::Large),
+            Self::Large => Some(Self::ExtraLarge),
+            Self::ExtraLarge => Some(Self::Huge),
+            Self::Huge => None,
+        }
+    }
+
     /// Base text size in px: what the chrome is set in. The document
     /// scales it by the preset (see [`document_fonts`]), and its headings
     /// and code cascade from there.

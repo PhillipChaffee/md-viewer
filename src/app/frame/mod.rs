@@ -6,9 +6,11 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::MarkdownApp;
+use crate::icons::Icon;
 use crate::persist::{PersistedState, APP_KEY};
 use crate::system_fonts::{document_fonts, setup_fonts};
 use crate::theme::{self, ColorOverrides};
@@ -16,6 +18,9 @@ use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(test)]
 mod tests;
+
+/// Side of the warning sign the error bar opens with.
+const WARNING_SIDE: f32 = 16.0;
 
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
@@ -83,7 +88,7 @@ impl eframe::App for MarkdownApp {
         // Get ctrl state for link handling
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
-        self.render_menu_bar(ctx);
+        self.render_top_bar(ctx);
         self.render_top_bars(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx);
@@ -283,23 +288,7 @@ impl MarkdownApp {
 
     /// The error bar, the find bar, and the tab strip.
     fn render_top_bars(&mut self, ctx: &egui::Context) {
-        // Show error message if any
-        let mut clear_error = false;
-        if let Some(error) = &self.error_message {
-            egui::TopBottomPanel::top("error_bar").show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    let warning = ui.visuals().warn_fg_color;
-                    ui.label(egui::RichText::new("⚠").color(warning));
-                    ui.label(egui::RichText::new(error).color(warning));
-                    if ui.small_button("✕").clicked() {
-                        clear_error = true;
-                    }
-                });
-            });
-        }
-        if clear_error {
-            self.error_message = None;
-        }
+        self.render_error_bar(ctx);
 
         // Find bar (conditional, between error bar and tab bar)
         let search_outcome = self.render_search_bar(ctx);
@@ -315,15 +304,52 @@ impl MarkdownApp {
             self.jump_match(-1);
         }
 
-        // Tab bar
-        let mut tab_to_close: Option<usize> = None;
-        egui::TopBottomPanel::top("tab_bar").show(ctx, |ui| {
-            tab_to_close = self.render_tab_bar(ui);
-        });
-
         // Close tab if requested
-        if let Some(idx) = tab_to_close {
+        if let Some(idx) = self.render_tab_bar(ctx) {
             self.close_tab(idx);
+        }
+    }
+
+    /// The last thing that went wrong, in the warning color, until it is
+    /// dismissed.
+    fn render_error_bar(&mut self, ctx: &egui::Context) {
+        let Some(error) = &self.error_message else {
+            return;
+        };
+        let palette = self.theme.palette();
+        let mut dismissed = false;
+        egui::TopBottomPanel::top("error_bar")
+            .exact_height(STRIP_HEIGHT)
+            .frame(chrome::bar_frame(palette))
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    ui.add_space(6.0);
+                    let (sign, _) = ui
+                        .allocate_exact_size(egui::Vec2::splat(WARNING_SIDE), egui::Sense::hover());
+                    Icon::Warning.paint(ui.painter(), sign, palette.warning);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let dismiss = QuietButton::icon(Icon::Close, "Dismiss")
+                            .show(ui, palette)
+                            .on_hover_text("Dismiss");
+                        dismissed = dismiss.clicked();
+                        // The message takes what the button leaves, and is
+                        // cut short rather than pushing the button out.
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(error)
+                                        .font(chrome::label_font())
+                                        .color(palette.warning),
+                                )
+                                .truncate(),
+                            );
+                        });
+                    });
+                });
+            });
+        if dismissed {
+            self.error_message = None;
         }
     }
 
