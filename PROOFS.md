@@ -174,7 +174,7 @@ cannot run. The proof runs `has_collapsed_ancestor`, the function
 | `system_fonts::all_lists_the_sizes_in_step_order` | `ALL` lists the sizes one step apart. | All 5 | Proven |
 
 The shortcut harnesses read the real `BINDINGS` table. They do not run
-`shortcut_actions`, which reads egui's input, nor the code that decides
+`shortcut_actions`, which reads and consumes egui's input, nor the code that decides
 which focus the app is in. Both are tested only.
 
 **Counts: 67 harnesses. 54 proven, 13 bounded.**

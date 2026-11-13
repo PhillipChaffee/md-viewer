@@ -34,6 +34,21 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
 - **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**
 - **A text size restored from a saved session was overwritten at launch.**
+- A quote inside a quote is set in from the quote around it, with a bar of its own, and a list that follows it starts in line.
+- A link in a heading sits where it is written and can be followed.
+- A plain sum between dollar signs, such as `$b + c$`, is shown as a formula, and text that is not a formula keeps both of its dollar signs.
+- A GIF in a document is shown (its first frame) instead of a warning sign.
+- A picture that was missing is shown once its file exists and the page reloads.
+- A diagram too large for the graphics card is shown at a lower resolution instead of crashing the app.
+- While a picture is enlarged, the top bar is dimmed with the rest of the window and its buttons no longer act.
+- A file named on the command line that could not be opened no longer appears under Recently Read.
+- The contents sidebar, the reading time and links follow what you type in edit mode.
+- A keyboard shortcut tapped very quickly is no longer dropped.
+- The find bar counts matches in the new document after you follow a link, go back or forward, or close a tab.
+- With many tabs open, the tab strip scrolls to the tab in front, and the open-file button no longer sits on the Preview/Edit switch.
+- Ctrl+S saves unsaved edits from the preview as well as from edit mode.
+- Ctrl+W in the find bar closes the tab without also deleting the last word of the search.
+- Unsaved edits are kept when the file changes on disk while you are looking at the preview, not only in edit mode.
 
 ### Internals
 
