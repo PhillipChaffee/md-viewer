@@ -1,6 +1,6 @@
 # Architecture
 
-Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing markdown files using egui + egui_commonmark with a custom tab system.
+Rust desktop application for reading markdown files, built on egui and a vendored egui_commonmark fork. `src/main.rs` only names the modules and starts the app; each module under `src/` owns one responsibility (`app/` the window and its panels, `theme/` the colors, `layout/` the reading column, `tab/`, `links/`, `explorer/`, `watcher/`, `system_fonts/`, `cli/`, `dialogs/`), with its tests in a sibling `tests.rs`.
 
 ## Core Components
 

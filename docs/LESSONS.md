@@ -150,7 +150,7 @@ CommonMarkViewer::new()
 **Problem:** merman 0.3 applies `themeVariables` (by `%%{init}%%` directive or by `with_site_config`) to flowcharts and ignores them for sequence diagrams: the SVG is byte-identical. Other diagram kinds hard-code the default theme in their CSS too. A theme option would have fixed the first diagram someone looked at and nothing else.
 **Fix:** Let usvg resolve the SVG and write it back (`Tree::to_string` with `preserve_text: true`). Every element then carries its final `fill` and `stroke` as `#rrggbb`, text is still `<text>`, and the round trip is pixel-identical. Recolor those attributes by use (text, fill, stroke) and by the role the original color has in mermaid's default theme.
 **Gotchas:** usvg paints the root element's `background-color: white` as an opaque backdrop, so strip it from the root tag. Probe every diagram kind you care about, not only a flowchart, before trusting a theme mechanism.
-**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/mermaid_theme/mod.rs`, `docs/devlog/070-themed-diagrams.md`
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/mermaid_theme/mod.rs`, `docs/devlog/071-themed-diagrams.md`
 
 ### A raster composited onto the page color is a box everywhere else
 
@@ -2021,7 +2021,7 @@ An empty first list is the assertion worth making. It also explains rises in the
 **Problem:** The renderer's column is a `left_to_right` wrapping layout. `ui.add_space(n)` there moves the cursor `n` px to the *right*, so the fork's `paragraph_spacing` and `heading_spacing_*` options had never changed a pixel. The real gap was two `ui.label("\n")` calls: one ends the row, the other is a blank row as tall as the body face's natural row height.
 **Fix:** start the next row at an exact y: `ui.advance_cursor_after_rect(Rect::from_min_size(pos2(ui.max_rect().left(), ui.min_rect().bottom() + gap), Vec2::ZERO))`, then `ui.set_row_height(0.0)`. A rect that misses the cursor's row starts a new row at its own height, and an empty rect always misses. Measuring from `min_rect().bottom()` makes the gap independent of what the row that ended contained.
 **Gotchas:** `ui.next_widget_position()` is the *bottom* of the cursor's row under `Align::BOTTOM`, which is why the old blank row and the recorded split points agreed. Decide a gap when the block *ends* (peek the next event), not when the next one starts, or a viewport slice that resumes at the next block has to know what came before it.
-**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/elements.rs` (`start_row_below`), `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`block_end`, `rhythm_gap_after`), `docs/devlog/071-reader-blocks.md`
+**Files:** `vendor/egui_commonmark/egui_commonmark_backend/src/elements.rs` (`start_row_below`), `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs` (`block_end`, `rhythm_gap_after`), `docs/devlog/074-reader-blocks.md`
 
 ### A child ui placed in a row sits at the row's bottom
 

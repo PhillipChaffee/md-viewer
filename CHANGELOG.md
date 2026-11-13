@@ -2,6 +2,40 @@
 
 All notable changes to markdown-viewer will be documented in this file.
 
+## [Unreleased]
+
+The viewer became a reader. The window is one sheet of paper with a centered column of serif text, and the code underneath runs under the full-lint Rust gates.
+
+### Features
+
+- **Four reading themes: Paper, Sepia, Dusk and Night.** One palette per theme owns every color the app paints, and body text reaches 7:1 contrast on each. Sepia is the default on a fresh install; `Ctrl+D` steps through them and the **Aa** popover picks one by swatch. A session saved by an older version comes back as Dusk if it was dark and Paper if it was light.
+
+- **A text column you can set to any width.** Drag either edge of the column (a hairline and a resize cursor mark it, and a pill shows the width while you drag), use the slider in the **Aa** popover, or press `Ctrl+Alt+←/→`. The column stays centered, runs from 280 px to the whole window, and is remembered. Double-click an edge to go back to 680 px.
+
+- **Reader typography.** Documents are set in bundled Source Serif 4 (regular, true italic, semibold, bold) at a 1.6 line height, with a small `file-name · N min read` line above the title. Line spacing has three steps. The other font presets still work.
+
+- **A quiet top bar.** The menu bar, path readout and LIVE badge are replaced by one hairline-ruled row: sidebar toggle, back and forward on the left, the document title in the middle, **Aa**, find, contents and **⋯** on the right. Everything the File, Navigate and View menus offered is in **⋯**. The tab strip appears only with two or more documents.
+
+- **Diagrams and formulas follow the page.** Mermaid diagrams are redrawn in the theme's colors on a transparent ground, and LaTeX formulas are transparent ink, so neither sits in a white or page-colored box. A diagram wider than the column may use the room beside it instead of shrinking until its labels cannot be read.
+
+- **Typeset blocks.** Tables have no box and no grid, only hairlines between rows, and honor the column alignment the markdown asks for. Task items show one drawn box, lists hang their markers in the margin, tight lists stay tight, and paragraphs, headings, quotes and display math have their own spacing.
+
+- **Sidebars and a home page.** The explorer and contents sidebars are frameless, and the contents list marks the heading being read. With no document open, the home page lists what was read recently: title, folder, reading time and the opening lines.
+
+### Fixes
+
+- **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
+- **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
+- **Live reload switched itself off** when a remote folder was open with no document.
+- **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
+- **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**
+- **A text size restored from a saved session was overwritten at launch.**
+
+### Internals
+
+- **The crate runs under the [full-lint](https://github.com/PhillipChaffee/full-lint) Rust baseline.** `./run-gates.sh` runs 23 gates: clippy's pedantic, nursery and cargo groups as errors, denied rustdoc lints, a cognitive-complexity cap of 15, a 1000-effective-line file cap, 95% coverage on lines, regions and functions, and the dependency and hygiene checks. `src/main.rs` (7384 lines) is now modules of at most a few hundred lines, and no test shares a file with the code it tests.
+- **The vendored forks moved from `crates/` to `vendor/`.**
+
 ## [0.3.0] - 2026-09-13
 
 Fonts got a real settings surface, and wide tables stopped escaping the reading pane.
