@@ -13,6 +13,7 @@ use crate::app::action::AppAction;
 use crate::app::tests::Harness;
 use crate::app::MarkdownApp;
 use crate::explorer::{FileExplorer, FileTreeNode, SortOrder};
+use crate::test_support::evaluate_log_arguments;
 use crate::watcher::{Backend, FileWatcher, WatchPlan, Watched, MAX_WATCHER_RETRIES};
 
 impl MarkdownApp {
@@ -52,9 +53,8 @@ fn run_until(harness: &mut Harness, what: &str, done: impl Fn(&Harness) -> bool)
 
 /// The app on `docs`, with live reload off.
 fn open(docs: &[(&str, &str)]) -> Harness {
-    // Format log arguments as a run with `RUST_LOG` set does, so one that
-    // panics fails a test.
-    log::set_max_level(log::LevelFilter::Trace);
+    // A log argument that panics fails a test.
+    evaluate_log_arguments();
     Harness::with_docs(docs)
 }
 
