@@ -34,7 +34,7 @@ src/app/startup/mod.rs	restored_active_tab_names_an_open_tab	saved.unwrap_or(0).
 src/persist/mod.rs	restored_zoom_is_in_range	saved.unwrap_or(1.0).clamp(ZOOM_MIN, ZOOM_MAX)	saved.unwrap_or(1.0).clamp(ZOOM_MIN, 30.0)
 src/persist/mod.rs	restored_math_scale_is_in_range	saved.unwrap_or(1.0).clamp(MATH_SCALE_MIN, MATH_SCALE_MAX)	saved.unwrap_or(0.5).max(MATH_SCALE_MIN)
 src/tab/mod.rs	back_and_forward_undo_each_other	    from.pop();\n	
-src/tab/mod.rs	a_step_back_moves_exactly_one_entry	    to.push(left);\n	    to.insert(0, left);\n
+src/tab/mod.rs	a_step_back_moves_exactly_one_entry	    to.push(left);\n	    to.push(left);\n    to.reverse();\n
 src/tab/mod.rs	a_visit_can_be_undone_and_clears_forward	    forward.clear();\n	
 src/tab/mod.rs	reading_minutes_never_overflow	words.div_ceil(WORDS_PER_MINUTE).max(1)	words.div_ceil(WORDS_PER_MINUTE)
 src/tab/mod.rs	reading_minutes_round_up	words.div_ceil(WORDS_PER_MINUTE).max(1)	(words / WORDS_PER_MINUTE).max(1)
