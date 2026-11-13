@@ -153,9 +153,36 @@ impl MarkdownApp {
         }
     }
 
+    /// Follow a link the reader clicked in the active document: a plain
+    /// click shows its target in place, and `in_new_tab` gives the target
+    /// a tab of its own.
+    pub(crate) fn follow_link(&mut self, link: &str, in_new_tab: bool) {
+        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+            return;
+        };
+        let followed = if in_new_tab {
+            tab.link_target(link)
+        } else {
+            let from = tab.path.clone();
+            let followed = tab.navigate_to_link(link).map(|_| None);
+            // A link to a heading of this document moves no tab.
+            if tab.path != from {
+                self.active_tab_navigated();
+            }
+            followed
+        };
+        match followed {
+            Ok(Some((path, fragment))) => {
+                self.open_in_new_tab_with_fragment(path, fragment.as_deref());
+            }
+            Ok(None) => {}
+            Err(error) => self.error_message = Some(format!("Unable to open {link}: {error}")),
+        }
+    }
+
     /// The active tab moved to another document: it is the most recent
     /// one, and what mirrors the tabs follows.
-    pub(crate) fn active_tab_navigated(&mut self) {
+    fn active_tab_navigated(&mut self) {
         if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
             self.record_recent(&path);
         }

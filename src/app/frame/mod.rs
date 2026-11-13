@@ -1,6 +1,5 @@
 //! The eframe integration: input hook, persistence, and the per-frame update sequence.
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use eframe::egui;
@@ -241,24 +240,12 @@ impl MarkdownApp {
         self.render_outline(ctx);
 
         // Main content area
-        let mut open_in_new_tab: Option<(PathBuf, Option<String>)> = None;
-        let path_before_render = self.tabs.get(self.active_tab).map(|tab| tab.path.clone());
-        egui::CentralPanel::default()
+        let clicked_link = egui::CentralPanel::default()
             .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::ZERO))
-            .show(ctx, |ui| {
-                open_in_new_tab = self.render_tab_content(ui, ctrl_held);
-            });
-
-        // A primary-clicked document link navigates inside Tab while it is
-        // rendered. Synchronize the app-level state that depends on tab paths.
-        let path_after_render = self.tabs.get(self.active_tab).map(|tab| tab.path.clone());
-        if path_after_render != path_before_render {
-            self.active_tab_navigated();
-        }
-
-        // Open link in new tab if requested
-        if let Some((path, fragment)) = open_in_new_tab {
-            self.open_in_new_tab_with_fragment(path, fragment.as_deref());
+            .show(ctx, |ui| self.render_tab_content(ui))
+            .inner;
+        if let Some(link) = clicked_link {
+            self.follow_link(&link, ctrl_held);
         }
     }
 

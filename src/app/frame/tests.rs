@@ -398,6 +398,30 @@ fn a_ctrl_clicked_link_opens_its_target_in_a_new_tab_at_the_anchor() {
     assert_eq!(harness.app().tabs[0].path, harness.path("a.md"));
 }
 
+#[test]
+fn a_document_opened_from_the_home_page_is_recorded_and_searched() {
+    let mut harness = UiHarness::with_docs(&[
+        ("a.md", "# First\n\nA needle and a needle.\n"),
+        ("b.md", "# Second\n"),
+    ]);
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+    let app = harness.app_mut();
+    app.open_in_new_tab(b.clone());
+    app.close_active_tab();
+    app.close_active_tab();
+    app.open_search();
+    app.search.query = "needle".to_owned();
+    harness.settle();
+    assert_eq!(harness.app().recent_files[0].path, b);
+
+    harness.click("First");
+
+    assert_eq!(harness.active_path(), a);
+    assert_eq!(harness.app().recent_files[0].path, a);
+    assert_eq!(harness.app().tabs[0].search_matches.len(), 2);
+    assert!(harness.shows("1 / 2"));
+}
+
 /// A 64 by 48 picture.
 const PICTURE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48">
 <rect width="64" height="48" fill="#285ac8"/>

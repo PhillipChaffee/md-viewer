@@ -14,7 +14,7 @@ use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
-use crate::tab::{LinkTarget, Tab};
+use crate::tab::Tab;
 
 mod column;
 pub(crate) mod look;
@@ -47,13 +47,9 @@ struct PreviewSettings<'look> {
 }
 
 impl MarkdownApp {
-    /// Render the active tab's content. Returns a path and optional
-    /// `#fragment` when the renderer hook requests it be opened in a new tab.
-    pub(crate) fn render_tab_content(
-        &mut self,
-        ui: &mut egui::Ui,
-        ctrl_held: bool,
-    ) -> Option<LinkTarget> {
+    /// Render the active tab's content. Returns the link the reader clicked
+    /// in it this frame, for the caller to follow.
+    pub(crate) fn render_tab_content(&mut self, ui: &mut egui::Ui) -> Option<String> {
         // Snapshot search state before taking a mutable borrow on the active tab
         let search_is_open = self.search.is_open;
         let active_idx = self.search.active_match_index;
@@ -128,7 +124,7 @@ impl MarkdownApp {
                 }
             });
 
-        let open_in_new_tab = follow_clicked_link(tab, ctrl_held, &mut self.error_message);
+        let clicked_link = tab.check_link_hooks();
         if edited {
             // The find bar's matches are of the text before the edit. They
             // are found again next frame and counted in the one after.
@@ -139,28 +135,8 @@ impl MarkdownApp {
         if let Some(width) = requested_width {
             self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width));
         }
-        open_in_new_tab
+        clicked_link
     }
-}
-
-/// Act on the link the renderer reported clicked this frame, if any: a
-/// plain click navigates `tab`, and the path of a Ctrl+click is returned
-/// for the caller to open in a new tab.
-fn follow_clicked_link(
-    tab: &mut Tab,
-    ctrl_held: bool,
-    error_message: &mut Option<String>,
-) -> Option<LinkTarget> {
-    let link = tab.check_link_hooks()?;
-    let followed = if ctrl_held {
-        tab.link_target(&link)
-    } else {
-        tab.navigate_to_link(&link).map(|_| None)
-    };
-    followed.unwrap_or_else(|error| {
-        *error_message = Some(format!("Unable to open {link}: {error}"));
-        None
-    })
 }
 
 /// Hands the find bar's matches to the renderer, which paints the highlights.
