@@ -324,8 +324,8 @@ fn nested_files_are_indented_under_their_folder() {
         text.unwrap()
     };
 
-    assert_close(left("c.md") - left("b.md"), INDENT);
-    assert_close(left("d.md") - left("c.md"), INDENT);
+    assert_close(left("c.md") - left("b.md"), sidebar::INDENT);
+    assert_close(left("d.md") - left("c.md"), sidebar::INDENT);
     // A file's name lines up with the folder's beside it.
     assert_close(left("sub"), left("b.md"));
 }

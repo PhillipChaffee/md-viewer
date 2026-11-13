@@ -237,7 +237,7 @@ fn subheadings_are_indented_under_their_heading() {
     let harness = outline_of(&guide());
     let left = |title| ink_and_left(&harness, title).1;
 
-    assert_close(left("Alpha One") - left("Alpha"), INDENT);
+    assert_close(left("Alpha One") - left("Alpha"), sidebar::INDENT);
     assert_close(left("Beta"), left("Alpha"));
     assert_close(left("Guide"), left("Alpha"));
 }

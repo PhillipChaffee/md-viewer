@@ -20,9 +20,6 @@ mod proofs;
 #[cfg(test)]
 mod tests;
 
-/// How far each level of the tree is pushed right of the one above it.
-const INDENT: f32 = 14.0;
-
 /// What a pick from the explorer's menu asks for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MenuPick {
@@ -298,7 +295,7 @@ struct TreeRow<'a> {
 
 impl TreeRow<'_> {
     fn indent(&self) -> f32 {
-        f32::from(self.depth) * INDENT
+        f32::from(self.depth) * sidebar::INDENT
     }
 }
 

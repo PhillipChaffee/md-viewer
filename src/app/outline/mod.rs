@@ -18,8 +18,6 @@ mod spy;
 #[cfg(test)]
 mod tests;
 
-/// How far each heading level is pushed right of the one above it.
-const INDENT: f32 = 14.0;
 /// How far the fold control reaches past its chevron on each side.
 const FOLD_REACH: f32 = 3.0;
 
@@ -256,7 +254,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
     let shown = Row {
         text: &row.header.title,
         // Indent based on header level (h2 = 0, h3 = 1 indent, etc.)
-        indent: f32::from(row.header.level.saturating_sub(2)) * INDENT,
+        indent: f32::from(row.header.level.saturating_sub(2)) * sidebar::INDENT,
         current: outline.current == Some(row.index),
         chevron: row.chevron,
     };

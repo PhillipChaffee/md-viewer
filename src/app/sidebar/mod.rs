@@ -17,6 +17,9 @@ const ROW_TEXT_SIZE: f32 = 13.0;
 pub(super) const RADIUS: f32 = 6.0;
 /// Space between a row's edge and what it shows.
 const ROW_INSET: f32 = 8.0;
+/// How far each level of a nested listing is pushed right of the one above
+/// it.
+pub(super) const INDENT: f32 = 14.0;
 /// Width of the column a row's chevron sits in.
 const CHEVRON_SLOT: f32 = 16.0;
 /// Space between a chevron and the row's text.
