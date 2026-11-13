@@ -1,25 +1,18 @@
 //! Live reload: watcher lifecycle, change polling, and tab reloads.
 
 use std::collections::HashSet;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use notify::{PollWatcher, RecommendedWatcher};
-use notify_debouncer_mini::{new_debouncer, new_debouncer_opt, DebounceEventResult, Debouncer};
+use notify_debouncer_mini::DebounceEventResult;
 
 use crate::app::MarkdownApp;
 use crate::watcher::{
     ancestors_within, explorer_watch_dirs, listing_to_refresh, needs_backend_restart,
-    next_watcher_retry, settled_paths, watch_diff, watch_path, FileWatcher, WatchPlan,
+    next_watcher_retry, settled_paths, watch_diff, FileWatcher, WatchPlan, Watched,
     MAX_WATCHER_RETRIES,
 };
-
-/// Quiet time after the last write before a change is reported.
-const DEBOUNCE: Duration = Duration::from_millis(200);
-/// How often GVFS documents are checked. Each check is a remote round trip.
-const GVFS_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 impl MarkdownApp {
     /// Start watching because of a user action or configuration change.
@@ -36,40 +29,15 @@ impl MarkdownApp {
             return;
         };
 
-        // Both debouncers send to the same channel
-        let (tx, debouncer_rx) = mpsc::channel();
-        let inotify = plan
-            .needs_inotify()
-            .then(|| self.start_inotify(&plan, tx.clone()))
-            .flatten();
-        let poll = plan
-            .needs_poll()
-            .then(|| self.start_poll(&plan, tx))
-            .flatten();
-
-        let Some(watcher) = FileWatcher::from_backends(inotify, poll) else {
-            log::error!("Failed to create any file watcher");
-            self.error_message = Some("Failed to create file watcher".to_string());
-            return;
+        let (tx, events) = mpsc::channel();
+        let ctx = self.egui_ctx.clone();
+        // Runs on a watcher thread: queue the batch for the UI thread, then
+        // wake egui so an idle window does not have to poll.
+        let on_events = move |batch: DebounceEventResult| {
+            let _ = tx.send(batch);
+            ctx.request_repaint();
         };
-        log::info!(
-            "Started watching {} local (inotify) + {} GVFS (poll) files, {} explorer dirs",
-            plan.local_files.len(),
-            plan.gvfs_files.len(),
-            self.watched_explorer_dirs.len()
-        );
-
-        match self.spawn_bridge(debouncer_rx) {
-            Ok(bridge_rx) => {
-                self.watcher = Some(watcher);
-                self.watcher_rx = Some(bridge_rx);
-                self.watch_enabled = true;
-            }
-            Err(error) => {
-                log::error!("Failed to spawn watcher bridge thread: {error}");
-                self.error_message = Some(format!("Failed to start file watcher bridge: {error}"));
-            }
-        }
+        self.adopt_watcher(FileWatcher::start(&plan, on_events), events);
     }
 
     /// What a fresh start registers, or `None` when no document is open and
@@ -88,69 +56,25 @@ impl MarkdownApp {
         ))
     }
 
-    /// Starts the inotify backend and records which of the plan's local paths
-    /// it accepted.
-    fn start_inotify(
+    /// Puts a freshly started watcher into use, with the channel its events
+    /// arrive on, or reports that no backend could start.
+    fn adopt_watcher(
         &mut self,
-        plan: &WatchPlan,
-        tx: Sender<DebounceEventResult>,
-    ) -> Option<Debouncer<RecommendedWatcher>> {
-        let mut debouncer = new_debouncer(DEBOUNCE, tx)
-            .inspect_err(|error| log::error!("Failed to create inotify watcher: {error}"))
-            .ok()?;
-        let watcher = debouncer.watcher();
-        for path in &plan.local_files {
-            if watch_path(watcher, path, "file") {
-                self.watched_paths.insert(path.clone());
-            }
-        }
-        for dir in &plan.explorer_dirs {
-            if watch_path(watcher, dir, "explorer dir") {
-                self.watched_explorer_dirs.insert(dir.clone());
-            }
-        }
-        Some(debouncer)
-    }
-
-    /// Starts the polling backend and records which of the plan's GVFS
-    /// documents it accepted.
-    fn start_poll(
-        &mut self,
-        plan: &WatchPlan,
-        tx: Sender<DebounceEventResult>,
-    ) -> Option<Debouncer<PollWatcher>> {
-        let config = notify_debouncer_mini::Config::default()
-            .with_timeout(DEBOUNCE)
-            .with_notify_config(notify::Config::default().with_poll_interval(GVFS_POLL_INTERVAL));
-        let mut debouncer = new_debouncer_opt::<_, PollWatcher>(config, tx)
-            .inspect_err(|error| log::error!("Failed to create poll watcher: {error}"))
-            .ok()?;
-        let watcher = debouncer.watcher();
-        for path in &plan.gvfs_files {
-            if watch_path(watcher, path, "polled file") {
-                self.watched_paths.insert(path.clone());
-            }
-        }
-        Some(debouncer)
-    }
-
-    /// Forwards debounced events to the channel the UI thread drains and
-    /// wakes egui for each batch, so an idle window does not have to poll.
-    fn spawn_bridge(
-        &self,
-        debouncer_rx: Receiver<DebounceEventResult>,
-    ) -> io::Result<Receiver<DebounceEventResult>> {
-        let (bridge_tx, bridge_rx) = mpsc::channel();
-        let ctx = self.egui_ctx.clone();
-        std::thread::Builder::new()
-            .name("watcher-bridge".into())
-            .spawn(move || {
-                while let Ok(event) = debouncer_rx.recv() {
-                    let _ = bridge_tx.send(event);
-                    ctx.request_repaint();
-                }
-            })?;
-        Ok(bridge_rx)
+        started: Option<(FileWatcher, Watched)>,
+        events: Receiver<DebounceEventResult>,
+    ) {
+        let Some((watcher, accepted)) = started else {
+            log::error!("Failed to create any file watcher");
+            self.error_message = Some("Failed to create file watcher".to_string());
+            return;
+        };
+        let (files, dirs) = (accepted.files.len(), accepted.explorer_dirs.len());
+        log::info!("Started watching {files} files and {dirs} explorer dirs");
+        self.watcher = Some(watcher);
+        self.watcher_rx = Some(events);
+        self.watched_paths = accepted.files;
+        self.watched_explorer_dirs = accepted.explorer_dirs;
+        self.watch_enabled = true;
     }
 
     pub(crate) fn stop_watching(&mut self) {

@@ -5,15 +5,23 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use notify::{PollWatcher, RecommendedWatcher, RecursiveMode};
-use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind, Debouncer};
+use notify_debouncer_mini::{
+    new_debouncer, new_debouncer_opt, DebounceEventHandler, DebouncedEvent, DebouncedEventKind,
+    Debouncer,
+};
 
 #[cfg(test)]
 mod tests;
 
 pub(crate) const MAX_WATCHER_RETRIES: u32 = 3;
 pub(crate) const FLASH_DURATION_MS: u64 = 600;
+/// Quiet time after the last write before a change is reported.
+const DEBOUNCE: Duration = Duration::from_millis(200);
+/// How often GVFS documents are checked. Each check is a remote round trip.
+const GVFS_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 pub(crate) fn next_watcher_retry(current: u32) -> Option<u32> {
     (current < MAX_WATCHER_RETRIES).then(|| current + 1)
@@ -166,7 +174,7 @@ pub(crate) fn listing_to_refresh<'a>(changed: &'a Path, root: &Path) -> Option<&
 
 /// Registers `path` non-recursively. A refusal is logged, naming the path as
 /// a `what`, and reported as `false`.
-pub(crate) fn watch_path(watcher: &mut dyn notify::Watcher, path: &Path, what: &str) -> bool {
+fn watch_path(watcher: &mut dyn notify::Watcher, path: &Path, what: &str) -> bool {
     match watcher.watch(path, RecursiveMode::NonRecursive) {
         Ok(()) => true,
         Err(error) => {
@@ -174,6 +182,75 @@ pub(crate) fn watch_path(watcher: &mut dyn notify::Watcher, path: &Path, what: &
             false
         }
     }
+}
+
+/// Registers each of `paths`, yielding the ones the watcher accepted.
+fn watch_all<'a>(
+    watcher: &'a mut dyn notify::Watcher,
+    paths: &'a [PathBuf],
+    what: &'a str,
+) -> impl Iterator<Item = PathBuf> + 'a {
+    paths
+        .iter()
+        .filter(move |path| watch_path(watcher, path, what))
+        .cloned()
+}
+
+/// The backend that was `created`, or `None` after logging why the backend
+/// named `what` could not start.
+fn started<W: notify::Watcher>(
+    created: notify::Result<Debouncer<W>>,
+    what: &str,
+) -> Option<Debouncer<W>> {
+    created
+        .inspect_err(|error| log::error!("Failed to create {what} watcher: {error}"))
+        .ok()
+}
+
+/// Starts the inotify backend and records in `accepted` which of the plan's
+/// local paths it accepted.
+fn start_inotify(
+    plan: &WatchPlan,
+    on_events: impl DebounceEventHandler,
+    accepted: &mut Watched,
+) -> Option<Debouncer<RecommendedWatcher>> {
+    let mut debouncer = started(new_debouncer(DEBOUNCE, on_events), "inotify")?;
+    let watcher = debouncer.watcher();
+    accepted
+        .files
+        .extend(watch_all(watcher, &plan.local_files, "file"));
+    accepted
+        .explorer_dirs
+        .extend(watch_all(watcher, &plan.explorer_dirs, "explorer dir"));
+    Some(debouncer)
+}
+
+/// Starts the polling backend and records in `accepted` which of the plan's
+/// GVFS documents it accepted.
+fn start_poll(
+    plan: &WatchPlan,
+    on_events: impl DebounceEventHandler,
+    accepted: &mut Watched,
+) -> Option<Debouncer<PollWatcher>> {
+    let config = notify_debouncer_mini::Config::default()
+        .with_timeout(DEBOUNCE)
+        .with_notify_config(notify::Config::default().with_poll_interval(GVFS_POLL_INTERVAL));
+    let created = new_debouncer_opt::<_, PollWatcher>(config, on_events);
+    let mut debouncer = started(created, "poll")?;
+    let watcher = debouncer.watcher();
+    accepted
+        .files
+        .extend(watch_all(watcher, &plan.gvfs_files, "polled file"));
+    Some(debouncer)
+}
+
+/// The paths a watcher start registered with its backends.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Watched {
+    /// Open documents, local and GVFS.
+    pub(crate) files: HashSet<PathBuf>,
+    /// Explorer directories.
+    pub(crate) explorer_dirs: HashSet<PathBuf>,
 }
 
 /// Wrapper for file watchers that supports both inotify (local) and poll (GVFS/remote).
@@ -187,8 +264,30 @@ pub(crate) enum FileWatcher {
 }
 
 impl FileWatcher {
+    /// Starts the backends `plan` has paths for and registers those paths
+    /// non-recursively. `on_events` runs on a watcher thread with each
+    /// debounced batch of changes, or with the error that stopped a backend.
+    ///
+    /// Returns the watcher with the paths its backends accepted, or `None`
+    /// when no backend could start.
+    pub(crate) fn start(
+        plan: &WatchPlan,
+        on_events: impl DebounceEventHandler + Clone,
+    ) -> Option<(Self, Watched)> {
+        let mut accepted = Watched::default();
+        let inotify = plan
+            .needs_inotify()
+            .then(|| start_inotify(plan, on_events.clone(), &mut accepted))
+            .flatten();
+        let poll = plan
+            .needs_poll()
+            .then(|| start_poll(plan, on_events, &mut accepted))
+            .flatten();
+        Self::from_backends(inotify, poll).map(|watcher| (watcher, accepted))
+    }
+
     /// Wraps whichever backends started; `None` when neither did.
-    pub(crate) fn from_backends(
+    fn from_backends(
         inotify: Option<Debouncer<RecommendedWatcher>>,
         poll: Option<Debouncer<PollWatcher>>,
     ) -> Option<Self> {
