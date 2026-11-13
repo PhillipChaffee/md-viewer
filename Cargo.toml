@@ -159,3 +159,6 @@ codegen-units = 4
 epaint = { path = "vendor/epaint", version = "0.33.3" }
 egui_commonmark_extended = { path = "vendor/egui_commonmark/egui_commonmark", version = "0.28.3" }
 egui_commonmark_backend_extended = { path = "vendor/egui_commonmark/egui_commonmark_backend", version = "0.28.3" }
+
+[dev-dependencies]
+egui_kittest = { version = "0.33.3", default-features = false, features = ["eframe"] }

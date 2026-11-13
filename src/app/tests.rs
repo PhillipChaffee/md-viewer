@@ -25,9 +25,9 @@ const CTRL_SHIFT: Modifiers = Modifiers {
 /// frame at a time without a window.
 pub(crate) struct Harness {
     pub(crate) app: MarkdownApp,
-    ctx: egui::Context,
-    frame: eframe::Frame,
-    dir: PathBuf,
+    pub(crate) ctx: egui::Context,
+    pub(crate) frame: eframe::Frame,
+    pub(crate) dir: PathBuf,
 }
 
 impl Harness {
