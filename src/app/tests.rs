@@ -2,7 +2,6 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use eframe::egui::{self, Key, Modifiers};
 use eframe::App as _;
@@ -11,10 +10,8 @@ use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
-use crate::test_support::assert_close;
+use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
-
-static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
 
 const CTRL_SHIFT: Modifiers = Modifiers {
     alt: false,
@@ -31,21 +28,18 @@ pub(crate) struct Harness {
     pub(crate) ctx: egui::Context,
     pub(crate) frame: eframe::Frame,
     pub(crate) dir: PathBuf,
+    /// Removes `dir` when the harness is dropped.
+    _scratch: ScratchDir,
 }
 
 impl Harness {
     /// Write each `(name, content)` document and start the app on the first
     /// one, the way `md-viewer <file>` does. File watching starts off.
     pub(crate) fn with_docs(docs: &[(&str, &str)]) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "md-viewer-app-test-{}-{}",
-            std::process::id(),
-            NEXT_SCRATCH_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        let dir = dir.canonicalize().unwrap();
+        let scratch = ScratchDir::new();
+        let dir = scratch.path().to_path_buf();
         for (name, content) in docs {
-            fs::write(dir.join(name), content).unwrap();
+            scratch.file(name, content);
         }
         let first = docs.first().map(|(name, _)| dir.join(name));
 
@@ -56,6 +50,7 @@ impl Harness {
             ctx,
             frame: eframe::Frame::_new_kittest(),
             dir,
+            _scratch: scratch,
         }
     }
 
@@ -109,12 +104,6 @@ impl Harness {
         self.app.raw_input_hook(&self.ctx, &mut raw_input);
         let (app, frame) = (&mut self.app, &mut self.frame);
         self.ctx.run(raw_input, |ctx| app.update(ctx, frame))
-    }
-}
-
-impl Drop for Harness {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.dir);
     }
 }
 
