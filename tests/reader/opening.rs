@@ -59,11 +59,7 @@ fn a_missing_file_opens_the_home_page_and_says_why() {
     reader.assert_sees("md-viewer");
 }
 
-/// Known bug, listed in `tests/README.md`: the file is put on the recently
-/// read list although it was never opened. This test states the right
-/// behavior and is expected to fail until the app has it.
 #[test]
-#[should_panic(expected = "a file that was never read is listed as read")]
 fn a_file_that_could_not_be_opened_is_not_listed_as_read() {
     let reader = Reader::launch().args(&["absent.md"]).open();
 

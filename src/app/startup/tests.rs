@@ -99,6 +99,10 @@ fn a_file_that_cannot_be_read_leaves_the_welcome_page_and_says_why() {
         message.contains(&missing.display().to_string()),
         "the message names the file: {message}"
     );
+    assert!(
+        app.recent_files.is_empty(),
+        "a file that never opened was not read"
+    );
 }
 
 #[test]

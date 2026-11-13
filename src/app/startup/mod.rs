@@ -357,7 +357,8 @@ impl MarkdownApp {
 
         // Record a CLI-provided file as recent (an explicit open). Session-restored
         // tabs are not treated as explicit opens, so they are not recorded here.
-        if let Some(file) = file {
+        // A file that did not open left no tab, and was never read.
+        if let Some(file) = file.filter(|_| !self.tabs.is_empty()) {
             let file = file.canonicalize().unwrap_or(file);
             self.record_recent(&file);
         }
