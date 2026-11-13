@@ -7,7 +7,10 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 - **MarkdownApp**: Main struct implementing `eframe::App`. Holds:
   - `tabs: Vec<Tab>` - list of open tabs
   - `active_tab: usize` - index of the currently active tab
-  - `dark_mode: bool` - global theme setting
+  - `theme: ThemeId` - the reading theme (Paper, Sepia, Dusk, Night); its palette is every color the app paints
+  - `reading_width: ReadingWidth` - width of the centered text column
+  - `line_spacing: LineSpacing` - body line height (Compact 1.45, Comfortable 1.6, Airy 1.8)
+  - `document_look: DocumentLook` - the document pane's fonts and block styling, rebuilt when the theme or the fonts change
   - `zoom_level: f32` - global zoom (0.5 to 3.0)
   - `show_outline: bool` - toggle outline sidebar visibility
   - `show_explorer: bool` - toggle file explorer visibility
@@ -31,7 +34,9 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
   - `history_back`, `history_forward: Vec<PathBuf>` - per-tab navigation history
 
 - **PersistedState**: Serializable struct for session persistence:
-  - `dark_mode: Option<bool>`
+  - `theme: Option<ThemeId>` (`dark_mode: Option<bool>` is still read from sessions saved before the themes: dark maps to Dusk, light to Paper)
+  - `reading_width: Option<f32>` (`full_width_content: Option<bool>` is still read from older sessions: `true` maps to fit-window)
+  - `line_spacing: Option<LineSpacing>`
   - `zoom_level: Option<f32>`
   - `show_outline: Option<bool>`
   - `show_explorer: Option<bool>` - file explorer visibility
@@ -63,6 +68,12 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 - **Keyboard document scrolling**: Plain document scroll keys are handled in `MarkdownApp::update` after mode-specific shortcuts are checked. `KeyboardScrollAction` maps Up/Down to fixed line steps and Page Up/Page Down to viewport-relative page steps through `keyboard_scroll_target`, which clamps against the active tab's `last_content_height`. The chosen target is assigned to the tab's `pending_scroll_offset`, so keyboard scrolling uses the same renderer-owned `ScrollArea` pipeline as outline and search jumps. Arrow keys are reserved for search-result navigation while the find bar is open, and document scrolling ignores Ctrl/Alt/Command-modified keypresses so it does not steal existing shortcuts.
 
 - **Wide table scrolling**: Wide markdown / HTML tables are wrapped in a nested `egui::ScrollArea::horizontal()` so columns wider than the content area can still be reached. Plain vertical wheel stays with the outer document scroller; table horizontal movement uses the bottom scrollbar, native horizontal input, or `Shift+vertical-wheel` (routed via `forward_shift_wheel_to_horizontal_scroll` in `vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs`) so the cursor crossing a wide table during normal scrolling does not change its horizontal offset.
+
+- **Themes**: `src/theme/` owns every color. `ThemeId::palette()` returns a `Palette` (page, surface, raised, text, heading, muted, rule, link, selection, accent, positive, warning, and the syntect theme for code). `theme::visuals(palette, overrides)` is the one function that turns a palette and the user's highlight/link overrides into `egui::Visuals`; `apply_theme` calls it when the theme or an override changes. Chrome code reads `self.theme.palette()` or `ui.visuals()` and never names a color. A test asserts body text and headings reach 7:1 contrast on every surface of every theme.
+
+- **Reading column**: `layout::ReadingWidth` is the text column's width in px (280 to 4000, default 680; 4000 means fit the window). `resolve(pane_width)` gives the column actually used, which keeps a `READING_COLUMN_MARGIN` on each side. The renderer centers the column (`BlockStyle::center_content`) and tables, code blocks and images keep to it. `src/app/content/column/` lays a resize strip in the margin beside each edge: hover shows a hairline and the resize cursor, a drag moves both edges about the pane center, a double click resets, and a pill shows the width while dragging. `Ctrl+Alt+←/→` step by 40 px. All of them end in `AppAction::SetReadingWidth` or `StepReadingWidth`.
+
+- **Document look**: the document is laid out in its own fonts, the chrome around it in the system sans. `system_fonts::document_fonts(family, preset, size)` names them; `setup_fonts` registers the families they refer to (`MarkdownBody`, `MarkdownStrong`, `MarkdownHeading`, `MarkdownEmphasis`) for every preset. The default **Reader** preset leads those families with the bundled Source Serif 4 faces (`src/system_fonts/bundled/`, compiled in from `assets/fonts/`). `DocumentLook` (`src/app/content/look/`) holds the resulting `egui::Style` and the renderer's `BlockStyle` (heading and italic families, code block box, blockquote bar, task marker, short rules); it is built in `begin_frame` only when the theme or the font configuration changed, and `preview_pane` hands it to the renderer every frame without allocating. A `muted` meta line (`file-name · N min read`, computed in `Tab` when content loads) is painted through the renderer's `preamble` hook so it scrolls with the document.
 
 - **Global Allocator**: mimalloc for performance
 

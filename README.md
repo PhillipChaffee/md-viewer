@@ -57,9 +57,10 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 
 ### View
 
-- **Dark & Light Themes** - Toggle with Ctrl+D
+- **Four Reading Themes** - Paper, Sepia, Dusk and Night; step through them with Ctrl+D or pick one in View → Theme
 - **Zoom** - 50% to 300% zoom (Ctrl++/-/0 or Ctrl+Scroll)
-- **Full Width** - Toggle between the reading-width column and the full content pane; prose and tables follow it together
+- **Resizable Text Column** - The text sits in a centered column: drag either edge to any width, step it with Ctrl+Alt+←/→, or switch to Full Width; prose, tables and code follow it together
+- **Reader Typography** - Documents are set in the bundled Source Serif 4 by default, with three line spacings; the other font presets and any installed family remain a click away
 - **Formula Size** - Scale rendered math from 100% to 150% (View → Formula Size), independent of UI zoom
 - **Keyboard Scrolling** - Scroll documents with ↑/↓ by line or Page Up/Page Down by page when the find bar is closed
 - **Live Reload** - Auto-refresh on file changes (enabled by default)
@@ -120,7 +121,8 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 
 | Shortcut | Action |
 | ---------- | -------- |
-| Ctrl+D | Toggle dark/light mode |
+| Ctrl+D | Next theme |
+| Ctrl+Alt+← / Ctrl+Alt+→ | Narrow / widen the text column |
 | Ctrl+Shift+E | Toggle file explorer |
 | Ctrl+Shift+O | Toggle outline sidebar |
 | Ctrl++ / Ctrl+= | Zoom in |
