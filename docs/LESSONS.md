@@ -378,6 +378,13 @@ if let Some(idx) = tab_to_close {
 
 **Files:** `src/main.rs`
 
+### A menu that mixes buttons and radio buttons has two text sizes
+
+**Context:** The explorer's "⋯" menu lists three actions and four sort orders.
+**Problem:** `ui.button` falls back to `TextStyle::Button` for its text (`egui-0.33.3 widgets/button.rs:45`) and `ui.radio` does not, so it takes the body style. The body style follows the reader's text size here, and the sort orders came out visibly larger than the actions above them.
+**Fix:** set `ui.style_mut().override_font_id` at the top of the menu closure; both widgets then take that font.
+**Files:** `src/app/sidebar/mod.rs` (`menu_text`)
+
 ### ui.close() replaces ui.close_menu()
 
 **Context:** Closing context menus in egui 0.33
