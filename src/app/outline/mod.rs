@@ -6,7 +6,7 @@ use egui_commonmark_extended::header_position_key;
 use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
-use crate::headers::Header;
+use crate::headers::{Header, Outline};
 use crate::icons::paint_sidebar_resize_affordance;
 use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
 use crate::tab::Tab;
@@ -57,47 +57,28 @@ struct OutlineUi<'a> {
     mcp: &'a Mcp,
 }
 
-/// The fold column of one outline row.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Fold {
-    /// No header in the document has children, so there is no column.
-    NoColumn,
-    /// The column is reserved to keep titles aligned, but this row is a leaf.
-    Leaf,
-    Collapsed,
-    Expanded,
+/// The fold column of the row for the heading at `index`. There is none
+/// where no heading in the document has children; otherwise a heading
+/// without children keeps the column blank so that the titles align.
+fn chevron_of(outline: &Outline, index: usize) -> Chevron {
+    if !outline.has_folds() {
+        Chevron::None
+    } else if !outline.has_children(index) {
+        Chevron::Blank
+    } else if outline.is_collapsed(index) {
+        Chevron::Closed
+    } else {
+        Chevron::Open
+    }
 }
 
-impl Fold {
-    fn of(tab: &Tab, index: usize, show_column: bool) -> Self {
-        if !show_column {
-            Self::NoColumn
-        } else if !tab.outline.has_children(index) {
-            Self::Leaf
-        } else if tab.outline.is_collapsed(index) {
-            Self::Collapsed
-        } else {
-            Self::Expanded
-        }
-    }
-
-    const fn chevron(self) -> Chevron {
-        match self {
-            Self::NoColumn => Chevron::None,
-            Self::Leaf => Chevron::Blank,
-            Self::Collapsed => Chevron::Closed,
-            Self::Expanded => Chevron::Open,
-        }
-    }
-
-    /// What a click on the fold control does, for a screen reader. `None`
-    /// for a row with nothing to fold.
-    const fn verb(self) -> Option<&'static str> {
-        match self {
-            Self::Collapsed => Some("Expand"),
-            Self::Expanded => Some("Collapse"),
-            Self::NoColumn | Self::Leaf => None,
-        }
+/// What a click on a row's fold control does, for a screen reader. `None`
+/// for a row with nothing to fold.
+const fn fold_verb(chevron: Chevron) -> Option<&'static str> {
+    match chevron {
+        Chevron::Closed => Some("Expand"),
+        Chevron::Open => Some("Collapse"),
+        Chevron::None | Chevron::Blank => None,
     }
 }
 
@@ -105,7 +86,7 @@ impl Fold {
 struct OutlineRow<'a> {
     index: usize,
     header: &'a Header,
-    fold: Fold,
+    chevron: Chevron,
 }
 
 /// Where a click on an outline entry scrolls the document.
@@ -259,7 +240,6 @@ fn row_top(row: usize) -> f32 {
 /// The scrollable list of headers that no collapsed ancestor hides.
 fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     let visible_indices = tab.outline.visible();
-    let show_fold_column = tab.outline.has_folds();
 
     // Rows touch, so that the wash under the pointer never falls between
     // two of them; show_rows adds this spacing to the row height.
@@ -284,7 +264,7 @@ fn outline_rows(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
                     let row = OutlineRow {
                         index,
                         header: &tab.outline.headers()[index],
-                        fold: Fold::of(tab, index, show_fold_column),
+                        chevron: chevron_of(&tab.outline, index),
                     };
                     outline_row(ui, &row, outline);
                 }
@@ -298,7 +278,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
         // Indent based on header level (h2 = 0, h3 = 1 indent, etc.)
         indent: f32::from(row.header.level.saturating_sub(2)) * INDENT,
         current: outline.current == Some(row.index),
-        chevron: row.fold.chevron(),
+        chevron: row.chevron,
     };
     let laid_out = sidebar::row(ui, outline.palette, &shown);
 
@@ -327,7 +307,7 @@ fn fold_control(
     chevron: egui::Rect,
     outline: &mut OutlineUi<'_>,
 ) {
-    let Some(verb) = row.fold.verb() else {
+    let Some(verb) = fold_verb(row.chevron) else {
         return;
     };
     let rect = chevron.expand2(egui::vec2(FOLD_REACH, 0.0));
@@ -343,7 +323,7 @@ fn fold_control(
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
 
-    let state = if row.fold == Fold::Collapsed {
+    let state = if row.chevron == Chevron::Closed {
         "collapsed"
     } else {
         "expanded"
