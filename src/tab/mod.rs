@@ -18,7 +18,7 @@ use crate::search::{find_matches, SearchMatch};
 #[cfg(test)]
 mod tests;
 
-/// Per-tab state for a document
+/// Per-tab state for a document.
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
     pub(crate) path: PathBuf,
@@ -26,7 +26,7 @@ pub(crate) struct Tab {
     pub(crate) cache: CommonMarkCache,
     pub(crate) document_title: Option<String>,
     pub(crate) outline_headers: Vec<Header>,
-    /// Set of header indices that are collapsed in the outline
+    /// Set of header indices that are collapsed in the outline.
     pub(crate) collapsed_headers: HashSet<usize>,
     pub(crate) scroll_offset: f32,
     pub(crate) pending_scroll_offset: Option<f32>,
@@ -38,7 +38,7 @@ pub(crate) struct Tab {
     pub(crate) pending_header_click_key: Option<String>,
     /// One-shot permission for the post-render corrective scroll that snaps
     /// the active search match into view. Set by `scroll_to_active_match`
-    /// (jump_match / search-open / tab-switch / query-rebuild) and cleared
+    /// (`jump_match` / search-open / tab-switch / query-rebuild) and cleared
     /// after the corrective block runs once. Without this gate, the block
     /// would re-fire every frame while `active_search_y` remains populated,
     /// fighting the user's wheel input and locking the view to the active
@@ -48,18 +48,18 @@ pub(crate) struct Tab {
     pub(crate) last_viewport_height: f32,
     pub(crate) content_lines: usize,
     local_links: Vec<String>,
-    /// Cached base URI for markdown image/link resolution (e.g. "file:///path/to/dir/")
+    /// Cached base URI for markdown image/link resolution (e.g. `file:///path/to/dir/`).
     pub(crate) base_uri: String,
     pub(crate) history_back: Vec<PathBuf>,
     pub(crate) history_forward: Vec<PathBuf>,
-    /// Cached matches for the current search query; empty when bar is closed or query is empty
+    /// Cached matches for the current search query; empty when bar is closed or query is empty.
     pub(crate) search_matches: Vec<SearchMatch>,
     /// Monotonic counter bumped on every content load/reload. Used as the
     /// invalidation key for the renderer's per-document scroll cache so
-    /// parsed events and split_points can survive across frames without
+    /// parsed events and `split_points` can survive across frames without
     /// re-hashing the entire content.
     pub(crate) content_version: u64,
-    /// When true, the content area shows a TextEdit instead of CommonMarkViewer.
+    /// When true, the content area shows a `TextEdit` instead of `CommonMarkViewer`.
     pub(crate) is_editing: bool,
     /// Snapshot of the on-disk content at last load/save. The edit buffer is
     /// dirty when `content != saved_content`.
@@ -68,7 +68,7 @@ pub(crate) struct Tab {
     /// (true = success, false = failure).
     pub(crate) save_flash: Option<(bool, Instant)>,
     /// Scroll ratio (0..=1) captured when entering edit mode, applied to the
-    /// editor's ScrollArea on its first frame.
+    /// editor's `ScrollArea` on its first frame.
     pub(crate) pending_edit_scroll: Option<f32>,
     /// View-mode content height captured when entering edit mode; converts
     /// the edit scroll ratio back to an absolute offset when leaving edit.
@@ -76,10 +76,11 @@ pub(crate) struct Tab {
 }
 
 impl Tab {
-    fn compute_base_uri(path: &std::path::Path) -> String {
-        path.parent()
-            .map(|p| format!("file://{}/", p.display()))
-            .unwrap_or_else(|| "file://".to_string())
+    fn compute_base_uri(path: &Path) -> String {
+        path.parent().map_or_else(
+            || "file://".to_string(),
+            |p| format!("file://{}/", p.display()),
+        )
     }
 
     pub(crate) fn new(path: PathBuf) -> io::Result<Self> {
@@ -150,10 +151,10 @@ impl Tab {
     }
 
     pub(crate) fn title(&self) -> String {
-        self.path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "Unknown".to_string())
+        self.path.file_name().map_or_else(
+            || "Unknown".to_string(),
+            |n| n.to_string_lossy().to_string(),
+        )
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {
@@ -274,19 +275,17 @@ impl Tab {
     }
 
     pub(crate) fn check_link_hooks(&self) -> Option<String> {
-        for link in &self.local_links {
-            if let Some(true) = self.cache.get_link_hook(link) {
-                return Some(link.clone());
-            }
-        }
-        None
+        self.local_links
+            .iter()
+            .find(|link| self.cache.get_link_hook(link) == Some(true))
+            .cloned()
     }
 
-    pub(crate) fn can_go_back(&self) -> bool {
+    pub(crate) const fn can_go_back(&self) -> bool {
         !self.history_back.is_empty()
     }
 
-    pub(crate) fn can_go_forward(&self) -> bool {
+    pub(crate) const fn can_go_forward(&self) -> bool {
         !self.history_forward.is_empty()
     }
 
