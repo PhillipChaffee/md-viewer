@@ -124,9 +124,7 @@ impl MarkdownApp {
         self.refresh_open_tab_paths();
 
         // Update watcher if enabled
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 
     pub(crate) fn navigate_active_tab_to(&mut self, path: &Path) {
@@ -173,9 +171,7 @@ impl MarkdownApp {
         // The same tab, another document: what the find bar counted is gone.
         self.search.last_tab = None;
         self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 
     /// Record a file in the recent list (most-recent first, deduped, capped),
@@ -206,9 +202,7 @@ impl MarkdownApp {
         self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
 
         // Update watcher
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 
     pub(crate) fn close_active_tab(&mut self) {
