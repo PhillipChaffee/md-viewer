@@ -575,3 +575,107 @@ fn commonmark_reference_with_encoded_path_is_registered() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn explicit_links_are_collected_for_a_document_path_without_a_folder() {
+    let content = "[guide](guide.md) and [top](#top)";
+    assert_eq!(
+        parse_local_links(content, Path::new("/")),
+        ["#top", "guide.md"]
+    );
+}
+
+/// A colon only ends a URI scheme when what precedes it is shaped like one;
+/// otherwise it is part of a file name.
+#[test]
+fn colon_after_something_that_is_no_scheme_stays_in_the_file_name() {
+    let dir = Path::new("/base/doc");
+    for destination in ["1st:notes.md", "my_notes:draft.md", ":notes.md"] {
+        assert_eq!(explicit_uri_scheme(destination), None, "{destination}");
+        assert_eq!(
+            resolve_local_link_path(destination, dir).unwrap(),
+            Some(dir.join(destination))
+        );
+    }
+    assert_eq!(explicit_uri_scheme("web+app:notes.md"), Some("web+app"));
+}
+
+mod fragment_scroll {
+    use super::*;
+    use crate::test_support::{assert_close, ScratchDir};
+
+    /// Above a heading, so it does not sit flush against the top edge.
+    const HEADROOM: f32 = 50.0;
+
+    /// A tab on a ten-line document whose title is on line 0 and whose
+    /// "Deep Section" heading is on line 8.
+    fn tab() -> (ScratchDir, Tab) {
+        let dir = ScratchDir::new();
+        let document = dir.file("doc.md", "# Title\n\na\n\nb\n\nc\n\n## Deep Section\n\n");
+        let tab = Tab::new(document).unwrap();
+        (dir, tab)
+    }
+
+    fn deep_section_key(tab: &Tab) -> String {
+        header_position_key(tab.outline_headers[1].source_start)
+    }
+
+    #[test]
+    fn title_fragment_scrolls_to_the_very_top() {
+        let (_dir, mut tab) = tab();
+
+        assert!(apply_fragment_navigation(&mut tab, "title"));
+
+        assert_close(tab.pending_scroll_offset.unwrap(), 0.0);
+        assert_eq!(tab.pending_header_click_key, None);
+    }
+
+    #[test]
+    fn heading_with_a_measured_position_scrolls_to_just_above_it() {
+        let (_dir, mut tab) = tab();
+        let key = deep_section_key(&tab);
+
+        tab.cache.record_header_content_y(&key, 400.0);
+        assert!(apply_fragment_navigation(&mut tab, "deep-section"));
+        assert_close(tab.pending_scroll_offset.unwrap(), 400.0 - HEADROOM);
+        assert_eq!(tab.pending_header_click_key, None, "nothing to correct");
+
+        // A heading nearer the top than the headroom cannot scroll above 0.
+        tab.cache.record_header_content_y(&key, 20.0);
+        assert!(apply_fragment_navigation(&mut tab, "deep-section"));
+        assert_close(tab.pending_scroll_offset.unwrap(), 0.0);
+    }
+
+    #[test]
+    fn unmeasured_heading_is_estimated_from_its_line_and_corrected_after_painting() {
+        let (_dir, mut tab) = tab();
+        let key = deep_section_key(&tab);
+        tab.last_content_height = 1000.0;
+
+        assert!(apply_fragment_navigation(&mut tab, "deep-section"));
+
+        // Line 8 of 10: eight tenths of the way down the rendered height.
+        assert_close(tab.pending_scroll_offset.unwrap(), 800.0 - HEADROOM);
+        assert_eq!(tab.pending_header_click_key, Some(key));
+    }
+
+    #[test]
+    fn document_without_a_title_still_resolves_its_section_anchors() {
+        let dir = ScratchDir::new();
+        let mut tab = Tab::new(dir.file("doc.md", "## Only Section\n")).unwrap();
+
+        assert!(apply_fragment_navigation(&mut tab, "only-section"));
+        assert!(!apply_fragment_navigation(&mut tab, "title"));
+    }
+
+    #[test]
+    fn unpainted_document_leaves_the_scroll_to_the_corrective_pass() {
+        let (_dir, mut tab) = tab();
+        let key = deep_section_key(&tab);
+
+        assert!(apply_fragment_navigation(&mut tab, "deep-section"));
+
+        assert_eq!(tab.pending_scroll_offset, None);
+        assert_eq!(tab.pending_header_click_key, Some(key));
+    }
+}
