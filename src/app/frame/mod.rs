@@ -216,25 +216,9 @@ impl MarkdownApp {
     /// The explorer, the outline, and the document pane, with the
     /// navigation each of them requested.
     fn render_panels(&mut self, ctx: &egui::Context, ctrl_held: bool) {
-        // File explorer (left sidebar)
-        let explorer_action = self.render_file_explorer(ctx);
-
-        // Explorer matches document links: primary click replaces the active
-        // document, while Ctrl/Cmd+click opens (or focuses) a separate tab.
-        if let Some(path) = explorer_action.file_to_open {
-            if ctrl_held {
-                self.open_in_new_tab(path);
-            } else {
-                self.navigate_active_tab_to(&path);
-            }
-        }
-
-        // Close tab from explorer (middle-click on open file)
-        if let Some(path) = explorer_action.file_to_close {
-            if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-                self.close_tab(idx);
-            }
-        }
+        // File explorer (left sidebar). Its clicks land before the outline
+        // is drawn, so the outline is that of the document they opened.
+        self.render_file_explorer(ctx, ctrl_held);
 
         // Outline sidebar (right) - at top level for proper layout
         self.render_outline(ctx);

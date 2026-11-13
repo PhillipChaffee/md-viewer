@@ -22,12 +22,12 @@ mod tests;
 
 /// What the reader's clicks on the listing ask of the app.
 #[derive(Default)]
-pub(crate) struct ExplorerAction {
-    /// File selected with the primary mouse button. The caller decides whether
-    /// it replaces the active document or opens a tab from the Ctrl modifier.
-    pub(crate) file_to_open: Option<PathBuf>,
+struct ExplorerAction {
+    /// File selected with the primary mouse button. Whether it replaces
+    /// the active document or opens a tab is the Ctrl modifier's say.
+    file_to_open: Option<PathBuf>,
     /// File to close (middle-click on open file).
-    pub(crate) file_to_close: Option<PathBuf>,
+    file_to_close: Option<PathBuf>,
 }
 
 /// What one frame's rows were clicked for. A later row's click replaces an
@@ -49,11 +49,12 @@ enum MenuPick {
 }
 
 impl MarkdownApp {
-    /// Render the file explorer sidebar.
-    /// Returns actions for files to open or close.
-    pub(crate) fn render_file_explorer(&mut self, ctx: &egui::Context) -> ExplorerAction {
+    /// Render the file explorer sidebar, then open or close the files its
+    /// rows were clicked for. `in_new_tab` is whether a clicked file gets a
+    /// tab of its own.
+    pub(crate) fn render_file_explorer(&mut self, ctx: &egui::Context, in_new_tab: bool) {
         if !self.show_explorer {
-            return ExplorerAction::default();
+            return;
         }
 
         let palette = self.theme.palette();
@@ -73,7 +74,27 @@ impl MarkdownApp {
             self.explorer_tree(ui, palette)
         });
         self.explorer_width = width;
-        action
+        self.apply_file_clicks(action, in_new_tab);
+    }
+
+    /// Open and close what the file rows were clicked for.
+    fn apply_file_clicks(&mut self, action: ExplorerAction, in_new_tab: bool) {
+        // Explorer matches document links: primary click replaces the active
+        // document, while Ctrl/Cmd+click opens (or focuses) a separate tab.
+        if let Some(path) = action.file_to_open {
+            if in_new_tab {
+                self.open_in_new_tab(path);
+            } else {
+                self.navigate_active_tab_to(&path);
+            }
+        }
+
+        // Close tab from explorer (middle-click on open file)
+        if let Some(path) = action.file_to_close {
+            if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
+                self.close_tab(idx);
+            }
+        }
     }
 
     /// "FILES", the folder they are in, and the menu that holds what the
