@@ -1,16 +1,13 @@
 //! The whole app over a scratch directory, driven by the labels of its widgets.
 
-use std::fs;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use eframe::egui;
 use egui_kittest::kittest::Queryable as _;
 
 use crate::app::MarkdownApp;
-
-static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
+use crate::test_support::{evaluate_log_arguments, ScratchDir};
 
 /// A running app that tests click through by widget label, the way a user
 /// reads the window. It dereferences to the `egui_kittest` harness, whose
@@ -18,6 +15,8 @@ static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
 pub(crate) struct LabelHarness {
     kit: egui_kittest::Harness<'static, MarkdownApp>,
     pub(crate) dir: PathBuf,
+    /// Removes `dir` when the harness is dropped.
+    _scratch: ScratchDir,
 }
 
 impl LabelHarness {
@@ -27,25 +26,22 @@ impl LabelHarness {
     pub(crate) fn with_docs(docs: &[(&str, &str)]) -> Self {
         // Format log arguments as a run with `RUST_LOG` set does, so one that
         // panics fails a test.
-        log::set_max_level(log::LevelFilter::Trace);
-        let dir = std::env::temp_dir().join(format!(
-            "md-viewer-label-test-{}-{}",
-            std::process::id(),
-            NEXT_SCRATCH_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        let dir = dir.canonicalize().unwrap();
+        evaluate_log_arguments();
+        let scratch = ScratchDir::new();
+        let dir = scratch.path().to_path_buf();
         for (name, content) in docs {
-            let path = dir.join(name);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(path, content).unwrap();
+            scratch.file(name, content);
         }
         let first = docs.first().map(|(name, _)| dir.join(name));
 
         let kit = egui_kittest::Harness::builder()
             .with_size(egui::vec2(1200.0, 800.0))
             .build_eframe(|cc| MarkdownApp::new(cc, first, false));
-        let mut harness = Self { kit, dir };
+        let mut harness = Self {
+            kit,
+            dir,
+            _scratch: scratch,
+        };
         harness.wait_for_explorer_scan();
         harness
     }
@@ -94,11 +90,5 @@ impl Deref for LabelHarness {
 impl DerefMut for LabelHarness {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.kit
-    }
-}
-
-impl Drop for LabelHarness {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.dir);
     }
 }
