@@ -243,11 +243,7 @@ impl MarkdownApp {
 
         let response = ui.allocate_rect(rect, egui::Sense::hover());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name));
-        let color = if response.hovered() {
-            palette.text
-        } else {
-            palette.muted
-        };
+        let color = chrome::ink(palette, true, response.hovered());
         ui.painter().galley(rect.min, galley, color);
         let live = self.live_reload.is_live();
         response.on_hover_ui(|ui| title_hover(ui, tab, live, palette));

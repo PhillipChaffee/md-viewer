@@ -75,11 +75,7 @@ fn theme_swatch(
         egui::FontId::proportional(15.0),
         shown.text,
     );
-    let name_color = if chosen || pointed {
-        chrome_palette.text
-    } else {
-        chrome_palette.muted
-    };
+    let name_color = chrome::ink(chrome_palette, true, chosen || pointed);
     painter.text(
         egui::pos2(center.x, response.rect.bottom() - 2.0),
         egui::Align2::CENTER_BOTTOM,

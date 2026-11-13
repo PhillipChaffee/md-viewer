@@ -208,11 +208,7 @@ fn tab_label(
     // The pointer counts as over the tab while it is over the close button
     // too, which takes the hover for itself.
     let pointed = ui.rect_contains_pointer(rect) || response.has_focus();
-    let color = if label.is_active || pointed {
-        palette.text
-    } else {
-        palette.muted
-    };
+    let color = chrome::ink(palette, true, label.is_active || pointed);
     let title_corner = egui::pos2(
         rect.left() + TAB_PADDING,
         rect.center().y - galley.size().y / 2.0,
@@ -270,11 +266,7 @@ fn tab_close_button(
         None,
     );
 
-    let color = if close.hovered() {
-        palette.text
-    } else {
-        palette.muted
-    };
+    let color = chrome::ink(palette, true, close.hovered());
     Icon::Close.paint(ui.painter(), square.shrink(3.0), color);
     if close.clicked() {
         actions.close = Some(label.index);

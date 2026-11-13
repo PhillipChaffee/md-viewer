@@ -95,13 +95,23 @@ pub(super) fn next_widget_popup_is_open(ui: &egui::Ui) -> bool {
 
 /// The ink of a control: muted at rest, the text color once it is pointed
 /// at, focused or lit, and faded while it cannot be used.
-fn ink(palette: &Palette, enabled: bool, strong: bool) -> Color32 {
+pub(super) fn ink(palette: &Palette, enabled: bool, strong: bool) -> Color32 {
     if !enabled {
         palette.muted.gamma_multiply(0.4)
     } else if strong {
         palette.text
     } else {
         palette.muted
+    }
+}
+
+/// What a control answers to: clicks while it can be used, and only the
+/// pointer over it while it cannot.
+pub(super) fn sense(enabled: bool) -> egui::Sense {
+    if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
     }
 }
 
@@ -219,12 +229,7 @@ impl<'a> QuietButton<'a> {
                 .max(self.min_width),
             BUTTON_SIDE,
         );
-        let sense = if self.enabled {
-            egui::Sense::click()
-        } else {
-            egui::Sense::hover()
-        };
-        let response = ui.allocate_response(size, sense);
+        let response = ui.allocate_response(size, sense(self.enabled));
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, self.enabled, self.label)
         });
@@ -351,13 +356,10 @@ impl<'a> MenuRow<'a> {
     }
 
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
-        let sense = if self.enabled {
-            egui::Sense::click()
-        } else {
-            egui::Sense::hover()
-        };
-        let response =
-            ui.allocate_response(egui::vec2(ui.available_width(), MENU_ROW_HEIGHT), sense);
+        let response = ui.allocate_response(
+            egui::vec2(ui.available_width(), MENU_ROW_HEIGHT),
+            sense(self.enabled),
+        );
         response.widget_info(|| {
             self.checked.map_or_else(
                 || egui::WidgetInfo::labeled(egui::WidgetType::Button, self.enabled, self.label),
