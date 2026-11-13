@@ -270,3 +270,25 @@ fn each_strip_names_its_edge() {
     assert!(Edge::Left.label().contains("left"));
     assert!(Edge::Right.label().contains("right"));
 }
+
+#[test]
+fn a_figure_may_use_the_pane_up_to_its_margins() {
+    let column = Column::in_pane(PANE, ReadingWidth::new(680.0));
+
+    assert_close(
+        column.figure_room(),
+        2.0_f32.mul_add(-READING_COLUMN_MARGIN, 1000.0),
+    );
+}
+
+#[test]
+fn a_figure_always_has_the_width_of_the_column() {
+    // A pane too narrow for its own margins still shows a column.
+    let narrow = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(40.0, 600.0));
+    let column = Column {
+        pane: narrow,
+        width: 30.0,
+    };
+
+    assert_close(column.figure_room(), 30.0);
+}
