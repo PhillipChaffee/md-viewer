@@ -5,6 +5,7 @@ This document defines the canonical workflow for implementing features in egui a
 ## Core Principle: Immediate Mode UI
 
 egui redraws the entire UI every frame (~60 FPS). This means:
+
 - UI code runs 60+ times per second
 - **NEVER** do expensive work inside `ui()` functions
 - **ALWAYS** cache computed results
@@ -35,6 +36,7 @@ fn ui(&mut self, ui: &mut egui::Ui) {
 ```
 
 **Checklist:**
+
 - [ ] Define struct for feature state
 - [ ] Add to `MarkdownApp` or `Tab` struct
 - [ ] Initialize in `Default` impl or constructor
@@ -69,6 +71,7 @@ fn parse_headers(content: &str) -> ParsedHeaders {
 ```
 
 **Checklist:**
+
 - [ ] Create functions in impl block (not in ui closure)
 - [ ] Return owned data structures
 - [ ] Call only when input data changes
@@ -105,6 +108,7 @@ fn render_outline(&mut self, ui: &mut egui::Ui) {
 ```
 
 **Checklist:**
+
 - [ ] Read from cached state only
 - [ ] Set flags for actions (don't execute immediately)
 - [ ] Keep render functions pure (no I/O, no heavy computation)
@@ -139,6 +143,7 @@ fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
 ```
 
 **Checklist:**
+
 - [ ] Use `mpsc::channel` for thread communication
 - [ ] Poll with `try_recv()` (never block)
 - [ ] Call `request_repaint_after()` for periodic checks
@@ -231,6 +236,7 @@ ScrollArea::vertical()
 ## Anti-Patterns (Don't Do These)
 
 ### 1. Parsing in Render Loop
+
 ```rust
 // BAD
 fn ui(&mut self, ui: &mut egui::Ui) {
@@ -244,6 +250,7 @@ fn load_file(&mut self) {
 ```
 
 ### 2. Recreating Cache Per Frame
+
 ```rust
 // BAD
 fn ui(&mut self, ui: &mut egui::Ui) {
@@ -258,6 +265,7 @@ struct App {
 ```
 
 ### 3. Blocking I/O in UI
+
 ```rust
 // BAD
 fn ui(&mut self, ui: &mut egui::Ui) {
@@ -270,6 +278,7 @@ fn ui(&mut self, ui: &mut egui::Ui) {
 ```
 
 ### 4. Allocating in Hot Path
+
 ```rust
 // BAD
 fn ui(&mut self, ui: &mut egui::Ui) {
@@ -310,7 +319,7 @@ After implementation:
 ## Quick Reference
 
 | Do | Don't |
-|----|-------|
+| ---- | ------- |
 | Parse data in `load_file()` | Parse data in `ui()` |
 | Store cache in struct | Create cache per frame |
 | Use `try_recv()` for channels | Use blocking `recv()` |

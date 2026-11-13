@@ -21,10 +21,12 @@ What is the issue that we're seeing that is motivating this decision or change?
 [Description]
 
 **Pros:**
+
 - Pro 1
 - Pro 2
 
 **Cons:**
+
 - Con 1
 - Con 2
 
@@ -33,10 +35,12 @@ What is the issue that we're seeing that is motivating this decision or change?
 [Description]
 
 **Pros:**
+
 - Pro 1
 - Pro 2
 
 **Cons:**
+
 - Con 1
 - Con 2
 

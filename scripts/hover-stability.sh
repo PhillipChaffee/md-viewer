@@ -47,68 +47,88 @@ SETTLE="${MDV_SETTLE:-1.5}"
 FRAMES="${MDV_FRAMES:-12}"
 OUT="${MDV_OUT:-/tmp/mdv-hover-$TAG}"
 
-rm -rf "$OUT"; mkdir -p "$OUT/shots"
-FIXTURE="$OUT/fixture"; mkdir -p "$FIXTURE"
+rm -rf "$OUT"
+mkdir -p "$OUT/shots"
+FIXTURE="$OUT/fixture"
+mkdir -p "$FIXTURE"
 # Enough files that the explorer itself scrolls: its vertical scrollbar is the
 # one that sits on the explorer/document boundary.
 for i in $(seq 1 40); do
-    f="$FIXTURE/a-deliberately-long-file-name-$i.md"
-    printf '# Document %s\n\n' "$i" > "$f"
-    for j in $(seq 1 60); do
-        echo "Line $j, long enough that the document scrolls and gets a scrollbar." >> "$f"
-    done
+	f="$FIXTURE/a-deliberately-long-file-name-$i.md"
+	printf '# Document %s\n\n' "$i" >"$f"
+	for j in $(seq 1 60); do
+		echo "Line $j, long enough that the document scrolls and gets a scrollbar." >>"$f"
+	done
 done
 
 pkill -f "Xvfb :$DISPLAY_NUM " 2>/dev/null
 rm -f "/tmp/.X$DISPLAY_NUM-lock" "/tmp/.X11-unix/X$DISPLAY_NUM"
 Xvfb ":$DISPLAY_NUM" -screen 0 1400x900x24 >/dev/null 2>&1 &
 XVFB_PID=$!
-for _ in $(seq 1 40); do DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 && break; sleep 0.25; done
-DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 || { echo "Xvfb :$DISPLAY_NUM did not come up"; exit 1; }
+for _ in $(seq 1 40); do
+	DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 && break
+	sleep 0.25
+done
+DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 || {
+	echo "Xvfb :$DISPLAY_NUM did not come up"
+	exit 1
+}
 export DISPLAY=":$DISPLAY_NUM"
 
 env WINIT_UNIX_BACKEND=x11 WAYLAND_DISPLAY= \
-    XDG_DATA_HOME="$OUT/data" XDG_CONFIG_HOME="$OUT/config" \
-    setsid "$BIN" --foreground "$FIXTURE/a-deliberately-long-file-name-1.md" \
-    >"$OUT/app.log" 2>&1 &
+	XDG_DATA_HOME="$OUT/data" XDG_CONFIG_HOME="$OUT/config" \
+	setsid "$BIN" --foreground "$FIXTURE/a-deliberately-long-file-name-1.md" \
+	>"$OUT/app.log" 2>&1 &
 APP_PID=$!
 for _ in $(seq 1 60); do
-    WID=$(xdotool search --name "Markdown Viewer" 2>/dev/null | head -1)
-    [ -n "${WID:-}" ] && break
-    sleep 0.5
+	WID=$(xdotool search --name "Markdown Viewer" 2>/dev/null | head -1)
+	[ -n "${WID:-}" ] && break
+	sleep 0.5
 done
 if [ -z "${WID:-}" ]; then
-    echo "FAIL: no window appeared"; tail -5 "$OUT/app.log"
-    kill "$APP_PID" "$XVFB_PID" 2>/dev/null; exit 1
+	echo "FAIL: no window appeared"
+	tail -5 "$OUT/app.log"
+	kill "$APP_PID" "$XVFB_PID" 2>/dev/null
+	exit 1
 fi
 sleep 3
 
-shot()  { import -window "$WID" "$OUT/shots/$1.png" 2>/dev/null; }
-hold()  { xdotool mousemove --sync "$1" "$2"; }
+shot() { import -window "$WID" "$OUT/shots/$1.png" 2>/dev/null; }
+hold() { xdotool mousemove --sync "$1" "$2"; }
 
 # Narrow the centre pane by widening the explorer, which is the condition the
 # report names. The divider starts near x=213 at this window size.
-hold 213 400; sleep 0.4
-xdotool mousedown 1; sleep 0.3
-for x in $(seq 220 15 430); do xdotool mousemove --sync "$x" 400; sleep 0.05; done
-sleep 0.4; xdotool mouseup 1; sleep 2
-hold 700 400; sleep 1.5
+hold 213 400
+sleep 0.4
+xdotool mousedown 1
+sleep 0.3
+for x in $(seq 220 15 430); do
+	xdotool mousemove --sync "$x" 400
+	sleep 0.05
+done
+sleep 0.4
+xdotool mouseup 1
+sleep 2
+hold 700 400
+sleep 1.5
 
-: > "$OUT/cursor.txt"
+: >"$OUT/cursor.txt"
 for x in $(seq 405 "$STEP" 440); do
-    hold "$x" 400
-    sleep "$SETTLE"
-    for f in $(seq -w 1 "$FRAMES"); do
-        shot "x${x}_f${f}"
-        printf '%s %s ' "$x" \
-            "$(python3 "$(dirname "$0")/hover-cursor-hash.py" ":$DISPLAY_NUM" 2>/dev/null | awk '{print $1}')" \
-            >> "$OUT/cursor.txt"
-        sleep 0.15
-    done
-    echo >> "$OUT/cursor.txt"
+	hold "$x" 400
+	sleep "$SETTLE"
+	for f in $(seq -w 1 "$FRAMES"); do
+		shot "x${x}_f${f}"
+		printf '%s %s ' "$x" \
+			"$(python3 "$(dirname "$0")/hover-cursor-hash.py" ":$DISPLAY_NUM" 2>/dev/null | awk '{print $1}')" \
+			>>"$OUT/cursor.txt"
+		sleep 0.15
+	done
+	echo >>"$OUT/cursor.txt"
 done
 
-kill -TERM "$APP_PID" 2>/dev/null; sleep 1; kill "$XVFB_PID" 2>/dev/null
+kill -TERM "$APP_PID" 2>/dev/null
+sleep 1
+kill "$XVFB_PID" 2>/dev/null
 
 python3 - "$OUT" "$TAG" <<'PY'
 from PIL import Image

@@ -11,49 +11,49 @@ set -euo pipefail
 # CARGO_REGISTRY_TOKEN in the environment.
 
 if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
-    echo "error: CARGO_REGISTRY_TOKEN not set" >&2
-    exit 1
+	echo "error: CARGO_REGISTRY_TOKEN not set" >&2
+	exit 1
 fi
 
 publish_dir() {
-    local dir="$1"
-    local label
-    if [ "$dir" = "." ]; then
-        label="md-viewer"
-    else
-        label=$(basename "$dir")
-    fi
+	local dir="$1"
+	local label
+	if [ "$dir" = "." ]; then
+		label="md-viewer"
+	else
+		label=$(basename "$dir")
+	fi
 
-    echo ""
-    echo "::group::Publishing ${label}"
+	echo ""
+	echo "::group::Publishing ${label}"
 
-    local logfile
-    logfile=$(mktemp)
-    local rc=0
-    # cargo reads CARGO_REGISTRY_TOKEN from the environment — passing it via
-    # --token would leak the token into argv and trigger a deprecation warning.
-    # --allow-dirty: belt-and-suspenders defence in case the "Remove local-only
-    # MCP dependency" CI step ever does modify Cargo.toml (it shouldn't with
-    # the anchored regex, but keep this so a future uncommented dep still
-    # publishes cleanly).
-    (cd "$dir" && cargo publish --allow-dirty 2>&1) | tee "$logfile" || rc=$?
+	local logfile
+	logfile=$(mktemp)
+	local rc=0
+	# cargo reads CARGO_REGISTRY_TOKEN from the environment — passing it via
+	# --token would leak the token into argv and trigger a deprecation warning.
+	# --allow-dirty: belt-and-suspenders defence in case the "Remove local-only
+	# MCP dependency" CI step ever does modify Cargo.toml (it shouldn't with
+	# the anchored regex, but keep this so a future uncommented dep still
+	# publishes cleanly).
+	(cd "$dir" && cargo publish --allow-dirty 2>&1) | tee "$logfile" || rc=$?
 
-    if [ $rc -eq 0 ]; then
-        echo "  Published ${label} OK"
-        # Sparse-index catch-up — give dependents enough time to resolve the new version.
-        echo "  Sleeping 45s for crates.io sparse-index propagation..."
-        sleep 45
-    elif grep -qE "already (uploaded|exists on crates.io)" "$logfile"; then
-        echo "  ${label}: version already on crates.io; skipping (idempotent)."
-    else
-        echo "::error::cargo publish failed for ${label}"
-        rm -f "$logfile"
-        echo "::endgroup::"
-        exit 1
-    fi
+	if [ $rc -eq 0 ]; then
+		echo "  Published ${label} OK"
+		# Sparse-index catch-up — give dependents enough time to resolve the new version.
+		echo "  Sleeping 45s for crates.io sparse-index propagation..."
+		sleep 45
+	elif grep -qE "already (uploaded|exists on crates.io)" "$logfile"; then
+		echo "  ${label}: version already on crates.io; skipping (idempotent)."
+	else
+		echo "::error::cargo publish failed for ${label}"
+		rm -f "$logfile"
+		echo "::endgroup::"
+		exit 1
+	fi
 
-    rm -f "$logfile"
-    echo "::endgroup::"
+	rm -f "$logfile"
+	echo "::endgroup::"
 }
 
 publish_dir vendor/egui_commonmark/egui_commonmark_backend

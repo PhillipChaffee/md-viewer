@@ -1,6 +1,7 @@
 # Devlog Workflow
 
 Every feature implementation should create a devlog file in `docs/devlog/` to capture:
+
 - Implementation status and scope
 - Key discoveries and API learnings
 - Architecture decisions
@@ -20,6 +21,7 @@ cp docs/devlog/TEMPLATE.md docs/devlog/${NEXT}-<feature-name>.md
 ```
 
 Then update the new file with:
+
 - Branch name
 - Today's date
 - Initial feature checklist
@@ -28,7 +30,7 @@ Use `/new-devlog <name>` as an explicit shortcut if needed.
 
 ## Devlog Structure
 
-```
+```text
 docs/devlog/
 ├── TEMPLATE.md           # Copy this for new features
 ├── 001-link-navigation.md
@@ -49,6 +51,7 @@ docs/devlog/
 ## What Requires a Devlog
 
 Create a devlog for ANY work that:
+
 - Adds new structs, fields, or functions
 - Changes user-visible behavior
 - Introduces new API usage patterns

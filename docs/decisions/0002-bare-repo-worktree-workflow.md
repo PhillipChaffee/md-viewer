@@ -20,6 +20,7 @@ The project frequently has multiple features in progress simultaneously. Switchi
 ### Option 1: Standard branching with stash
 
 Use normal git branches, stash changes when switching:
+
 ```bash
 git stash
 git checkout feature-x
@@ -27,11 +28,13 @@ git stash pop
 ```
 
 **Pros:**
+
 - Standard git workflow everyone knows
 - Single working directory
 - No extra disk space
 
 **Cons:**
+
 - Stash conflicts are common
 - Can't work on two features simultaneously
 - Easy to forget stashed changes
@@ -40,6 +43,7 @@ git stash pop
 ### Option 2: Multiple clones
 
 Clone the repo multiple times:
+
 ```bash
 ~/markdown-viewer-main/
 ~/markdown-viewer-feature-x/
@@ -47,10 +51,12 @@ Clone the repo multiple times:
 ```
 
 **Pros:**
+
 - Complete isolation
 - No git complexity
 
 **Cons:**
+
 - Wastes disk space (duplicate .git)
 - Changes don't share history easily
 - Fetching updates in each clone
@@ -58,6 +64,7 @@ Clone the repo multiple times:
 ### Option 3: Bare repo + worktrees
 
 Bare repository with worktrees for each branch:
+
 ```bash
 ~/markdown-viewer/
 ├── .bare/           # Git database
@@ -67,6 +74,7 @@ Bare repository with worktrees for each branch:
 ```
 
 **Pros:**
+
 - Single git database, multiple working directories
 - Each worktree is fully isolated
 - Can work on multiple features simultaneously
@@ -74,6 +82,7 @@ Bare repository with worktrees for each branch:
 - Disk efficient (shared objects)
 
 **Cons:**
+
 - Non-standard setup, learning curve
 - Worktree commands are verbose
 - Must remember to clean up old worktrees

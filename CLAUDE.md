@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 ## Tech Stack
 
 | Component | Technology |
-|-----------|------------|
+| ----------- | ------------ |
 | Language | Rust |
 | GUI Framework | egui 0.33 + eframe (glow backend) |
 | Markdown | egui_commonmark 0.22 (vendored with custom typography) |
@@ -26,16 +26,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 4. **Check recent changes:** `git log --oneline -5`
 
 **For feature work, follow the egui immediate-mode pattern:**
-```
+
+```text
 State → Logic → UI → Async
 ```
+
 See `docs/EGUI_WORKFLOW.md` for the complete guide.
 
 ## Project Structure
 
 This is a **bare repository** setup. The git database lives in `.bare/` and all working copies are in `worktrees/`.
 
-```
+```text
 ~/markdown-viewer/
 ├── .bare/                      # Bare git repository (don't edit directly)
 ├── .claude -> worktrees/main/.claude  # Symlink to tracked config
@@ -59,6 +61,7 @@ This is a **bare repository** setup. The git database lives in `.bare/` and all 
 ## Documentation
 
 **Auto-loaded** (from `.claude/rules/`):
+
 - `egui-patterns.md` - **Critical** - Never parse in UI code, State→Logic→UI→Async
 - `build-commands.md` - cargo build, run, clippy, make install
 - `devlog-workflow.md` - How to document feature implementations
@@ -68,6 +71,7 @@ This is a **bare repository** setup. The git database lives in `.bare/` and all 
 - `context-awareness.md` - **Read before coding** - ensure fresh context
 
 **Imported** (via `@path`):
+
 - @docs/EGUI_WORKFLOW.md - **Read before coding** - State→Logic→UI→Async pattern
 - @docs/ARCHITECTURE.md - Core components, libraries, rendering flow
 - @docs/KEYBOARD_SHORTCUTS.md - All keyboard shortcuts

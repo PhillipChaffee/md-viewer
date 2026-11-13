@@ -14,12 +14,12 @@ VERSION="${1:?usage: release-notes.sh <version-without-v>}"
 CHANGELOG="${2:-CHANGELOG.md}"
 
 if [ -f "$CHANGELOG" ] && grep -q "^## \[${VERSION}\]" "$CHANGELOG"; then
-    awk -v v="^## \\\\[${VERSION}\\\\]" '
+	awk -v v="^## \\\\[${VERSION}\\\\]" '
         $0 ~ v      { inside = 1; next }
         inside && /^## \[/ { exit }
         inside      { print }
     ' "$CHANGELOG" | sed -e '/./,$!d' | awk 'BEGIN{RS="";ORS="\n\n"}1'
 else
-    echo "::warning::no CHANGELOG section for ${VERSION}; falling back to git-cliff" >&2
-    git-cliff --latest --strip header
+	echo "::warning::no CHANGELOG section for ${VERSION}; falling back to git-cliff" >&2
+	git-cliff --latest --strip header
 fi

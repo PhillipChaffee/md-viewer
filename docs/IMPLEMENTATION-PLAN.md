@@ -552,7 +552,7 @@ impl eframe::App for MarkdownApp {
 ### Keyboard Shortcuts Updated
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Click link | Open in current view |
 | Ctrl+Click link | Open in new window |
 | Alt+Left | Go back (current view) |
@@ -567,6 +567,7 @@ impl eframe::App for MarkdownApp {
 **Complexity**: High (~300-400 lines)
 
 **Options**:
+
 1. **Custom tabs using `selectable_value`** - Lighter weight, full control
 2. **[egui_dock](https://docs.rs/egui_dock)** - Full-featured with docking support
 
@@ -999,7 +1000,7 @@ impl eframe::App for MarkdownApp {
 ### Keyboard Shortcuts for Tabs
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+T | New tab |
 | Ctrl+W | Close current tab |
 | Ctrl+Tab | Next tab |
@@ -1078,25 +1079,30 @@ impl eframe::App for MarkdownApp {
 ## References
 
 ### egui Documentation
+
 - [egui GitHub Repository](https://github.com/emilk/egui)
 - [egui API Docs](https://docs.rs/egui/latest/egui/)
 - [Multiple Viewports (Context7)](https://context7.com/emilk/egui/llms.txt) - `ctx.show_viewport_deferred()`
 
 ### egui_commonmark
+
 - [egui_commonmark Docs](https://docs.rs/egui_commonmark/latest/egui_commonmark/)
 - Link hooks: `CommonMarkCache::add_link_hook()`, `get_link_hook()`
 
 ### Tab Libraries
+
 - [egui_dock](https://docs.rs/egui_dock/latest/egui_dock/) - Full docking/tabbing support
 - [egui_tabs](https://crates.io/crates/egui_tabs) - Simple tab widget
 - [egui_tiles](https://docs.rs/egui_tiles) - Hierarchical tile/tab manager
 
 ### egui UI Patterns
+
 - `ui.selectable_value()` - For custom tab selection
 - `ui.selectable_label()` - For tab-like buttons
 - `ScrollArea::horizontal()` - For scrollable tab bars
 
 ### Key egui Concepts
+
 - **ViewportId**: Unique identifier for OS windows
 - **ViewportBuilder**: Configure window properties
 - **show_viewport_deferred**: Create child windows
@@ -1107,6 +1113,7 @@ impl eframe::App for MarkdownApp {
 ## Implementation Checklist
 
 ### Phase D (Simple)
+
 - [ ] Add link detection module
 - [ ] Implement `register_link_hooks()` in `load_file()`
 - [ ] Add navigation history (`history`, `history_index`)
@@ -1116,6 +1123,7 @@ impl eframe::App for MarkdownApp {
 - [ ] Handle clicked link hooks in `update()`
 
 ### Phase A (Multi-Window)
+
 - [ ] Add `ChildWindow` struct
 - [ ] Add `child_windows: Vec<ChildWindow>` to app
 - [ ] Implement `open_in_new_window()`
@@ -1124,6 +1132,7 @@ impl eframe::App for MarkdownApp {
 - [ ] Clean up closed windows
 
 ### Phase B (Tabs)
+
 - [ ] Decide: Custom tabs vs egui_dock
 - [ ] Create `Tab` struct with per-document state
 - [ ] Refactor `MarkdownApp` to use tabs
@@ -1132,6 +1141,7 @@ impl eframe::App for MarkdownApp {
 - [ ] Implement tab close, reorder, context menu
 
 ### Phase C (Hybrid)
+
 - [ ] Combine Phase A and Phase B
 - [ ] Enable tab tear-off to new windows
 - [ ] Support tab merging between windows

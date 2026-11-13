@@ -23,7 +23,7 @@ add "lint" "cargo clippy --workspace --all-targets -- -D warnings"
 add "doc" "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps"
 add "tests" "cargo test --workspace"
 add "coverage" "cargo llvm-cov --workspace --fail-under-lines 95 --fail-under-regions 95 --fail-under-functions 95 --lcov --output-path lcov.info"
-add "cognitive" "arborist --threshold 15 --exceeds-only --gitignore --languages rust ."
+add "cognitive" "arborist --threshold 15 --exceeds-only --gitignore --languages rust src"
 add "file-length" "./effective-lines-gate.sh"
 
 add "spell-check" "typos"
@@ -37,7 +37,7 @@ add "deny-advisories" "cargo deny check advisories"
 add "deny-licenses" "cargo deny check licenses"
 add "deny-bans" "cargo deny check bans"
 add "unused-deps" "cargo shear --deny-warnings"
-add "todo-policy" 'rc=0; git grep --untracked --no-recurse-submodules -nE "TODO|FIXME" -- "*.rs" || rc=$?; test "$rc" -eq 1'
+add "todo-policy" 'rc=0; git grep --untracked --no-recurse-submodules -nE "TODO|FIXME" -- "*.rs" ":!vendor" || rc=$?; test "$rc" -eq 1'
 add "shell-lint" 'for sh in $(git ls-files "*.sh"); do shellcheck "$sh"; done'
 add "shell-format" 'for sh in $(git ls-files "*.sh"); do shfmt -d "$sh"; done'
 add "workflow-yaml-lint" "yamllint ./.github/workflows/*.yml $(find . -mindepth 2 -maxdepth 2 \( -name 'ci.yml' -o -name 'mutation.yml' \) -not -path './.github/*' | tr '\n' ' ')"

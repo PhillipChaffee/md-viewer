@@ -19,7 +19,7 @@ if btn.clicked() { ... }
 These widgets MUST be registered for MCP testing:
 
 | Widget Type | Registration | Example |
-|-------------|--------------|---------|
+| ------------- | -------------- | --------- |
 | Buttons | `register_widget(name, "button", &response, None)` | `register_widget("Save", "button", &btn, None)` |
 | Small buttons | `register_widget(name, "button", &response, None)` | `register_widget("Close Tab", "button", &btn, None)` |
 | Selectable labels | `register_widget(name, "tab", &response, value)` | `register_widget("Tab: README", "tab", &resp, Some("active"))` |
@@ -43,6 +43,7 @@ self.mcp_bridge.register_widget(
 ### Skip Registration (Decorative)
 
 These typically don't need registration:
+
 - Pure decorative icons/separators
 - Static labels without testable state
 - Layout helpers (spacers, etc.)
@@ -67,7 +68,7 @@ if btn.clicked() { ... }
 Use descriptive, unique names that identify the widget's purpose:
 
 | Pattern | Example |
-|---------|---------|
+| --------- | --------- |
 | Action buttons | `"Save"`, `"Close"`, `"Refresh"` |
 | Toggle buttons | `"Toggle: Dark Mode"`, `"Toggle: Outline"` |
 | Tab buttons | `"Tab: filename.md"` |

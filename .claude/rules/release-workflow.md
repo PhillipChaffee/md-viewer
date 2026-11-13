@@ -25,7 +25,7 @@ See `docs/LESSONS.md`, "CHANGELOG.md is hand-curated".
 
    Edit the lockfile *surgically* — scope the change to the `md-viewer` block:
 
-   ```
+   ```text
    name = "md-viewer"
    version = "0.1.7"      ->      version = "0.1.8"
    ```

@@ -19,11 +19,13 @@ Add the ability to zoom in/out (scale text larger/smaller) using **Ctrl + Mouse 
 Use `ctx.set_pixels_per_point()` to scale the entire UI uniformly.
 
 **Pros:**
+
 - Simple implementation (single API call)
 - Scales everything consistently (text, images, UI elements)
 - Native egui approach
 
 **Cons:**
+
 - Scales entire UI, not just markdown content
 
 ### Option B: Font-Only Scaling
@@ -31,10 +33,12 @@ Use `ctx.set_pixels_per_point()` to scale the entire UI uniformly.
 Modify text styles via `ctx.style_mut()` to only scale fonts.
 
 **Pros:**
+
 - Only affects text size
 - UI chrome stays at fixed size
 
 **Cons:**
+
 - More complex implementation
 - May cause layout issues with mixed content
 - Code blocks and images won't scale
@@ -104,7 +108,7 @@ ctx.set_zoom_factor(self.zoom_level);
 ### 5. Add Keyboard Shortcuts
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl + Mouse Wheel | Zoom in/out |
 | Ctrl + Plus/= | Zoom in |
 | Ctrl + Minus | Zoom out |
@@ -170,7 +174,7 @@ if (self.zoom_level - 1.0).abs() > 0.01 {
 ## Code Locations
 
 | Change | Location |
-|--------|----------|
+| -------- | ---------- |
 | Add `zoom_level` field | `MarkdownApp` struct (line ~61) |
 | Add to persisted state | `PersistedState` struct (line ~18) |
 | Initialize zoom | `MarkdownApp::new()` (line ~78) |

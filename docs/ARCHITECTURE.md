@@ -69,7 +69,7 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 ## Key Libraries
 
 | Crate | Purpose |
-|-------|---------|
+| ------- | --------- |
 | eframe/egui 0.33 | GUI framework (glow backend for Wayland) |
 | egui_commonmark 0.22 | Markdown rendering with syntax highlighting |
 | notify 6.1 + notify-debouncer-mini 0.4 | File watching |
@@ -79,7 +79,7 @@ Single-file Rust desktop application (`src/main.rs`, ~1300 lines) for viewing ma
 
 ## Rendering Flow
 
-```
+```text
 update() → check_file_changes() → reload affected tabs
          → request_repaint_after(100ms) if watching
          → Apply theme, zoom settings
@@ -100,6 +100,7 @@ Uses `show_viewport` for optimized rendering - egui clips content outside the vi
 ## Custom Tab System
 
 The tab system uses a simple `Vec<Tab>` with an `active_tab` index:
+
 - Tab bar rendered using `ui.selectable_label()` in a horizontal scroll area
 - Close button (×) shown on hover or for active tab
 - Context menu with "Close" and "Close Others" options
@@ -113,6 +114,7 @@ The tab system uses a simple `Vec<Tab>` with an `active_tab` index:
 ## File Explorer
 
 Left sidebar showing all markdown files in a hierarchical directory tree:
+
 - Root directory determined by: CLI file → persisted state → first open tab → cwd
 - Can be re-pointed at runtime via File → Open Folder… (`open_folder_dialog` → `FileExplorer::set_root`)
 - Recursive scanning with 10 level depth limit

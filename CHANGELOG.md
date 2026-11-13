@@ -334,6 +334,7 @@ The largest release so far: 74 merged pull requests, 38 of them from [@RichardCa
 ### Styling
 
 - Apply rustfmt formatting
+
 ## [0.1.2] - 2026-03-04
 
 ### Bug Fixes
@@ -393,6 +394,7 @@ The largest release so far: 74 merged pull requests, 38 of them from [@RichardCa
 ### Styling
 
 - Apply rustfmt to font fallback tuples
+
 ## [0.1.1] - 2026-01-30
 
 ### Bug Fixes
@@ -416,4 +418,3 @@ The largest release so far: 74 merged pull requests, 38 of them from [@RichardCa
 ### Ci
 
 - Add GitHub Actions for CI and releases
-

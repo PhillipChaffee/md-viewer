@@ -20,16 +20,19 @@ The markdown-viewer needed multi-document support. Users should be able to open 
 ### Option 1: egui_dock
 
 Use the egui_dock crate for full docking support:
+
 ```toml
 egui_dock = "0.15"
 ```
 
 **Pros:**
+
 - Full-featured: tabs, splits, floating windows
 - Active community
 - Drag-and-drop tab reordering
 
 **Cons:**
+
 - Heavyweight for our needs (we only want tabs)
 - Complex state management with DockState
 - Would need to adapt our sidebars to work with docking
@@ -38,6 +41,7 @@ egui_dock = "0.15"
 ### Option 2: Custom `Vec<Tab>` implementation
 
 Simple `Vec<Tab>` with manual tab bar rendering:
+
 ```rust
 struct MarkdownApp {
     tabs: Vec<Tab>,
@@ -46,6 +50,7 @@ struct MarkdownApp {
 ```
 
 **Pros:**
+
 - Exactly the features we need, nothing more
 - Full control over rendering and behavior
 - Easy to add per-tab state
@@ -53,6 +58,7 @@ struct MarkdownApp {
 - Simple debugging
 
 **Cons:**
+
 - Must implement tab bar UI ourselves
 - No drag-to-reorder (not needed currently)
 - No split views (not planned)
@@ -60,6 +66,7 @@ struct MarkdownApp {
 ### Option 3: egui built-in tabs
 
 Use egui's `ui.selectable_label()` in a horizontal layout:
+
 ```rust
 ui.horizontal(|ui| {
     for (i, tab) in tabs.iter().enumerate() {
@@ -71,11 +78,13 @@ ui.horizontal(|ui| {
 ```
 
 **Pros:**
+
 - Uses only egui primitives
 - Very lightweight
 - Easy to style consistently
 
 **Cons:**
+
 - Same implementation effort as Option 2
 - No real advantage over a proper Tab struct
 
@@ -84,6 +93,7 @@ ui.horizontal(|ui| {
 Custom `Vec<Tab>` with `ui.selectable_label()` for the tab bar (hybrid of Options 2 and 3).
 
 Each `Tab` struct holds all per-document state:
+
 - Path and content
 - CommonMarkCache (must persist across frames)
 - Scroll position and pending scroll targets

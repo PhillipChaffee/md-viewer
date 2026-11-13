@@ -4,7 +4,7 @@ This repo uses a bare repository setup at `~/markdown-viewer/.bare`. All worktre
 
 ## Directory Structure
 
-```
+```text
 ~/markdown-viewer/
 ├── .bare/                      # Bare git repository
 ├── .claude -> worktrees/main/.claude  # Symlink to tracked config
@@ -37,6 +37,7 @@ git log --oneline main..origin/main
 ```
 
 If the last command shows commits, main is behind remote. Update main first:
+
 ```bash
 git -C ~/markdown-viewer/.bare fetch origin main:main
 ```

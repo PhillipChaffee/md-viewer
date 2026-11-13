@@ -12,7 +12,23 @@
     "MD033": false,
     // shell scripts legitimately use tab indentation; tabs inside fenced
     // shell blocks are the script's own style, not doc sloppiness
-    "MD010": { "code_blocks": false }
+    "MD010": { "code_blocks": false },
+    // the changelog repeats "Fixed"/"Added" under every release by design;
+    // only sibling duplicates are a real navigation bug
+    "MD024": { "siblings_only": true },
+    // the keyboard-shortcut and comparison tables are hand-aligned for the
+    // rendered view, with cells too wide to pad into source columns
+    "MD060": false,
+    // the README captions its screenshots with an italic line under each
+    // image; a caption is not a heading
+    "MD036": false,
+    // the .claude/commands files open with YAML frontmatter and a note, the
+    // format the command loader reads
+    "MD041": false
   },
-  "globs": ["**/*.md"]
+  "globs": ["**/*.md"],
+  // vendor/ holds upstream documents kept byte-comparable with upstream;
+  // target/ is build output; docs/devlog/ and docs/superpowers/ are dated
+  // working notes that are append-only history, not maintained prose
+  "ignores": ["vendor/**", "target/**", "docs/devlog/**", "docs/superpowers/**"]
 }

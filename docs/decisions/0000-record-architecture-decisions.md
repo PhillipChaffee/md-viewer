@@ -21,10 +21,12 @@ We need to record the architectural decisions made on this project so that futur
 Keep architectural decisions embedded in feature devlogs.
 
 **Pros:**
+
 - No new process
 - All context in one place per feature
 
 **Cons:**
+
 - Hard to find specific decisions later
 - Devlogs focus on implementation, not alternatives considered
 - Cross-cutting decisions don't belong to any single feature
@@ -34,12 +36,14 @@ Keep architectural decisions embedded in feature devlogs.
 Create a `docs/decisions/` folder with numbered markdown files following MADR format.
 
 **Pros:**
+
 - Standardized format with options/pros/cons
 - Easy to reference (ADR-0001)
 - Discoverable via filesystem
 - Compatible with existing devlog workflow
 
 **Cons:**
+
 - Another thing to maintain
 - Some overlap with devlogs
 
@@ -48,11 +52,13 @@ Create a `docs/decisions/` folder with numbered markdown files following MADR fo
 Adopt MADR format in `docs/decisions/`. ADRs capture decisions with multiple considered options. Devlogs continue to capture implementation details and discoveries.
 
 **When to create an ADR:**
+
 - Choosing between multiple valid approaches
 - Decisions that affect project structure or tooling
 - Deviations from common practices that need explanation
 
 **When to use devlogs instead:**
+
 - Implementation details and API discoveries
 - Single-feature scope without major alternatives
 

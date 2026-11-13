@@ -3,7 +3,7 @@
 ## Tab Management
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+T | Open file in new tab |
 | Ctrl+W | Close current tab |
 | Ctrl+Tab | Next tab |
@@ -13,7 +13,7 @@
 ## File Operations
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+O | Open file in new tab |
 | F5 | Toggle file watching |
 | Ctrl+Q | Quit application |
@@ -21,7 +21,7 @@
 ## Navigation
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Alt+Left | Navigate back in history |
 | Alt+Right | Navigate forward in history |
 | Click link | Navigate in current tab |
@@ -30,7 +30,7 @@
 ## Search
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+F | Open find bar (or refocus the input if already open) |
 | Enter or ↓ | Jump to the next match in the current document |
 | Shift+Enter or ↑ | Jump to the previous match in the current document |
@@ -41,7 +41,7 @@ The find bar also has on-screen `↑` and `↓` buttons next to the match count 
 ## View
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+D | Toggle dark/light mode |
 | Ctrl+Shift+E | Toggle file explorer |
 | Ctrl+Shift+O | Toggle outline sidebar |

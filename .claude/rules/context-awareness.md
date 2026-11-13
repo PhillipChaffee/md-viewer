@@ -7,19 +7,23 @@ These rules ensure Claude has accurate context before modifying code, preventing
 When the user asks to implement a feature or fix a bug, **automatically perform these checks before writing any code**:
 
 1. **Check branch and status:**
+
    ```bash
    git branch --show-current
    git status --short
    ```
 
 2. **Verify branch is fresh** (critical for feature branches):
+
    ```bash
    git fetch origin 2>/dev/null
    git log --oneline HEAD..origin/main 2>/dev/null | head -5
    ```
+
    If output is not empty, warn: "Branch may be stale. Consider rebasing on main first."
 
 3. **Show recent commits** for context:
+
    ```bash
    git log --oneline -5
    ```
@@ -69,7 +73,7 @@ LESSONS.md contains hard-won fixes and gotchas. Ignoring it wastes time re-disco
 If existing code uses a pattern, new code must follow it:
 
 | If You See | New Code Must |
-|------------|---------------|
+| ------------ | --------------- |
 | `.scroll_source(...)` on ScrollArea | Include scroll_source config |
 | `.auto_shrink([false, false])` | Maintain same shrink behavior |
 | Error handling with `if let Some(...)` | Use same error pattern |
@@ -103,19 +107,24 @@ Skim these before major changes:
 ## Red Flags - You're Missing Context
 
 ### "I'll just rewrite this part"
+
 Stop. Read the existing code first. Understand WHY it's structured that way.
 
 ### "This code seems unnecessary"
+
 It probably isn't. Check git blame to see when/why it was added:
+
 ```bash
 git blame -L 100,120 src/main.rs
 git show <commit-hash>  # Read the commit message
 ```
 
 ### "I remember the code does X"
+
 Don't trust memory. Use Read tool to verify current state.
 
 ### Copy-pasting from earlier in conversation
+
 Conversation context may be stale. Re-read the actual file.
 
 ## Checklist Before Modifying Code

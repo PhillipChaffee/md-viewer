@@ -7,21 +7,21 @@ input=$(cat)
 
 # Extract file_path using jq (or grep/sed fallback)
 if command -v jq &>/dev/null; then
-    file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+	file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
 else
-    file_path=$(echo "$input" | grep -oP '"file_path"\s*:\s*"\K[^"]+')
+	file_path=$(echo "$input" | grep -oP '"file_path"\s*:\s*"\K[^"]+')
 fi
 
 # Get branch from the file's directory, not CWD
 if [ -n "$file_path" ]; then
-    dir=$(dirname "$file_path")
-    branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
+	dir=$(dirname "$file_path")
+	branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
 else
-    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+	branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 fi
 
 if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
-    cat << 'DENY'
+	cat <<'DENY'
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Cannot edit files on 'main' branch. Create a feature worktree first:\n\ngit -C ~/markdown-viewer/.bare worktree add ~/markdown-viewer/worktrees/<name> -b feature/<name>"}}
 DENY
 fi

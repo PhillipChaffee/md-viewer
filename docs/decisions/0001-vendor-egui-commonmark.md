@@ -20,16 +20,19 @@ The markdown-viewer app needed custom typography support (configurable line heig
 ### Option 1: Fork on GitHub + git dependency
 
 Create a GitHub fork and reference it in Cargo.toml:
+
 ```toml
 egui_commonmark = { git = "https://github.com/user/egui_commonmark", branch = "typography" }
 ```
 
 **Pros:**
+
 - Standard Rust practice for forks
 - Can easily PR changes upstream
 - Tracks upstream commits
 
 **Cons:**
+
 - Network dependency for builds
 - Branch management overhead
 - Harder to see local changes at a glance
@@ -38,11 +41,13 @@ egui_commonmark = { git = "https://github.com/user/egui_commonmark", branch = "t
 ### Option 2: Vendor in `crates/` directory
 
 Copy the full crate into `crates/egui_commonmark/` and reference as path dependency:
+
 ```toml
 egui_commonmark = { path = "crates/egui_commonmark/egui_commonmark" }
 ```
 
 **Pros:**
+
 - No network dependency
 - Immediate debugging with local changes
 - Clear diff against upstream (git blame works)
@@ -50,6 +55,7 @@ egui_commonmark = { path = "crates/egui_commonmark/egui_commonmark" }
 - All code visible in project
 
 **Cons:**
+
 - Manual sync with upstream updates
 - Larger repository size
 - Must track which changes are ours
@@ -57,16 +63,19 @@ egui_commonmark = { path = "crates/egui_commonmark/egui_commonmark" }
 ### Option 3: Patch in Cargo.toml
 
 Use `[patch]` section to override the crates.io version:
+
 ```toml
 [patch.crates-io]
 egui_commonmark = { path = "crates/egui_commonmark" }
 ```
 
 **Pros:**
+
 - Other dependencies still see the crate normally
 - Can switch back to crates.io easily
 
 **Cons:**
+
 - Same vendoring overhead as Option 2
 - More confusing dependency resolution
 

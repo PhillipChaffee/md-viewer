@@ -25,20 +25,26 @@ If you need to refactor before adding a feature:
 ## Red Flags - Stop and Reconsider
 
 ### >100 Lines Changed in One File
+
 If a single commit changes >100 lines in one file:
+
 - STOP and reconsider the approach
 - Break into smaller, incremental commits
 - Document why each change is needed
 - Review what's being DELETED - is it intentional?
 
 ### Using Write Tool on Existing Files
+
 The Write tool replaces entire file contents. For existing files:
+
 - ALWAYS use Edit tool instead
 - Edit preserves unchanged code automatically
 - Write can silently drop code you didn't include
 
 ### "Simplifying" by Removal
+
 If your refactor removes code to "simplify":
+
 - Verify each removal is intentional
 - Check if removed code implemented a feature or fix
 - Document why the code is no longer needed
@@ -55,7 +61,8 @@ If your refactor removes code to "simplify":
 ## Examples
 
 ### Good: Incremental Refactor
-```
+
+```text
 Commit 1: Extract Tab struct from MarkdownApp fields
 Commit 2: Move tab rendering to Tab::render method
 Commit 3: Add tabs Vec to replace single content field
@@ -64,7 +71,8 @@ Commit 5: Remove old single-file fields (now unused)
 ```
 
 ### Bad: Big Bang Rewrite
-```
+
+```text
 Commit 1: Replace entire file with new tab implementation
           (+726 lines, -704 lines, "all features preserved")
 ```

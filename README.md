@@ -13,6 +13,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ## Features
 
 ### Rendering
+
 - **GitHub Flavored Markdown** - Full GFM support including tables, task lists, footnotes, and recognized emoji shortcodes such as `:pushpin:`
 - **LaTeX Math** - Inline `$…$` and display `$$…$$` equations rendered via typst + mitex — fractions, sub/superscripts, `\boxed`, accents, matrices, and more — sized and baseline-aligned to the surrounding text
 - **Syntax Highlighting** - 200+ languages via syntect with beautiful color schemes
@@ -40,6 +41,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ![YAML frontmatter rendered as a key/value table](screenshots/frontmatter.png)
 
 ### Navigation
+
 - **Tab System** - Open multiple documents with tab bar (Ctrl+Click links to open in new tab)
 - **In-Document Search (Ctrl+F)** - Find bar with inline highlights, Enter/Shift+Enter to cycle matches
 - **File Explorer** - Hierarchical sidebar with lazy-loading directories and sorting options; freely resizable, width remembered
@@ -54,6 +56,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ![In-document search](screenshots/search.png)
 
 ### View
+
 - **Dark & Light Themes** - Toggle with Ctrl+D
 - **Zoom** - 50% to 300% zoom (Ctrl++/-/0 or Ctrl+Scroll)
 - **Full Width** - Toggle between the reading-width column and the full content pane; prose and tables follow it together
@@ -75,6 +78,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 | ![Dark mode](screenshots/dark-mode.png) | ![Light mode](screenshots/light-mode.png) |
 
 ### Usability
+
 - **Drag and Drop** - Drop markdown files onto the window to open
 - **Native Dialogs** - System file and folder picker integration
 - **Welcome Page & Recent Files** - Open files or folders from the idle screen and reopen recent documents
@@ -86,7 +90,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ### Tab Management
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+T | Open file in new tab |
 | Ctrl+W | Close current tab |
 | Ctrl+Tab | Next tab |
@@ -96,7 +100,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ### Navigation
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+O | Open file in new tab |
 | Alt+Left | Navigate back in history |
 | Alt+Right | Navigate forward in history |
@@ -106,7 +110,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ### Search
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+F | Open find bar (or refocus if already open) |
 | Enter / ↓ | Jump to next match |
 | Shift+Enter / ↑ | Jump to previous match |
@@ -115,7 +119,7 @@ A fast, lightweight markdown viewer for Linux built with Rust and egui. Designed
 ### View
 
 | Shortcut | Action |
-|----------|--------|
+| ---------- | -------- |
 | Ctrl+D | Toggle dark/light mode |
 | Ctrl+Shift+E | Toggle file explorer |
 | Ctrl+Shift+O | Toggle outline sidebar |
