@@ -67,7 +67,6 @@ impl eframe::App for MarkdownApp {
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx, files_hover);
 
-        // Capture AccessKit output for MCP bridge
         mcp::capture(&mut self.mcp, ctx);
     }
 }
@@ -76,7 +75,6 @@ impl MarkdownApp {
     /// Per-frame housekeeping that runs before any input or UI: file
     /// changes, async polls, and theme, font, zoom, and title application.
     fn begin_frame(&mut self, ctx: &egui::Context) {
-        // Enable AccessKit for MCP bridge
         mcp::begin_frame(&mut self.mcp, ctx);
 
         self.poll_background_work(ctx);

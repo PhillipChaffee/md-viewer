@@ -109,9 +109,9 @@ pub(crate) struct MarkdownApp {
     // The `fonts` egui last loaded: fonts are reloaded only when they differ.
     applied_fonts: Option<FontConfig>,
     font_picker: settings::FontPicker,
-    // Disables egui's glyph pixel-snapping when true. Applied unconditionally
-    // every frame (see ctx.set_zoom_factor below) since it's a single write
-    // into egui's own memory, not worth a last-applied change-gate.
+    // Disables egui's glyph pixel-snapping when true. `begin_frame` applies
+    // it every frame: it is a single write into egui's own memory, not
+    // worth a last-applied change-gate.
     smooth_text_rendering: bool,
     // The native file and folder dialogs. Fields rather than direct calls so
     // a test can answer in the user's place.
