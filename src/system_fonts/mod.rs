@@ -111,35 +111,27 @@ impl FontPreset {
         matches!(self, Self::Reader) && preferred_family.is_none()
     }
 
-    /// Body families from the emulated viewer's CSS stack, in resolution
-    /// order. `None` keeps the app's own primary sans selection.
-    ///
-    /// Pure macOS keywords (`-apple-system`, `BlinkMacSystemFont`) are skipped.
-    /// `"Adwaita Sans"` directly follows `"Segoe UI"` because modern fontconfig
-    /// setups substitute Segoe UI with GNOME's Adwaita Sans, which is what
-    /// Linux browsers actually render for stacks asking for Segoe UI first.
-    const fn body_families(self) -> Option<&'static [&'static str]> {
+    /// The font stacks of the viewer this preset emulates. `None` keeps the
+    /// app's own primary sans selection and egui's bundled monospace first.
+    const fn emulated_stack(self) -> Option<&'static ViewerStack> {
         match self {
             Self::Reader | Self::Current => None,
-            Self::Github => Some(GITHUB_BODY_FAMILIES),
-            Self::Vscode => Some(VSCODE_BODY_FAMILIES),
+            Self::Github => Some(&GITHUB),
+            Self::Vscode => Some(&VSCODE),
         }
     }
+}
 
-    /// Code families from the emulated viewer's monospace stack, in resolution
-    /// order. Empty keeps egui's bundled monospace first.
-    const fn mono_families(self) -> &'static [&'static str] {
-        match self {
-            // GitHub puts ui-monospace first; on Linux browsers that resolves
-            // through fontconfig's generic monospace alias before any of the
-            // named proprietary faces are reached, so the Linux defaults lead.
-            Self::Github => GITHUB_MONO_FAMILIES,
-            // VS Code webviews always inject editor.fontFamily; its Linux
-            // default is 'Droid Sans Mono', monospace.
-            Self::Vscode => VSCODE_MONO_FAMILIES,
-            Self::Reader | Self::Current => &[],
-        }
-    }
+/// The families an emulated viewer's stylesheet asks for, in resolution
+/// order.
+///
+/// Pure macOS keywords (`-apple-system`, `BlinkMacSystemFont`) are skipped.
+/// `"Adwaita Sans"` directly follows `"Segoe UI"` because modern fontconfig
+/// setups substitute Segoe UI with GNOME's Adwaita Sans, which is what
+/// Linux browsers actually render for stacks asking for Segoe UI first.
+struct ViewerStack {
+    body: &'static [&'static str],
+    mono: &'static [&'static str],
 }
 
 /// Discrete base text sizes shared by every font preset. Unlike the presets
@@ -213,50 +205,60 @@ impl TextSizeClass {
     }
 }
 
-/// Primer `.markdown-body` body stack without macOS-only aliases; the generic
-/// `sans-serif` tail is covered by the app's existing fallback chain.
+/// Primer `.markdown-body`.
 ///
-/// GitHub prepends its open-source Mona Sans (primer/primitives#1332); it
-/// renders only where installed locally because GitHub ships no markdown
-/// webfont. `"Noto Sans Backtick Fix"` is intentionally skipped: it is a
+/// The body stack is without macOS-only aliases; the generic `sans-serif`
+/// tail is covered by the app's existing fallback chain. GitHub prepends its
+/// open-source Mona Sans (primer/primitives#1332); it renders only where
+/// installed locally because GitHub ships no markdown webfont.
+/// `"Noto Sans Backtick Fix"` is intentionally skipped: it is a
 /// `local()`-only `@font-face` shim covering just U+60, not a real family.
-const GITHUB_BODY_FAMILIES: &[&str] = &[
-    "Mona Sans VF",
-    "Mona Sans",
-    "Segoe UI",
-    "Adwaita Sans", // fontconfig substitutes Segoe UI with Adwaita Sans on modern GNOME
-    "Noto Sans",
-    "Helvetica",
-    "Arial",
-];
+///
+/// In the code stack generic monospace leads because `ui-monospace` precedes
+/// every named face in the CSS: on Linux browsers it resolves through
+/// fontconfig's generic monospace alias before any of the named proprietary
+/// faces are reached.
+const GITHUB: ViewerStack = ViewerStack {
+    body: &[
+        "Mona Sans VF",
+        "Mona Sans",
+        "Segoe UI",
+        "Adwaita Sans", // fontconfig substitutes Segoe UI with Adwaita Sans on modern GNOME
+        "Noto Sans",
+        "Helvetica",
+        "Arial",
+    ],
+    mono: &[
+        "Noto Sans Mono",
+        "DejaVu Sans Mono",
+        "SFMono-Regular",
+        "SF Mono",
+        "Menlo",
+        "Consolas",
+        "Liberation Mono",
+    ],
+};
 
-/// Primer `.markdown-body` code stack. Generic monospace leads because
-/// `ui-monospace` precedes every named face in the CSS and resolves on Linux.
-const GITHUB_MONO_FAMILIES: &[&str] = &[
-    "Noto Sans Mono",
-    "DejaVu Sans Mono",
-    "SFMono-Regular",
-    "SF Mono",
-    "Menlo",
-    "Consolas",
-    "Liberation Mono",
-];
-
-/// VS Code preview body stack without macOS-only aliases; `system-ui` is
-/// transcribed to its common desktop resolutions and `sans-serif` remains
-/// covered by the app's existing fallback chain.
-const VSCODE_BODY_FAMILIES: &[&str] = &[
-    "Segoe WPC",
-    "Segoe UI",
-    "Adwaita Sans", // system-ui on GNOME 47+
-    "Cantarell",    // system-ui on older GNOME releases
-    "Ubuntu",
-    "Droid Sans",
-];
-
-/// VS Code preview code stack: the Linux `editor.fontFamily` default followed
-/// by the generic monospace resolutions.
-const VSCODE_MONO_FAMILIES: &[&str] = &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"];
+/// VS Code's markdown preview.
+///
+/// The body stack is without macOS-only aliases; `system-ui` is transcribed
+/// to its common desktop resolutions and `sans-serif` remains covered by the
+/// app's existing fallback chain.
+///
+/// The code stack is the Linux `editor.fontFamily` default, which VS Code
+/// webviews always inject (`'Droid Sans Mono', monospace`), followed by the
+/// generic monospace resolutions.
+const VSCODE: ViewerStack = ViewerStack {
+    body: &[
+        "Segoe WPC",
+        "Segoe UI",
+        "Adwaita Sans", // system-ui on GNOME 47+
+        "Cantarell",    // system-ui on older GNOME releases
+        "Ubuntu",
+        "Droid Sans",
+    ],
+    mono: &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"],
+};
 
 /// Code is set this much smaller than the body text around it: a
 /// monospace face looks larger than a proportional one at the same size.
@@ -374,20 +376,17 @@ fn font_definitions(
         .get(&FontFamily::Proportional)
         .cloned()
         .unwrap_or_default();
+    let stack = preset.emulated_stack();
     let installed = install_regular_fonts(
         fonts,
         &mut definitions,
         locale,
         preferred_family,
-        preset.body_families(),
+        stack.map(|stack| stack.body),
     );
     let bold_count = install_strong_font_family(fonts, &mut definitions, &installed, &defaults);
-    let preset_mono_families = preset.mono_families();
-    let preset_mono = if preset_mono_families.is_empty() {
-        false
-    } else {
-        install_preset_mono_font(fonts, &mut definitions, preset_mono_families)
-    };
+    let preset_mono =
+        stack.is_some_and(|stack| install_preset_mono_font(fonts, &mut definitions, stack.mono));
     install_emoji_fonts(fonts, &mut definitions);
     // Last, so the document chains end in every fallback installed above.
     install_document_families(

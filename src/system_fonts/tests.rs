@@ -281,8 +281,9 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     // Sans, asks for Segoe UI before Noto Sans, and ends the named part of
     // its body stack at Arial.
     let github_body = FontPreset::Github
-        .body_families()
-        .expect("github body list");
+        .emulated_stack()
+        .expect("github stack")
+        .body;
     assert_eq!(github_body[..3], ["Mona Sans VF", "Mona Sans", "Segoe UI"]);
     assert!(github_body.contains(&"Noto Sans"));
     assert_eq!(*github_body.last().expect("non-empty"), "Arial");
@@ -290,8 +291,9 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     // VS Code preview lists Ubuntu and Droid Sans behind the system-ui
     // resolutions.
     let vscode_body = FontPreset::Vscode
-        .body_families()
-        .expect("vscode body list");
+        .emulated_stack()
+        .expect("vscode stack")
+        .body;
     let ubuntu_pos = vscode_body
         .iter()
         .position(|f| *f == "Ubuntu")
@@ -303,18 +305,17 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     assert!(adwaita_pos < ubuntu_pos, "system-ui precedes Ubuntu");
 
     // The default preset keeps the app's own sans selection.
-    assert_eq!(FontPreset::Current.body_families(), None);
-    assert!(FontPreset::Current.mono_families().is_empty());
+    assert!(FontPreset::Current.emulated_stack().is_none());
 }
 
 #[test]
 fn preset_mono_lists_lead_with_linux_generic_monospace_resolutions() {
     assert_eq!(
-        FontPreset::Github.mono_families()[..2],
+        emulated_families(FontPreset::Github).1[..2],
         ["Noto Sans Mono", "DejaVu Sans Mono"]
     );
     assert_eq!(
-        FontPreset::Vscode.mono_families(),
+        emulated_families(FontPreset::Vscode).1,
         ["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"]
     );
 }
@@ -399,7 +400,7 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
         &mut FontDefinitions::default(),
         None,
         None,
-        FontPreset::Github.body_families(),
+        Some(emulated_families(FontPreset::Github).0),
     );
 
     let primary = installed
@@ -543,10 +544,9 @@ fn a_machine_with_no_fonts_still_gets_a_font_list() {
 
 /// The families of the viewer `preset` emulates, body then code.
 fn emulated_families(preset: FontPreset) -> (&'static [&'static str], &'static [&'static str]) {
-    (
-        preset.body_families().unwrap_or_default(),
-        preset.mono_families(),
-    )
+    preset
+        .emulated_stack()
+        .map_or((&[], &[]), |stack| (stack.body, stack.mono))
 }
 
 #[test]
