@@ -352,14 +352,12 @@ impl FileExplorer {
         None
     }
 
-    /// Toggle directory expansion (loads children if not yet loaded).
+    /// Toggle directory expansion. Expanding loads the directory and every
+    /// directory below it that was left expanded.
     pub(crate) fn toggle_expanded(&mut self, path: &PathBuf) {
-        if self.expanded_dirs.contains(path) {
-            self.expanded_dirs.remove(path);
-        } else {
-            // Load children before expanding if not yet loaded
-            self.load_children(path);
+        if !self.expanded_dirs.remove(path) {
             self.expanded_dirs.insert(path.clone());
+            Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
         }
     }
 
@@ -427,6 +425,8 @@ impl FileExplorer {
         Self::load_all_children(&mut self.tree, self.sort_order, 0);
         // Then collect all directory paths
         self.expanded_dirs = Self::collect_all_dirs(&self.tree);
+        // The directories listed at the depth limit are expanded but unread.
+        Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
     }
 
     /// Recursively load all unloaded directories (up to `MAX_EXPAND_DEPTH`).

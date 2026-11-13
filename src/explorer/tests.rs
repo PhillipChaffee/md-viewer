@@ -546,6 +546,46 @@ fn toggling_a_folder_loads_it_once_and_then_only_flips_its_expansion() {
     assert_eq!(child_names(&explorer, &docs), ["guide.md"]);
 }
 
+/// A folder stays expanded while a folder above it is closed. A rescan then
+/// leaves the closed folder unread, so the one below it is not in the tree.
+#[test]
+fn expanding_a_folder_loads_the_expanded_folders_remembered_below_it() {
+    let dir = ScratchDir::new();
+    let docs = dir.dir("docs");
+    let deep = dir.dir("docs/deep");
+    dir.file("docs/deep/guide.md", "# Guide");
+    let mut explorer = explorer_at(dir.path());
+    explorer.toggle_expanded(&docs);
+    explorer.toggle_expanded(&deep);
+    explorer.toggle_expanded(&docs);
+    explorer.refresh();
+    wait_for_scan(&mut explorer);
+    assert!(explorer.get_children(&docs).is_none(), "closed, so unread");
+
+    explorer.toggle_expanded(&docs);
+
+    assert!(explorer.is_expanded(&deep));
+    assert_eq!(child_names(&explorer, &deep), ["guide.md"]);
+}
+
+#[test]
+fn loading_a_folder_reads_it_once_and_only_if_the_tree_lists_it() {
+    let dir = ScratchDir::new();
+    let docs = dir.dir("docs");
+    let deep = dir.dir("docs/deep");
+    dir.file("docs/guide.md", "# Guide");
+    let mut explorer = explorer_at(dir.path());
+
+    explorer.load_children(&deep);
+    assert!(explorer.get_children(&docs).is_none(), "not listed yet");
+
+    explorer.load_children(&docs);
+    dir.file("docs/later.md", "# Later");
+    explorer.load_children(&docs);
+    assert_eq!(child_names(&explorer, &docs), ["deep", "guide.md"]);
+    assert!(!explorer.is_expanded(&docs));
+}
+
 #[test]
 fn expanding_a_folder_that_is_not_in_the_tree_loads_nothing() {
     let dir = ScratchDir::new();
@@ -582,7 +622,7 @@ fn expand_all_opens_every_folder_and_collapse_all_closes_them() {
 }
 
 #[test]
-fn expand_all_stops_loading_below_the_depth_limit() {
+fn expand_all_stops_at_the_depth_limit_with_every_expanded_folder_loaded() {
     let dir = ScratchDir::new();
     let mut levels = vec![dir.path().to_path_buf()];
     for depth in 0..=FileExplorer::MAX_EXPAND_DEPTH + 1 {
@@ -594,10 +634,12 @@ fn expand_all_stops_loading_below_the_depth_limit() {
 
     explorer.expand_all();
 
-    // `levels[n]` sits n levels below the root; the limit loads ten of them.
-    let last_loaded = &levels[FileExplorer::MAX_EXPAND_DEPTH];
-    let first_unloaded = &levels[FileExplorer::MAX_EXPAND_DEPTH + 1];
-    assert!(explorer.get_children(last_loaded).is_some());
-    assert!(explorer.get_children(first_unloaded).is_none());
-    assert!(!explorer.is_expanded(levels.last().unwrap()));
+    // `levels[n]` sits n levels below the root. The limit reads ten of them
+    // and expands the folder the tenth lists, which is then read as well.
+    let last_expanded = &levels[FileExplorer::MAX_EXPAND_DEPTH + 1];
+    let first_closed = &levels[FileExplorer::MAX_EXPAND_DEPTH + 2];
+    assert!(explorer.is_expanded(last_expanded));
+    assert!(lists(&explorer, last_expanded, "level-11"));
+    assert!(!explorer.is_expanded(first_closed));
+    assert!(explorer.get_children(first_closed).is_none());
 }
