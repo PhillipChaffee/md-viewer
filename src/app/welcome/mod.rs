@@ -10,6 +10,9 @@ use crate::recent::{
     format_relative_time, now_epoch_secs, RecentEntry, RECENT_FILES_CAP, RECENT_SHOWN,
 };
 
+#[cfg(test)]
+mod tests;
+
 /// What the user picked on the welcome page.
 #[derive(Debug, PartialEq, Eq)]
 enum WelcomeAction {
