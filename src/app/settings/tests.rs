@@ -34,16 +34,16 @@ fn picking_a_color_overrides_the_theme_color_it_belongs_to() {
 
     change_color(&mut harness, 0);
 
-    let highlight = harness.app().highlight_color.unwrap();
+    let highlight = harness.app().colors.highlight.unwrap();
     assert_ne!(highlight, theme_highlight);
-    assert_eq!(harness.app().link_color, None);
+    assert_eq!(harness.app().colors.link, None);
     assert_eq!(drawn_colors(&harness), (highlight, theme_link));
 
     change_color(&mut harness, 1);
 
-    let link = harness.app().link_color.unwrap();
+    let link = harness.app().colors.link.unwrap();
     assert_ne!(link, theme_link);
-    assert_eq!(harness.app().highlight_color, Some(highlight));
+    assert_eq!(harness.app().colors.highlight, Some(highlight));
     assert_eq!(drawn_colors(&harness), (highlight, link));
 }
 
@@ -54,22 +54,22 @@ fn reset_is_offered_per_override_and_brings_the_theme_color_back() {
     harness.pick("Colors");
     assert_eq!(harness.enabled("Reset"), [false, false]);
 
-    harness.app_mut().highlight_color = Some(RED);
-    harness.app_mut().link_color = Some(GREEN);
+    harness.app_mut().colors.highlight = Some(RED);
+    harness.app_mut().colors.link = Some(GREEN);
     harness.settle();
     assert_eq!(harness.enabled("Reset"), [true, true]);
     assert_eq!(drawn_colors(&harness), (RED, GREEN));
 
     let highlight_reset = harness.labelled("Reset")[0].0;
     harness.click_at(highlight_reset);
-    assert_eq!(harness.app().highlight_color, None);
-    assert_eq!(harness.app().link_color, Some(GREEN));
+    assert_eq!(harness.app().colors.highlight, None);
+    assert_eq!(harness.app().colors.link, Some(GREEN));
     assert_eq!(drawn_colors(&harness), (theme_highlight, GREEN));
     assert_eq!(harness.enabled("Reset"), [false, true]);
 
     let link_reset = harness.labelled("Reset")[1].0;
     harness.click_at(link_reset);
-    assert_eq!(harness.app().link_color, None);
+    assert_eq!(harness.app().colors.link, None);
     assert_eq!(drawn_colors(&harness), (theme_highlight, theme_link));
 }
 

@@ -99,8 +99,8 @@ fn customized_session() -> Harness {
     app.reading_width = ReadingWidth::new(512.0);
     app.line_spacing = LineSpacing::Airy;
     app.math_scale = 1.5;
-    app.highlight_color = Some(Color32::from_rgb(200, 30, 30));
-    app.link_color = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
+    app.colors.highlight = Some(Color32::from_rgb(200, 30, 30));
+    app.colors.link = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
     app.fonts.family = Some("No Such Family".to_owned());
     app.smooth_text_rendering = true;
     app.fonts.preset = FontPreset::Vscode;
@@ -130,7 +130,7 @@ fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
             app.explorer_width.to_bits(),
             app.outline_width.to_bits(),
         ),
-        (app.highlight_color, app.link_color),
+        (app.colors.highlight, app.colors.link),
         (app.fonts.family.clone(), app.fonts.preset, app.fonts.size),
         (app.get_open_tab_paths(), app.active_tab),
         (
@@ -475,7 +475,7 @@ fn a_diagram_is_redrawn_in_the_colors_of_the_theme_switched_to() {
 fn the_users_colors_stay_on_top_of_whichever_theme_is_picked() {
     let mut harness = Harness::with_three_docs();
     let highlight = Color32::from_rgb(200, 30, 30);
-    harness.app.highlight_color = Some(highlight);
+    harness.app.colors.highlight = Some(highlight);
     harness.idle();
 
     for theme in ThemeId::ALL {
@@ -487,7 +487,7 @@ fn the_users_colors_stay_on_top_of_whichever_theme_is_picked() {
         assert_eq!(visuals.panel_fill, theme.palette().page);
     }
 
-    harness.app.highlight_color = None;
+    harness.app.colors.highlight = None;
     harness.idle();
     assert_eq!(
         harness.ctx.style().visuals.selection.bg_fill,

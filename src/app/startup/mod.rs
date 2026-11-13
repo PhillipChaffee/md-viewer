@@ -19,7 +19,7 @@ use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts, FontConfig};
 use crate::tab::Tab;
-use crate::theme::ThemeId;
+use crate::theme::{ColorOverrides, ThemeId};
 
 #[cfg(kani)]
 mod proofs;
@@ -243,8 +243,10 @@ impl MarkdownApp {
         let reading_width = persisted.reading_width();
         let line_spacing = persisted.line_spacing();
         let math_scale = persisted.math_scale();
-        let highlight_color = persisted.highlight_color();
-        let link_color = persisted.link_color();
+        let colors = ColorOverrides {
+            highlight: persisted.highlight_color(),
+            link: persisted.link_color(),
+        };
         let smooth_text_rendering = persisted.smooth_text_rendering();
         let show_explorer = persisted.show_explorer();
         let explorer_width = persisted.explorer_width();
@@ -277,13 +279,8 @@ impl MarkdownApp {
             line_spacing,
             document_look,
             math_scale,
-            // Frame 1 always rebuilds Visuals anyway (last_applied_theme
-            // starts at None), so this just avoids a spurious second rebuild
-            // afterward if nothing further changes.
-            highlight_color,
-            last_applied_highlight_color: highlight_color,
-            link_color,
-            last_applied_link_color: link_color,
+            colors,
+            applied_visuals: None,
             show_color_settings_dialog: false,
             // Already applied by `new` via setup_fonts(); `applied_fonts` starts
             // in sync so update() doesn't redundantly reload fonts on frame 1.
@@ -306,7 +303,6 @@ impl MarkdownApp {
             flashing_paths: HashMap::new(),
             is_virtual_display: is_virtual_display(std::env::var("DISPLAY").ok().as_deref()),
             egui_ctx: ctx.clone(),
-            last_applied_theme: None,
             last_applied_zoom_level: None,
             last_window_title: String::new(),
             title_dirty: true,
@@ -337,8 +333,8 @@ impl MarkdownApp {
             full_width_content: None,
             line_spacing: Some(self.line_spacing),
             math_scale: Some(self.math_scale),
-            highlight_color: self.highlight_color.map(color_to_persisted),
-            link_color: self.link_color.map(color_to_persisted),
+            highlight_color: self.colors.highlight.map(color_to_persisted),
+            link_color: self.colors.link.map(color_to_persisted),
             selected_font_family: self.fonts.family.clone(),
             smooth_text_rendering: Some(self.smooth_text_rendering),
             font_preset: Some(self.fonts.preset),

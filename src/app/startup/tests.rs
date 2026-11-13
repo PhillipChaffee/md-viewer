@@ -54,7 +54,7 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert!(!app.smooth_text_rendering);
     assert_close(app.zoom_level, 1.0);
     assert_close(app.math_scale, 1.0);
-    assert_eq!(app.highlight_color, None);
+    assert_eq!(app.colors.highlight, None);
     assert_eq!(app.fonts.preset, FontPreset::Reader);
     assert_eq!(app.fonts.size, TextSizeClass::Normal);
     assert!(!app.live_reload.is_live());
@@ -197,9 +197,9 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
     assert_close(app.reading_width.get(), ReadingWidth::MAX);
     assert_eq!(app.line_spacing, LineSpacing::Airy);
     assert_close(app.math_scale, 1.0);
-    assert_eq!(app.highlight_color, Some(Color32::from_rgb(10, 20, 30)));
+    assert_eq!(app.colors.highlight, Some(Color32::from_rgb(10, 20, 30)));
     assert_eq!(
-        app.link_color,
+        app.colors.link,
         Some(Color32::from_rgba_premultiplied(1, 2, 3, 4))
     );
     assert_eq!(app.fonts.family.as_deref(), Some("No Such Family"));

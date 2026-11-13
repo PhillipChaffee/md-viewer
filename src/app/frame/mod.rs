@@ -14,7 +14,7 @@ use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::persist::APP_KEY;
 use crate::system_fonts::{document_fonts, setup_fonts};
-use crate::theme::{self, ColorOverrides};
+use crate::theme;
 
 #[cfg(test)]
 mod tests;
@@ -143,21 +143,12 @@ impl MarkdownApp {
     /// Rebuild the egui visuals when the theme or a color override changed.
     /// Returns whether it did.
     fn apply_theme(&mut self, ctx: &egui::Context) -> bool {
-        if self.last_applied_theme == Some(self.theme)
-            && self.last_applied_highlight_color == self.highlight_color
-            && self.last_applied_link_color == self.link_color
-        {
+        let wanted = Some((self.theme, self.colors));
+        if self.applied_visuals == wanted {
             return false;
         }
-        self.last_applied_theme = Some(self.theme);
-        self.last_applied_highlight_color = self.highlight_color;
-        self.last_applied_link_color = self.link_color;
-
-        let overrides = ColorOverrides {
-            highlight: self.highlight_color,
-            link: self.link_color,
-        };
-        ctx.set_visuals(theme::visuals(self.theme.palette(), overrides));
+        self.applied_visuals = wanted;
+        ctx.set_visuals(theme::visuals(self.theme.palette(), self.colors));
         true
     }
 

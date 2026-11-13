@@ -55,7 +55,7 @@ impl MarkdownApp {
                     }
 
                     let reset_btn =
-                        ui.add_enabled(self.highlight_color.is_some(), egui::Button::new("Reset"));
+                        ui.add_enabled(self.colors.highlight.is_some(), egui::Button::new("Reset"));
                     mcp::widget(
                         &self.mcp,
                         format_args!("Colors Dialog: Highlight Color Reset"),
@@ -84,7 +84,7 @@ impl MarkdownApp {
                     }
 
                     let reset_btn =
-                        ui.add_enabled(self.link_color.is_some(), egui::Button::new("Reset"));
+                        ui.add_enabled(self.colors.link.is_some(), egui::Button::new("Reset"));
                     mcp::widget(
                         &self.mcp,
                         format_args!("Colors Dialog: Link Color Reset"),
@@ -100,10 +100,10 @@ impl MarkdownApp {
 
         self.show_color_settings_dialog = open;
         if let Some(color) = new_highlight_color {
-            self.highlight_color = color;
+            self.colors.highlight = color;
         }
         if let Some(color) = new_link_color {
-            self.link_color = color;
+            self.colors.link = color;
         }
     }
 

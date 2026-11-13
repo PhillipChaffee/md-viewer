@@ -19,7 +19,7 @@ use crate::recent::RecentEntry;
 use crate::search::SearchState;
 use crate::system_fonts::FontConfig;
 use crate::tab::Tab;
-use crate::theme::ThemeId;
+use crate::theme::{ColorOverrides, ThemeId};
 
 mod action;
 mod appearance;
@@ -94,13 +94,12 @@ pub(crate) struct MarkdownApp {
     /// when the theme or the fonts change (never per frame).
     document_look: DocumentLook,
     math_scale: f32,
-    // Selection/highlight background color override. `None` = theme default.
-    highlight_color: Option<egui::Color32>,
-    // Mirrors `last_applied_theme`: only rebuild Visuals when this changes.
-    last_applied_highlight_color: Option<egui::Color32>,
-    // Hyperlink text color override. `None` = theme default.
-    link_color: Option<egui::Color32>,
-    last_applied_link_color: Option<egui::Color32>,
+    /// The reader's own highlight and link colors. `None` in either is
+    /// the theme's.
+    colors: ColorOverrides,
+    // The theme and colors egui's Visuals were last built from: they are
+    // rebuilt only when either differs. `None` until the first frame.
+    applied_visuals: Option<(ThemeId, ColorOverrides)>,
     show_color_settings_dialog: bool,
     /// The document's font family, preset and size class. Every preset
     /// shares the one size class.
@@ -142,8 +141,6 @@ pub(crate) struct MarkdownApp {
     is_virtual_display: bool,
     // Stored context for waking egui from the watcher bridge thread
     egui_ctx: egui::Context,
-    // Track state to avoid unconditional repaints
-    last_applied_theme: Option<ThemeId>,
     // Last zoom level handed to set_zoom_factor; skips redundant writes
     last_applied_zoom_level: Option<f32>,
     last_window_title: String,
