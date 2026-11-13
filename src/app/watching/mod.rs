@@ -237,7 +237,7 @@ impl MarkdownApp {
             // `search_matches` will be cleared by `Tab::reload`. Force a rebuild
             // on the next frame by invalidating the cache-validity shadow state.
             if self.reload_tabs_showing(&path) && self.search.is_open {
-                self.search.last_tab = None;
+                self.search.invalidate();
             }
         }
 

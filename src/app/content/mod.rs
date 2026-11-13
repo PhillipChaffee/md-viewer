@@ -133,7 +133,7 @@ impl MarkdownApp {
         if edited {
             // The find bar's matches are of the text before the edit. They
             // are found again next frame and counted in the one after.
-            self.search.last_tab = None;
+            self.search.invalidate();
             ui.ctx().request_repaint();
         }
         self.document_pane_width = pane_width;

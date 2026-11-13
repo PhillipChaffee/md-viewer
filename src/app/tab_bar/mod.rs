@@ -190,7 +190,7 @@ impl MarkdownApp {
         self.title_dirty = true;
         // The kept tab moved to the first place, which the find bar may
         // have searched while it held another document.
-        self.search.last_tab = None;
+        self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
     }

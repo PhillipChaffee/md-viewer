@@ -6,7 +6,7 @@ use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::search::{stepped_match_index, SearchBarOutcome};
+use crate::search::{stepped_match_index, SearchBarOutcome, SearchState};
 
 #[cfg(test)]
 mod tests;
@@ -180,17 +180,13 @@ impl MarkdownApp {
             return;
         }
         let tab_idx = self.active_tab;
-        let needs_rebuild =
-            self.search.query != self.search.last_query || self.search.last_tab != Some(tab_idx);
-        if !needs_rebuild {
+        if self.search.is_built_for(tab_idx) {
             return;
         }
-        let q = self.search.query.clone();
         if let Some(tab) = self.tabs.get_mut(tab_idx) {
-            tab.rebuild_search(&q);
+            tab.rebuild_search(&self.search.query);
         }
-        self.search.last_query = q;
-        self.search.last_tab = Some(tab_idx);
+        self.search.mark_built_for(tab_idx);
         // Always start at the first match after any rebuild — query change, tab
         // change, or watcher reload. Match indices are not semantically comparable
         // across rebuilds; preserving a numeric index across docs is coincidental
@@ -206,12 +202,7 @@ impl MarkdownApp {
 
     /// Close the find bar and clear highlight state on every tab.
     pub(crate) fn close_search(&mut self) {
-        self.search.is_open = false;
-        self.search.query.clear();
-        self.search.last_query.clear();
-        self.search.last_tab = None;
-        self.search.focus_requested = false;
-        self.search.active_match_index = 0;
+        self.search = SearchState::default();
         for tab in &mut self.tabs {
             tab.search_matches.clear();
             tab.cache.clear_search_ranges();

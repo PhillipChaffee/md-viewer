@@ -122,7 +122,7 @@ impl MarkdownApp {
         self.title_dirty = true;
         // A first document takes the place the find bar searched while it
         // was empty.
-        self.search.last_tab = None;
+        self.search.invalidate();
         self.refresh_open_tab_paths();
 
         // Update watcher if enabled
@@ -171,7 +171,7 @@ impl MarkdownApp {
         }
         self.title_dirty = true;
         // The same tab, another document: what the find bar counted is gone.
-        self.search.last_tab = None;
+        self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
     }
@@ -196,7 +196,7 @@ impl MarkdownApp {
         self.title_dirty = true;
         // The tabs after the closed one moved down a place, so the place
         // the find bar searched may hold another document now.
-        self.search.last_tab = None;
+        self.search.invalidate();
         self.refresh_open_tab_paths();
 
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
