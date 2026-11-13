@@ -4,9 +4,13 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
 use crate::tab::Tab;
 use crate::watcher::FLASH_DURATION_MS;
+
+#[cfg(test)]
+mod tests;
 
 /// How long a save's outcome stays beside the mode toggle.
 const SAVE_FLASH: Duration = Duration::from_millis(FLASH_DURATION_MS * 3);
@@ -69,7 +73,7 @@ impl MarkdownApp {
             ));
 
             if new_tab_btn.clicked() {
-                self.open_file_dialog();
+                self.apply_action(ui.ctx(), AppAction::OpenFile);
             }
 
             // Preview|Edit segmented toggle for the active tab, right-aligned
@@ -96,11 +100,11 @@ impl MarkdownApp {
 
     /// The horizontally scrollable row of tabs.
     fn tab_strip(&mut self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
-        // Collect the titles first: drawing a tab updates `self.hovered_tab`.
         let titles: Vec<String> = self.tabs.iter().map(Tab::title).collect();
         let has_siblings = titles.len() > 1;
-        // Last frame's hover decides the close buttons for the whole strip.
-        let hovered_tab = self.hovered_tab;
+        // The tab under the pointer last frame decides this frame's close
+        // buttons for the whole strip.
+        let hovered_tab = self.hovered_tab.take();
 
         egui::ScrollArea::horizontal()
             .max_width(ui.available_width() - 30.0)
@@ -115,13 +119,19 @@ impl MarkdownApp {
                             show_close: is_active || hovered_tab == Some(index),
                             has_siblings,
                         };
-                        if tab_label(ui, &label, actions).hovered() {
+                        // `hovered()` is false over the tab's own label and
+                        // close button, which take the hover for themselves.
+                        if tab_label(ui, &label, actions).contains_pointer() {
                             self.hovered_tab = Some(index);
                         }
                         ui.separator();
                     }
                 });
             });
+        if self.hovered_tab != hovered_tab {
+            // The close buttons drawn this frame are one pointer move stale.
+            ui.ctx().request_repaint();
+        }
     }
 
     /// Applies the frame's tab strip actions. Returns the tab the caller
@@ -145,9 +155,7 @@ impl MarkdownApp {
         self.active_tab = 0;
         self.title_dirty = true;
         self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 }
 

@@ -6,7 +6,7 @@ use egui_commonmark_extended::header_position_key;
 use crate::app::MarkdownApp;
 use crate::headers::{any_header_has_children, header_has_children, header_is_hidden, Header};
 use crate::icons::paint_sidebar_resize_affordance;
-use crate::layout::SIDEBAR_MIN_WIDTH;
+use crate::layout::{line_fraction, SIDEBAR_MIN_WIDTH};
 use crate::tab::Tab;
 
 #[cfg(test)]
@@ -19,10 +19,16 @@ pub(super) const HEADER_SCROLL_MARGIN: f32 = 50.0;
 #[cfg(feature = "mcp")]
 type McpWidget = (String, &'static str, egui::Rect, Option<String>);
 
-/// What a click in the outline asks for, by header index.
+/// What a click in the outline asks for.
 enum OutlineClick {
+    /// Fold or unfold the header at this index.
     ToggleFold(usize),
-    JumpTo(usize),
+    /// Scroll the document to a heading.
+    JumpTo {
+        /// Byte offset of the heading in the document source.
+        source_start: usize,
+        line_number: usize,
+    },
 }
 
 /// State shared by the outline's widgets while one frame is drawn.
@@ -131,7 +137,10 @@ impl MarkdownApp {
 
         match outline.click {
             Some(OutlineClick::ToggleFold(index)) => toggle_fold(tab, index),
-            Some(OutlineClick::JumpTo(index)) => jump_to_header(tab, index),
+            Some(OutlineClick::JumpTo {
+                source_start,
+                line_number,
+            }) => jump_to_header(tab, source_start, line_number),
             None => {}
         }
     }
@@ -242,7 +251,10 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi)
         ));
 
         if !outline.is_dragging && response.clicked() {
-            outline.click = Some(OutlineClick::JumpTo(row.index));
+            outline.click = Some(OutlineClick::JumpTo {
+                source_start: row.header.source_start,
+                line_number: row.header.line_number,
+            });
         }
     });
 }
@@ -254,11 +266,17 @@ fn fold_indicator(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut Outline
         return;
     }
     let (rect, response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
-    let indicator = match row.fold {
-        Fold::Collapsed => "+",
-        Fold::Expanded => "-",
+    let (indicator, verb) = match row.fold {
+        Fold::Collapsed => ("+", "Expand"),
+        Fold::Expanded => ("-", "Collapse"),
         Fold::NoColumn | Fold::Leaf => return,
     };
+    // The indicator is painted, not a widget with text, so it names itself
+    // for screen readers.
+    response.widget_info(|| {
+        let name = format!("{verb} {}", row.header.title);
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
+    });
     let text_color = if response.hovered() {
         ui.visuals().strong_text_color()
     } else {
@@ -297,21 +315,16 @@ fn toggle_fold(tab: &mut Tab, index: usize) {
 }
 
 /// Schedules the scroll that brings the clicked header into view.
-fn jump_to_header(tab: &mut Tab, index: usize) {
-    let Some(header) = tab.outline_headers.get(index) else {
-        return;
-    };
+fn jump_to_header(tab: &mut Tab, source_start: usize, line_number: usize) {
     // The renderer records the same source-stable key, so formatting
     // and duplicate display titles cannot redirect the click.
-    let key = header_position_key(header.source_start);
-    let Some(jump) = header_jump(
+    let key = header_position_key(source_start);
+    let jump = header_jump(
         tab.cache.get_header_position(&key),
-        header.line_number,
+        line_number,
         tab.content_lines,
         tab.last_content_height,
-    ) else {
-        return;
-    };
+    );
     tab.pending_scroll_offset = Some(jump.scroll_offset);
     if jump.is_estimate {
         // The estimate only gets us near the target. Request one
@@ -322,31 +335,17 @@ fn jump_to_header(tab: &mut Tab, index: usize) {
 
 /// Picks the scroll offset for a header: its measured position when the
 /// renderer has painted it, otherwise an estimate from its line number.
-/// `None` when the document has not been laid out yet.
+/// Before the document is laid out that estimate is the top.
 fn header_jump(
     measured_y: Option<f32>,
     line_number: usize,
     content_lines: usize,
     content_height: f32,
-) -> Option<HeaderJump> {
-    let above = |y: f32| (y - HEADER_SCROLL_MARGIN).max(0.0);
-    if let Some(y) = measured_y {
-        return Some(HeaderJump {
-            scroll_offset: above(y),
-            is_estimate: false,
-        });
+) -> HeaderJump {
+    let estimated_y = line_fraction(line_number, content_lines) * content_height;
+    let header_y = measured_y.unwrap_or(estimated_y);
+    HeaderJump {
+        scroll_offset: (header_y - HEADER_SCROLL_MARGIN).max(0.0),
+        is_estimate: measured_y.is_none(),
     }
-    (content_height > 0.0 && content_lines > 0).then(|| HeaderJump {
-        scroll_offset: above(line_fraction(line_number, content_lines) * content_height),
-        is_estimate: true,
-    })
-}
-
-/// How far down the document `line` is, as a fraction of `total` lines.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "line counts above 2^24 lose precision, which a scroll estimate tolerates"
-)]
-fn line_fraction(line: usize, total: usize) -> f32 {
-    line as f32 / total as f32
 }

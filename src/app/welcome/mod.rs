@@ -4,12 +4,17 @@ use std::path::PathBuf;
 
 use eframe::egui;
 
+use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
 use crate::recent::{
     format_relative_time, now_epoch_secs, RecentEntry, RECENT_FILES_CAP, RECENT_SHOWN,
 };
 
+#[cfg(test)]
+mod tests;
+
 /// What the user picked on the welcome page.
+#[derive(Debug, PartialEq, Eq)]
 enum WelcomeAction {
     OpenFile,
     OpenFolder,
@@ -50,27 +55,30 @@ impl MarkdownApp {
             now: now_epoch_secs(),
         };
 
-        let action = egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add_space(64.0);
-                welcome_heading(ui);
-                ui.add_space(18.0);
-                let from_buttons = open_buttons(ui);
-                let from_recents = recent_files(ui, &list);
-                from_buttons.or(from_recents)
-            })
-            .inner;
-
         // Deferred actions (run after the borrow on self.recent_files is released).
-        match action {
-            Some(WelcomeAction::OpenFile) => self.open_file_dialog(),
-            Some(WelcomeAction::OpenFolder) => self.open_folder_dialog(),
+        match welcome_page(ui, &list) {
+            Some(WelcomeAction::OpenFile) => self.apply_action(ui.ctx(), AppAction::OpenFile),
+            Some(WelcomeAction::OpenFolder) => self.apply_action(ui.ctx(), AppAction::OpenFolder),
             Some(WelcomeAction::OpenRecent(path)) => self.open_in_new_tab(path),
             Some(WelcomeAction::ToggleShowAll) => self.welcome_show_all = !self.welcome_show_all,
             None => {}
         }
     }
+}
+
+/// Draws the whole page. Returns what the user picked this frame.
+fn welcome_page(ui: &mut egui::Ui, list: &RecentList<'_>) -> Option<WelcomeAction> {
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.add_space(64.0);
+            welcome_heading(ui);
+            ui.add_space(18.0);
+            let from_buttons = open_buttons(ui);
+            let from_recents = recent_files(ui, list);
+            from_buttons.or(from_recents)
+        })
+        .inner
 }
 
 fn welcome_heading(ui: &mut egui::Ui) {
@@ -159,10 +167,8 @@ fn recent_column(ui: &mut egui::Ui, list: &RecentList<'_>) -> Option<WelcomeActi
 /// Draws one recent file. Returns whether the user clicked it; a file that
 /// no longer exists is shown disabled.
 fn recent_row(ui: &mut egui::Ui, entry: &RecentEntry, exists: bool, now: u64) -> bool {
-    let name = entry.path.file_name().map_or_else(
-        || entry.path.to_string_lossy().into_owned(),
-        |name| name.to_string_lossy().into_owned(),
-    );
+    let name = entry.path.file_name().unwrap_or(entry.path.as_os_str());
+    let name = name.to_string_lossy();
     let dir = entry
         .path
         .parent()
