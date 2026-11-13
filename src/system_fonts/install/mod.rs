@@ -104,7 +104,7 @@ impl SelectedFont {
 }
 
 pub(crate) struct InstalledFont {
-    key: String,
+    key: &'static str,
     pub(crate) selected: SelectedFont,
     required_glyphs: &'static str,
     pub(crate) primary: bool,
@@ -306,7 +306,7 @@ impl RegularFontInstaller<'_, '_> {
             family.push(key.to_owned());
         }
         self.installed.push(InstalledFont {
-            key: key.to_owned(),
+            key,
             selected,
             required_glyphs,
             primary,
@@ -422,18 +422,8 @@ pub(crate) fn install_regular_fonts(
     installer.installed
 }
 
-fn push_unique(
-    destination: &mut Vec<String>,
-    seen: &mut HashSet<String>,
-    names: impl IntoIterator<Item = String>,
-) {
-    for name in names {
-        if seen.insert(name.clone()) {
-            destination.push(name);
-        }
-    }
-}
-
+/// The chain strong text is drawn from: each name once, where it first
+/// comes in this order.
 fn build_strong_family(
     primary_regular: Option<&str>,
     primary_bold: Option<&str>,
@@ -441,22 +431,16 @@ fn build_strong_family(
     fallback_bold: &[String],
     proportional: &[String],
 ) -> Vec<String> {
-    let mut family = Vec::new();
     let mut seen = HashSet::new();
-    push_unique(
-        &mut family,
-        &mut seen,
-        primary_bold.into_iter().map(str::to_owned),
-    );
-    push_unique(
-        &mut family,
-        &mut seen,
-        primary_regular.into_iter().map(str::to_owned),
-    );
-    push_unique(&mut family, &mut seen, default_proportional.iter().cloned());
-    push_unique(&mut family, &mut seen, fallback_bold.iter().cloned());
-    push_unique(&mut family, &mut seen, proportional.iter().cloned());
-    family
+    primary_bold
+        .into_iter()
+        .chain(primary_regular)
+        .chain(default_proportional.iter().map(String::as_str))
+        .chain(fallback_bold.iter().map(String::as_str))
+        .chain(proportional.iter().map(String::as_str))
+        .filter(|name| seen.insert(*name))
+        .map(str::to_owned)
+        .collect()
 }
 
 pub(crate) fn install_strong_font_family(
@@ -476,7 +460,7 @@ pub(crate) fn install_strong_font_family(
 
     for regular in installed {
         if regular.primary {
-            primary_regular = Some(regular.key.clone());
+            primary_regular = Some(regular.key);
         }
         let Some(selected) = fonts.select(
             &[regular.selected.family_id],
@@ -507,7 +491,7 @@ pub(crate) fn install_strong_font_family(
         .cloned()
         .unwrap_or_default();
     let strong = build_strong_family(
-        primary_regular.as_deref(),
+        primary_regular,
         primary_bold.as_deref(),
         default_proportional,
         &fallback_bold,

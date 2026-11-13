@@ -40,7 +40,7 @@ impl Installed {
     }
 
     fn keys(&self) -> Vec<&str> {
-        self.fonts.iter().map(|font| font.key.as_str()).collect()
+        self.fonts.iter().map(|font| font.key).collect()
     }
 
     fn chain(&self, family: &FontFamily) -> &[String] {
