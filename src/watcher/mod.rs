@@ -165,15 +165,6 @@ pub(crate) fn ancestors_within<'a>(
         .take_while(move |dir| dir.starts_with(root))
 }
 
-/// The explorer directory whose listing a change to `changed` can alter, if
-/// `changed` lies under `root`.
-pub(crate) fn listing_to_refresh<'a>(changed: &'a Path, root: &Path) -> Option<&'a Path> {
-    changed
-        .starts_with(root)
-        .then(|| changed.parent())
-        .flatten()
-}
-
 /// Registers `path` non-recursively. A refusal is logged, naming the path as
 /// a `what`, and reported as `false`.
 fn watch_path(watcher: &mut dyn notify::Watcher, path: &Path, what: &str) -> bool {

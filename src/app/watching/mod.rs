@@ -9,8 +9,8 @@ use notify_debouncer_mini::DebounceEventResult;
 
 use crate::app::MarkdownApp;
 use crate::watcher::{
-    ancestors_within, explorer_watch_dirs, listing_to_refresh, next_watcher_retry, settled_paths,
-    FileWatcher, WatchPlan, MAX_WATCHER_RETRIES,
+    ancestors_within, explorer_watch_dirs, next_watcher_retry, settled_paths, FileWatcher,
+    WatchPlan, MAX_WATCHER_RETRIES,
 };
 
 #[cfg(test)]
@@ -227,7 +227,10 @@ impl MarkdownApp {
         for path in changed_paths {
             self.flash_changed_path(&path, now);
             if let Some(root) = &self.file_explorer.root {
-                refresh_directories.extend(listing_to_refresh(&path, root).map(Path::to_path_buf));
+                // The change can alter one listing: that of the directory
+                // holding the path, when it is inside the explorer.
+                let listing = ancestors_within(&path, root).next();
+                refresh_directories.extend(listing.map(Path::to_path_buf));
             }
 
             // If the active tab gets reloaded while the find bar is open, its

@@ -465,16 +465,19 @@ fn a_change_outside_the_root_has_no_ancestors_within_it() {
 }
 
 #[test]
-fn a_change_under_the_root_refreshes_its_parent_listing() {
+fn the_nearest_ancestor_within_the_root_is_the_directory_holding_the_change() {
     let root = Path::new("/home/me");
 
     assert_eq!(
-        listing_to_refresh(Path::new("/home/me/docs/new.md"), root),
+        ancestors_within(Path::new("/home/me/docs/new.md"), root).next(),
         Some(Path::new("/home/me/docs"))
     );
     assert_eq!(
-        listing_to_refresh(Path::new("/home/me/new.md"), root),
+        ancestors_within(Path::new("/home/me/new.md"), root).next(),
         Some(root)
     );
-    assert_eq!(listing_to_refresh(Path::new("/tmp/new.md"), root), None);
+    assert_eq!(
+        ancestors_within(Path::new("/tmp/new.md"), root).next(),
+        None
+    );
 }
