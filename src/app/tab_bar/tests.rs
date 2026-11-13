@@ -198,10 +198,11 @@ fn close_others_stops_watching_the_closed_documents() {
     );
 }
 
-#[test]
-fn close_others_counts_the_matches_of_the_document_it_keeps() {
+/// Three tabs with the find bar open on the first: `a.md` holds the word
+/// looked for once, `b.md` holds it twice and `c.md` not at all.
+fn finding_needle() -> LabelHarness {
     let mut harness = LabelHarness::with_docs(&[
-        ("a.md", "needle"),
+        ("a.md", "# A\n\nneedle"),
         ("b.md", "needle needle"),
         ("c.md", "# C"),
     ]);
@@ -215,6 +216,59 @@ fn close_others_counts_the_matches_of_the_document_it_keeps() {
     app.search.query = "needle".to_owned();
     harness.frames(2);
     assert!(harness.query_by_label("1 / 1").is_some());
+    harness
+}
+
+/// Whether the last frame asked for another one at once.
+fn asks_for_a_frame(harness: &LabelHarness) -> bool {
+    harness.output().viewport_output[&egui::ViewportId::ROOT]
+        .repaint_delay
+        .is_zero()
+}
+
+/// Run the two frames egui asks for after a frame that had input, and no
+/// more: the window draws nothing further unless something asks.
+fn run_the_frames_asked_for(harness: &mut LabelHarness) {
+    for _ in 0..2 {
+        assert!(asks_for_a_frame(harness));
+        harness.step();
+    }
+}
+
+#[test]
+fn the_find_bar_counts_again_in_the_frames_a_close_is_followed_by() {
+    let mut harness = finding_needle();
+
+    harness
+        .get_by_label("a.md")
+        .click_button(PointerButton::Middle);
+    // One frame for each event of the click; the last one closes the tab.
+    harness.step();
+    assert_eq!(open_paths(&harness).len(), 2);
+    assert!(harness.query_by_label("1 / 1").is_some(), "not yet counted");
+    run_the_frames_asked_for(&mut harness);
+    assert!(harness.query_by_label("1 / 2").is_some(), "after a close");
+
+    harness.state_mut().focus_tab(1);
+    harness.frames(6);
+    assert!(
+        harness.query_by_label("1 / 2").is_none(),
+        "c.md is in front"
+    );
+    open_context_menu(&mut harness, "b.md");
+    harness.get_by_label("Close Others").click();
+    harness.step();
+    assert_eq!(open_paths(&harness), [harness.path("b.md")]);
+    run_the_frames_asked_for(&mut harness);
+    assert!(
+        harness.query_by_label("1 / 2").is_some(),
+        "after Close Others"
+    );
+}
+
+#[test]
+fn close_others_counts_the_matches_of_the_document_it_keeps() {
+    let mut harness = finding_needle();
 
     open_context_menu(&mut harness, "b.md");
     harness.click("Close Others");
