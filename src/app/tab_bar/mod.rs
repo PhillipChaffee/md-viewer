@@ -12,7 +12,7 @@ use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::mcp::{self, Mcp};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::tab::Tab;
+use crate::tab::{SaveOutcome, Tab};
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -363,7 +363,7 @@ fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
 
 /// Shows the outcome of the last save until it expires, then forgets it.
 fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
-    let Some((ok, at)) = tab.save_flash else {
+    let Some((outcome, at)) = tab.save_flash else {
         return;
     };
     // The strip may be on screen only for this outcome, so it has to be
@@ -374,10 +374,9 @@ fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
         tab.save_flash = None;
         return;
     }
-    let (label, color) = if ok {
-        ("Saved", palette.positive)
-    } else {
-        ("Save failed", palette.warning)
+    let (label, color) = match outcome {
+        SaveOutcome::Saved => ("Saved", palette.positive),
+        SaveOutcome::Failed => ("Save failed", palette.warning),
     };
     ui.label(
         egui::RichText::new(label)

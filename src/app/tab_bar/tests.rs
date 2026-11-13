@@ -11,6 +11,7 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::{STRIP_HEIGHT, UNDERLINE};
 use crate::app::content::tests::label_harness::LabelHarness;
+use crate::tab::SaveOutcome;
 use crate::test_support::{assert_close, painted_shapes};
 
 /// `a.md`, `b.md`, and `c.md`, each in its own tab with `c.md` active. The
@@ -430,7 +431,7 @@ fn a_lone_document_has_its_edit_controls_in_the_top_bar() {
 
     harness.state_mut().tabs[0].set_edit_mode(true);
     harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.state_mut().tabs[0].save_flash = Some((false, Instant::now()));
+    harness.state_mut().tabs[0].save_flash = Some((SaveOutcome::Failed, Instant::now()));
     harness.frames(2);
 
     assert!(!shows_strip(&harness));
@@ -481,7 +482,7 @@ fn a_save_reports_its_outcome_beside_the_mode_toggle() {
     let mut harness = three_tabs();
     assert!(harness.query_by_label("Saved").is_none());
 
-    harness.state_mut().tabs[2].save_flash = Some((true, Instant::now()));
+    harness.state_mut().tabs[2].save_flash = Some((SaveOutcome::Saved, Instant::now()));
     harness.frames(1);
     assert!(harness.query_by_label("Saved").is_some());
     let palette = harness.state().theme.palette();
@@ -492,7 +493,7 @@ fn a_save_reports_its_outcome_beside_the_mode_toggle() {
         palette.positive
     );
 
-    harness.state_mut().tabs[2].save_flash = Some((false, Instant::now()));
+    harness.state_mut().tabs[2].save_flash = Some((SaveOutcome::Failed, Instant::now()));
     harness.frames(1);
     assert!(harness.query_by_label("Save failed").is_some());
     assert!(harness.query_by_label("Saved").is_none());
@@ -509,7 +510,7 @@ fn a_save_outcome_disappears_after_a_moment() {
     let mut harness = one_tab("# A");
     let expired = Instant::now().checked_sub(super::SAVE_FLASH).unwrap();
 
-    harness.state_mut().tabs[0].save_flash = Some((true, expired));
+    harness.state_mut().tabs[0].save_flash = Some((SaveOutcome::Saved, expired));
     harness.frames(2);
 
     assert!(harness.query_by_label("Saved").is_none());

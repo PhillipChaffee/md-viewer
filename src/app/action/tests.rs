@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::app::tests::Harness;
+use crate::tab::SaveOutcome;
 use crate::test_support::assert_close;
 
 #[test]
@@ -70,7 +71,10 @@ fn a_save_that_cannot_be_written_is_reported_and_flagged() {
 
     harness.apply(AppAction::Save);
 
-    assert!(matches!(harness.app.tabs[0].save_flash, Some((false, _))));
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Failed, _))
+    ));
     let message = harness.app.error_message.clone().unwrap();
     assert!(
         message.contains("a.md"),
@@ -96,7 +100,10 @@ fn unsaved_edits_are_saved_from_the_preview_as_from_the_editor() {
 
     assert_eq!(on_disk(&harness), "edited");
     assert!(!harness.app.tabs[0].is_dirty());
-    assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Saved, _))
+    ));
 }
 
 #[test]

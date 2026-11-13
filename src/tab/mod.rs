@@ -72,6 +72,13 @@ fn record_visit<T>(back: &mut Vec<T>, forward: &mut Vec<T>, left: T) {
     forward.clear();
 }
 
+/// How the last save of a tab's text went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SaveOutcome {
+    Saved,
+    Failed,
+}
+
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
@@ -111,9 +118,9 @@ pub(crate) struct Tab {
     /// Snapshot of the on-disk content at last load/save. `is_dirty`
     /// compares the edit buffer with it.
     saved_content: String,
-    /// "Saved ✓" / "Save failed" flash trigger for the edit toolbar
-    /// (true = success, false = failure).
-    pub(crate) save_flash: Option<(bool, Instant)>,
+    /// The outcome of the last save and when it was, for the edit
+    /// toolbar to show until it has had its time.
+    pub(crate) save_flash: Option<(SaveOutcome, Instant)>,
     /// Scroll ratio (0..=1) captured when entering edit mode, applied to the
     /// editor's `ScrollArea` on its first frame.
     pub(crate) pending_edit_scroll: Option<f32>,
@@ -203,11 +210,24 @@ impl Tab {
         Ok(())
     }
 
+    /// Write the text to the tab's file, and note how that went for the
+    /// edit toolbar to show.
+    pub(crate) fn save(&mut self) -> io::Result<()> {
+        let result = self.save_to_disk();
+        let outcome = if result.is_ok() {
+            SaveOutcome::Saved
+        } else {
+            SaveOutcome::Failed
+        };
+        self.save_flash = Some((outcome, Instant::now()));
+        result
+    }
+
     /// Atomic save: write a temp file next to the target, then rename over
     /// it (mirrors the dsh-better-sidebar editor's tmp+rename save path).
     /// On success `saved_content` is refreshed so the buffer is no longer
     /// dirty.
-    pub(crate) fn save_to_disk(&mut self) -> io::Result<()> {
+    fn save_to_disk(&mut self) -> io::Result<()> {
         let tmp = PathBuf::from(format!(
             "{}.mdv-tmp-{}",
             self.path.display(),

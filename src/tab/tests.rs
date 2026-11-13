@@ -227,6 +227,22 @@ mod editing {
     }
 
     #[test]
+    fn a_save_notes_how_it_went() {
+        let (dir, mut tab) = tab_with("# Notes");
+        tab.content.push('!');
+
+        tab.save().unwrap();
+        assert!(matches!(tab.save_flash, Some((SaveOutcome::Saved, _))));
+        assert!(!tab.is_dirty());
+
+        tab.content.push('!');
+        fs::remove_dir_all(dir.path()).unwrap();
+        assert!(tab.save().is_err());
+        assert!(matches!(tab.save_flash, Some((SaveOutcome::Failed, _))));
+        assert!(tab.is_dirty());
+    }
+
+    #[test]
     fn save_writes_the_buffer_and_leaves_no_temporary_file() {
         let (dir, mut tab) = tab_with("# Notes");
         tab.content = "# Notes\n\nEdited.\n".to_owned();

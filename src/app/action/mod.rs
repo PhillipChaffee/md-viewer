@@ -1,7 +1,5 @@
 //! What the user can ask the app to do, and the one place each request runs.
 
-use std::time::Instant;
-
 use eframe::egui;
 
 use crate::app::MarkdownApp;
@@ -169,16 +167,12 @@ impl MarkdownApp {
         if !tab.is_dirty() {
             return;
         }
-        match tab.save_to_disk() {
-            Ok(()) => {
-                log::info!("Saved tab edits: {}", tab.path.display());
-                tab.save_flash = Some((true, Instant::now()));
-            }
+        match tab.save() {
+            Ok(()) => log::info!("Saved tab edits: {}", tab.path.display()),
             Err(error) => {
                 log::error!("Failed to save {}: {error}", tab.path.display());
                 self.error_message =
                     Some(format!("Unable to save {}: {error}", tab.path.display()));
-                tab.save_flash = Some((false, Instant::now()));
             }
         }
     }

@@ -10,6 +10,7 @@ use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
+use crate::tab::SaveOutcome;
 use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
 
@@ -328,7 +329,10 @@ fn ctrl_s_writes_unsaved_edits_and_nothing_else() {
     harness.app.tabs[0].content = "edited".to_owned();
     harness.press(Modifiers::CTRL, Key::S);
     assert_eq!(fs::read_to_string(&path).unwrap(), "edited");
-    assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Saved, _))
+    ));
 
     // Edits left unsaved are saved from the preview of them too.
     harness.app.tabs[0].content = "edited again".to_owned();
