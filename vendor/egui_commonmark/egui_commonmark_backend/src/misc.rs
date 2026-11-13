@@ -450,6 +450,10 @@ mod tests {
 
             assert_eq!(image.pixels[0], egui::Color32::TRANSPARENT);
             assert!(image.pixels.contains(&ink), "no fully inked pixel");
+            assert!(
+                image.pixels.iter().any(|pixel| (1..255).contains(&pixel.a())),
+                "glyph edges are not antialiased"
+            );
             // Every pixel is the ink at some opacity, so it blends with
             // whatever it is painted on. Premultiplication rounds a channel
             // by at most one step.
