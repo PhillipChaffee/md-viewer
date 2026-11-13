@@ -178,6 +178,19 @@ fn closing_a_tab_counts_the_document_that_takes_its_place() {
 }
 
 #[test]
+fn a_document_opened_under_a_waiting_query_is_searched() {
+    let mut harness = Harness::with_docs(&[("a.md", "needle needle\n")]);
+    harness.app.close_active_tab();
+    harness.app.open_search();
+    harness.app.search.query = "needle".to_owned();
+    harness.app.maybe_rebuild_search();
+
+    harness.app.open_in_new_tab(harness.path("a.md"));
+
+    assert_eq!(matches_in_front(&mut harness), 2);
+}
+
+#[test]
 fn the_find_bar_is_a_strip_of_the_page_with_no_box_around_the_query() {
     let mut harness = UiHarness::with_docs(&[("a.md", "needle\n")]);
     harness.app_mut().theme = ThemeId::Dusk;

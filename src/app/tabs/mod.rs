@@ -120,6 +120,9 @@ impl MarkdownApp {
         self.record_recent(&path);
         self.active_tab = self.tabs.len() - 1;
         self.title_dirty = true;
+        // A first document takes the place the find bar searched while it
+        // was empty.
+        self.search.last_tab = None;
         self.refresh_open_tab_paths();
 
         // Update watcher if enabled
