@@ -74,233 +74,75 @@ impl Scope {
     }
 }
 
+const ZOOM_IN: f32 = ZOOM_STEP;
+const ZOOM_OUT: f32 = 1.0 / ZOOM_STEP;
+
+/// Writes the binding table one shortcut per line, as
+/// `Chord + Key in Scope => action`. It is a macro only because rustfmt
+/// would otherwise spread every row over six lines.
+macro_rules! bindings {
+    ($($chord:ident + $key:ident in $scope:ident => $action:expr),* $(,)?) => {
+        &[$((Chord::$chord, Key::$key, Scope::$scope, $action)),*]
+    };
+}
+
 /// Every keyboard shortcut. Rows sit in the order their actions run when
 /// several fire in one frame.
-const BINDINGS: &[(Chord, Key, Scope, AppAction)] = &[
-    // Ctrl+0 resets the lightbox zoom only; the document has its own reset.
-    (
-        Chord::Ctrl,
-        Key::Num0,
-        Scope::Lightbox,
-        AppAction::ResetLightboxZoom,
-    ),
-    // Ctrl+/- zoom applies to the lightbox when open, the document otherwise.
-    // Steps are multiplicative (×1.25) like browsers.
-    (
-        Chord::Ctrl,
-        Key::Plus,
-        Scope::Lightbox,
-        AppAction::ZoomLightboxBy(ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Equals,
-        Scope::Lightbox,
-        AppAction::ZoomLightboxBy(ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Minus,
-        Scope::Lightbox,
-        AppAction::ZoomLightboxBy(1.0 / ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Plus,
-        Scope::Document,
-        AppAction::ZoomBy(ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Equals,
-        Scope::Document,
-        AppAction::ZoomBy(ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Minus,
-        Scope::Document,
-        AppAction::ZoomBy(1.0 / ZOOM_STEP),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num0,
-        Scope::Document,
-        AppAction::ResetZoom,
-    ),
-    (
-        Chord::CtrlNoShift,
-        Key::O,
-        Scope::Document,
-        AppAction::OpenFile,
-    ),
-    (Chord::Ctrl, Key::T, Scope::Document, AppAction::OpenFile),
-    (Chord::Any, Key::F5, Scope::Document, AppAction::ToggleWatch),
-    (
-        Chord::Ctrl,
-        Key::D,
-        Scope::Document,
-        AppAction::ToggleDarkMode,
-    ),
-    (
-        Chord::CtrlShift,
-        Key::O,
-        Scope::Document,
-        AppAction::ToggleOutline,
-    ),
-    (
-        Chord::CtrlShift,
-        Key::E,
-        Scope::Document,
-        AppAction::ToggleExplorer,
-    ),
-    (Chord::Ctrl, Key::Q, Scope::Document, AppAction::Quit),
-    (Chord::CtrlNoShift, Key::S, Scope::Document, AppAction::Save),
-    (Chord::Ctrl, Key::W, Scope::Document, AppAction::CloseTab),
-    (
-        Chord::CtrlNoShift,
-        Key::Tab,
-        Scope::Document,
-        AppAction::NextTab,
-    ),
-    (
-        Chord::CtrlShift,
-        Key::Tab,
-        Scope::Document,
-        AppAction::PreviousTab,
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num1,
-        Scope::Document,
-        AppAction::FocusTab(0),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num2,
-        Scope::Document,
-        AppAction::FocusTab(1),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num3,
-        Scope::Document,
-        AppAction::FocusTab(2),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num4,
-        Scope::Document,
-        AppAction::FocusTab(3),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num5,
-        Scope::Document,
-        AppAction::FocusTab(4),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num6,
-        Scope::Document,
-        AppAction::FocusTab(5),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num7,
-        Scope::Document,
-        AppAction::FocusTab(6),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num8,
-        Scope::Document,
-        AppAction::FocusTab(7),
-    ),
-    (
-        Chord::Ctrl,
-        Key::Num9,
-        Scope::Document,
-        AppAction::FocusTab(8),
-    ),
-    (
-        Chord::Alt,
-        Key::ArrowLeft,
-        Scope::Document,
-        AppAction::NavigateBack,
-    ),
-    (
-        Chord::Alt,
-        Key::ArrowRight,
-        Scope::Document,
-        AppAction::NavigateForward,
-    ),
+const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
+    // The lightbox takes over the zoom keys. Its Ctrl+0 resets the lightbox
+    // zoom only; the document has its own reset.
+    Ctrl + Num0 in Lightbox => AppAction::ResetLightboxZoom,
+    Ctrl + Plus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
+    Ctrl + Equals in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
+    Ctrl + Minus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_OUT),
+
+    // Zoom steps are multiplicative (×1.25) like browsers and the lightbox.
+    Ctrl + Plus in Document => AppAction::ZoomBy(ZOOM_IN),
+    Ctrl + Equals in Document => AppAction::ZoomBy(ZOOM_IN),
+    Ctrl + Minus in Document => AppAction::ZoomBy(ZOOM_OUT),
+    Ctrl + Num0 in Document => AppAction::ResetZoom,
+
+    CtrlNoShift + O in Document => AppAction::OpenFile,
+    Ctrl + T in Document => AppAction::OpenFile,
+    Any + F5 in Document => AppAction::ToggleWatch,
+    Ctrl + D in Document => AppAction::ToggleDarkMode,
+    CtrlShift + O in Document => AppAction::ToggleOutline,
+    CtrlShift + E in Document => AppAction::ToggleExplorer,
+    Ctrl + Q in Document => AppAction::Quit,
+    CtrlNoShift + S in Document => AppAction::Save,
+
+    Ctrl + W in Document => AppAction::CloseTab,
+    CtrlNoShift + Tab in Document => AppAction::NextTab,
+    CtrlShift + Tab in Document => AppAction::PreviousTab,
+    Ctrl + Num1 in Document => AppAction::FocusTab(0),
+    Ctrl + Num2 in Document => AppAction::FocusTab(1),
+    Ctrl + Num3 in Document => AppAction::FocusTab(2),
+    Ctrl + Num4 in Document => AppAction::FocusTab(3),
+    Ctrl + Num5 in Document => AppAction::FocusTab(4),
+    Ctrl + Num6 in Document => AppAction::FocusTab(5),
+    Ctrl + Num7 in Document => AppAction::FocusTab(6),
+    Ctrl + Num8 in Document => AppAction::FocusTab(7),
+    Ctrl + Num9 in Document => AppAction::FocusTab(8),
+    Alt + ArrowLeft in Document => AppAction::NavigateBack,
+    Alt + ArrowRight in Document => AppAction::NavigateForward,
+
     // Opens the find bar, or refocuses it if already open.
-    (
-        Chord::CtrlNoShift,
-        Key::F,
-        Scope::Document,
-        AppAction::OpenSearch,
-    ),
+    CtrlNoShift + F in Document => AppAction::OpenSearch,
     // While the find bar is open it takes Enter / Shift+Enter / ↑↓ / Esc.
     // Up/Down are safe to bind even when the singleline TextEdit has focus
     // because it doesn't use vertical arrows for cursor movement.
-    (
-        Chord::NoShift,
-        Key::Enter,
-        Scope::FindBar,
-        AppAction::NextMatch,
-    ),
-    (
-        Chord::Any,
-        Key::ArrowDown,
-        Scope::FindBar,
-        AppAction::NextMatch,
-    ),
-    (
-        Chord::Shift,
-        Key::Enter,
-        Scope::FindBar,
-        AppAction::PreviousMatch,
-    ),
-    (
-        Chord::Any,
-        Key::ArrowUp,
-        Scope::FindBar,
-        AppAction::PreviousMatch,
-    ),
-    (
-        Chord::Any,
-        Key::Escape,
-        Scope::FindBar,
-        AppAction::CloseSearch,
-    ),
+    NoShift + Enter in FindBar => AppAction::NextMatch,
+    Any + ArrowDown in FindBar => AppAction::NextMatch,
+    Shift + Enter in FindBar => AppAction::PreviousMatch,
+    Any + ArrowUp in FindBar => AppAction::PreviousMatch,
+    Any + Escape in FindBar => AppAction::CloseSearch,
+
     // Plain document scroll keys. The arrows stay with search navigation
     // while the find bar is open; the page keys scroll either way.
-    (
-        Chord::Unmodified,
-        Key::ArrowUp,
-        Scope::Reading,
-        AppAction::Scroll(KeyboardScrollAction::LineUp),
-    ),
-    (
-        Chord::Unmodified,
-        Key::ArrowDown,
-        Scope::Reading,
-        AppAction::Scroll(KeyboardScrollAction::LineDown),
-    ),
-    (
-        Chord::Unmodified,
-        Key::PageUp,
-        Scope::Document,
-        AppAction::Scroll(KeyboardScrollAction::PageUp),
-    ),
-    (
-        Chord::Unmodified,
-        Key::PageDown,
-        Scope::Document,
-        AppAction::Scroll(KeyboardScrollAction::PageDown),
-    ),
+    Unmodified + ArrowUp in Reading => AppAction::Scroll(KeyboardScrollAction::LineUp),
+    Unmodified + ArrowDown in Reading => AppAction::Scroll(KeyboardScrollAction::LineDown),
+    Unmodified + PageUp in Document => AppAction::Scroll(KeyboardScrollAction::PageUp),
+    Unmodified + PageDown in Document => AppAction::Scroll(KeyboardScrollAction::PageDown),
 ];
 
 /// The actions this frame's input asks for, in the order they run. Each kind
