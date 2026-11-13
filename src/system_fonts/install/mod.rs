@@ -90,6 +90,17 @@ impl SelectedFont {
         data.index = self.index;
         data
     }
+
+    /// Log the face as the `kind` font loaded under `key`.
+    fn log_loaded(&self, kind: &str, key: &str) {
+        log::info!(
+            "Loaded {kind} font {key} ({}, weight {}) from {} (face index {})",
+            self.family,
+            self.weight.value(),
+            self.source,
+            self.index
+        );
+    }
 }
 
 pub(crate) struct InstalledFont {
@@ -200,6 +211,14 @@ impl SystemFonts<'_> {
         self.select(family_ids, Weight::Regular, required_glyphs)
     }
 
+    /// The installed families among `names`, in the order named.
+    fn family_ids(&mut self, names: &[&str]) -> Vec<FamilyId> {
+        names
+            .iter()
+            .filter_map(|name| self.collection.family_id(name))
+            .collect()
+    }
+
     /// Regular face of the installed family called `family` that covers
     /// `required_glyphs`, wherever the platform keeps its file.
     pub(crate) fn named(&mut self, family: &str, required_glyphs: &str) -> Option<SelectedFont> {
@@ -272,14 +291,7 @@ impl RegularFontInstaller<'_, '_> {
         required_glyphs: &'static str,
         primary: bool,
     ) {
-        log::info!(
-            "Loaded system font {} ({}, weight {}) from {} (face index {})",
-            key,
-            selected.family,
-            selected.weight.value(),
-            selected.source,
-            selected.index
-        );
+        selected.log_loaded("system", key);
         self.definitions
             .font_data
             .insert(key.to_owned(), selected.data().into());
@@ -336,10 +348,7 @@ impl RegularFontInstaller<'_, '_> {
     /// Each stack name is tried in the emulated viewer's resolution order; a
     /// total miss falls through to the app's own auto-detection.
     fn install_preset_body_family(&mut self, preset_families: &'static [&'static str]) -> bool {
-        let family_ids: Vec<FamilyId> = preset_families
-            .iter()
-            .filter_map(|name| self.fonts.collection.family_id(name))
-            .collect();
+        let family_ids = self.fonts.family_ids(preset_families);
         let installed =
             self.install_from_families(PRIMARY_SANS_KEY, &family_ids, LATIN_SAMPLE, true);
         if !installed {
@@ -480,14 +489,7 @@ pub(crate) fn install_strong_font_family(
             continue;
         }
         let key = format!("{}Bold", regular.key);
-        log::info!(
-            "Loaded strong font {} ({}, weight {}) from {} (face index {})",
-            key,
-            selected.family,
-            selected.weight.value(),
-            selected.source,
-            selected.index
-        );
+        selected.log_loaded("strong", &key);
         definitions
             .font_data
             .insert(key.clone(), selected.data().into());
@@ -528,10 +530,7 @@ pub(crate) fn install_preset_mono_font(
     definitions: &mut FontDefinitions,
     mono_families: &'static [&'static str],
 ) -> bool {
-    let family_ids: Vec<FamilyId> = mono_families
-        .iter()
-        .filter_map(|name| fonts.collection.family_id(name))
-        .collect();
+    let family_ids = fonts.family_ids(mono_families);
     let Some(selected) = fonts.regular(&family_ids, "{}") else {
         log::warn!(
             "Preset mono families {mono_families:?} had no usable face; keeping the bundled monospace."
