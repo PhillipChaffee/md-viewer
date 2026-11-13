@@ -266,11 +266,17 @@ fn fold_indicator(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut Outline
         return;
     }
     let (rect, response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
-    let indicator = match row.fold {
-        Fold::Collapsed => "+",
-        Fold::Expanded => "-",
+    let (indicator, verb) = match row.fold {
+        Fold::Collapsed => ("+", "Expand"),
+        Fold::Expanded => ("-", "Collapse"),
         Fold::NoColumn | Fold::Leaf => return,
     };
+    // The indicator is painted, not a widget with text, so it names itself
+    // for screen readers.
+    response.widget_info(|| {
+        let name = format!("{verb} {}", row.header.title);
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
+    });
     let text_color = if response.hovered() {
         ui.visuals().strong_text_color()
     } else {
