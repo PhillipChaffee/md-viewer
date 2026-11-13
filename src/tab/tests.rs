@@ -66,12 +66,16 @@ mod document {
     use crate::test_support::assert_close;
 
     #[test]
-    fn tab_is_titled_after_its_file() {
-        let (_dir, mut tab) = tab_on(&[("notes.md", "# Notes")]);
+    fn tab_is_titled_after_the_file_it_shows() {
+        let (dir, mut tab) = tab_on(&[("notes.md", "# Notes"), ("other.md", "# Other")]);
         assert_eq!(tab.title(), "notes.md");
 
-        tab.path = PathBuf::from("/");
-        assert_eq!(tab.title(), "Unknown");
+        assert!(tab.navigate_to_path(&dir.path().join("other.md")).unwrap());
+        assert_eq!(tab.title(), "other.md");
+        tab.navigate_back().unwrap();
+        assert_eq!(tab.title(), "notes.md");
+
+        assert_eq!(file_title(Path::new("/")), "Unknown");
     }
 
     #[test]

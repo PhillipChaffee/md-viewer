@@ -45,10 +45,8 @@ fn title_center(bar_center: f32, free: egui::Rangef, width: f32) -> f32 {
 }
 
 /// What the bar calls a document: its first heading, else its file name.
-fn document_name(tab: &Tab) -> std::borrow::Cow<'_, str> {
-    tab.document_title
-        .as_deref()
-        .map_or_else(|| tab.title().into(), Into::into)
+fn document_name(tab: &Tab) -> &str {
+    tab.document_title.as_deref().unwrap_or_else(|| tab.title())
 }
 
 /// The hover text of the title: where the document is, and whether it is
@@ -230,7 +228,7 @@ impl MarkdownApp {
         let palette = self.theme.palette();
         let name = document_name(tab);
         let mut job = egui::text::LayoutJob::simple_singleline(
-            name.clone().into_owned(),
+            name.to_owned(),
             chrome::label_font(),
             egui::Color32::PLACEHOLDER,
         );
@@ -244,9 +242,7 @@ impl MarkdownApp {
         let rect = egui::Rect::from_center_size(center, galley.size());
 
         let response = ui.allocate_rect(rect, egui::Sense::hover());
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name.as_ref())
-        });
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name));
         let color = if response.hovered() {
             palette.text
         } else {

@@ -86,6 +86,8 @@ pub(crate) type LinkTarget = (PathBuf, Option<String>);
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
     pub(crate) path: PathBuf,
+    /// The file name of `path`, worked out when the path is set.
+    title: String,
     pub(crate) content: String,
     pub(crate) cache: CommonMarkCache,
     pub(crate) document_title: Option<String>,
@@ -144,6 +146,7 @@ impl Tab {
         let mut tab = Self {
             id: egui::Id::new(&path),
             base_uri: Self::compute_base_uri(&path),
+            title: file_title(&path),
             path,
             saved_content: content.clone(),
             content,
@@ -200,8 +203,8 @@ impl Tab {
         self.content != self.saved_content
     }
 
-    pub(crate) fn title(&self) -> String {
-        file_title(&self.path)
+    pub(crate) fn title(&self) -> &str {
+        &self.title
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {
@@ -259,6 +262,7 @@ impl Tab {
         self.content = content;
         self.saved_content = self.content.clone();
         self.path = path;
+        self.title = file_title(&self.path);
         self.id = egui::Id::new(&self.path);
         self.cache = CommonMarkCache::default();
         self.content_version = self.content_version.wrapping_add(1);

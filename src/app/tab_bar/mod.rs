@@ -126,7 +126,6 @@ impl MarkdownApp {
     /// when `reveal` is set.
     fn tab_strip(&self, ui: &mut egui::Ui, actions: &mut TabStripActions, reveal: bool) {
         let palette = self.theme.palette();
-        let titles: Vec<String> = self.tabs.iter().map(Tab::title).collect();
 
         egui::ScrollArea::horizontal()
             .max_width(ui.available_width() - OPEN_BUTTON_ROOM)
@@ -135,15 +134,15 @@ impl MarkdownApp {
                 // The tabs go straight into the scrolled row: a row of
                 // their own inside it would be centered at its starting
                 // height and then grow downward, off the strip.
-                for (index, title) in titles.iter().enumerate() {
+                for (index, tab) in self.tabs.iter().enumerate() {
                     let label = TabLabel {
                         index,
-                        title,
+                        title: tab.title(),
                         is_active: index == self.active_tab,
                     };
-                    let tab = tab_label(ui, &label, palette, &self.mcp, actions);
+                    let shown = tab_label(ui, &label, palette, &self.mcp, actions);
                     if reveal && label.is_active {
-                        scroll_into_strip(ui, tab.rect);
+                        scroll_into_strip(ui, shown.rect);
                     }
                 }
                 ui.add_space(pixel(ui));

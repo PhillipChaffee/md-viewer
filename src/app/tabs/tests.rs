@@ -21,7 +21,7 @@ fn three_tabs() -> Harness {
 }
 
 fn tab_names(app: &MarkdownApp) -> Vec<String> {
-    app.tabs.iter().map(crate::tab::Tab::title).collect()
+    app.tabs.iter().map(|tab| tab.title().to_owned()).collect()
 }
 
 fn recent_paths(app: &MarkdownApp) -> Vec<PathBuf> {
