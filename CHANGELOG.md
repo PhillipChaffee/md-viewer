@@ -26,6 +26,8 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
 - **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
+- **Emoji in bold text and headings were black outlines** where the same emoji in plain text was in color. Every weight now draws an emoji from the same font.
+- **❤️ was followed by a dotted "VS16" box.** A variation selector (U+FE0F, U+FE0E) now takes no room on the page, and the text itself is unchanged.
 - **One mouse wheel step scrolled the page twice.** A notch now moves the document once, also while text is being selected.
 - **Escape closed an open menu and the find bar together.** It now closes the menu first and the find bar on the next press.
 - **Entering edit mode with one document open moved the page down.** The Preview and Edit switch for a lone document is now in the top bar.
