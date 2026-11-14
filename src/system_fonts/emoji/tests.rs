@@ -2,10 +2,15 @@ use super::*;
 
 use std::borrow::Cow;
 
-use egui::Color32;
+use egui::{Color32, FontFamily};
+use egui_commonmark_extended::STRONG_FONT_FAMILY;
 use fontique::FontWeight;
 
+use crate::system_fonts::bundled::{
+    DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY, DOCUMENT_HEADING_FAMILY,
+};
 use crate::system_fonts::tests::{bundled_face, Fonts, LATIN_FACE};
+use crate::system_fonts::{font_definitions, FontConfig, FontPreset};
 
 /// Subset of Noto Color Emoji holding only the glyphs these tests name, so
 /// they run the same on a machine with no color emoji font installed. See
@@ -101,8 +106,12 @@ impl RasterizedGlyph {
 }
 
 fn rasterize(ctx: &egui::Context, ch: char) -> RasterizedGlyph {
-    let job =
-        egui::text::LayoutJob::simple(ch.to_string(), font_id(), Color32::WHITE, f32::INFINITY);
+    rasterize_in(ctx, font_id(), ch)
+}
+
+/// `ch` as text set in `font` draws it.
+fn rasterize_in(ctx: &egui::Context, font: egui::FontId, ch: char) -> RasterizedGlyph {
+    let job = egui::text::LayoutJob::simple(ch.to_string(), font, Color32::WHITE, f32::INFINITY);
     ctx.fonts_mut(|fonts| {
         let galley = fonts.layout_job(job);
         let uv = galley.rows[0].glyphs[0].uv_rect;
@@ -314,4 +323,94 @@ fn definitions_without_family_chains_only_gain_the_font_data() {
     faces.sort_unstable();
     assert_eq!(faces, [COLOR_EMOJI_KEY, MONOCHROME_EMOJI_KEY]);
     assert!(definitions.families.is_empty());
+}
+
+/// Every family the app sets text in, on a desktop with a sans (regular and
+/// bold), script fallbacks and the color emoji font.
+fn text_families() -> [FontFamily; 6] {
+    let named = |family: &str| FontFamily::Name(family.into());
+    [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        named(STRONG_FONT_FAMILY),
+        named(DOCUMENT_BODY_FAMILY),
+        named(DOCUMENT_HEADING_FAMILY),
+        named(DOCUMENT_EMPHASIS_FAMILY),
+    ]
+}
+
+/// The chains `preset` installs where the color emoji font is the fixture.
+fn preset_definitions(preset: FontPreset) -> FontDefinitions {
+    let mut fonts = Fonts::multilingual();
+    fonts.register_as_is(COLOR_EMOJI_FIXTURE);
+    let config = FontConfig {
+        preset,
+        ..FontConfig::default()
+    };
+    font_definitions(&mut fonts.system(), Some("en-US"), &config)
+}
+
+/// Bold text, headings and emphasis draw an emoji from the same face as the
+/// text around them: in color where the machine has a color emoji font.
+#[test]
+fn emoji_are_in_color_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            let glyph = rasterize_in(&ctx, egui::FontId::new(16.0, family.clone()), '\u{1F534}');
+            assert!(
+                glyph.colored && glyph.peak(Color32::r, Color32::g) > 128,
+                "{preset:?} draws 🔴 in {family:?} without color"
+            );
+        }
+    }
+}
+
+/// Every chain holds the same emoji faces in the same order, so no weight
+/// resolves an emoji differently from another.
+#[test]
+fn every_chain_ends_in_the_same_emoji_faces() {
+    let emoji_faces = [
+        COLOR_EMOJI_KEY,
+        BUILTIN_EMOJI_KEYS[0],
+        BUILTIN_EMOJI_KEYS[1],
+        MONOCHROME_EMOJI_KEY,
+    ];
+    for preset in FontPreset::ALL {
+        let definitions = preset_definitions(preset);
+        for family in text_families() {
+            let chain = &definitions.families[&family];
+            let emoji: Vec<&str> = chain
+                .iter()
+                .map(String::as_str)
+                .filter(|name| emoji_faces.contains(name))
+                .collect();
+            assert_eq!(emoji, emoji_faces, "{preset:?} {family:?}");
+            assert_eq!(chain.last().map(String::as_str), Some(MONOCHROME_EMOJI_KEY));
+        }
+    }
+}
+
+/// A variation selector picks the look of the character before it and is
+/// never drawn itself: ❤️ is as wide as ❤, in every family.
+#[test]
+fn a_variation_selector_takes_no_room() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    let width = |family: &FontFamily, text: &str| {
+        let font = egui::FontId::new(16.0, family.clone());
+        let job =
+            egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
+        ctx.fonts_mut(|fonts| fonts.layout_job(job).rect.width())
+    };
+    for family in text_families() {
+        let plain = width(&family, "a\u{2764}b");
+        for selector in ['\u{FE0E}', '\u{FE0F}'] {
+            let selected = width(&family, &format!("a\u{2764}{selector}b"));
+            assert!(
+                (selected - plain).abs() < f32::EPSILON,
+                "{selector:?} is {} wide in {family:?}",
+                selected - plain
+            );
+        }
+    }
 }

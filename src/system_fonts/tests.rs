@@ -660,8 +660,8 @@ fn each_preset_installs_its_own_faces_in_a_fixed_order() {
         "SystemHanFallback",
         "NotoEmoji",
     ];
-    // Strong text is chained before the bundled emoji face goes in.
-    let strong = &proportional[..5];
+    // Strong text ends in the same emoji faces as the text around it.
+    let strong = &proportional;
     let expected = |strong_lead: &[&str], body_lead: &[&str], sans_face, code_face: Option<_>| {
         let code_lead: &[&str] = code_face.map_or(&[], |_| &["PresetMono"]);
         InstalledChains {
