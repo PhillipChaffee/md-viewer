@@ -86,8 +86,10 @@ folder, reading time and opening lines.
 - Mermaid diagrams: flowcharts, sequence, class, state, ER, gantt and pie.
   Click a diagram to enlarge it.
 - Syntax highlighting for 200+ languages, with a color scheme per theme.
-- Images (PNG, JPEG, GIF, SVG, local or over HTTP), HTML tables and YAML
-  frontmatter.
+- Images (PNG, JPEG, GIF, WebP, SVG, local or over HTTP), HTML tables and
+  YAML frontmatter. Animated GIFs and WebPs play while they are in view.
+  Click a picture to enlarge it; a moving one is enlarged as the frame you
+  clicked.
 - System font fallbacks for CJK and other non-Latin scripts.
 
 **Getting around**

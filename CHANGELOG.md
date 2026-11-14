@@ -22,6 +22,8 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Sidebars and a home page.** The explorer and contents sidebars are frameless, and the contents list marks the heading being read. With no document open, the home page lists what was read recently: title, folder, reading time and the opening lines.
 
+- **Animated GIFs and WebPs play.** A picture of several frames shows each for the time the file asks for and starts over, instead of standing on its first frame. It asks the window to redraw only while it is in view, so a page with no moving picture on screen costs nothing at rest. Clicking one enlarges the frame that was clicked, held still.
+
 ### Fixes
 
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
@@ -41,7 +43,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - A quote inside a quote is set in from the quote around it, with a bar of its own, and a list that follows it starts in line.
 - A link in a heading sits where it is written and can be followed.
 - A plain sum between dollar signs, such as `$b + c$`, is shown as a formula, and text that is not a formula keeps both of its dollar signs.
-- A GIF in a document is shown (its first frame) instead of a warning sign.
+- A GIF in a document is shown instead of a warning sign.
 - A picture that was missing is shown once its file exists and the page reloads.
 - A diagram too large for the graphics card is shown at a lower resolution instead of crashing the app.
 - While a picture is enlarged, the top bar is dimmed with the rest of the window and its buttons no longer act.
