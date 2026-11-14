@@ -108,7 +108,7 @@ impl MarkdownApp {
         let mut tab = match Tab::new(path.clone()) {
             Ok(tab) => tab,
             Err(error) => {
-                self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
+                self.report_unopened(&path, &error);
                 return;
             }
         };
@@ -127,8 +127,20 @@ impl MarkdownApp {
             return;
         }
 
-        // A document that cannot be shown leaves the one in front, unsaid.
-        let _ = self.navigate_active(|tab| tab.navigate_to_path(path));
+        // A file that cannot be read leaves the document in front, and
+        // says so as one opened in a tab of its own does.
+        let shown = path
+            .canonicalize()
+            .and_then(|target| self.navigate_active(|tab| tab.navigate_to_path(&target)));
+        if let Err(error) = shown {
+            self.report_unopened(path, &error);
+        }
+    }
+
+    /// Say in the error bar that the file at `path` was asked for and
+    /// could not be opened.
+    fn report_unopened(&mut self, path: &Path, error: &io::Error) {
+        self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
     }
 
     pub(crate) fn navigate_active_history(&mut self, go_back: bool) {

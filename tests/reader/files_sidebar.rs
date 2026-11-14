@@ -440,6 +440,23 @@ fn a_new_file_that_is_not_a_document_does_not_appear() {
     assert_eq!(reader.count("sketch.png"), 0);
 }
 
+#[cfg(unix)]
+#[test]
+fn a_file_that_cannot_be_read_says_so_and_leaves_the_open_document() {
+    let mut reader = shelf()
+        .link("lost.md", "gone.md")
+        .args(&["readme.md"])
+        .open();
+    show_files(&mut reader);
+
+    reader.click("lost.md");
+
+    reader.assert_sees("Unable to open");
+    reader.assert_sees("lost.md");
+    reader.assert_sees("Start here.");
+    assert_eq!(reader.title(), "readme.md - Markdown Viewer");
+}
+
 #[test]
 fn without_live_reload_the_list_waits_for_refresh() {
     let mut reader = shelf().args(&["readme.md", "--no-watch"]).open();

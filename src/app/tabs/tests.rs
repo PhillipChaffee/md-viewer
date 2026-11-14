@@ -140,6 +140,31 @@ fn navigating_replaces_the_active_document_and_updates_what_mirrors_it() {
 }
 
 #[test]
+fn navigating_to_a_file_that_cannot_be_read_stays_put_and_says_why() {
+    let mut harness = Harness::with_three_docs();
+    let (a, missing) = (harness.path("a.md"), harness.path("missing.md"));
+
+    harness.app.navigate_active_tab_to(&missing);
+
+    assert_eq!(harness.active_path(), a);
+    assert!(harness.app.tabs[0].history_back.is_empty());
+    let message = harness.app.error_message.clone().unwrap();
+    assert!(message.starts_with("Unable to open "), "{message}");
+    assert!(message.contains(&missing.display().to_string()));
+}
+
+#[test]
+fn navigating_to_a_folder_stays_put_and_says_nothing() {
+    let mut harness = Harness::with_three_docs();
+    let a = harness.path("a.md");
+
+    harness.app.navigate_active_tab_to(&harness.dir.clone());
+
+    assert_eq!(harness.active_path(), a);
+    assert_eq!(harness.app.error_message, None);
+}
+
+#[test]
 fn a_history_step_onto_a_deleted_document_stays_put_and_says_why() {
     let mut harness = Harness::with_three_docs();
     let (a, b) = (harness.path("a.md"), harness.path("b.md"));
