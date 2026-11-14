@@ -451,6 +451,50 @@ fn a_diagram_is_enlarged_on_a_sheet_of_the_page() {
 }
 
 #[test]
+fn every_kind_of_picture_is_enlarged_by_the_first_click() {
+    let kinds = [
+        "blue.png",
+        "red.jpg",
+        "shape.svg",
+        "green.gif",
+        "still.gif",
+        "green.webp",
+        "pulse.gif",
+        "pulse.webp",
+    ];
+
+    for file in kinds {
+        let mut reader = gallery(file);
+        let (x, y) = middle(in_the_text(&mut reader));
+
+        reader.click_point(x, y);
+
+        assert_eq!(reader.count(CLOSE), 1, "{file} did not enlarge");
+    }
+}
+
+#[test]
+fn a_moving_picture_is_enlarged_as_the_frame_that_was_clicked_held_still() {
+    let mut reader = enlarged("pulse.gif");
+    let large_one = large(&reader);
+    let held = reader.picture_ink(large_one);
+
+    for _ in 0..6 {
+        reader.idle_for(std::time::Duration::from_millis(10));
+        assert_eq!(reader.picture_ink(large(&reader)), held);
+    }
+
+    let frames = ["#CC3333", "#33AA55", "#3366CC"].map(Rgb::hex);
+    assert!(
+        frames.contains(&held),
+        "{held:?} is no frame of the picture"
+    );
+    assert!((large_one.width - 60.0).abs() < NEAR, "{large_one:?}");
+    assert!((large_one.height - 40.0).abs() < NEAR, "{large_one:?}");
+    assert_centered(&reader);
+}
+
+#[test]
 fn a_formula_is_not_something_to_enlarge() {
     let mut reader = illustrated("words before\n\n$$\nx^2 + y^2\n$$\n\nwords after").open();
     let formula = picture_between(&mut reader, "words before", "words after");

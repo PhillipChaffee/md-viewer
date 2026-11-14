@@ -11,6 +11,15 @@ pub(crate) const BLUE_PNG: &[u8] = include_bytes!("../fixtures/blue.png");
 pub(crate) const RED_JPEG: &[u8] = include_bytes!("../fixtures/red.jpg");
 /// A 60 by 40 picture of one flat green, `#33AA55`.
 pub(crate) const GREEN_GIF: &[u8] = include_bytes!("../fixtures/green.gif");
+/// A 60 by 40 picture that moves: flat red, then green, then blue, half
+/// a second each, over and over.
+pub(crate) const PULSE_GIF: &[u8] = include_bytes!("../fixtures/pulse.gif");
+/// A 60 by 40 picture of one flat green. Its one frame says it is shown for
+/// half a second, as a frame of a moving picture would.
+pub(crate) const STILL_GIF: &[u8] = include_bytes!("../fixtures/still.gif");
+/// [`GREEN_GIF`] as a WebP, and [`PULSE_GIF`] as a WebP.
+pub(crate) const GREEN_WEBP: &[u8] = include_bytes!("../fixtures/green.webp");
+pub(crate) const PULSE_WEBP: &[u8] = include_bytes!("../fixtures/pulse.webp");
 /// A 1600 by 200 picture of one flat blue: wider than any column here.
 pub(crate) const WIDE_PNG: &[u8] = include_bytes!("../fixtures/wide.png");
 /// A 200 by 100 drawing of one flat green, `#22AA44`.
@@ -38,6 +47,10 @@ pub(crate) fn illustrated(text: &str) -> Launch {
         .bytes("blue.png", BLUE_PNG)
         .bytes("red.jpg", RED_JPEG)
         .bytes("green.gif", GREEN_GIF)
+        .bytes("pulse.gif", PULSE_GIF)
+        .bytes("still.gif", STILL_GIF)
+        .bytes("green.webp", GREEN_WEBP)
+        .bytes("pulse.webp", PULSE_WEBP)
         .bytes("wide.png", WIDE_PNG)
         .doc("shape.svg", GREEN_SVG)
         .args(&["page.md"])
