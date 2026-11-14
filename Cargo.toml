@@ -29,9 +29,6 @@ eframe = { version = "0.33", default-features = false, features = [
 ] }
 egui = { version = "0.33", features = ["accesskit"] }
 
-# MCP bridge for E2E testing (optional, local dev only - not on crates.io)
-# egui-mcp-bridge = { path = "/home/ahmet/dev/mcp/egui-mcp/crates/egui-mcp-bridge", optional = true }
-
 # Markdown rendering with syntax highlighting (fork with typography support)
 egui_commonmark_extended = { version = "0.28.3", features = [
     "better_syntax_highlighting",
@@ -77,7 +74,6 @@ ignored = ["image"]
 
 [features]
 default = []
-# mcp = ["dep:egui-mcp-bridge"]
 
 # The lint tables below are the full-lint Rust baseline
 # (github.com/PhillipChaffee/full-lint, rust/Cargo.toml.example). CI turns
@@ -95,11 +91,9 @@ unreachable_pub = "warn"
 trivial_casts = "warn"
 trivial_numeric_casts = "warn"
 unused_qualifications = "warn"
-# The `mcp` feature is declared only on machines that have the local
-# egui-mcp-bridge checkout; the cfg name must stay known everywhere else.
 # `kani` is set only by `cargo kani`, which compiles the proof harnesses in
 # each module's `proofs.rs`; no other build sees them (see PROOFS.md).
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("mcp"))', 'cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [workspace.lints.rustdoc]
 # The whole stable group in one entry, so lints rustdoc gains stay owned by
