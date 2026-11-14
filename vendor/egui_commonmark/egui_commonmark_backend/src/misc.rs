@@ -766,7 +766,15 @@ impl Image {
     }
 
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
-        let image = egui::Image::from_uri(&self.uri)
+        // A moving picture is drawn from the frame that is due. Every
+        // frame has the size of the whole picture, so its place on the
+        // page never changes.
+        let frame = crate::animation::current_frame(ui.ctx(), &self.uri);
+        let source = match frame {
+            Some(frame) => egui::ImageSource::Texture(frame),
+            None => egui::ImageSource::Uri(self.uri.as_str().into()),
+        };
+        let image = egui::Image::new(source)
             .fit_to_original_size(1.0)
             .max_width(options.max_width(ui))
             .sense(egui::Sense::click());
@@ -782,18 +790,34 @@ impl Image {
         }
         let response = ui.add(image);
         cache.observe_image_size(&self.uri, response.rect.size());
+        // Only a picture in view keeps the window drawing.
+        if ui.is_rect_visible(response.rect) {
+            crate::animation::repaint_for_next_frame(ui.ctx(), &self.uri);
+        }
 
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
 
         if response.clicked() {
-            let load = ui.ctx().try_load_texture(
-                &self.uri,
-                egui::TextureOptions::default(),
-                egui::load::SizeHint::default(),
-            );
-            if let Ok(egui::load::TexturePoll::Ready { texture }) = load {
+            // The enlarged view of a moving picture is the frame that was
+            // clicked, held still.
+            let texture = frame.or_else(|| {
+                // Any other picture is asked for the way egui's `Image`
+                // asked for it, which for a GIF or WebP of one frame is
+                // not under the address the document gives.
+                let shown = egui::Image::from_uri(&self.uri);
+                let load = shown.source(ui.ctx()).load(
+                    ui.ctx(),
+                    egui::TextureOptions::default(),
+                    egui::load::SizeHint::default(),
+                );
+                match load {
+                    Ok(egui::load::TexturePoll::Ready { texture }) => Some(texture),
+                    Ok(egui::load::TexturePoll::Pending { .. }) | Err(_) => None,
+                }
+            });
+            if let Some(texture) = texture {
                 cache.clicked_image = Some((texture.id, texture.size));
             }
         }

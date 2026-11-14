@@ -32,7 +32,7 @@ pulldown-cmark = { workspace = true }
 unicode-segmentation = { workspace = true }
 
 [features]
-default = ["load-images", "pulldown_cmark"]
+default = ["load-images", "animated-images", "pulldown_cmark"]
 
 ## Enable proc macros for compile time generation of egui widgets from markdown
 macros = [
@@ -57,6 +57,9 @@ better_syntax_highlighting = [
 ## Enable loading of images. Make sure to also opt in to what image format you need
 ## through the image crate.
 load-images = ["egui_extras/image", "egui_extras/file"]
+
+## Play animated GIF and WebP images instead of showing their first frame.
+animated-images = ["load-images", "egui_extras/gif", "egui_extras/webp"]
 
 ## Support loading svg images
 svg = ["egui_extras/svg", "dep:resvg"]
@@ -91,7 +94,7 @@ eframe = { version = "0.33", default-features = false, features = [
     "x11",
 ] }
 
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "gif"] }
 egui_commonmark_macros_extended = { workspace = true } # Tests won't build otherswise
 
 [package.metadata.docs.rs]

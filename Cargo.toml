@@ -35,6 +35,7 @@ egui_commonmark_extended = { version = "0.28.3", features = [
     "svg",
     "svg_text",
     "load-images",
+    "animated-images",
     "fetch",
     "mermaid",
     "math",
@@ -68,7 +69,8 @@ percent-encoding = "2.3"
 
 # cargo-shear cannot see a crate that is used only for its features: `image`
 # is never imported, but its png/jpeg/gif features switch on the decoders
-# egui_extras needs to show images in documents.
+# egui_extras needs to show images in documents. The renderer's
+# `animated-images` feature asks for the GIF and WebP decoders itself.
 [package.metadata.cargo-shear]
 ignored = ["image"]
 
