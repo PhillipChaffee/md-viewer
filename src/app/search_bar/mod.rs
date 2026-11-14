@@ -4,7 +4,6 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
-use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 
@@ -44,13 +43,6 @@ impl MarkdownApp {
                         let close_btn = QuietButton::icon(Icon::Close, "Close find bar")
                             .show(ui, palette)
                             .on_hover_text("Close (Esc)");
-                        mcp::widget(
-                            &self.mcp,
-                            format_args!("Search: Close"),
-                            "button",
-                            &close_btn,
-                            None,
-                        );
                         if close_btn.clicked() {
                             // A closed bar has no match to step to.
                             actions = vec![AppAction::CloseSearch];
@@ -73,14 +65,6 @@ impl MarkdownApp {
             .desired_width(QUERY_WIDTH);
         let response = ui.add(text_edit);
 
-        mcp::widget(
-            &self.mcp,
-            format_args!("Search: Input"),
-            "textbox",
-            &response,
-            None,
-        );
-
         if self.search.focus_requested {
             response.request_focus();
             self.search.focus_requested = false;
@@ -99,39 +83,17 @@ impl MarkdownApp {
         } else {
             format!("{} / {}", self.search.active_match_index + 1, total_matches)
         };
-        let label_response = chrome::small_label(ui, palette, &label_text);
-
-        mcp::widget(
-            &self.mcp,
-            format_args!("Search: Match Count"),
-            "label",
-            &label_response,
-            Some(&label_text),
-        );
+        chrome::small_label(ui, palette, &label_text);
 
         let prev_btn = QuietButton::icon(Icon::ChevronUp, "Previous match")
             .enabled(total_matches > 0)
             .show(ui, palette)
             .on_hover_text("Previous match (Shift+Enter / Up)");
-        mcp::widget(
-            &self.mcp,
-            format_args!("Search: Previous"),
-            "button",
-            &prev_btn,
-            None,
-        );
 
         let next_btn = QuietButton::icon(Icon::ChevronDown, "Next match")
             .enabled(total_matches > 0)
             .show(ui, palette)
             .on_hover_text("Next match (Enter / Down)");
-        mcp::widget(
-            &self.mcp,
-            format_args!("Search: Next"),
-            "button",
-            &next_btn,
-            None,
-        );
         actions.extend(next_btn.clicked().then_some(AppAction::NextMatch));
         actions.extend(prev_btn.clicked().then_some(AppAction::PreviousMatch));
     }

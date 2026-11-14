@@ -4,7 +4,6 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use eframe::egui;
 
-use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::system_fonts::{scan_pickable_font_families, FontPreset, TextSizeClass};
 
@@ -107,9 +106,9 @@ impl MarkdownApp {
                 // selection defaults by hand.
                 let highlight = ui.visuals().selection.bg_fill;
                 colors.highlight =
-                    self.color_row(ui, "Highlight Color", highlight, colors.highlight);
+                    Self::color_row(ui, "Highlight Color", highlight, colors.highlight);
                 let link = ui.visuals().hyperlink_color;
-                colors.link = self.color_row(ui, "Link Color", link, colors.link);
+                colors.link = Self::color_row(ui, "Link Color", link, colors.link);
             });
 
         self.show_color_settings_dialog = open;
@@ -121,7 +120,6 @@ impl MarkdownApp {
     /// Returns the override the row leaves in force: `overridden` unless
     /// the reader picked a color or reset to the theme's, which is `None`.
     fn color_row(
-        &self,
         ui: &mut egui::Ui,
         name: &str,
         mut color: egui::Color32,
@@ -131,25 +129,11 @@ impl MarkdownApp {
         ui.horizontal(|ui| {
             ui.label(format!("{name}:"));
             let color_btn = ui.color_edit_button_srgba(&mut color);
-            mcp::widget(
-                &self.mcp,
-                format_args!("Colors Dialog: {name}"),
-                "color",
-                &color_btn,
-                None,
-            );
             if color_btn.changed() {
                 asked = Some(color);
             }
 
             let reset_btn = ui.add_enabled(overridden.is_some(), egui::Button::new("Reset"));
-            mcp::widget(
-                &self.mcp,
-                format_args!("Colors Dialog: {name} Reset"),
-                "button",
-                &reset_btn,
-                None,
-            );
             if reset_btn.clicked() {
                 asked = None;
             }
@@ -205,13 +189,6 @@ impl MarkdownApp {
                 let preset_btn = ui
                     .selectable_label(active, preset.label())
                     .on_hover_text(preset.description());
-                mcp::widget(
-                    &self.mcp,
-                    format_args!("Font Dialog: Preset: {}", preset.label()),
-                    "button",
-                    &preset_btn,
-                    Some(if active { "selected" } else { "" }),
-                );
                 if preset_btn.clicked() && !active {
                     self.fonts.preset = preset;
                 }
@@ -235,13 +212,6 @@ impl MarkdownApp {
                 let size_btn = ui
                     .selectable_label(active, size.label())
                     .on_hover_text("Base text size; headings and code scale with it");
-                mcp::widget(
-                    &self.mcp,
-                    format_args!("Font Dialog: Size: {}", size.label()),
-                    "button",
-                    &size_btn,
-                    Some(if active { "selected" } else { "" }),
-                );
                 if size_btn.clicked() && !active {
                     self.fonts.size = size;
                 }
@@ -252,14 +222,7 @@ impl MarkdownApp {
     fn font_family_search(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Search:");
-            let filter_edit = ui.text_edit_singleline(&mut self.font_picker.filter);
-            mcp::widget(
-                &self.mcp,
-                format_args!("Font Dialog: Search"),
-                "textbox",
-                &filter_edit,
-                None,
-            );
+            ui.text_edit_singleline(&mut self.font_picker.filter);
         });
     }
 
@@ -341,13 +304,6 @@ impl MarkdownApp {
     fn system_default_row(&self, ui: &mut egui::Ui) -> bool {
         let default_selected = self.fonts.family.is_none();
         let default_btn = ui.selectable_label(default_selected, "System Default");
-        mcp::widget(
-            &self.mcp,
-            format_args!("Font Dialog: System Default"),
-            "button",
-            &default_btn,
-            Some(if default_selected { "selected" } else { "" }),
-        );
         default_btn.clicked()
     }
 }

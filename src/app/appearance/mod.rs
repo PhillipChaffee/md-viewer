@@ -6,7 +6,6 @@ use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, BUTTON_SIDE};
-use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::theme::{Palette, ThemeId};
@@ -125,13 +124,6 @@ impl MarkdownApp {
                     });
                 chrome::hairline(ui, palette);
                 let fonts = MenuRow::new("Fonts…").flush().show(ui, palette);
-                mcp::widget(
-                    &self.mcp,
-                    format_args!("Appearance: Fonts"),
-                    "button",
-                    &fonts,
-                    None,
-                );
                 if fonts.clicked() {
                     *picked = Some(AppAction::OpenFontSettings);
                     ui.close();
@@ -151,13 +143,6 @@ impl MarkdownApp {
             for theme in ThemeId::ALL {
                 let chosen = self.theme == theme;
                 let swatch = theme_swatch(ui, theme, chosen, cell, palette);
-                mcp::widget(
-                    &self.mcp,
-                    format_args!("Appearance: Theme: {}", theme.label()),
-                    "button",
-                    &swatch,
-                    Some(if chosen { "selected" } else { "unselected" }),
-                );
                 if swatch.clicked() {
                     *picked = Some(AppAction::SetTheme(theme));
                 }
@@ -180,13 +165,6 @@ impl MarkdownApp {
                 .labelled("Smaller text")
                 .enabled(size.smaller().is_some())
                 .show(ui, palette);
-            mcp::widget(
-                &self.mcp,
-                format_args!("Appearance: Smaller Text"),
-                "button",
-                &smaller,
-                None,
-            );
             if let Some(size) = size.smaller().filter(|_| smaller.clicked()) {
                 *picked = Some(AppAction::SetTextSize(size));
             }
@@ -201,13 +179,6 @@ impl MarkdownApp {
                 .labelled("Larger text")
                 .enabled(size.larger().is_some())
                 .show(ui, palette);
-            mcp::widget(
-                &self.mcp,
-                format_args!("Appearance: Larger Text"),
-                "button",
-                &larger,
-                None,
-            );
             if let Some(size) = size.larger().filter(|_| larger.clicked()) {
                 *picked = Some(AppAction::SetTextSize(size));
             }
@@ -245,26 +216,12 @@ impl MarkdownApp {
         );
         slider
             .widget_info(|| egui::WidgetInfo::slider(true, f64::from(width), "Text column width"));
-        mcp::widget(
-            &self.mcp,
-            format_args!("Appearance: Width"),
-            "slider",
-            &slider,
-            Some(&readout),
-        );
         if slider.changed() {
             *picked = Some(AppAction::SetReadingWidth(ReadingWidth::new(width)));
         }
 
         ui.horizontal(|ui| {
             let fit = QuietButton::text("Fit window").show(ui, palette);
-            mcp::widget(
-                &self.mcp,
-                format_args!("Appearance: Fit Window"),
-                "button",
-                &fit,
-                None,
-            );
             if fit.clicked() {
                 *picked = Some(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
             }
@@ -272,13 +229,6 @@ impl MarkdownApp {
                 let reset = QuietButton::text("Reset")
                     .labelled("Reset width")
                     .show(ui, palette);
-                mcp::widget(
-                    &self.mcp,
-                    format_args!("Appearance: Reset Width"),
-                    "button",
-                    &reset,
-                    None,
-                );
                 if reset.clicked() {
                     *picked = Some(AppAction::SetReadingWidth(ReadingWidth::DEFAULT));
                 }

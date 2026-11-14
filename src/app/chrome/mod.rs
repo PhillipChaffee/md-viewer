@@ -346,15 +346,6 @@ impl<'a> MenuRow<'a> {
         self
     }
 
-    /// The state a toggle row reports to the MCP bridge.
-    pub(super) const fn mcp_value(&self) -> Option<&'static str> {
-        match self.checked {
-            Some(true) => Some("on"),
-            Some(false) => Some("off"),
-            None => None,
-        }
-    }
-
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
         let response = ui.allocate_response(
             egui::vec2(ui.available_width(), MENU_ROW_HEIGHT),
