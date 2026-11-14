@@ -196,6 +196,72 @@ fn emoji_shortcodes_become_the_emoji() {
 }
 
 #[test]
+fn an_emoji_in_bold_text_is_drawn_as_in_the_text_around_it() {
+    let faces = [
+        '\u{1f600}',
+        '\u{1f389}',
+        '\u{2705}',
+        '\u{1f680}',
+        '\u{231a}',
+    ];
+    let line: String = faces.iter().flat_map(|face| [' ', *face]).collect();
+    let reader = page(&format!(
+        "# Signs\n\nplain{line} end\n\n**strong{line} end**"
+    ));
+
+    for face in faces {
+        let plain = reader.drawing_of("plain", face);
+        assert!(!plain.is_blank(), "{face} is drawn in plain text");
+        assert_eq!(reader.drawing_of("strong", face), plain, "{face}");
+    }
+}
+
+#[test]
+fn an_emoji_in_a_heading_is_in_color_where_one_in_the_text_is() {
+    let rocket = '\u{1f680}';
+    let reader = page(&format!(
+        "# Signs\n\n## Launch {rocket} day\n\nplain {rocket} here"
+    ));
+
+    // The heading is on the page and in the contents beside it.
+    let headings = reader.drawings_of("Launch", rocket);
+    let plain = reader.drawing_of("plain", rocket);
+
+    assert!(headings.len() >= 2, "{headings:?}");
+    for heading in &headings {
+        assert!(!heading.is_blank());
+        assert_eq!(
+            heading.is_in_color(),
+            plain.is_in_color(),
+            "{headings:?} beside {plain:?}"
+        );
+    }
+}
+
+/// U+FE0F asks for the emoji look of the sign before it and U+FE0E for the
+/// text look. Neither is a character to draw.
+#[test]
+fn a_variation_selector_takes_no_room_and_stays_in_the_text() {
+    let bare = "a\u{2764}b";
+    let selected = ["a\u{2764}\u{fe0f}b", "a\u{2764}\u{fe0e}b"];
+    for (open, close) in [("", ""), ("**", "**")] {
+        let lines = each([bare, selected[0], selected[1]], |line| {
+            format!("{open}{line}{close}\n\n")
+        });
+        let reader = page(&format!("# Signs\n\n{lines}"));
+
+        for line in selected {
+            reader.assert_sees(line);
+            let (with, without) = (reader.width_of(line), reader.width_of(bare));
+            assert!(
+                (with - without).abs() < 0.01,
+                "{open}{line}{close} is {with} wide and {without} without the selector"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_shortcode_that_names_no_emoji_stays_as_typed() {
     let reader = page("# Signs\n\nSee :not_an_emoji: and 10:30:45 here.");
 
