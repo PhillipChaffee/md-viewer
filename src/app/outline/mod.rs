@@ -2,7 +2,6 @@
 
 use eframe::egui;
 
-use crate::app::mcp::{self, Mcp};
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
@@ -43,7 +42,6 @@ struct OutlineUi<'a> {
     /// that the list scrolls to show it.
     follow_row: Option<usize>,
     click: Option<OutlineClick>,
-    mcp: &'a Mcp,
 }
 
 /// The fold column of the row for the heading at `index`. There is none
@@ -117,7 +115,6 @@ impl MarkdownApp {
             current: current_row.map(|row| tab.outline.visible()[row]),
             follow_row: current_row.filter(|_| follow),
             click: None,
-            mcp: &self.mcp,
         };
 
         let panel = sidebar::Panel {
@@ -162,13 +159,6 @@ fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     let Some(more) = sidebar::header(ui, outline.palette, &header) else {
         return;
     };
-    mcp::rect(
-        outline.mcp,
-        format_args!("Outline: Options"),
-        "button",
-        more.rect,
-        None,
-    );
     let picked = egui::Popup::menu(&more).show(outline_menu);
     if let Some(click) = picked.and_then(|menu| menu.inner) {
         outline.click = Some(click);
@@ -248,14 +238,6 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
     };
     let laid_out = sidebar::row(ui, outline.palette, &shown);
 
-    mcp::rect(
-        outline.mcp,
-        format_args!("Header: {}", row.header.title),
-        "header",
-        laid_out.response.rect,
-        Some(&format_args!("h{}", row.header.level)),
-    );
-
     if !outline.is_dragging && laid_out.response.clicked() {
         outline.click = Some(OutlineClick::JumpTo(row.index));
     }
@@ -285,19 +267,6 @@ fn fold_control(
         let name = format!("{verb} {}", row.header.title);
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
-
-    let state = if row.chevron == Chevron::Closed {
-        "collapsed"
-    } else {
-        "expanded"
-    };
-    mcp::rect(
-        outline.mcp,
-        format_args!("Toggle: {}", row.header.title),
-        "button",
-        rect,
-        Some(&state),
-    );
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));

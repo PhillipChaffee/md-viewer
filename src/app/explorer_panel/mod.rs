@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use eframe::egui;
 
-use crate::app::mcp;
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{FileTreeNode, SortOrder};
@@ -108,15 +107,6 @@ impl MarkdownApp {
             menu: Some("Explorer options"),
         };
         let more = sidebar::header(ui, palette, &header);
-        if let Some(more) = &more {
-            mcp::widget(
-                &self.mcp,
-                format_args!("Explorer: Options"),
-                "button",
-                more,
-                None,
-            );
-        }
 
         let sort_order = self.file_explorer.sort_order();
         let picked = more
@@ -218,14 +208,6 @@ impl MarkdownApp {
             chevron: Chevron::Blank,
         };
         let response = sidebar::row(ui, listing.palette, &shown).response;
-        let state_value = if is_open { "open" } else { "" };
-        mcp::widget(
-            &self.mcp,
-            format_args!("File: {}", row.name),
-            "button",
-            &response,
-            Some(state_value),
-        );
 
         if response.clicked() {
             clicks.files.file_to_open = Some(row.path.to_path_buf());
@@ -257,14 +239,6 @@ impl MarkdownApp {
             },
         };
         let response = sidebar::row(ui, palette, &shown).response;
-        let state_value = if is_expanded { "expanded" } else { "collapsed" };
-        mcp::widget(
-            &self.mcp,
-            format_args!("Directory: {}", row.name),
-            "button",
-            &response,
-            Some(state_value),
-        );
 
         // The toggle is applied after the rows are drawn.
         if response.clicked() {

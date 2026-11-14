@@ -7,7 +7,6 @@ use eframe::egui;
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, STRIP_HEIGHT};
 use crate::app::edit_controls::edit_mode_controls;
-use crate::app::mcp::{self, Mcp};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::theme::Palette;
@@ -108,7 +107,7 @@ impl MarkdownApp {
                         title: tab.title(),
                         is_active: index == self.active_tab,
                     };
-                    let shown = tab_label(ui, &label, palette, &self.mcp, actions);
+                    let shown = tab_label(ui, &label, palette, actions);
                     if reveal && label.is_active {
                         scroll_into_strip(ui, shown.rect);
                     }
@@ -123,13 +122,6 @@ impl MarkdownApp {
         let open = QuietButton::icon(Icon::Plus, "Open file in new tab")
             .show(ui, self.theme.palette())
             .on_hover_text("Open File… (Ctrl+T)");
-        mcp::widget(
-            &self.mcp,
-            format_args!("Open File in New Tab"),
-            "button",
-            &open,
-            None,
-        );
         actions.open_file = open.clicked();
     }
 
@@ -178,7 +170,6 @@ fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
     palette: &'static Palette,
-    mcp: &Mcp,
     actions: &mut TabStripActions,
 ) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
@@ -197,15 +188,6 @@ fn tab_label(
             label.title,
         )
     });
-
-    let state = if label.is_active { "active" } else { "" };
-    mcp::rect(
-        mcp,
-        format_args!("Tab: {}", label.title),
-        "tab",
-        rect,
-        Some(&state),
-    );
 
     // The pointer counts as over the tab while it is over the close button
     // too, which takes the hover for itself.
@@ -232,7 +214,7 @@ fn tab_label(
         actions.close = Some(label.index);
     }
     if pointed {
-        tab_close_button(ui, &response, label, palette, mcp, actions);
+        tab_close_button(ui, &response, label, palette, actions);
     }
 
     egui::Popup::context_menu(&response)
@@ -247,7 +229,6 @@ fn tab_close_button(
     tab: &egui::Response,
     label: &TabLabel<'_>,
     palette: &Palette,
-    mcp: &Mcp,
     actions: &mut TabStripActions,
 ) {
     let square = egui::Rect::from_center_size(
@@ -259,14 +240,6 @@ fn tab_close_button(
     );
     let close = ui.interact(square, tab.id.with("close"), egui::Sense::click());
     close.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close tab"));
-
-    mcp::rect(
-        mcp,
-        format_args!("Close Tab: {}", label.title),
-        "button",
-        square,
-        None,
-    );
 
     let color = chrome::ink(palette, true, close.hovered());
     Icon::Close.paint(ui.painter(), square.shrink(3.0), color);

@@ -9,7 +9,6 @@ use eframe::egui::{self, FontId, TextStyle};
 use crate::app::content::look::DocumentLook;
 use crate::app::frame::WindowTitle;
 use crate::app::lightbox::Lightbox;
-use crate::app::mcp::Mcp;
 use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::settings::FontPicker;
 use crate::app::watching::LiveReload;
@@ -234,8 +233,6 @@ impl MarkdownApp {
             persisted.expanded_dirs,
         );
 
-        let mcp = Mcp::new();
-
         let mut app = Self {
             tabs,
             active_tab,
@@ -279,7 +276,6 @@ impl MarkdownApp {
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,
             home_list: None,
-            mcp,
         };
 
         app.begin_session(file, watch);

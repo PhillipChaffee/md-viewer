@@ -10,7 +10,6 @@ use egui_commonmark_extended::CommonMarkViewer;
 use crate::app::action::AppAction;
 use crate::app::content::column::{resize_strips, Column};
 use crate::app::content::look::DocumentLook;
-use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
 use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
@@ -81,7 +80,6 @@ impl MarkdownApp {
 
         let (reading_width, palette) = (self.reading_width, self.theme.palette());
         let column_drag_grab = &mut self.column_drag_grab;
-        let mcp = &self.mcp;
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
@@ -111,9 +109,6 @@ impl MarkdownApp {
                 };
                 // After the document, so the strips sit on top of it.
                 let requested_width = resize_strips(ui, column, column_drag_grab, palette);
-                for (name, strip) in column.strips() {
-                    mcp::rect(mcp, format_args!("{name}"), "slider", strip, None);
-                }
 
                 // Request repaint during smooth scrolling
                 if ui.ctx().input(|i| i.smooth_scroll_delta.length_sq() > 0.0) {

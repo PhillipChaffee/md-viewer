@@ -80,11 +80,6 @@ impl Column {
         }
     }
 
-    /// The two strips with their names, for the MCP bridge.
-    pub(super) fn strips(self) -> [(&'static str, egui::Rect); 2] {
-        [Edge::Left, Edge::Right].map(|edge| (edge.label(), self.strip(edge)))
-    }
-
     /// The strip that resizes from `edge`: the pane's full height, just
     /// outside the column.
     fn strip(self, edge: Edge) -> egui::Rect {

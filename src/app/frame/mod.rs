@@ -7,7 +7,6 @@ use eframe::egui;
 use crate::app::content::look::DocumentLook;
 use crate::app::drop;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
-use crate::app::mcp;
 use crate::app::MarkdownApp;
 use crate::persist::APP_KEY;
 use crate::system_fonts::{document_fonts, setup_fonts};
@@ -41,7 +40,6 @@ impl WindowTitle {
 
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        mcp::raw_input(&mut self.mcp, raw_input);
         self.lightbox.capture_wheel(raw_input);
     }
 
@@ -66,8 +64,6 @@ impl eframe::App for MarkdownApp {
         self.render_strips(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx, files_hover);
-
-        mcp::capture(&mut self.mcp, ctx);
     }
 }
 
@@ -75,8 +71,6 @@ impl MarkdownApp {
     /// Per-frame housekeeping that runs before any input or UI: file
     /// changes, async polls, and theme, font, zoom, and title application.
     fn begin_frame(&mut self, ctx: &egui::Context) {
-        mcp::begin_frame(&mut self.mcp, ctx);
-
         self.poll_background_work(ctx);
 
         // Limit frame rate on virtual displays (e.g., Xvfb) which lack vsync

@@ -9,7 +9,6 @@ use eframe::egui;
 
 use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::Lightbox;
-use crate::app::mcp::Mcp;
 use crate::app::tabs::PathPicker;
 use crate::app::watching::LiveReload;
 use crate::explorer::FileExplorer;
@@ -30,7 +29,6 @@ mod error_bar;
 mod explorer_panel;
 mod frame;
 mod lightbox;
-mod mcp;
 mod outline;
 mod overflow_menu;
 #[cfg(kani)]
@@ -146,6 +144,4 @@ pub(crate) struct MarkdownApp {
     /// The home page's rows, built from `recent_files` when they change
     /// and not while painting. `None` until the page next shows.
     home_list: Option<welcome::HomeList>,
-    // MCP bridge for E2E testing
-    mcp: Mcp,
 }
