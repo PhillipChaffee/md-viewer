@@ -8,8 +8,7 @@
 
 #![cfg(feature = "animated-images")]
 
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use egui::load::TexturePoll;
 use egui_commonmark_extended::{CommonMarkCache, CommonMarkViewer};
@@ -21,34 +20,18 @@ const COLORS: [[u8; 4]; 3] = [[204, 51, 51, 255], [51, 170, 85, 255], [51, 102, 
 /// Each frame is on for half a second.
 const DELAY_MS: u32 = 500;
 
-/// A folder of this test's own, removed when the test is done.
-struct Scratch(PathBuf);
+/// Where the window finds the picture. egui hands over bytes it was given
+/// under such an address in the frame that asks for them, and the GIF is
+/// decoded in that frame too. A file is read on a thread of its own, which
+/// asks for a repaint whenever it gets to it: no frame count tells a test
+/// that the request is behind it.
+const PULSE: &str = "bytes://pulse.gif";
+const PULSE_PAGE: &str = "![pulse](bytes://pulse.gif)";
 
-impl Scratch {
-    fn new(name: &str) -> Self {
-        let dir =
-            std::env::temp_dir().join(format!("moving-picture-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        Self(dir)
-    }
-
-    /// Write a GIF of `frames` frames, one flat color of [`COLORS`] each,
-    /// and give its address.
-    fn gif(&self, name: &str, frames: usize) -> String {
-        let path = self.0.join(name);
-        write_gif(&path, frames);
-        format!("file://{}", path.display())
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn write_gif(path: &Path, frames: usize) {
-    let mut encoder = GifEncoder::new(std::fs::File::create(path).unwrap());
+/// A GIF of `frames` frames, one flat color of [`COLORS`] each.
+fn gif(frames: usize) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut encoder = GifEncoder::new(&mut bytes);
     encoder.set_repeat(Repeat::Infinite).unwrap();
     let delay = image::Delay::from_numer_denom_ms(DELAY_MS, 1);
     for color in &COLORS[..frames] {
@@ -57,6 +40,8 @@ fn write_gif(path: &Path, frames: usize) {
             .encode_frame(image::Frame::from_parts(pixels, 0, 0, delay))
             .unwrap();
     }
+    drop(encoder);
+    bytes
 }
 
 fn painted_pictures(shape: &egui::Shape, found: &mut Vec<(egui::TextureId, egui::Rect)>) {
@@ -84,21 +69,23 @@ struct Shown {
     next_repaint: Duration,
 }
 
-/// A window on `markdown`, which starts `above` points down the page.
-struct Window<'a> {
+/// A window on a page whose one picture is the GIF at [`PULSE`]. The page
+/// starts `above` points down the window.
+struct Window {
     ctx: egui::Context,
     cache: CommonMarkCache,
-    markdown: &'a str,
     above: f32,
     events: Vec<egui::Event>,
 }
 
-impl<'a> Window<'a> {
-    fn new(markdown: &'a str) -> Self {
+impl Window {
+    /// A window whose picture has `frames` frames.
+    fn new(frames: usize) -> Self {
+        let ctx = egui::Context::default();
+        ctx.include_bytes(PULSE, gif(frames));
         Self {
-            ctx: egui::Context::default(),
+            ctx,
             cache: CommonMarkCache::default(),
-            markdown,
             above: 0.0,
             events: Vec::new(),
         }
@@ -112,13 +99,17 @@ impl<'a> Window<'a> {
             events: std::mem::take(&mut self.events),
             ..Default::default()
         };
-        let (cache, markdown, above) = (&mut self.cache, self.markdown, self.above);
+        let (cache, above) = (&mut self.cache, self.above);
         let output = self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.add_space(above);
-                CommonMarkViewer::new().show(ui, cache, markdown);
+                CommonMarkViewer::new().show(ui, cache, PULSE_PAGE);
             });
         });
+        assert!(
+            !self.ctx.has_pending_images(),
+            "the picture is being read on another thread"
+        );
         let mut pictures = Vec::new();
         let window = egui::Rect::from_min_size(egui::Pos2::ZERO, WINDOW);
         for clipped in &output.shapes {
@@ -130,21 +121,6 @@ impl<'a> Window<'a> {
         Shown {
             pictures,
             next_repaint: output.viewport_output[&egui::ViewportId::ROOT].repaint_delay,
-        }
-    }
-
-    /// Frames at `seconds` until the picture at `uri` has been read, which
-    /// happens on another thread. Gives the first frame that shows it.
-    #[track_caller]
-    fn frame_once_loaded(&mut self, uri: &str, seconds: f64) -> Shown {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            let shown = self.frame_at(seconds);
-            if frame_texture(&self.ctx, uri, 0).is_some() {
-                return shown;
-            }
-            assert!(Instant::now() < deadline, "waited too long for {uri}");
-            std::thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -164,10 +140,10 @@ impl<'a> Window<'a> {
     }
 }
 
-/// The texture egui holds for frame `index` of the picture at `uri`.
-fn frame_texture(ctx: &egui::Context, uri: &str, index: usize) -> Option<egui::load::SizedTexture> {
+/// The texture egui holds for frame `index` of the picture.
+fn frame_texture(ctx: &egui::Context, index: usize) -> Option<egui::load::SizedTexture> {
     let load = ctx.try_load_texture(
-        &format!("{uri}#{index}"),
+        &format!("{PULSE}#{index}"),
         egui::TextureOptions::default(),
         Default::default(),
     );
@@ -179,11 +155,8 @@ fn frame_texture(ctx: &egui::Context, uri: &str, index: usize) -> Option<egui::l
 
 #[test]
 fn each_frame_of_a_gif_is_shown_in_turn_in_one_place() {
-    let scratch = Scratch::new("turn");
-    let uri = scratch.gif("pulse.gif", 3);
-    let markdown = format!("![pulse]({uri})");
-    let mut window = Window::new(&markdown);
-    window.frame_once_loaded(&uri, 0.1);
+    let mut window = Window::new(3);
+    window.frame_at(0.1);
 
     let shown: Vec<_> = [0.1, 0.6, 1.1, 1.6, 2.1]
         .into_iter()
@@ -191,7 +164,7 @@ fn each_frame_of_a_gif_is_shown_in_turn_in_one_place() {
         .collect();
 
     let frames: Vec<_> = (0..3)
-        .map(|index| frame_texture(&window.ctx, &uri, index).unwrap())
+        .map(|index| frame_texture(&window.ctx, index).unwrap())
         .collect();
     for (at, pictures) in shown.iter().enumerate() {
         assert_eq!(pictures.len(), 1, "one picture is painted");
@@ -205,12 +178,9 @@ fn each_frame_of_a_gif_is_shown_in_turn_in_one_place() {
 
 #[test]
 fn a_gif_in_view_asks_for_a_repaint_when_its_next_frame_is_due() {
-    let scratch = Scratch::new("due");
-    let uri = scratch.gif("pulse.gif", 3);
-    let markdown = format!("![pulse]({uri})");
-    let mut window = Window::new(&markdown);
+    let mut window = Window::new(3);
 
-    let loaded = window.frame_once_loaded(&uri, 0.1);
+    let loaded = window.frame_at(0.1);
     let later = window.frame_at(0.75);
 
     let step = Duration::from_millis(u64::from(DELAY_MS));
@@ -225,11 +195,8 @@ fn a_gif_in_view_asks_for_a_repaint_when_its_next_frame_is_due() {
 
 #[test]
 fn a_gif_out_of_view_asks_for_no_repaint() {
-    let scratch = Scratch::new("away");
-    let uri = scratch.gif("pulse.gif", 3);
-    let markdown = format!("![pulse]({uri})");
-    let mut window = Window::new(&markdown);
-    window.frame_once_loaded(&uri, 0.1);
+    let mut window = Window::new(3);
+    window.frame_at(0.1);
 
     window.above = WINDOW.y + 50.0;
     window.frame_at(0.2);
@@ -246,11 +213,8 @@ fn a_gif_out_of_view_asks_for_no_repaint() {
 
 #[test]
 fn a_gif_of_one_frame_asks_for_no_repaint() {
-    let scratch = Scratch::new("still");
-    let uri = scratch.gif("still.gif", 1);
-    let markdown = format!("![still]({uri})");
-    let mut window = Window::new(&markdown);
-    window.frame_once_loaded(&uri, 0.1);
+    let mut window = Window::new(1);
+    window.frame_at(0.1);
 
     window.frame_at(0.2);
     let shown = window.frame_at(0.3);
@@ -261,16 +225,13 @@ fn a_gif_of_one_frame_asks_for_no_repaint() {
 
 #[test]
 fn a_click_on_a_gif_hands_over_the_frame_that_was_clicked() {
-    let scratch = Scratch::new("click");
-    let uri = scratch.gif("pulse.gif", 3);
-    let markdown = format!("![pulse]({uri})");
-    let mut window = Window::new(&markdown);
-    window.frame_once_loaded(&uri, 0.1);
+    let mut window = Window::new(3);
+    window.frame_at(0.1);
     let on_screen = window.frame_at(0.6).pictures[0];
 
     window.click(on_screen.1, 0.6);
 
-    let second = frame_texture(&window.ctx, &uri, 1).unwrap();
+    let second = frame_texture(&window.ctx, 1).unwrap();
     assert_eq!(on_screen.0, second.id);
     assert_eq!(
         window.cache.take_clicked_image(),
