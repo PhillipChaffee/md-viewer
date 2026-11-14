@@ -1265,4 +1265,32 @@ mod tests {
             "Unexpected intrinsic size"
         );
     }
+
+    /// md-viewer patch: a variation selector is kept in the text and takes
+    /// no room, whichever face maps it to a glyph.
+    #[test]
+    fn test_variation_selectors_are_invisible() {
+        let pixels_per_point = 1.0;
+        let mut fonts = FontsImpl::new(
+            1024,
+            AlphaFromCoverage::default(),
+            FontDefinitions::default(),
+        );
+        let mut lay_out = |text: &str| {
+            let job = LayoutJob::single_section(text.into(), TextFormat::default());
+            layout(&mut fonts, pixels_per_point, job.into())
+        };
+        let bare = lay_out("a\u{2764}b");
+
+        for selector in ['\u{FE0E}', '\u{FE0F}', '\u{FE00}', '\u{E0100}'] {
+            let text = format!("a\u{2764}{selector}b");
+            let galley = lay_out(&text);
+            assert_eq!(galley.text(), text);
+            assert_eq!(galley.size(), bare.size(), "{selector:?}");
+            let glyph = &galley.rows[0].row.glyphs[2];
+            assert_eq!(glyph.chr, selector);
+            assert_eq!(glyph.advance_width, 0.0, "{selector:?}");
+            assert!(glyph.uv_rect.is_nothing(), "{selector:?}");
+        }
+    }
 }

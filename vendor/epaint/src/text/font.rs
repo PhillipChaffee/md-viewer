@@ -759,6 +759,13 @@ fn invisible_char(c: char) -> bool {
 
     // TODO(emilk): heed bidi characters
 
+    // A variation selector picks the look of the character before it (U+FE0F
+    // asks for the emoji look, U+FE0E for the text look) and is never drawn
+    // itself. Fonts that map one to a visible "VS16" box are debugging aids.
+    if matches!(c, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}') {
+        return true;
+    }
+
     matches!(
         c,
         '\u{200B}' // ZERO WIDTH SPACE
