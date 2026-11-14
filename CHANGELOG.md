@@ -31,6 +31,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - **Entering edit mode with one document open moved the page down.** The Preview and Edit switch for a lone document is now in the top bar.
 - **The app aborted at startup on a machine where fontconfig lists no fonts.** Fixed by fontique 0.12.
 - **Live reload switched itself off** when a remote folder was open with no document.
+- **Live Reload in ⋯ showed unchecked, and a click on it changed nothing, while there was nothing to watch.** The check mark now shows the setting, and a click or `F5` switches it off or on at any time. Switched on with nothing to watch, it follows the next document opened.
 - **A file that cannot be read said nothing when clicked in the files sidebar** while a document was open. The error bar now says why, as it does with no document open, and the open document stays.
 - **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
 - **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**

@@ -95,7 +95,8 @@ folder, reading time and opening lines.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
 - Drag a file onto the window to open it.
-- Live reload when the file changes on disk.
+- Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
+  is checked while the setting is on, also with nothing open to follow.
 - An edit mode (`Ctrl+E`) that shows the source and saves with `Ctrl+S`.
 - The session is remembered: open tabs, theme, column width, sidebars.
 

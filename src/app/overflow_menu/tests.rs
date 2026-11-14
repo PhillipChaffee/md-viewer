@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 use crate::app::ui_harness::UiHarness;
 use crate::app::MarkdownApp;
+use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::test_support::assert_close;
 use crate::theme::ThemeId;
@@ -189,6 +190,23 @@ fn live_reload_turns_file_watching_on_and_off_and_is_ticked_while_on() {
 
     harness.click("Live Reload");
     assert!(!harness.app().live_reload.is_live());
+}
+
+#[test]
+fn live_reload_is_ticked_while_on_with_nothing_to_watch_and_a_click_unticks_it() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.app_mut().close_active_tab();
+    harness.app_mut().file_explorer = FileExplorer::default();
+    harness.open_more();
+    harness.click("Live Reload");
+    assert!(!harness.app().live_reload.is_live());
+
+    harness.open_more();
+    assert!(harness.is_on("Live Reload"));
+
+    harness.click("Live Reload");
+    harness.open_more();
+    assert!(!harness.is_on("Live Reload"));
 }
 
 #[test]

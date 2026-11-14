@@ -48,17 +48,19 @@ impl LiveReload {
         self.enabled
     }
 
-    /// Whether a watcher runs: what the live indicator shows.
+    /// Whether a watcher runs: what the title's hover note shows. The
+    /// menu's check mark shows the setting.
     pub(super) const fn is_live(&self) -> bool {
         self.running.is_some()
     }
 }
 
 impl MarkdownApp {
-    /// Turns live reload off while a watcher runs, and on otherwise: also
-    /// when it is on already with nothing to watch.
+    /// Turns the setting off when it is on and on when it is off, whether
+    /// or not there is anything to watch. Turned on with nothing to watch,
+    /// the watcher starts once there is.
     pub(crate) fn toggle_watching(&mut self) {
-        if self.live_reload.is_live() {
+        if self.live_reload.enabled {
             self.stop_watching();
             self.live_reload.enabled = false;
         } else {

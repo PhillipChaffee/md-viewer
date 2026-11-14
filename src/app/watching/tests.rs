@@ -263,6 +263,24 @@ fn live_reload_waits_while_there_is_nothing_to_watch() {
 }
 
 #[test]
+fn switching_live_reload_off_with_nothing_to_watch_keeps_it_off() {
+    let mut harness = open(&[("a.md", "# A")]);
+    harness.apply(AppAction::CloseTab);
+    harness.app.file_explorer = FileExplorer::default();
+    harness.apply(AppAction::ToggleWatch);
+    assert!(harness.app.live_reload.is_enabled());
+    assert!(!harness.app.live_reload.is_live());
+
+    harness.apply(AppAction::ToggleWatch);
+    assert!(!harness.app.live_reload.is_enabled());
+
+    harness.app.open_in_new_tab(harness.path("a.md"));
+    harness.idle();
+    assert!(!harness.app.live_reload.is_live());
+    assert_eq!(harness.app.error_message, None);
+}
+
+#[test]
 fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
     let mut harness = open(&[("a.md", "# A")]);
     harness.apply(AppAction::CloseTab);
