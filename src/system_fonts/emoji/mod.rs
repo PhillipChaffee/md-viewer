@@ -62,7 +62,9 @@ pub(crate) fn install_emoji_fonts(fonts: &mut SystemFonts<'_>, definitions: &mut
 /// monochrome emoji faces in every chain.
 fn install_color_emoji_face(definitions: &mut FontDefinitions, mut data: FontData) {
     // Restrict to default-emoji characters so the color face
-    // never claims general symbols (▶ ⚠ ✔ …) used by the UI.
+    // never claims general symbols (▶ ⚠ ✔ …) used by the UI. The vendored
+    // epaint still takes such a symbol from this face where U+FE0F follows
+    // it in the text, and takes no character from it where U+FE0E does.
     data.emoji_only = true;
     definitions
         .font_data

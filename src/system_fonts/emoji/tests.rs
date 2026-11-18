@@ -14,7 +14,8 @@ use crate::system_fonts::{font_definitions, FontConfig, FontPreset};
 
 /// Subset of Noto Color Emoji holding only the glyphs these tests name, so
 /// they run the same on a machine with no color emoji font installed. See
-/// `fixtures/README.txt` for how it was produced.
+/// `fixtures/README.txt` for how it was produced. The layout tests of the
+/// vendored epaint read the same file.
 const COLOR_EMOJI_FIXTURE: &[u8] = include_bytes!("fixtures/color-emoji-subset.ttf");
 
 /// 🟢 🔴 🔵 ⚪ ✅, the emoji the project's own documents use.
@@ -111,7 +112,13 @@ fn rasterize(ctx: &egui::Context, ch: char) -> RasterizedGlyph {
 
 /// `ch` as text set in `font` draws it.
 fn rasterize_in(ctx: &egui::Context, font: egui::FontId, ch: char) -> RasterizedGlyph {
-    let job = egui::text::LayoutJob::simple(ch.to_string(), font, Color32::WHITE, f32::INFINITY);
+    rasterize_first(ctx, font, &ch.to_string())
+}
+
+/// The first character of `text` as text set in `font` draws it, which
+/// depends on the characters after it.
+fn rasterize_first(ctx: &egui::Context, font: egui::FontId, text: &str) -> RasterizedGlyph {
+    let job = egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
     ctx.fonts_mut(|fonts| {
         let galley = fonts.layout_job(job);
         let uv = galley.rows[0].glyphs[0].uv_rect;
@@ -392,25 +399,107 @@ fn every_chain_ends_in_the_same_emoji_faces() {
 }
 
 /// A variation selector picks the look of the character before it and is
-/// never drawn itself: ❤️ is as wide as ❤, in every family.
+/// never drawn itself: it takes no room, in every family. The sign before it
+/// may change its width with its look, so the room is read off the selector.
 #[test]
 fn a_variation_selector_takes_no_room() {
     let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
-    let width = |family: &FontFamily, text: &str| {
-        let font = egui::FontId::new(16.0, family.clone());
-        let job =
-            egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
-        ctx.fonts_mut(|fonts| fonts.layout_job(job).rect.width())
-    };
     for family in text_families() {
-        let plain = width(&family, "a\u{2764}b");
         for selector in ['\u{FE0E}', '\u{FE0F}'] {
-            let selected = width(&family, &format!("a\u{2764}{selector}b"));
+            let text = format!("a\u{2764}{selector}b");
+            let galley = lay_out(&ctx, &family, &text);
+            let selector_glyph = &galley.rows[0].glyphs[2];
+            assert_eq!(selector_glyph.chr, selector);
             assert!(
-                (selected - plain).abs() < f32::EPSILON,
+                selector_glyph.uv_rect.is_nothing(),
+                "{selector:?} in {family:?}"
+            );
+            assert!(
+                selector_glyph.advance_width.abs() < f32::EPSILON,
                 "{selector:?} is {} wide in {family:?}",
-                selected - plain
+                selector_glyph.advance_width
             );
         }
     }
+}
+
+/// ❤, a sign that is an emoji only with U+FE0F after it.
+const HEART: char = '\u{2764}';
+
+fn lay_out(ctx: &egui::Context, family: &FontFamily, text: &str) -> std::sync::Arc<egui::Galley> {
+    let font = egui::FontId::new(16.0, family.clone());
+    let job = egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
+    ctx.fonts_mut(|fonts| fonts.layout_job(job))
+}
+
+/// U+FE0F after a sign asks for its emoji look: ❤️ is red where the machine
+/// has a color emoji font, in every weight, and ❤ alone stays in the ink of
+/// the text.
+#[test]
+fn a_sign_with_the_emoji_selector_is_in_color_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            let font = egui::FontId::new(16.0, family.clone());
+            let selected = rasterize_first(&ctx, font.clone(), "\u{2764}\u{FE0F}");
+            assert!(
+                selected.colored && selected.peak(Color32::r, Color32::g) > 128,
+                "{preset:?} draws ❤️ in {family:?} without color"
+            );
+            let bare = rasterize_in(&ctx, font, HEART);
+            assert!(!bare.colored, "{preset:?} draws ❤ in {family:?} in color");
+            assert!(bare.ink_pixels() > 20);
+        }
+    }
+}
+
+/// U+FE0E after an emoji asks for its text look: ✅︎ and 😀︎ are in the ink
+/// of the text, where ✅ and 😀 alone are in color.
+#[test]
+fn an_emoji_with_the_text_selector_is_in_the_ink_of_the_text() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    for family in text_families() {
+        let font = egui::FontId::new(16.0, family.clone());
+        for emoji in ['\u{2705}', '\u{1F600}'] {
+            let selected = rasterize_first(&ctx, font.clone(), &format!("{emoji}\u{FE0E}"));
+            assert!(
+                !selected.colored,
+                "{emoji}\u{FE0E} is in color in {family:?}"
+            );
+            assert!(selected.ink_pixels() > 20, "{emoji}\u{FE0E} in {family:?}");
+            assert!(rasterize_in(&ctx, font.clone(), emoji).colored);
+        }
+    }
+}
+
+/// Without a color emoji font there is no emoji look to switch to: ❤️ is
+/// drawn as ❤ is.
+#[test]
+fn a_selector_changes_nothing_without_a_color_font() {
+    let ctx = context_with_fonts(definitions_without_color_font());
+    let bare = lay_out(&ctx, &FontFamily::Proportional, "\u{2764}");
+    for selector in ['\u{FE0E}', '\u{FE0F}'] {
+        let selected = lay_out(
+            &ctx,
+            &FontFamily::Proportional,
+            &format!("{HEART}{selector}"),
+        );
+        assert_eq!(
+            selected.rows[0].glyphs[0].uv_rect,
+            bare.rows[0].glyphs[0].uv_rect
+        );
+    }
+}
+
+/// A digit has no emoji look of its own, though the color face maps it as
+/// the base of a keycap: 1 with U+FE0F after it is still the digit.
+#[test]
+fn a_digit_with_the_emoji_selector_stays_a_digit() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    let selected = lay_out(&ctx, &FontFamily::Proportional, "1\u{FE0F}");
+    let bare = lay_out(&ctx, &FontFamily::Proportional, "1");
+
+    let digit = &selected.rows[0].glyphs[0];
+    assert_eq!(digit.uv_rect, bare.rows[0].glyphs[0].uv_rect);
+    assert!(!digit.uv_rect.is_nothing());
 }

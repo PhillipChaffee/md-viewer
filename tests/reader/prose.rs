@@ -243,25 +243,68 @@ fn an_emoji_in_a_heading_is_in_color_where_one_in_the_text_is() {
 }
 
 /// U+FE0F asks for the emoji look of the sign before it and U+FE0E for the
-/// text look. Neither is a character to draw.
+/// text look. Neither is a character to draw: the line is as wide as the
+/// sign alone makes it, which for the emoji look is as wide as an emoji.
 #[test]
 fn a_variation_selector_takes_no_room_and_stays_in_the_text() {
-    let bare = "a\u{2764}b";
-    let selected = ["a\u{2764}\u{fe0f}b", "a\u{2764}\u{fe0e}b"];
+    let (heart, dot) = ('\u{2764}', '\u{1f534}');
+    let (bare, emoji) = (format!("a{heart}b"), format!("a{dot}b"));
+    let (as_emoji, as_text) = (format!("a{heart}\u{fe0f}b"), format!("a{heart}\u{fe0e}b"));
     for (open, close) in [("", ""), ("**", "**")] {
-        let lines = each([bare, selected[0], selected[1]], |line| {
+        let lines = each([&bare, &emoji, &as_emoji, &as_text], |line| {
             format!("{open}{line}{close}\n\n")
         });
         let reader = page(&format!("# Signs\n\n{lines}"));
 
-        for line in selected {
+        let alike = if reader.drawing_of(&as_emoji, heart).is_in_color() {
+            &emoji
+        } else {
+            &bare
+        };
+        for (line, alike) in [(&as_emoji, alike), (&as_text, &bare)] {
             reader.assert_sees(line);
-            let (with, without) = (reader.width_of(line), reader.width_of(bare));
+            let (with, without) = (reader.width_of(line), reader.width_of(alike));
             assert!(
                 (with - without).abs() < 0.01,
-                "{open}{line}{close} is {with} wide and {without} without the selector"
+                "{open}{line}{close} is {with} wide and {alike} is {without}"
             );
         }
+    }
+}
+
+/// ❤ is a sign in the ink of the text, and ❤️ asks for it as an emoji: it
+/// is in color where the emoji beside it are, in plain and in bold text.
+#[test]
+fn a_sign_with_the_emoji_selector_is_drawn_as_the_emoji_around_it_are() {
+    let (heart, dot) = ('\u{2764}', '\u{1f534}');
+    for (open, close) in [("", ""), ("**", "**")] {
+        let reader = page(&format!(
+            "# Signs\n\n{open}selected {heart}\u{fe0f} end{close}\n\n\
+             {open}bare {heart} end{close}\n\n{open}emoji {dot} end{close}"
+        ));
+
+        let selected = reader.drawing_of("selected", heart);
+        assert!(!selected.is_blank());
+        assert_eq!(
+            selected.is_in_color(),
+            reader.drawing_of("emoji", dot).is_in_color(),
+            "{open}{selected:?}{close}"
+        );
+        assert!(!reader.drawing_of("bare", heart).is_in_color());
+    }
+}
+
+/// 😀︎ and ✅︎ ask for an emoji in the ink of the text, as a letter is.
+#[test]
+fn an_emoji_with_the_text_selector_is_in_the_ink_of_the_text() {
+    let faces = ['\u{1f600}', '\u{2705}'];
+    let lines = each(faces, |face| format!("as text {face}\u{fe0e} end\n\n"));
+    let reader = page(&format!("# Signs\n\n{lines}"));
+
+    for face in faces {
+        let drawing = reader.drawing_of(&format!("{face}\u{fe0e}"), face);
+        assert!(!drawing.is_blank(), "{face}");
+        assert!(!drawing.is_in_color(), "{face}: {drawing:?}");
     }
 }
 

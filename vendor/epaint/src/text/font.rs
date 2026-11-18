@@ -7,6 +7,7 @@ use crate::{
     TextureAtlas,
     text::{
         FontTweak,
+        emoji_sequence::Presentation,
         fonts::{CachedFamily, FontFaceKey},
     },
 };
@@ -257,14 +258,41 @@ impl FontImpl {
 
     /// `\n` will result in `None`
     pub(super) fn glyph_info(&mut self, c: char) -> Option<GlyphInfo> {
-        if let Some(glyph_info) = self.glyph_info_cache.get(&c) {
-            return Some(*glyph_info);
-        }
-
         // An emoji-only face (e.g. a color-emoji font) must not claim general
         // symbols (▶ ⚠ ✔ arrows, …) that regular text faces render better.
         if self.emoji_only && !is_default_emoji(c) {
             return None;
+        }
+        self.mapped_glyph_info(c)
+    }
+
+    /// md-viewer patch: the glyph of `c` when a variation selector after it
+    /// asks for `presentation`. The emoji look comes from an emoji-only face,
+    /// whichever character it is, and the text look from any other face.
+    ///
+    /// A digit, `#` and `*` have no emoji look of their own: a color face
+    /// maps them only as the base of a keycap, to an empty glyph.
+    pub(super) fn glyph_info_as(
+        &mut self,
+        c: char,
+        presentation: Presentation,
+    ) -> Option<GlyphInfo> {
+        let has_the_look = match presentation {
+            Presentation::Emoji => self.emoji_only && !c.is_ascii(),
+            Presentation::Text => !self.emoji_only,
+        };
+        if has_the_look {
+            self.mapped_glyph_info(c)
+        } else {
+            None
+        }
+    }
+
+    /// The glyph this face maps `c` to, whether or not the face is kept to
+    /// emoji.
+    fn mapped_glyph_info(&mut self, c: char) -> Option<GlyphInfo> {
+        if let Some(glyph_info) = self.glyph_info_cache.get(&c) {
+            return Some(*glyph_info);
         }
 
         if self.ignore_character(c) {
@@ -564,6 +592,41 @@ impl Font<'_> {
     /// Can we display all the glyphs in this text?
     pub fn has_glyphs(&mut self, s: &str) -> bool {
         s.chars().all(|c| self.has_glyph(c))
+    }
+
+    /// md-viewer patch: what draws the first character of `text`, given the
+    /// character after it. A character followed by U+FE0F is drawn from the
+    /// color emoji face and one followed by U+FE0E from the text faces,
+    /// where they have it.
+    ///
+    /// Any other character is looked up as [`Self::glyph_info`] does, after
+    /// one look at the character after it.
+    pub(crate) fn glyph_info_at(&mut self, text: &str) -> (FontFaceKey, GlyphInfo) {
+        let mut chars = text.chars();
+        let Some(c) = chars.next() else {
+            return self.cached_family.replacement_glyph;
+        };
+        match chars.next().and_then(Presentation::asked_by) {
+            Some(presentation) => self.glyph_info_as(c, presentation),
+            None => self.glyph_info(c),
+        }
+    }
+
+    /// `c` with the look a variation selector asks for, or as
+    /// [`Self::glyph_info`] has it where no face has that look.
+    fn glyph_info_as(&mut self, c: char, presentation: Presentation) -> (FontFaceKey, GlyphInfo) {
+        let key = (c, presentation);
+        if let Some(selected) = self.cached_family.presentation_cache.get(&key) {
+            return *selected;
+        }
+
+        let selected = self.cached_family.fonts.iter().find_map(|font_key| {
+            let font_impl = self.fonts_by_id.get_mut(font_key)?;
+            Some((*font_key, font_impl.glyph_info_as(c, presentation)?))
+        });
+        let selected = selected.unwrap_or_else(|| self.glyph_info(c));
+        self.cached_family.presentation_cache.insert(key, selected);
+        selected
     }
 
     /// `\n` will (intentionally) show up as the replacement character.

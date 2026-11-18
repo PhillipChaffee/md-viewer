@@ -81,7 +81,9 @@ folder, reading time and opening lines.
 
 - GitHub Flavored Markdown: tables, task lists, footnotes, strikethrough and
   emoji shortcodes such as `:pushpin:`. An emoji looks the same in bold
-  text and headings as in the text around them.
+  text and headings as in the text around them. A variation
+  selector picks the look of the sign before it: ❤️ is the color emoji and
+  ❤︎ the sign in the ink of the text.
 - LaTeX math, inline `$…$` and display `$$…$$`.
 - Mermaid diagrams: flowcharts, sequence, class, state, ER, gantt and pie.
   Click a diagram to enlarge it.
@@ -272,9 +274,8 @@ Two things to know before you rely on those gates:
 ## Known limits
 
 - Emoji are in color where Noto Color Emoji is installed, and in the ink of
-  the text elsewhere. A sign that is an emoji only with a variation selector
-  after it, such as ❤️, is in the ink of the text, and a joined sequence
-  such as 👨‍👩‍👧 is drawn as its parts.
+  the text elsewhere. A joined sequence such as 👨‍👩‍👧 is drawn as its
+  parts.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
 

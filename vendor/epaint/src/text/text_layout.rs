@@ -178,13 +178,16 @@ fn layout_section(
     let mut current_font = FontFaceKey::INVALID;
     let mut current_font_impl_metrics = ScaledMetrics::default();
 
-    for chr in job.text[byte_range.clone()].chars() {
+    let text = &job.text[byte_range.clone()];
+    for (byte_index, chr) in text.char_indices() {
         if job.break_on_newline && chr == '\n' {
             out_paragraphs.push(Paragraph::from_section_index(section_index));
             paragraph = out_paragraphs.last_mut().unwrap();
             paragraph.empty_paragraph_height = line_height; // TODO(emilk): replace this hack with actually including `\n` in the glyphs?
         } else {
-            let (font_id, glyph_info) = font.glyph_info(chr);
+            // md-viewer patch: the character after this one may be a
+            // variation selector that picks its look.
+            let (font_id, glyph_info) = font.glyph_info_at(&text[byte_index..]);
             let mut font_impl = font.fonts_by_id.get_mut(&font_id);
             if current_font != font_id {
                 current_font = font_id;
@@ -1292,5 +1295,59 @@ mod tests {
             assert_eq!(glyph.advance_width, 0.0, "{selector:?}");
             assert!(glyph.uv_rect.is_nothing(), "{selector:?}");
         }
+    }
+
+    /// md-viewer patch: the default faces with a color emoji face ahead of
+    /// the built-in emoji faces, kept to emoji as the app installs it. The
+    /// face is the fixture of the app's own emoji tests.
+    fn fonts_with_color_emoji() -> FontsImpl {
+        const COLOR_EMOJI: &[u8] = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../src/system_fonts/emoji/fixtures/color-emoji-subset.ttf"
+        ));
+        let mut definitions = FontDefinitions::default();
+        let mut face = crate::text::FontData::from_static(COLOR_EMOJI);
+        face.emoji_only = true;
+        definitions
+            .font_data
+            .insert("ColorEmoji".into(), face.into());
+        for chain in definitions.families.values_mut() {
+            let built_in = chain.iter().position(|name| name == "NotoEmoji-Regular");
+            chain.insert(built_in.unwrap(), "ColorEmoji".into());
+        }
+        FontsImpl::new(1024, AlphaFromCoverage::default(), definitions)
+    }
+
+    fn lay_out(fonts: &mut FontsImpl, text: &str) -> Galley {
+        let job = LayoutJob::single_section(text.into(), TextFormat::default());
+        layout(fonts, 1.0, job.into())
+    }
+
+    /// md-viewer patch: U+FE0F after a character draws it from the color
+    /// face and U+FE0E from the text faces. Without one, nothing changes.
+    #[test]
+    fn test_variation_selector_picks_the_face() {
+        let mut fonts = fonts_with_color_emoji();
+        let mut first_glyph = |text: &str| lay_out(&mut fonts, text).rows[0].glyphs[0].uv_rect;
+
+        // ❤ is text by default, ✅ and 😀 are emoji by default.
+        let heart = first_glyph("\u{2764}");
+        assert!(!heart.colored);
+        assert!(first_glyph("\u{2764}\u{FE0F}").colored);
+        assert_eq!(first_glyph("\u{2764}\u{FE0E}"), heart);
+        assert_eq!(first_glyph("\u{2764}\u{FE00}"), heart);
+
+        for emoji in ['\u{2705}', '\u{1F600}'] {
+            let colored = first_glyph(&emoji.to_string());
+            assert!(colored.colored);
+            assert_eq!(first_glyph(&format!("{emoji}\u{FE0F}")), colored);
+            let text_look = first_glyph(&format!("{emoji}\u{FE0E}"));
+            assert!(!text_look.colored && !text_look.is_nothing());
+        }
+
+        // The color face maps 1 as the base of a keycap, to an empty glyph.
+        let digit = first_glyph("1");
+        assert!(!digit.is_nothing());
+        assert_eq!(first_glyph("1\u{FE0F}"), digit);
     }
 }
