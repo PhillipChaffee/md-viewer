@@ -56,6 +56,10 @@ reason = "reviewed 2026-11-13: zbus_names, same accesskit_unix D-Bus stack as RU
 id = "RUSTSEC-2026-0372"
 reason = "reviewed 2026-11-13: zvariant_derive, same accesskit_unix D-Bus stack as RUSTSEC-2026-0370."
 
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+reason = "reviewed 2026-11-18: chrono is unmaintained with no fixed release; pinned by merman (diagram dates) and typst-as-lib, never called from this crate."
+
 # osv-scanner's allow-list takes bare SPDX identifiers only, so a license
 # with an exception clause cannot be listed. ar_archive_writer is
 # "Apache-2.0 WITH LLVM-exception": Apache-2.0 plus a grant that only widens
