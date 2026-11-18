@@ -92,8 +92,8 @@ folder, reading time and opening lines.
 - Syntax highlighting for 200+ languages, with a color scheme per theme.
 - Images (PNG, JPEG, GIF, WebP, SVG, local or over HTTP), HTML tables and
   YAML frontmatter. Animated GIFs and WebPs play while they are in view.
-  Click a picture to enlarge it; a moving one is enlarged as the frame you
-  clicked.
+  Click a picture to enlarge it; a moving one goes on playing while it is
+  enlarged.
 - System font fallbacks for CJK and other non-Latin scripts.
 
 **Getting around**
@@ -282,6 +282,12 @@ Two things to know before you rely on those gates:
   because Markdown reads its `*` apart from the characters after it.
 - In edit mode the arrow keys and Backspace move through an emoji written
   as several characters one character at a time.
+- An animated GIF or WebP is decoded whole when it is first shown, which
+  takes a moment and four bytes of memory for each pixel of each frame. One
+  whose frames need more than 256 MiB (139 frames of 800 × 600) then shows
+  its first frame and does not move. When the frames of all moving pictures
+  pass 512 MiB, those out of view are let go, and decoded again when they
+  are scrolled back to.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
 

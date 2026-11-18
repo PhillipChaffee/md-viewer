@@ -22,7 +22,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Sidebars and a home page.** The explorer and contents sidebars are frameless, and the contents list marks the heading being read. With no document open, the home page lists what was read recently: title, folder, reading time and the opening lines.
 
-- **Animated GIFs and WebPs play.** A picture of several frames shows each for the time the file asks for and starts over, instead of standing on its first frame. It asks the window to redraw only while it is in view, so a page with no moving picture on screen costs nothing at rest. Clicking one enlarges the frame that was clicked, held still.
+- **Animated GIFs and WebPs play.** A picture of several frames shows each for the time the file asks for and starts over, instead of standing on its first frame. It asks the window to redraw only while it is in view, so a page with no moving picture on screen costs nothing at rest. Clicking one enlarges it, and it goes on playing there in step with the page. Its frames are kept once, as textures: up to 256 MiB for one picture, which past that shows its first frame only, and 512 MiB for all of them, past which pictures out of view are let go and read again when they come back.
 
 ### Fixes
 
@@ -39,6 +39,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - **Live reload switched itself off** when a remote folder was open with no document.
 - **Live Reload in ⋯ showed unchecked, and a click on it changed nothing, while there was nothing to watch.** The check mark now shows the setting, and a click or `F5` switches it off or on at any time. Switched on with nothing to watch, it follows the next document opened.
 - **A file that cannot be read said nothing when clicked in the files sidebar** while a document was open. The error bar now says why, as it does with no document open, and the open document stays.
+- **A picture stayed in memory until the app quit,** decoded and as a texture, after the last tab that showed it was closed. Closing a tab now gives back the pictures no other tab has shown.
 - **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
 - **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**
 - **A text size restored from a saved session was overwritten at launch.**
