@@ -381,6 +381,16 @@ pub fn enlarged_frame(ctx: &egui::Context, uri: &str) -> Option<SizedTexture> {
     Some(texture)
 }
 
+/// Let go of everything egui keeps of the picture at `uri`, moving or not:
+/// the file's bytes, what was decoded from them, and the textures. For a
+/// picture no open document shows. It is read again if one does.
+pub fn forget(ctx: &egui::Context, uri: &str) {
+    pictures(ctx, |pictures| pictures.known.remove(uri));
+    let delays: Option<FrameDurations> = ctx.data_mut(|data| data.remove_temp(Id::new(uri)));
+    forget_frames(ctx, uri, delays.map_or(0, |delays| delays.all().len()));
+    ctx.forget_image(uri);
+}
+
 #[cfg(test)]
 #[path = "animation_tests.rs"]
 mod tests;

@@ -1,5 +1,6 @@
 //! Per-tab document state: content, caches, scroll position, and navigation history.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -106,6 +107,10 @@ pub(crate) struct Tab {
     local_links: Vec<String>,
     /// Cached base URI for markdown image/link resolution (e.g. `file:///path/to/dir/`).
     pub(crate) base_uri: String,
+    /// The addresses of the pictures shown by documents this tab has left
+    /// or reloaded. What egui keeps of them is given back when the tab is
+    /// closed.
+    pictures_left: BTreeSet<String>,
     pub(crate) history_back: Vec<PathBuf>,
     pub(crate) history_forward: Vec<PathBuf>,
     /// Cached matches for the current search query; empty when bar is closed or query is empty.
@@ -151,6 +156,7 @@ impl Tab {
             saved_content: content.clone(),
             content,
             cache: CommonMarkCache::default(),
+            pictures_left: BTreeSet::new(),
             document_title: None,
             kicker: String::new(),
             outline: Outline::default(),
@@ -258,7 +264,16 @@ impl Tab {
         Ok(())
     }
 
+    /// The addresses of the pictures this tab has shown, in its document
+    /// and in the documents it showed before.
+    pub(crate) fn pictures(&self) -> impl Iterator<Item = &str> {
+        let left = self.pictures_left.iter().map(String::as_str);
+        left.chain(self.cache.pictures_shown())
+    }
+
     fn apply_loaded_content(&mut self, path: PathBuf, content: String) {
+        let shown = self.cache.pictures_shown().map(str::to_owned);
+        self.pictures_left.extend(shown);
         self.content = content;
         self.saved_content = self.content.clone();
         self.path = path;

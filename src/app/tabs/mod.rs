@@ -3,6 +3,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use egui_commonmark_extended::animation;
+
 use crate::app::MarkdownApp;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
 use crate::tab::Tab;
@@ -232,7 +234,8 @@ impl MarkdownApp {
             return;
         }
 
-        self.tabs.remove(idx);
+        let closed = self.tabs.remove(idx);
+        self.forget_pictures(&[closed]);
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
         // which renders the welcome page (active_tab kept in range / at 0).
         self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
@@ -242,10 +245,22 @@ impl MarkdownApp {
     /// Close every tab but the one at `keep`, which comes to the front.
     pub(crate) fn close_other_tabs(&mut self, keep: usize) {
         let kept = self.tabs.remove(keep);
-        self.tabs.clear();
-        self.tabs.push(kept);
+        let closed = std::mem::replace(&mut self.tabs, vec![kept]);
+        self.forget_pictures(&closed);
         self.active_tab = 0;
         self.tab_documents_changed();
+    }
+
+    /// Give back the memory egui keeps for the pictures the `closed` tabs
+    /// showed: egui keeps a picture for as long as the app runs otherwise.
+    /// A picture a tab still open has shown stays.
+    fn forget_pictures(&self, closed: &[Tab]) {
+        for uri in closed.iter().flat_map(Tab::pictures) {
+            let still_shown = self.tabs.iter().flat_map(Tab::pictures);
+            if !still_shown.into_iter().any(|shown| shown == uri) {
+                animation::forget(&self.egui_ctx, uri);
+            }
+        }
     }
 
     pub(crate) fn close_active_tab(&mut self) {

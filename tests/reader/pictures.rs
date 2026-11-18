@@ -173,6 +173,52 @@ fn a_moving_gif_scrolled_out_of_view_leaves_the_window_at_rest() {
 }
 
 #[test]
+fn a_moving_picture_plays_again_after_its_document_was_closed_and_opened_again() {
+    let mut reader = illustrated("![a picture](pulse.gif)\n\n[the other page](other.md)")
+        .doc("other.md", "# Other\n\n[the first page](page.md)")
+        .open();
+    in_view(&mut reader);
+    reader.ctrl_click("the other page");
+    reader.click("page.md");
+
+    reader.press("Ctrl+W");
+    reader.idle_for(std::time::Duration::from_millis(100));
+    let closed = (reader.pictures().len(), reader.is_at_rest());
+    reader.click("the first page");
+
+    assert_eq!(closed, (0, true), "the picture went with its document");
+    let picture = in_view(&mut reader);
+    let mut seen = vec![pulse_color(&reader, picture)];
+    for _ in 0..8 {
+        reader.idle_for(ONE_STEP);
+        seen.push(pulse_color(&reader, picture));
+    }
+    seen.dedup();
+    assert!(seen.len() >= 3, "it moved on only to {seen:?}");
+    for pair in seen.windows(2) {
+        assert_eq!(pair[1], (pair[0] + 1) % 3, "{seen:?}");
+    }
+    assert!((picture.width - 60.0).abs() < NEAR, "{picture:?}");
+}
+
+#[test]
+fn a_still_picture_is_shown_again_after_its_document_was_closed_and_opened_again() {
+    let mut reader = illustrated("![a picture](blue.png)\n\n[the other page](other.md)")
+        .doc("other.md", "# Other\n\n[the first page](page.md)")
+        .open();
+    let before = in_view(&mut reader);
+    reader.ctrl_click("the other page");
+    reader.click("page.md");
+
+    reader.press("Ctrl+W");
+    reader.click("the first page");
+
+    let again = in_view(&mut reader);
+    assert_color(reader.picture_ink(again), "#3366CC");
+    assert_eq!((again.width, again.height), (before.width, before.height));
+}
+
+#[test]
 fn a_page_without_a_moving_picture_leaves_the_window_at_rest() {
     let mut reader = framed("![a picture](blue.png)");
     shown(&mut reader);

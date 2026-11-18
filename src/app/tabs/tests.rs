@@ -360,3 +360,99 @@ fn a_cancelled_folder_dialog_leaves_the_explorer_alone() {
     assert!(!harness.app.show_explorer);
     assert!(harness.app.error_message.is_none());
 }
+
+/// How many textures egui keeps for the picture in the file `name`.
+fn textures_of(harness: &Harness, name: &str) -> usize {
+    let textures = harness.ctx.tex_manager();
+    let of_the_picture =
+        |(_, texture): &(_, &egui::epaint::textures::TextureMeta)| texture.name.contains(name);
+    let kept = textures.read().allocated().filter(of_the_picture).count();
+    kept
+}
+
+/// Draw frames until egui keeps `count` textures for each picture of
+/// `names`. A picture is read from its file on a thread of egui's own.
+#[track_caller]
+fn wait_for_textures(harness: &mut Harness, names: &[&str], count: usize) {
+    for _ in 0..2000 {
+        harness.idle();
+        if names.iter().all(|name| textures_of(harness, name) == count) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let kept: Vec<_> = names
+        .iter()
+        .map(|name| textures_of(harness, name))
+        .collect();
+    panic!("{names:?} are kept as {kept:?} textures, not {count} each");
+}
+
+/// The app on `a.md`, which shows a moving picture of its own and the
+/// picture `shared.gif`, with both pictures read. `b.md` beside it shows
+/// `shared.gif` too, and `c.md` no picture.
+fn a_document_with_pictures() -> Harness {
+    let own = "![moving](own.gif)\n\n![shared](shared.gif)\n\n[on](c.md)";
+    let docs = [
+        ("a.md", own),
+        ("b.md", "![shared](shared.gif)"),
+        ("c.md", "# C"),
+    ];
+    let mut harness = Harness::with_docs(&docs);
+    let pulse = include_bytes!("../../../tests/fixtures/pulse.gif");
+    fs::write(harness.path("own.gif"), pulse).unwrap();
+    fs::write(harness.path("shared.gif"), pulse).unwrap();
+    wait_for_textures(&mut harness, &["own.gif", "shared.gif"], 3);
+    harness
+}
+
+/// [`a_document_with_pictures`] with `b.md` shown in a second tab.
+fn pictures_in_two_tabs() -> Harness {
+    let mut harness = a_document_with_pictures();
+    harness.app.open_in_new_tab(harness.path("b.md"));
+    harness.idle();
+    harness
+}
+
+#[test]
+fn closing_a_tab_gives_back_the_pictures_no_other_tab_has_shown() {
+    let mut harness = pictures_in_two_tabs();
+
+    harness.app.close_tab(0);
+    harness.idle();
+
+    assert_eq!(tab_names(&harness.app), ["b.md"]);
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 3);
+}
+
+#[test]
+fn closing_the_other_tabs_gives_back_their_pictures() {
+    let mut harness = pictures_in_two_tabs();
+
+    harness.app.close_other_tabs(1);
+    harness.idle();
+
+    assert_eq!(tab_names(&harness.app), ["b.md"]);
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 3);
+}
+
+#[test]
+fn closing_a_tab_gives_back_the_pictures_of_a_document_it_had_left() {
+    let mut harness = a_document_with_pictures();
+    let left = harness.app.tabs[0].navigate_to_link("c.md");
+    assert!(left.unwrap(), "the link was not followed");
+    harness.idle();
+    let kept_while_open = (
+        textures_of(&harness, "own.gif"),
+        textures_of(&harness, "shared.gif"),
+    );
+
+    harness.app.close_tab(0);
+    harness.idle();
+
+    assert_eq!(kept_while_open, (3, 3), "going back shows them at once");
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 0);
+}

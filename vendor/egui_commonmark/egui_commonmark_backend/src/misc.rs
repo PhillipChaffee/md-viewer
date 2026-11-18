@@ -2721,6 +2721,11 @@ impl CommonMarkCache {
         self.clicked_image.take()
     }
 
+    /// The addresses of the pictures this cache has shown.
+    pub fn pictures_shown(&self) -> impl Iterator<Item = &str> {
+        self.image_sizes.keys().map(String::as_str)
+    }
+
     /// Clear the cache for all scrollable elements
     pub fn clear_scrollable(&mut self) {
         self.scroll.clear();

@@ -497,3 +497,23 @@ fn room_is_made_for_a_picture_in_the_frame_before_it_is_read_again() {
     assert!(reads.pictures.is_empty());
     assert_eq!(shows.pictures.len(), 1);
 }
+
+#[test]
+fn a_picture_that_is_forgotten_gives_back_what_was_kept_of_it_and_is_read_again_when_shown() {
+    let mut window = Window::new(3);
+    window.frame_at(0.1);
+    window.frame_at(0.2);
+
+    animation::forget(&window.ctx, PULSE);
+    let kept = (textures_of(&window.ctx, PULSE), decoded_bytes(&window.ctx));
+    // egui lets go of bytes it was handed, where it would read a file again.
+    window.ctx.include_bytes(PULSE, gif(3));
+    window.frame_at(0.3);
+    let again = window.frame_at(0.6);
+
+    assert_eq!(kept, (0, 0));
+    let second = frame_texture(&window.ctx, 1).unwrap();
+    assert_eq!(again.pictures.len(), 1);
+    assert_eq!(again.pictures[0].0, second.id);
+    assert_eq!(textures_of(&window.ctx, PULSE), 3);
+}
