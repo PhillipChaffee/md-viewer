@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::app::tests::Harness;
+use crate::tab::SaveOutcome;
 use crate::test_support::assert_close;
 
 #[test]
@@ -40,9 +41,9 @@ fn menu_only_actions_change_their_own_setting() {
     assert!(!harness.app.show_color_settings_dialog);
     harness.apply(AppAction::OpenColorSettings);
     assert!(harness.app.show_color_settings_dialog);
-    assert!(!harness.app.show_font_dialog);
+    assert!(!harness.app.font_picker.open);
     harness.apply(AppAction::OpenFontSettings);
-    assert!(harness.app.show_font_dialog);
+    assert!(harness.app.font_picker.open);
 }
 
 #[test]
@@ -70,12 +71,39 @@ fn a_save_that_cannot_be_written_is_reported_and_flagged() {
 
     harness.apply(AppAction::Save);
 
-    assert!(matches!(harness.app.tabs[0].save_flash, Some((false, _))));
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Failed, _))
+    ));
     let message = harness.app.error_message.clone().unwrap();
     assert!(
         message.contains("a.md"),
         "the message names the file: {message}"
     );
+}
+
+#[test]
+fn unsaved_edits_are_saved_from_the_preview_as_from_the_editor() {
+    let mut harness = Harness::with_docs(&[("a.md", "original")]);
+    let on_disk = |harness: &Harness| std::fs::read_to_string(harness.path("a.md")).unwrap();
+
+    harness.apply(AppAction::Save);
+    assert!(
+        harness.app.tabs[0].save_flash.is_none(),
+        "there was nothing to save"
+    );
+
+    harness.app.tabs[0].set_edit_mode(true);
+    harness.app.tabs[0].content = "edited".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
+    harness.apply(AppAction::Save);
+
+    assert_eq!(on_disk(&harness), "edited");
+    assert!(!harness.app.tabs[0].is_dirty());
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Saved, _))
+    ));
 }
 
 #[test]
@@ -99,7 +127,7 @@ fn lightbox_zoom_actions_do_nothing_without_a_lightbox() {
     harness.apply(AppAction::ZoomLightboxBy(1.25));
     harness.apply(AppAction::ResetLightboxZoom);
 
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
     assert!((harness.app.zoom_level - 1.0).abs() < 1e-6);
 }
 
@@ -119,13 +147,13 @@ fn theme_actions_pick_a_theme_or_step_to_the_next() {
 fn a_column_width_is_set_inside_its_range() {
     let mut harness = Harness::with_three_docs();
 
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     assert_close(harness.app.reading_width.get(), 512.0);
-    harness.apply(AppAction::SetReadingWidth(1.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(1.0)));
     assert_close(harness.app.reading_width.get(), ReadingWidth::MIN);
-    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
     assert!(harness.app.reading_width.fits_window());
-    harness.apply(AppAction::SetReadingWidth(f32::NAN));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(f32::NAN)));
     assert_eq!(harness.app.reading_width, ReadingWidth::DEFAULT);
 }
 
@@ -166,11 +194,11 @@ fn a_new_column_width_lays_documents_out_again_and_the_same_width_does_not() {
     let revision = |harness: &Harness| harness.app.tabs[0].cache.layout_revision();
 
     let before = revision(&harness);
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     let resized = revision(&harness);
     assert!(resized > before);
 
-    harness.apply(AppAction::SetReadingWidth(512.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(512.0)));
     assert_eq!(revision(&harness), resized, "nothing changed");
 
     harness.apply(AppAction::StepReadingWidth(ReadingWidth::STEP));
@@ -213,7 +241,7 @@ fn a_text_size_action_sets_the_size_class_the_fonts_follow() {
     let normal = body(&harness);
 
     harness.apply(AppAction::SetTextSize(TextSizeClass::Huge));
-    assert_eq!(harness.app.text_size_class, TextSizeClass::Huge);
+    assert_eq!(harness.app.fonts.size, TextSizeClass::Huge);
     harness.idle();
     harness.idle();
 

@@ -740,6 +740,19 @@ impl Link {
     }
 }
 
+/// A picture in the document that was clicked, for an enlarged view of it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClickedImage {
+    /// What the picture showed when it was clicked. The texture belongs to
+    /// egui's loader: the id holds for as long as the picture stays loaded.
+    pub texture: egui::TextureId,
+    /// The picture's own size.
+    pub size: egui::Vec2,
+    /// The address of a picture that plays. [`crate::animation::enlarged_frame`]
+    /// gives the frame of it to show in each later frame.
+    pub moving: Option<String>,
+}
+
 pub struct Image {
     pub uri: String,
     pub alt_text: Vec<RichText>,
@@ -765,27 +778,95 @@ impl Image {
         }
     }
 
+    /// The picture from `source` at the size the page gives it.
+    fn on_the_page<'a>(
+        source: egui::ImageSource<'a>,
+        ui: &Ui,
+        options: &CommonMarkOptions,
+    ) -> egui::Image<'a> {
+        egui::Image::new(source)
+            .fit_to_original_size(1.0)
+            .max_width(options.max_width(ui))
+            .sense(egui::Sense::click())
+    }
+
+    /// Hold the place of a moving picture whose frames, of `size`, were let
+    /// go, and have it read again once that place is in view. Out of view
+    /// it is left alone: asking egui for it would read it at once.
+    fn hold_place(&self, ui: &mut Ui, options: &CommonMarkOptions, size: egui::Vec2) {
+        let by_address = egui::ImageSource::Uri(self.uri.as_str().into());
+        let place = Self::on_the_page(by_address, ui, options)
+            .calc_size(ui.available_size(), Some(size));
+        let (rect, _) = ui.allocate_exact_size(place, egui::Sense::hover());
+        if ui.is_rect_visible(rect) {
+            crate::animation::bring_back(ui.ctx(), &self.uri);
+        }
+    }
+
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
-        let response = ui.add(
-            egui::Image::from_uri(&self.uri)
-                .fit_to_original_size(1.0)
-                .max_width(options.max_width(ui))
-                .sense(egui::Sense::click()),
-        );
+        use crate::animation::Drawn;
+        // A moving picture is drawn from the frame that is due. Every
+        // frame has the size of the whole picture, so its place on the
+        // page never changes.
+        let (frame, plays) = match crate::animation::to_draw(ui.ctx(), &self.uri) {
+            Drawn::Frame { texture, plays } => (Some(texture), plays),
+            Drawn::ByAddress => (None, false),
+            Drawn::LetGo(size) => return self.hold_place(ui, options, size),
+        };
+        let source = match frame {
+            Some(frame) => egui::ImageSource::Texture(frame),
+            None => egui::ImageSource::Uri(self.uri.as_str().into()),
+        };
+        let image = Self::on_the_page(source, ui, options);
+        // egui's loaders keep a failure for as long as the app runs. A
+        // cache that has not shown this picture yet belongs to a page just
+        // loaded or reloaded: a failure it finds is left from before, and
+        // is forgotten so the picture is asked for again. A load that
+        // starts now is pending here, so it is never asked for twice.
+        if cache.observed_image_size(&self.uri).is_none()
+            && image.load_for_size(ui.ctx(), ui.available_size()).is_err()
+        {
+            ui.ctx().forget_image(&self.uri);
+        }
+        let response = ui.add(image);
         cache.observe_image_size(&self.uri, response.rect.size());
+        if frame.is_none() {
+            // A moving picture that egui has read in this frame.
+            crate::animation::taken_in(ui.ctx(), &self.uri);
+        }
+        // Only a picture in view keeps the window drawing.
+        if ui.is_rect_visible(response.rect) {
+            crate::animation::in_view(ui.ctx(), &self.uri);
+        }
 
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
 
         if response.clicked() {
-            let load = ui.ctx().try_load_texture(
-                &self.uri,
-                egui::TextureOptions::default(),
-                egui::load::SizeHint::default(),
-            );
-            if let Ok(egui::load::TexturePoll::Ready { texture }) = load {
-                cache.clicked_image = Some((texture.id, texture.size));
+            // The enlarged view of a moving picture starts from the frame
+            // that was clicked.
+            let texture = frame.or_else(|| {
+                // Any other picture is asked for the way egui's `Image`
+                // asked for it, which for a GIF or WebP of one frame is
+                // not under the address the document gives.
+                let shown = egui::Image::from_uri(&self.uri);
+                let load = shown.source(ui.ctx()).load(
+                    ui.ctx(),
+                    egui::TextureOptions::default(),
+                    egui::load::SizeHint::default(),
+                );
+                match load {
+                    Ok(egui::load::TexturePoll::Ready { texture }) => Some(texture),
+                    Ok(egui::load::TexturePoll::Pending { .. }) | Err(_) => None,
+                }
+            });
+            if let Some(texture) = texture {
+                cache.clicked_image = Some(ClickedImage {
+                    texture: texture.id,
+                    size: texture.size,
+                    moving: plays.then(|| self.uri.clone()),
+                });
             }
         }
 
@@ -998,12 +1079,14 @@ fn mermaid_usvg_options() -> resvg::usvg::Options<'static> {
     }
 }
 
-/// Render mermaid source to a raster image, in `colors` when given.
+/// Render mermaid source to a raster image, in `colors` when given, no
+/// side of it longer than `max_side` pixels.
 #[cfg(feature = "mermaid")]
 fn render_mermaid_image(
     renderer: &merman::render::HeadlessRenderer,
     content: &str,
     colors: Option<&crate::MermaidColors>,
+    max_side: usize,
 ) -> Result<MermaidRendered, String> {
     let svg = match renderer.render_svg_readable_sync(content) {
         Ok(Some(svg)) => svg,
@@ -1019,23 +1102,36 @@ fn render_mermaid_image(
             .ok_or("Failed to recolor SVG")?,
         None => svg,
     };
-    let (image, size) = rasterize_mermaid_svg(svg.as_bytes()).ok_or("Failed to rasterize SVG")?;
+    let (image, size) =
+        rasterize_mermaid_svg(svg.as_bytes(), max_side).ok_or("Failed to rasterize SVG")?;
     Ok(MermaidRendered { image, size })
 }
 
+/// The scale a diagram `width` by `height` is rasterized at: 2x for a
+/// crisp lightbox zoom, or less for a diagram that at 2x would have a side
+/// longer than `max_side` pixels, the longest the graphics card takes in a
+/// texture.
 #[cfg(feature = "mermaid")]
-fn rasterize_mermaid_svg(svg_bytes: &[u8]) -> Option<(egui::ColorImage, egui::Vec2)> {
+fn mermaid_raster_scale(width: f32, height: f32, max_side: usize) -> f32 {
+    (max_side as f32 / width.max(height)).min(2.0)
+}
+
+#[cfg(feature = "mermaid")]
+fn rasterize_mermaid_svg(
+    svg_bytes: &[u8],
+    max_side: usize,
+) -> Option<(egui::ColorImage, egui::Vec2)> {
     let opts = mermaid_usvg_options();
     let tree = resvg::usvg::Tree::from_data(svg_bytes, &opts).ok()?;
     let svg_size = tree.size();
 
-    // Rasterize at 2x for crisp lightbox zoom (matches LightboxState::new)
-    let scale = 2.0_f32;
-    let w = (svg_size.width() * scale) as u32;
-    let h = (svg_size.height() * scale) as u32;
-    if w == 0 || h == 0 {
-        return None;
-    }
+    let scale = mermaid_raster_scale(svg_size.width(), svg_size.height(), max_side);
+    // The `min` keeps a rounding error in the scale from adding a pixel to
+    // the longest side. The `max` keeps the short side of a long, thin
+    // diagram from being scaled away to nothing.
+    let side = |length: f32| ((length * scale) as usize).min(max_side).max(1) as u32;
+    let w = side(svg_size.width());
+    let h = side(svg_size.height());
 
     let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
     resvg::render(
@@ -1143,7 +1239,8 @@ impl CodeBlock {
         // Since egui processes blocks in document order, the first waiting block
         // encountered after the thread slot clears is always the topmost one.
         if waiting && cache.mermaid_rendering.is_none() {
-            Self::spawn_mermaid_render(source, key, &self.content, colors, cache);
+            let max_side = ui.ctx().input(|input| input.max_texture_side);
+            Self::spawn_mermaid_render(source, key, &self.content, colors, max_side, cache);
         }
         if waiting {
             ui.ctx()
@@ -1233,6 +1330,7 @@ impl CodeBlock {
         key: u64,
         content: &str,
         colors: Option<crate::MermaidColors>,
+        max_side: usize,
         cache: &mut CommonMarkCache,
     ) {
         cache.mermaid_rendering = Some(key);
@@ -1241,7 +1339,7 @@ impl CodeBlock {
         let renderer = cache.mermaid_renderer.clone();
 
         std::thread::spawn(move || {
-            let result = render_mermaid_image(&renderer, &content, colors.as_ref());
+            let result = render_mermaid_image(&renderer, &content, colors.as_ref(), max_side);
             let _ = tx.send(MermaidRenderResult {
                 source,
                 key,
@@ -2460,9 +2558,8 @@ pub struct CommonMarkCache {
     #[cfg(feature = "mermaid")]
     clicked_mermaid: Option<(egui::TextureHandle, egui::Vec2)>,
 
-    /// Set when a regular image is clicked (texture id + intrinsic size for lightbox).
-    /// Texture lifetime is owned by egui's loader, so we only carry the id.
-    clicked_image: Option<(egui::TextureId, egui::Vec2)>,
+    /// Set when a regular image is clicked, for the lightbox.
+    clicked_image: Option<ClickedImage>,
 
     /// Last allocated size per ordinary image URI. Loader completion can
     /// replace a placeholder with a differently sized image.
@@ -2619,10 +2716,14 @@ impl CommonMarkCache {
         self.clicked_mermaid.take()
     }
 
-    /// Take the clicked image texture id and size (if any). Returns `Some` once per click.
-    /// The texture is owned by egui's loader; the id is valid for as long as it stays loaded.
-    pub fn take_clicked_image(&mut self) -> Option<(egui::TextureId, egui::Vec2)> {
+    /// Take the clicked image (if any). Returns `Some` once per click.
+    pub fn take_clicked_image(&mut self) -> Option<ClickedImage> {
         self.clicked_image.take()
+    }
+
+    /// The addresses of the pictures this cache has shown.
+    pub fn pictures_shown(&self) -> impl Iterator<Item = &str> {
+        self.image_sizes.keys().map(String::as_str)
     }
 
     /// Clear the cache for all scrollable elements

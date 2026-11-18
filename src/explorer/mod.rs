@@ -13,18 +13,6 @@ use crate::links::has_markdown_extension;
 #[cfg(test)]
 mod tests;
 
-/// Action from file explorer interaction.
-#[derive(Default)]
-pub(crate) struct ExplorerAction {
-    /// File selected with the primary mouse button. The caller decides whether
-    /// it replaces the active document or opens a tab from the Ctrl modifier.
-    pub(crate) file_to_open: Option<PathBuf>,
-    /// File to close (middle-click on open file).
-    pub(crate) file_to_close: Option<PathBuf>,
-    /// Directory to toggle expansion (deferred to avoid clone).
-    pub(crate) dir_to_toggle: Option<PathBuf>,
-}
-
 /// Sort order for file explorer.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) enum SortOrder {
@@ -85,12 +73,6 @@ impl FileTreeNode {
     }
 }
 
-pub(crate) struct ExplorerScanResult {
-    root: PathBuf,
-    sort_order: SortOrder,
-    tree: Vec<FileTreeNode>,
-}
-
 /// A scan of the explorer root, with the settings it was requested under so
 /// it can run on another thread while the explorer keeps changing.
 #[derive(Clone)]
@@ -101,14 +83,10 @@ struct RootScan {
 }
 
 impl RootScan {
-    fn run(self) -> ExplorerScanResult {
+    fn run(self) -> Vec<FileTreeNode> {
         let mut tree = FileExplorer::scan_directory_shallow(&self.root, self.sort_order);
-        FileExplorer::restore_expanded_children(&mut tree, &self.expanded_dirs, self.sort_order);
-        ExplorerScanResult {
-            root: self.root,
-            sort_order: self.sort_order,
-            tree,
-        }
+        FileExplorer::load_expanded(&mut tree, &self.expanded_dirs, self.sort_order);
+        tree
     }
 }
 
@@ -129,15 +107,59 @@ fn spawn_named_thread(name: &str, work: Work) -> io::Result<()> {
 /// File explorer state.
 #[derive(Default)]
 pub(crate) struct FileExplorer {
-    pub(crate) root: Option<PathBuf>,
-    pub(crate) tree: Vec<FileTreeNode>,
-    pub(crate) expanded_dirs: HashSet<PathBuf>,
-    pub(crate) sort_order: SortOrder,
-    /// Receiver for asynchronous root-directory scan results.
-    pub(crate) pending_scan: Option<Receiver<ExplorerScanResult>>,
+    root: Option<PathBuf>,
+    tree: Vec<FileTreeNode>,
+    expanded_dirs: HashSet<PathBuf>,
+    sort_order: SortOrder,
+    /// Where the listing of the root arrives once its scan is done. Each
+    /// new scan takes the place of the one before, so what arrives is
+    /// always the listing of the root as it is now.
+    pending_scan: Option<Receiver<Vec<FileTreeNode>>>,
 }
 
 impl FileExplorer {
+    /// The explorer as a session left it: its order and its open folders
+    /// are in place before `root` is scanned, so the scan reads them.
+    pub(crate) fn restored(
+        sort_order: SortOrder,
+        expanded_dirs: HashSet<PathBuf>,
+        root: Option<PathBuf>,
+    ) -> Self {
+        let mut explorer = Self {
+            expanded_dirs,
+            sort_order,
+            ..Self::default()
+        };
+        if let Some(root) = root {
+            explorer.set_root(root);
+        }
+        explorer
+    }
+
+    /// The folder the explorer lists.
+    pub(crate) fn root(&self) -> Option<&Path> {
+        self.root.as_deref()
+    }
+
+    /// The listing, as far as it has been read.
+    pub(crate) fn tree(&self) -> &[FileTreeNode] {
+        &self.tree
+    }
+
+    /// The folders left open, whether or not the listing reaches them.
+    pub(crate) const fn expanded_dirs(&self) -> &HashSet<PathBuf> {
+        &self.expanded_dirs
+    }
+
+    pub(crate) const fn sort_order(&self) -> SortOrder {
+        self.sort_order
+    }
+
+    /// Whether a scan of the root is still to be collected.
+    pub(crate) const fn is_scanning(&self) -> bool {
+        self.pending_scan.is_some()
+    }
+
     /// Scan a directory shallowly - only one level, subdirectories marked as unloaded.
     fn scan_directory_shallow(path: &Path, sort_order: SortOrder) -> Vec<FileTreeNode> {
         let Ok(entries) = fs::read_dir(path) else {
@@ -193,26 +215,23 @@ impl FileExplorer {
             match sort_order {
                 SortOrder::NameAsc => a.name().cmp(b.name()),
                 SortOrder::NameDesc => b.name().cmp(a.name()),
-                SortOrder::DateAsc => {
-                    // Oldest first: None (unknown) sorts last
-                    match (a.modified(), b.modified()) {
-                        (Some(a_time), Some(b_time)) => a_time.cmp(&b_time),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => a.name().cmp(b.name()),
-                    }
-                }
-                SortOrder::DateDesc => {
-                    // Newest first: None (unknown) sorts last
-                    match (a.modified(), b.modified()) {
-                        (Some(a_time), Some(b_time)) => b_time.cmp(&a_time),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => a.name().cmp(b.name()),
-                    }
-                }
+                SortOrder::DateAsc => Self::by_date(a, b, false),
+                SortOrder::DateDesc => Self::by_date(a, b, true),
             }
         });
+    }
+
+    /// Order two nodes by modification time. A node whose time is unknown
+    /// goes last in both directions, and two such nodes go by name. Equal
+    /// times compare equal, so the sort keeps the order they were in.
+    fn by_date(a: &FileTreeNode, b: &FileTreeNode, newest_first: bool) -> std::cmp::Ordering {
+        match (a.modified(), b.modified()) {
+            (Some(a_time), Some(b_time)) if newest_first => b_time.cmp(&a_time),
+            (Some(a_time), Some(b_time)) => a_time.cmp(&b_time),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.name().cmp(b.name()),
+        }
     }
 
     /// Set root directory and start a shallow background scan.
@@ -244,15 +263,17 @@ impl FileExplorer {
         if spawn(thread_name, work).is_ok() {
             self.pending_scan = Some(rx);
         } else {
-            self.tree = scan.run().tree;
+            // An older scan still running would overwrite this newer tree.
+            self.pending_scan = None;
+            self.tree = scan.run();
         }
     }
 
     /// Check if a background scan completed and apply results.
     pub(crate) fn poll_pending_scan(&mut self) -> bool {
         let received = self.pending_scan.as_ref().map(Receiver::try_recv);
-        let mut result = match received {
-            Some(Ok(result)) => result,
+        let mut tree = match received {
+            Some(Ok(tree)) => tree,
             Some(Err(TryRecvError::Empty)) | None => return false,
             Some(Err(TryRecvError::Disconnected)) => {
                 self.pending_scan = None;
@@ -260,16 +281,13 @@ impl FileExplorer {
             }
         };
         self.pending_scan = None;
-        if self.root.as_deref() != Some(result.root.as_path()) {
-            return false;
-        }
-        if result.sort_order != self.sort_order {
-            Self::resort_tree_recursive(&mut result.tree, self.sort_order);
-        }
-        // Expansion can change while the worker is running. Reuse its snapshot
-        // and load any directories expanded after it started.
-        Self::restore_expanded_children(&mut result.tree, &self.expanded_dirs, self.sort_order);
-        self.tree = result.tree;
+        // The order and the open folders can change while the worker is
+        // running. Reuse its snapshot: put it in the order of now, which
+        // moves nothing when that is the order it was scanned in, and load
+        // any directories expanded after it started.
+        Self::resort_tree_recursive(&mut tree, self.sort_order);
+        Self::load_expanded(&mut tree, &self.expanded_dirs, self.sort_order);
+        self.tree = tree;
         true
     }
 
@@ -280,17 +298,24 @@ impl FileExplorer {
         }
     }
 
-    fn restore_expanded_children(
-        tree: &mut [FileTreeNode],
+    /// Load every expanded directory that can be reached through loaded
+    /// ones. A directory is loaded before the walk goes into it, so an
+    /// expanded directory below it is found in the same pass.
+    fn load_expanded(
+        nodes: &mut [FileTreeNode],
         expanded_dirs: &HashSet<PathBuf>,
         sort_order: SortOrder,
     ) {
-        // Parents must be loaded before their expanded descendants can be
-        // found in the lazy tree.
-        let mut expanded: Vec<&PathBuf> = expanded_dirs.iter().collect();
-        expanded.sort_by_key(|path| path.components().count());
-        for path in expanded {
-            Self::load_children_in_tree(tree, path, sort_order);
+        for node in nodes {
+            let FileTreeNode::Directory { path, children, .. } = node else {
+                continue;
+            };
+            if expanded_dirs.contains(path) {
+                children.get_or_insert_with(|| Self::scan_directory_shallow(path, sort_order));
+            }
+            if let Some(loaded) = children {
+                Self::load_expanded(loaded, expanded_dirs, sort_order);
+            }
         }
     }
 
@@ -307,31 +332,7 @@ impl FileExplorer {
             };
             *children = Some(Self::scan_directory_shallow(directory, self.sort_order));
         }
-
-        // Restore expanded descendants from shallowest to deepest so their
-        // parents exist before lazy children are loaded.
-        let mut expanded: Vec<PathBuf> = self.expanded_dirs.iter().cloned().collect();
-        expanded.sort_by_key(|path| path.components().count());
-        for path in expanded {
-            self.load_children(&path);
-        }
-    }
-
-    /// Load children for a specific directory (lazy loading).
-    pub(crate) fn load_children(&mut self, dir_path: &Path) {
-        Self::load_children_in_tree(&mut self.tree, dir_path, self.sort_order);
-    }
-
-    /// Load the children of `target_path` if it is in the loaded tree and
-    /// has not been scanned yet.
-    fn load_children_in_tree(
-        nodes: &mut [FileTreeNode],
-        target_path: &Path,
-        sort_order: SortOrder,
-    ) {
-        if let Some(children) = Self::children_slot_mut(nodes, target_path) {
-            children.get_or_insert_with(|| Self::scan_directory_shallow(target_path, sort_order));
-        }
+        Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
     }
 
     /// The children slot of the directory at `target_path`, searching only
@@ -359,14 +360,12 @@ impl FileExplorer {
         None
     }
 
-    /// Toggle directory expansion (loads children if not yet loaded).
+    /// Toggle directory expansion. Expanding loads the directory and every
+    /// directory below it that was left expanded.
     pub(crate) fn toggle_expanded(&mut self, path: &PathBuf) {
-        if self.expanded_dirs.contains(path) {
-            self.expanded_dirs.remove(path);
-        } else {
-            // Load children before expanding if not yet loaded
-            self.load_children(path);
+        if !self.expanded_dirs.remove(path) {
             self.expanded_dirs.insert(path.clone());
+            Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
         }
     }
 
@@ -397,34 +396,6 @@ impl FileExplorer {
         }
     }
 
-    /// Get children for a directory by path (looks up in original tree, not clone).
-    pub(crate) fn get_children(&self, target_path: &Path) -> Option<&Vec<FileTreeNode>> {
-        Self::find_children_in_tree(&self.tree, target_path)
-    }
-
-    /// Loaded children of the directory at `target_path`, searching only
-    /// directories whose children are already loaded.
-    fn find_children_in_tree<'tree>(
-        nodes: &'tree [FileTreeNode],
-        target_path: &Path,
-    ) -> Option<&'tree Vec<FileTreeNode>> {
-        for node in nodes {
-            let FileTreeNode::Directory { path, children, .. } = node else {
-                continue;
-            };
-            if path == target_path {
-                return children.as_ref();
-            }
-            let found = children
-                .as_deref()
-                .and_then(|loaded| Self::find_children_in_tree(loaded, target_path));
-            if found.is_some() {
-                return found;
-            }
-        }
-        None
-    }
-
     /// Maximum depth for `expand_all` to prevent excessive recursion.
     const MAX_EXPAND_DEPTH: usize = 10;
 
@@ -434,6 +405,8 @@ impl FileExplorer {
         Self::load_all_children(&mut self.tree, self.sort_order, 0);
         // Then collect all directory paths
         self.expanded_dirs = Self::collect_all_dirs(&self.tree);
+        // The directories listed at the depth limit are expanded but unread.
+        Self::load_expanded(&mut self.tree, &self.expanded_dirs, self.sort_order);
     }
 
     /// Recursively load all unloaded directories (up to `MAX_EXPAND_DEPTH`).

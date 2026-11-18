@@ -3,7 +3,6 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use eframe::egui::accesskit::Toggled;
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton};
@@ -15,7 +14,7 @@ use crate::test_support::{assert_close, painted_shapes};
 
 /// `a.md`, `b.md`, and `c.md`, each in its own tab with `c.md` active. The
 /// explorer is hidden so that a file name labels its tab and nothing else.
-fn three_tabs() -> LabelHarness {
+pub(crate) fn three_tabs() -> LabelHarness {
     let mut harness = LabelHarness::with_docs(&[("a.md", "# A"), ("b.md", "# B"), ("c.md", "# C")]);
     let (b, c) = (harness.path("b.md"), harness.path("c.md"));
     let app = harness.state_mut();
@@ -27,9 +26,25 @@ fn three_tabs() -> LabelHarness {
 }
 
 /// One document in one tab, with the explorer hidden.
-fn one_tab(content: &str) -> LabelHarness {
+pub(crate) fn one_tab(content: &str) -> LabelHarness {
     let mut harness = LabelHarness::with_docs(&[("a.md", content)]);
     harness.state_mut().show_explorer = false;
+    harness.frames(2);
+    harness
+}
+
+/// Forty documents, each in a tab of its own with the last in front: more
+/// tabs than the window is wide.
+fn many_tabs() -> LabelHarness {
+    let names: Vec<String> = (1..=40).map(|n| format!("doc-{n:02}.md")).collect();
+    let docs: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "# Doc")).collect();
+    let mut harness = LabelHarness::with_docs(&docs);
+    let rest: Vec<PathBuf> = names[1..].iter().map(|name| harness.path(name)).collect();
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    for path in rest {
+        app.open_in_new_tab(path);
+    }
     harness.frames(2);
     harness
 }
@@ -172,19 +187,100 @@ fn close_others_stops_watching_the_closed_documents() {
     let mut harness = three_tabs();
     harness.key_press(Key::F5);
     harness.frames(2);
-    assert_eq!(harness.state().watched_paths.len(), 3);
+    assert_eq!(harness.state().watched_files().len(), 3);
 
     open_context_menu(&mut harness, "b.md");
     harness.click("Close Others");
 
     assert_eq!(
-        harness.state().watched_paths,
+        *harness.state().watched_files(),
         HashSet::from([harness.path("b.md")])
     );
 }
 
+/// Three tabs with the find bar open on the first: `a.md` holds the word
+/// looked for once, `b.md` holds it twice and `c.md` not at all.
+fn finding_needle() -> LabelHarness {
+    let mut harness = LabelHarness::with_docs(&[
+        ("a.md", "# A\n\nneedle"),
+        ("b.md", "needle needle"),
+        ("c.md", "# C"),
+    ]);
+    let (b, c) = (harness.path("b.md"), harness.path("c.md"));
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    app.open_in_new_tab(b);
+    app.open_in_new_tab(c);
+    app.focus_tab(0);
+    app.open_search();
+    app.search.query = "needle".to_owned();
+    harness.frames(2);
+    assert!(harness.query_by_label("1 / 1").is_some());
+    harness
+}
+
+/// Whether the last frame asked for another one at once.
+fn asks_for_a_frame(harness: &LabelHarness) -> bool {
+    harness.output().viewport_output[&egui::ViewportId::ROOT]
+        .repaint_delay
+        .is_zero()
+}
+
+/// Run the two frames egui asks for after a frame that had input, and no
+/// more: the window draws nothing further unless something asks.
+fn run_the_frames_asked_for(harness: &mut LabelHarness) {
+    for _ in 0..2 {
+        assert!(asks_for_a_frame(harness));
+        harness.step();
+    }
+}
+
+#[test]
+fn the_find_bar_counts_again_in_the_frames_a_close_is_followed_by() {
+    let mut harness = finding_needle();
+
+    harness
+        .get_by_label("a.md")
+        .click_button(PointerButton::Middle);
+    // One frame for each event of the click; the last one closes the tab.
+    harness.step();
+    assert_eq!(open_paths(&harness).len(), 2);
+    assert!(harness.query_by_label("1 / 1").is_some(), "not yet counted");
+    run_the_frames_asked_for(&mut harness);
+    assert!(harness.query_by_label("1 / 2").is_some(), "after a close");
+
+    harness.state_mut().focus_tab(1);
+    harness.frames(6);
+    assert!(
+        harness.query_by_label("1 / 2").is_none(),
+        "c.md is in front"
+    );
+    open_context_menu(&mut harness, "b.md");
+    harness.get_by_label("Close Others").click();
+    harness.step();
+    assert_eq!(open_paths(&harness), [harness.path("b.md")]);
+    run_the_frames_asked_for(&mut harness);
+    assert!(
+        harness.query_by_label("1 / 2").is_some(),
+        "after Close Others"
+    );
+}
+
+#[test]
+fn close_others_counts_the_matches_of_the_document_it_keeps() {
+    let mut harness = finding_needle();
+
+    open_context_menu(&mut harness, "b.md");
+    harness.click("Close Others");
+    // The matches are found again in the frame after the close and
+    // counted in the one after that.
+    harness.frames(1);
+
+    assert!(harness.query_by_label("1 / 2").is_some());
+}
+
 /// Whether the strip is on screen: its open-file button is.
-fn shows_strip(harness: &LabelHarness) -> bool {
+pub(crate) fn shows_strip(harness: &LabelHarness) -> bool {
     harness.query_by_label("Open file in new tab").is_some()
 }
 
@@ -232,7 +328,7 @@ fn the_strip_is_the_height_of_one_row_with_every_tab_filling_it() {
 
 /// The text the last frame painted that reads `text`, in the strip.
 #[track_caller]
-fn strip_text(harness: &LabelHarness, text: &str) -> egui::epaint::TextShape {
+pub(crate) fn strip_text(harness: &LabelHarness, text: &str) -> egui::epaint::TextShape {
     let strip = crate::app::chrome::BAR_HEIGHT..=crate::app::chrome::BAR_HEIGHT + STRIP_HEIGHT;
     let found = painted_shapes(harness.output())
         .into_iter()
@@ -309,141 +405,123 @@ fn the_plus_button_opens_what_the_picker_returns_in_a_new_tab() {
 }
 
 #[test]
-fn the_mode_toggle_switches_between_preview_and_edit() {
+fn a_frame_that_opens_a_file_and_picks_a_tab_opens_the_file_first() {
     let mut harness = three_tabs();
-    let editing = |harness: &LabelHarness| harness.state().tabs[2].is_editing;
-    let chosen = |harness: &LabelHarness, mode| {
-        harness.get_by_label(mode).accesskit_node().toggled() == Some(Toggled::True)
+    let other = harness.dir.join("d.md");
+    std::fs::write(&other, "# D").unwrap();
+    harness.state_mut().file_picker = Box::new(move |_| Ok(Some(other.clone())));
+    let ctx = harness.ctx.clone();
+    let actions = super::TabStripActions {
+        open_file: true,
+        activate: Some(0),
+        close: Some(1),
+        close_others: None,
     };
-    assert!(chosen(&harness, "Preview"));
 
-    harness.click("Edit");
-    assert!(editing(&harness));
-    assert!(chosen(&harness, "Edit"));
-    assert!(!chosen(&harness, "Preview"));
+    let to_close = harness.state_mut().apply_tab_strip_actions(&ctx, &actions);
 
-    harness.click("Preview");
-    assert!(!editing(&harness));
-}
-
-/// Where the document pane starts: the top of the contents sidebar, which
-/// stands beside the document in it.
-fn pane_top(harness: &LabelHarness) -> f32 {
-    harness.get_by_label("CONTENTS").rect().top()
+    assert_eq!(to_close, Some(1));
+    assert_eq!(open_paths(&harness).len(), 4);
+    assert_eq!(active_path(&harness), harness.path("a.md"));
 }
 
 #[test]
-fn editing_a_lone_document_leaves_the_page_where_it_is() {
-    let mut harness = one_tab("# A\n\n## B");
-    harness.state_mut().show_outline = true;
-    harness.frames(2);
-    let at_rest = pane_top(&harness);
+fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
+    let harness = many_tabs();
 
-    harness.key_press_modifiers(Modifiers::CTRL, Key::E);
-    harness.frames(2);
-    assert!(harness.state().tabs[0].is_editing);
-    assert_close(pane_top(&harness), at_rest);
-
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.frames(2);
-    assert!(harness.query_by_label("Unsaved changes").is_some());
-    assert_close(pane_top(&harness), at_rest);
-
-    harness.click("Preview");
-    assert!(!harness.state().tabs[0].is_editing);
-    assert_close(pane_top(&harness), at_rest);
-}
-
-#[test]
-fn a_lone_document_has_its_edit_controls_in_the_top_bar() {
-    let mut harness = one_tab("# A");
-    assert!(harness.query_by_label("Preview").is_none());
-
-    harness.state_mut().tabs[0].set_edit_mode(true);
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.state_mut().tabs[0].save_flash = Some((false, Instant::now()));
-    harness.frames(2);
-
-    assert!(!shows_strip(&harness));
-    let bar_bottom = crate::app::chrome::BAR_HEIGHT;
-    let appearance = harness.get_by_label("Appearance").rect();
-    for control in ["Save failed", "Unsaved changes", "Preview", "Edit"] {
-        let rect = harness.get_by_label(control).rect();
-        assert!(rect.bottom() <= bar_bottom, "{control} at {rect:?}");
-        assert!(rect.right() < appearance.left(), "{control} at {rect:?}");
-    }
-}
-
-#[test]
-fn unsaved_edits_are_marked_beside_the_mode_toggle() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().tabs[0].set_edit_mode(true);
-    harness.frames(2);
-    assert!(harness.query_by_label("Unsaved changes").is_none());
-
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.frames(1);
-
-    let dot = harness.get_by_label("Unsaved changes").rect();
+    let open = harness.get_by_label("Open file in new tab").rect();
     let toggle = harness.get_by_label("Preview").rect();
-    assert!(dot.right() <= toggle.left(), "{dot:?} before {toggle:?}");
-    assert_close(dot.center().y, toggle.center().y);
-    let warning = harness.state().theme.palette().warning;
-    let dots = painted_shapes(harness.output())
-        .into_iter()
-        .filter(|shape| matches!(shape, egui::Shape::Circle(dot) if dot.fill == warning))
-        .count();
-    assert_eq!(dots, 1);
-}
 
-#[test]
-fn unsaved_edits_of_a_lone_document_stay_marked_after_leaving_edit_mode() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.frames(2);
-
-    assert!(!shows_strip(&harness));
-    assert!(harness.query_by_label("Unsaved changes").is_some());
-    assert!(harness.query_by_label("Preview").is_some());
-}
-
-#[test]
-fn a_save_reports_its_outcome_beside_the_mode_toggle() {
-    let mut harness = three_tabs();
-    assert!(harness.query_by_label("Saved").is_none());
-
-    harness.state_mut().tabs[2].save_flash = Some((true, Instant::now()));
-    harness.frames(1);
-    assert!(harness.query_by_label("Saved").is_some());
-    let palette = harness.state().theme.palette();
-    assert_eq!(
-        strip_text(&harness, "Saved").galley.job.sections[0]
-            .format
-            .color,
-        palette.positive
-    );
-
-    harness.state_mut().tabs[2].save_flash = Some((false, Instant::now()));
-    harness.frames(1);
-    assert!(harness.query_by_label("Save failed").is_some());
-    assert!(harness.query_by_label("Saved").is_none());
-    assert_eq!(
-        strip_text(&harness, "Save failed").galley.job.sections[0]
-            .format
-            .color,
-        palette.warning
+    assert!(
+        open.right() <= toggle.left(),
+        "the button at {open:?} runs into the toggle at {toggle:?}"
     );
 }
 
+/// Whether the tab named `name` is wholly on screen, before the open-file
+/// button that ends the strip.
+fn in_strip(harness: &LabelHarness, name: &str) -> bool {
+    let tab = harness.get_by_label(name).rect();
+    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    tab.left() >= 0.0 && tab.right() <= strip_end
+}
+
 #[test]
-fn a_save_outcome_disappears_after_a_moment() {
-    let mut harness = one_tab("# A");
-    let expired = Instant::now().checked_sub(super::SAVE_FLASH).unwrap();
+fn a_tab_that_comes_to_the_front_is_scrolled_into_the_strip() {
+    let mut harness = many_tabs();
+    harness.frames(30);
+    assert!(in_strip(&harness, "doc-40.md"), "the document just opened");
 
-    harness.state_mut().tabs[0].save_flash = Some((true, expired));
-    harness.frames(2);
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+    assert!(in_strip(&harness, "doc-01.md"), "the first, switched to");
+    assert!(!in_strip(&harness, "doc-40.md"));
+}
 
-    assert!(harness.query_by_label("Saved").is_none());
-    assert_eq!(harness.state().tabs[0].save_flash, None);
-    assert!(!shows_strip(&harness), "nothing is left to report");
+#[test]
+fn a_tab_that_takes_the_place_of_a_closed_one_is_scrolled_into_the_strip() {
+    let mut harness = many_tabs();
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+    let over_the_strip = harness.get_by_label("doc-01.md").rect().center();
+    harness.event(Event::PointerMoved(over_the_strip));
+    harness.event(Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(-4000.0, 0.0),
+        modifiers: Modifiers::NONE,
+    });
+    harness.frames(30);
+    assert!(
+        !in_strip(&harness, "doc-02.md"),
+        "scrolled out of the strip"
+    );
+
+    harness.state_mut().close_tab(0);
+    harness.frames(30);
+
+    assert_eq!(active_path(&harness), harness.path("doc-02.md"));
+    assert!(in_strip(&harness, "doc-02.md"), "the document now in front");
+}
+
+#[test]
+fn a_second_tab_on_the_same_document_is_scrolled_into_the_strip_too() {
+    let mut harness = many_tabs();
+    let first = harness.path("doc-01.md");
+    let last = &mut harness.state_mut().tabs[39];
+    assert!(last.navigate_to_path(&first).unwrap());
+    harness.frames(30);
+
+    harness.state_mut().focus_tab(0);
+    harness.frames(30);
+
+    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    let tab = harness
+        .query_all_by_label("doc-01.md")
+        .next()
+        .unwrap()
+        .rect();
+    assert!(
+        tab.left() >= 0.0 && tab.right() <= strip_end,
+        "the first tab is at {tab:?}"
+    );
+}
+
+#[test]
+fn the_strip_stays_where_the_reader_scrolled_it() {
+    let mut harness = many_tabs();
+    harness.frames(30);
+    let over_the_strip = harness.get_by_label("doc-40.md").rect().center();
+
+    harness.event(Event::PointerMoved(over_the_strip));
+    harness.event(Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(2000.0, 0.0),
+        modifiers: Modifiers::NONE,
+    });
+    harness.frames(30);
+
+    assert!(
+        !in_strip(&harness, "doc-40.md"),
+        "the tab in front is not pulled back into view"
+    );
 }

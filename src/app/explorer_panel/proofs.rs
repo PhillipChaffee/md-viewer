@@ -3,8 +3,7 @@
 
 use std::time::Duration;
 
-use super::flash_alpha;
-use crate::watcher::FLASH_DURATION_MS;
+use super::{flash_alpha, FLASH_DURATION_MS};
 
 /// For every elapsed time the highlight's opacity is computed without
 /// overflow; while the flash lasts it is between the floor of 60 and the

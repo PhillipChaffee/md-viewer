@@ -256,7 +256,9 @@ fn a_diagram_wider_than_the_column_uses_the_pane_centered_on_the_column() {
     );
 
     // A column as wide as the diagram's room holds it at the same size.
-    harness.apply(crate::app::action::AppAction::SetReadingWidth(room));
+    harness.apply(crate::app::action::AppAction::SetReadingWidth(
+        crate::layout::ReadingWidth::new(room),
+    ));
     harness.idle();
     let in_wide_column = diagram_rect(&mut harness);
     assert_about(in_wide_column.width(), diagram.width(), "its natural size");

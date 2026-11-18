@@ -1,13 +1,9 @@
 //! What the user can ask the app to do, and the one place each request runs.
 
-use std::time::Instant;
-
 use eframe::egui;
 
 use crate::app::MarkdownApp;
-use crate::layout::{
-    keyboard_scroll_target, zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth,
-};
+use crate::layout::{zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth};
 use crate::system_fonts::TextSizeClass;
 use crate::theme::ThemeId;
 
@@ -51,9 +47,8 @@ pub(crate) enum AppAction {
     /// Switch the text column between filling the window and its default
     /// width.
     ToggleFullWidth,
-    /// Make the text column this many px wide; `ReadingWidth::MAX` fits the
-    /// window.
-    SetReadingWidth(f32),
+    /// Make the text column this wide.
+    SetReadingWidth(ReadingWidth),
     /// Widen the text column by this many px, or narrow it if negative.
     StepReadingWidth(f32),
     SetLineSpacing(LineSpacing),
@@ -103,27 +98,27 @@ impl MarkdownApp {
             AppAction::ToggleExplorer => self.show_explorer = !self.show_explorer,
             AppAction::ToggleOutline => self.toggle_outline(),
             AppAction::ToggleFullWidth => self.toggle_full_width(),
-            AppAction::SetReadingWidth(px) => self.set_reading_width(ReadingWidth::new(px)),
+            AppAction::SetReadingWidth(width) => self.set_reading_width(width),
             AppAction::StepReadingWidth(delta) => {
                 let shown_in = self.document_pane_width;
                 self.set_reading_width(self.reading_width.stepped(delta, shown_in));
             }
             AppAction::SetLineSpacing(spacing) => self.set_line_spacing(spacing),
-            AppAction::SetTextSize(size) => self.text_size_class = size,
+            AppAction::SetTextSize(size) => self.fonts.size = size,
             AppAction::ToggleSmoothText => {
                 self.smooth_text_rendering = !self.smooth_text_rendering;
             }
             AppAction::OpenColorSettings => self.show_color_settings_dialog = true,
-            AppAction::OpenFontSettings => self.show_font_dialog = true,
+            AppAction::OpenFontSettings => self.font_picker.open = true,
             AppAction::ZoomBy(factor) => self.zoom_level = zoomed(self.zoom_level, factor),
             AppAction::ResetZoom => self.zoom_level = 1.0,
             AppAction::ZoomLightboxBy(factor) => {
-                if let Some(lightbox) = &mut self.lightbox {
+                if let Some(lightbox) = &mut self.lightbox.open {
                     lightbox.zoom_by(factor);
                 }
             }
             AppAction::ResetLightboxZoom => {
-                if let Some(lightbox) = &mut self.lightbox {
+                if let Some(lightbox) = &mut self.lightbox.open {
                     lightbox.zoom = 1.0;
                 }
             }
@@ -160,36 +155,23 @@ impl MarkdownApp {
         self.relayout_documents();
     }
 
-    fn toggle_watching(&mut self) {
-        if self.watcher.is_some() {
-            self.stop_watching();
-            self.watch_enabled = false;
-        } else {
-            self.watch_enabled = true;
-            self.start_watching();
-        }
-    }
-
-    /// Persist the active tab's edit buffer. Only meaningful in edit mode
-    /// with unsaved changes; the flash label in the edit toolbar reports the
-    /// outcome.
+    /// Persist the active tab's unsaved edits, from the editor or from the
+    /// preview of them: the unsaved mark is shown in both. With nothing
+    /// unsaved it does nothing; the flash label beside the mode toggle
+    /// reports the outcome.
     fn save_active_tab(&mut self) {
         let Some(tab) = self.tabs.get_mut(self.active_tab) else {
             return;
         };
-        if !tab.is_editing || tab.content == tab.saved_content {
+        if !tab.is_dirty() {
             return;
         }
-        match tab.save_to_disk() {
-            Ok(()) => {
-                log::info!("Saved tab edits: {}", tab.path.display());
-                tab.save_flash = Some((true, Instant::now()));
-            }
+        match tab.save() {
+            Ok(()) => log::info!("Saved tab edits: {}", tab.path.display()),
             Err(error) => {
                 log::error!("Failed to save {}: {error}", tab.path.display());
                 self.error_message =
                     Some(format!("Unable to save {}: {error}", tab.path.display()));
-                tab.save_flash = Some((false, Instant::now()));
             }
         }
     }
@@ -197,14 +179,8 @@ impl MarkdownApp {
     /// Queue a keyboard scroll step through the pending-scroll pipeline the
     /// outline and search jumps use.
     fn scroll_active_tab(&mut self, step: KeyboardScrollAction) {
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
-            return;
-        };
-        tab.pending_scroll_offset = Some(keyboard_scroll_target(
-            tab.scroll_offset,
-            tab.last_viewport_height,
-            tab.last_content_height,
-            step,
-        ));
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            tab.scroll_by_key(step);
+        }
     }
 }

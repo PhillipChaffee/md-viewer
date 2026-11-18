@@ -11,8 +11,29 @@ use eframe::egui::{Key, Modifiers};
 
 use crate::app::action::AppAction;
 use crate::app::tests::Harness;
-use crate::explorer::FileTreeNode;
-use crate::watcher::{FileWatcher, WatchPlan, MAX_WATCHER_RETRIES};
+use crate::app::MarkdownApp;
+use crate::explorer::{FileExplorer, FileTreeNode, SortOrder};
+use crate::test_support::evaluate_log_arguments;
+use crate::watcher::{Backend, FileWatcher, WatchPlan, Watched, MAX_WATCHER_RETRIES};
+
+impl MarkdownApp {
+    /// What the running watcher holds, for the tests of every module that
+    /// changes it; `None` while no watcher runs.
+    pub(in crate::app) fn watched(&self) -> Option<&Watched> {
+        let running = self.live_reload.running.as_ref()?;
+        Some(running.watcher.watched())
+    }
+
+    /// The documents the running watcher holds.
+    pub(in crate::app) fn watched_files(&self) -> &HashSet<PathBuf> {
+        &self.watched().unwrap().files
+    }
+
+    /// The explorer directories the running watcher holds.
+    pub(in crate::app) fn watched_explorer_dirs(&self) -> &HashSet<PathBuf> {
+        &self.watched().unwrap().explorer_dirs
+    }
+}
 
 /// How long a test waits for the watcher before it fails.
 const EVENT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -32,9 +53,8 @@ fn run_until(harness: &mut Harness, what: &str, done: impl Fn(&Harness) -> bool)
 
 /// The app on `docs`, with live reload off.
 fn open(docs: &[(&str, &str)]) -> Harness {
-    // Format log arguments as a run with `RUST_LOG` set does, so one that
-    // panics fails a test.
-    log::set_max_level(log::LevelFilter::Trace);
+    // A log argument that panics fails a test.
+    evaluate_log_arguments();
     Harness::with_docs(docs)
 }
 
@@ -44,7 +64,7 @@ fn watching(docs: &[(&str, &str)]) -> Harness {
     let mut harness = open(docs);
     harness.apply(AppAction::ToggleWatch);
     run_until(&mut harness, "the explorer scan", |harness| {
-        harness.app.file_explorer.pending_scan.is_none()
+        !harness.app.file_explorer.is_scanning()
     });
     harness
 }
@@ -64,7 +84,12 @@ fn fail_watcher(harness: &mut Harness) {
     events
         .send(Err(notify::Error::generic("disk on fire")))
         .unwrap();
-    harness.app.watcher_rx = Some(receiver);
+    harness.app.live_reload.running.as_mut().unwrap().events = receiver;
+}
+
+/// An explorer with nothing open, pointed at `root`.
+fn explorer_on(root: impl Into<PathBuf>) -> FileExplorer {
+    FileExplorer::restored(SortOrder::default(), HashSet::new(), Some(root.into()))
 }
 
 fn explorer_root_names(harness: &Harness) -> Vec<&str> {
@@ -73,7 +98,7 @@ fn explorer_root_names(harness: &Harness) -> Vec<&str> {
             FileTreeNode::File { name, .. } | FileTreeNode::Directory { name, .. } => name,
         }
     }
-    harness.app.file_explorer.tree.iter().map(name).collect()
+    harness.app.file_explorer.tree().iter().map(name).collect()
 }
 
 #[test]
@@ -81,11 +106,11 @@ fn starting_live_reload_watches_the_open_document_and_the_explorer_root() {
     let harness = watching(&[("a.md", "# A")]);
 
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
     assert_eq!(
-        harness.app.watched_explorer_dirs,
+        *harness.app.watched_explorer_dirs(),
         HashSet::from([harness.dir.clone()])
     );
     assert_eq!(harness.app.error_message, None);
@@ -97,9 +122,8 @@ fn stopping_live_reload_forgets_what_was_watched() {
 
     harness.apply(AppAction::ToggleWatch);
 
-    assert!(harness.app.watcher.is_none());
-    assert!(harness.app.watched_paths.is_empty());
-    assert!(harness.app.watched_explorer_dirs.is_empty());
+    assert!(!harness.app.live_reload.is_live());
+    assert!(harness.app.watched().is_none());
 }
 
 #[test]
@@ -150,7 +174,7 @@ fn a_document_opened_while_watching_is_reloaded_too() {
     // watch can report the change.
     let doc = write_doc(&harness, "sub/b.md", "old");
     harness.app.open_in_new_tab(doc.clone());
-    assert!(harness.app.watched_paths.contains(&doc));
+    assert!(harness.app.watched_files().contains(&doc));
 
     fs::write(&doc, "new").unwrap();
 
@@ -167,7 +191,7 @@ fn closing_a_tab_stops_watching_its_document() {
     harness.apply(AppAction::CloseTab);
 
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
 }
@@ -189,18 +213,18 @@ fn an_expanded_folder_is_watched_until_it_is_collapsed() {
     write_doc(&harness, "sub/x.md", "# X");
     let sub = harness.path("sub");
 
-    harness.app.file_explorer.expanded_dirs.insert(sub.clone());
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
-    assert!(harness.app.watched_explorer_dirs.contains(&sub));
+    assert!(harness.app.watched_explorer_dirs().contains(&sub));
     let created = write_doc(&harness, "sub/new.md", "# New");
     run_until(&mut harness, "the change in sub/ to be seen", |harness| {
         harness.app.flashing_paths.contains_key(&created)
     });
 
-    harness.app.file_explorer.expanded_dirs.remove(&sub);
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
     assert_eq!(
-        harness.app.watched_explorer_dirs,
+        *harness.app.watched_explorer_dirs(),
         HashSet::from([harness.dir.clone()])
     );
 }
@@ -213,29 +237,47 @@ fn folders_are_not_watched_while_live_reload_is_off() {
         .unwrap()
         .to_path_buf();
 
-    harness.app.file_explorer.expanded_dirs.insert(sub);
+    harness.app.file_explorer.toggle_expanded(&sub);
     harness.app.reconcile_explorer_watches();
 
-    assert!(harness.app.watched_explorer_dirs.is_empty());
+    assert!(harness.app.watched().is_none());
 }
 
 #[test]
 fn live_reload_waits_while_there_is_nothing_to_watch() {
     let mut harness = open(&[("a.md", "# A")]);
     harness.apply(AppAction::CloseTab);
-    harness.app.file_explorer.root = None;
+    harness.app.file_explorer = FileExplorer::default();
 
     harness.apply(AppAction::ToggleWatch);
     for _ in 0..=MAX_WATCHER_RETRIES {
         harness.idle();
     }
-    assert!(harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_none());
+    assert!(harness.app.live_reload.enabled);
+    assert!(!harness.app.live_reload.is_live());
     assert_eq!(harness.app.error_message, None);
 
     harness.app.open_in_new_tab(harness.path("a.md"));
     harness.idle();
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.is_live());
+}
+
+#[test]
+fn switching_live_reload_off_with_nothing_to_watch_keeps_it_off() {
+    let mut harness = open(&[("a.md", "# A")]);
+    harness.apply(AppAction::CloseTab);
+    harness.app.file_explorer = FileExplorer::default();
+    harness.apply(AppAction::ToggleWatch);
+    assert!(harness.app.live_reload.is_enabled());
+    assert!(!harness.app.live_reload.is_live());
+
+    harness.apply(AppAction::ToggleWatch);
+    assert!(!harness.app.live_reload.is_enabled());
+
+    harness.app.open_in_new_tab(harness.path("a.md"));
+    harness.idle();
+    assert!(!harness.app.live_reload.is_live());
+    assert_eq!(harness.app.error_message, None);
 }
 
 #[test]
@@ -243,8 +285,7 @@ fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
     let mut harness = open(&[("a.md", "# A")]);
     harness.apply(AppAction::CloseTab);
     // GVFS folders are never watched, so this leaves nothing to register.
-    harness.app.file_explorer.root =
-        Some(PathBuf::from("/run/user/1000/gvfs/sftp:host=example/notes"));
+    harness.app.file_explorer = explorer_on("/run/user/1000/gvfs/sftp:host=example/notes");
 
     harness.apply(AppAction::ToggleWatch);
     for _ in 0..=MAX_WATCHER_RETRIES {
@@ -252,7 +293,7 @@ fn a_remote_folder_without_open_documents_is_not_a_watcher_failure() {
     }
 
     assert_eq!(harness.app.error_message, None);
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.enabled);
 }
 
 #[test]
@@ -264,8 +305,7 @@ fn a_watcher_that_cannot_start_is_reported_in_the_error_bar() {
 
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.contains("file watcher"), "{message}");
-    assert!(harness.app.watcher.is_none());
-    assert!(harness.app.watcher_rx.is_none());
+    assert!(!harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -281,19 +321,19 @@ fn a_local_document_beside_remote_ones_starts_the_inotify_backend() {
     harness
         .app
         .adopt_watcher(FileWatcher::start(&remote_only, handler), receiver);
-    assert!(running_watcher(&mut harness).inotify_watcher().is_none());
+    assert!(!running_watcher(&mut harness).runs(Backend::Inotify));
 
     harness.app.update_watched_paths();
 
-    assert!(running_watcher(&mut harness).inotify_watcher().is_some());
+    assert!(running_watcher(&mut harness).runs(Backend::Inotify));
     assert_eq!(
-        harness.app.watched_paths,
+        *harness.app.watched_files(),
         HashSet::from([harness.path("a.md")])
     );
 }
 
 fn running_watcher(harness: &mut Harness) -> &mut FileWatcher {
-    harness.app.watcher.as_mut().unwrap()
+    &mut harness.app.live_reload.running.as_mut().unwrap().watcher
 }
 
 #[test]
@@ -302,7 +342,7 @@ fn a_watcher_error_restarts_the_watcher() {
 
     fail_watcher(&mut harness);
     harness.idle();
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.enabled);
     assert_eq!(harness.app.error_message, None);
 
     fs::write(harness.path("a.md"), "new").unwrap();
@@ -319,14 +359,14 @@ fn live_reload_turns_off_after_three_failed_restarts() {
     for _ in 0..MAX_WATCHER_RETRIES {
         fail_watcher(&mut harness);
         harness.idle();
-        assert!(harness.app.watch_enabled);
+        assert!(harness.app.live_reload.enabled);
     }
 
     fail_watcher(&mut harness);
     harness.idle();
 
-    assert!(!harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_none());
+    assert!(!harness.app.live_reload.enabled);
+    assert!(!harness.app.live_reload.is_live());
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.contains("3 retries"), "{message}");
     assert!(message.contains("disk on fire"), "{message}");
@@ -341,14 +381,14 @@ fn a_reported_change_restores_the_retry_budget() {
     }
     let (events, receiver) = mpsc::channel();
     events.send(Ok(Vec::new())).unwrap();
-    harness.app.watcher_rx = Some(receiver);
+    harness.app.live_reload.running.as_mut().unwrap().events = receiver;
     harness.idle();
 
     fail_watcher(&mut harness);
     harness.idle();
 
-    assert!(harness.app.watch_enabled);
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.enabled);
+    assert!(harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -358,7 +398,7 @@ fn a_watcher_that_stopped_is_restarted_on_the_next_frame() {
     harness.app.stop_watching();
     harness.idle();
 
-    assert!(harness.app.watcher.is_some());
+    assert!(harness.app.live_reload.is_live());
 }
 
 #[test]
@@ -372,7 +412,7 @@ fn a_watcher_that_keeps_stopping_turns_live_reload_off() {
     harness.app.stop_watching();
     harness.idle();
 
-    assert!(!harness.app.watch_enabled);
+    assert!(!harness.app.live_reload.enabled);
     let message = harness.app.error_message.clone().unwrap();
     assert!(message.ends_with("3 retries"), "{message}");
 }
@@ -383,6 +423,20 @@ fn unsaved_edits_are_not_overwritten_by_a_change_on_disk() {
     let doc = harness.path("a.md");
     harness.app.tabs[0].set_edit_mode(true);
     harness.app.tabs[0].content = "my edit".to_owned();
+
+    fs::write(&doc, "changed elsewhere").unwrap();
+    harness.app.reload_changed_tabs(vec![doc]);
+
+    assert_eq!(harness.app.tabs[0].content, "my edit");
+}
+
+#[test]
+fn unsaved_edits_shown_in_the_preview_are_not_overwritten_either() {
+    let mut harness = open(&[("a.md", "on disk")]);
+    let doc = harness.path("a.md");
+    harness.app.tabs[0].set_edit_mode(true);
+    harness.app.tabs[0].content = "my edit".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
 
     fs::write(&doc, "changed elsewhere").unwrap();
     harness.app.reload_changed_tabs(vec![doc]);
@@ -456,7 +510,7 @@ fn a_change_outside_the_explorer_root_flashes_only_the_file() {
         .parent()
         .unwrap()
         .to_path_buf();
-    harness.app.file_explorer.root = Some(elsewhere);
+    harness.app.file_explorer = explorer_on(elsewhere);
 
     fs::write(&doc, "new").unwrap();
     harness.app.reload_changed_tabs(vec![doc.clone()]);
@@ -470,7 +524,7 @@ fn a_change_outside_the_explorer_root_flashes_only_the_file() {
 fn a_change_is_reloaded_without_an_explorer_root() {
     let mut harness = open(&[("a.md", "old")]);
     let doc = harness.path("a.md");
-    harness.app.file_explorer.root = None;
+    harness.app.file_explorer = FileExplorer::default();
 
     fs::write(&doc, "new").unwrap();
     harness.app.reload_changed_tabs(vec![doc.clone()]);

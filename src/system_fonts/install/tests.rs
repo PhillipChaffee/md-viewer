@@ -19,8 +19,7 @@ impl Installed {
     ) -> Self {
         let mut definitions = FontDefinitions::default();
         let installed = install_regular_fonts(
-            &mut fonts.collection,
-            &mut fonts.source_cache,
+            &mut fonts.system(),
             &mut definitions,
             None,
             preferred,
@@ -41,7 +40,7 @@ impl Installed {
     }
 
     fn keys(&self) -> Vec<&str> {
-        self.fonts.iter().map(|font| font.key.as_str()).collect()
+        self.fonts.iter().map(|font| font.key).collect()
     }
 
     fn chain(&self, family: &FontFamily) -> &[String] {
@@ -52,8 +51,7 @@ impl Installed {
     /// strong text is drawn from.
     fn strong(mut self, fonts: &mut Fonts) -> (usize, Vec<String>) {
         let count = install_strong_font_family(
-            &mut fonts.collection,
-            &mut fonts.source_cache,
+            &mut fonts.system(),
             &mut self.definitions,
             &self.fonts,
             &["DefaultLatin".to_owned()],
@@ -321,8 +319,7 @@ fn preset_code_face_goes_in_front_of_the_bundled_monospace() {
     let bundled_first = definitions.families[&FontFamily::Monospace][0].clone();
 
     let installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut definitions,
         &["First Mono", "Second Mono"],
     );
@@ -338,8 +335,7 @@ fn missing_preset_code_faces_leave_the_monospace_chain_alone() {
     let mut definitions = FontDefinitions::default();
 
     let installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut definitions,
         &["First Mono", "Second Mono"],
     );
@@ -354,12 +350,8 @@ fn body_font_selection_skips_families_the_collection_does_not_know() {
     let foreign = Fonts::none().register_latin("Elsewhere Sans");
     let known = fonts.collection.family_id("Fixture Sans").unwrap();
 
-    let none = select_body_font(&mut fonts.collection, &mut fonts.source_cache, &[foreign]);
-    let found = select_body_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &[foreign, known],
-    );
+    let none = fonts.system().regular(&[foreign], LATIN_SAMPLE);
+    let found = fonts.system().regular(&[foreign, known], LATIN_SAMPLE);
 
     assert!(none.is_none());
     assert_eq!(
@@ -396,12 +388,7 @@ impl FontFile {
     }
 
     fn select(&mut self) -> Option<SelectedFont> {
-        select_family_font(
-            &mut self.fonts.collection,
-            &mut self.fonts.source_cache,
-            &self.family,
-            "Aa",
-        )
+        self.fonts.system().named(&self.family, "Aa")
     }
 }
 
@@ -427,13 +414,10 @@ fn face_whose_file_has_vanished_is_passed_over() {
 #[test]
 fn face_registered_from_memory_says_so_in_its_source() {
     let mut fonts = Fonts::with_sans();
-    let face = select_family_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        "Fixture Sans",
-        "Aa",
-    )
-    .expect("the family is registered");
+    let face = fonts
+        .system()
+        .named("Fixture Sans", "Aa")
+        .expect("the family is registered");
     assert_eq!(face.source, "<memory>");
 }
 
@@ -445,20 +429,9 @@ fn definitions_without_family_chains_only_gain_the_font_data() {
     let mut definitions = FontDefinitions::empty();
     definitions.families.clear();
 
-    let installed = install_regular_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-        None,
-        None,
-        None,
-    );
-    let mono_installed = install_preset_mono_font(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-        &["Fixture Sans"],
-    );
+    let installed = install_regular_fonts(&mut fonts.system(), &mut definitions, None, None, None);
+    let mono_installed =
+        install_preset_mono_font(&mut fonts.system(), &mut definitions, &["Fixture Sans"]);
 
     assert_eq!(installed.len(), 1);
     assert!(mono_installed);

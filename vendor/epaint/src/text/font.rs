@@ -7,6 +7,7 @@ use crate::{
     TextureAtlas,
     text::{
         FontTweak,
+        emoji_sequence::{self, EMOJI_SELECTOR, Presentation},
         fonts::{CachedFamily, FontFaceKey},
     },
 };
@@ -257,14 +258,81 @@ impl FontImpl {
 
     /// `\n` will result in `None`
     pub(super) fn glyph_info(&mut self, c: char) -> Option<GlyphInfo> {
-        if let Some(glyph_info) = self.glyph_info_cache.get(&c) {
-            return Some(*glyph_info);
-        }
-
         // An emoji-only face (e.g. a color-emoji font) must not claim general
         // symbols (▶ ⚠ ✔ arrows, …) that regular text faces render better.
         if self.emoji_only && !is_default_emoji(c) {
             return None;
+        }
+        self.mapped_glyph_info(c)
+    }
+
+    /// md-viewer patch: the glyph of `c` when a variation selector after it
+    /// asks for `presentation`. The emoji look comes from an emoji-only face,
+    /// whichever character it is, and the text look from any other face.
+    ///
+    /// A digit, `#` and `*` have no emoji look of their own: a color face
+    /// maps them only as the base of a keycap, to an empty glyph.
+    pub(super) fn glyph_info_as(
+        &mut self,
+        c: char,
+        presentation: Presentation,
+    ) -> Option<GlyphInfo> {
+        let has_the_look = match presentation {
+            Presentation::Emoji => self.emoji_only && !c.is_ascii(),
+            Presentation::Text => !self.emoji_only,
+        };
+        if has_the_look {
+            self.mapped_glyph_info(c)
+        } else {
+            None
+        }
+    }
+
+    /// md-viewer patch: the one glyph this face draws the whole of
+    /// `sequence` with, when its substitution table joins the characters:
+    /// a flag, a skin tone, a keycap, people held by zero-width joiners.
+    ///
+    /// This shapes the sequence, which is slow next to a character lookup;
+    /// [`Font::glyph_info_at`] keeps the answer.
+    pub(super) fn sequence_glyph_info(&self, sequence: &str) -> Option<GlyphInfo> {
+        let first = sequence.chars().next()?;
+        if self.ab_glyph_font.glyph_id(first).0 == 0 {
+            return None;
+        }
+        // Faces spell their sequences without the emoji selector.
+        let spelled: String = sequence.chars().filter(|&c| c != EMOJI_SELECTOR).collect();
+        if spelled.chars().nth(1).is_none() {
+            return None;
+        }
+
+        let font = swash::FontRef::from_index(&self.raw_bytes, self.font_index as usize)?;
+        let mut context = swash::shape::ShapeContext::new();
+        let mut shaper = context.builder(font).build();
+        shaper.add_str(&spelled);
+        let mut glyph_count = 0;
+        let mut glyph_id = 0;
+        shaper.shape_with(|cluster| {
+            glyph_count += cluster.glyphs.len();
+            if let Some(glyph) = cluster.glyphs.first() {
+                glyph_id = glyph.id;
+            }
+        });
+        if glyph_count != 1 || glyph_id == 0 {
+            return None;
+        }
+
+        let glyph_id = ab_glyph::GlyphId(glyph_id);
+        Some(GlyphInfo {
+            id: Some(glyph_id),
+            advance_width_unscaled: self.ab_glyph_font.h_advance_unscaled(glyph_id).into(),
+        })
+    }
+
+    /// The glyph this face maps `c` to, whether or not the face is kept to
+    /// emoji.
+    fn mapped_glyph_info(&mut self, c: char) -> Option<GlyphInfo> {
+        if let Some(glyph_info) = self.glyph_info_cache.get(&c) {
+            return Some(*glyph_info);
         }
 
         if self.ignore_character(c) {
@@ -566,6 +634,82 @@ impl Font<'_> {
         s.chars().all(|c| self.has_glyph(c))
     }
 
+    /// md-viewer patch: what draws the first character of `text`, given the
+    /// characters after it, and how many of those the glyph stands for too.
+    ///
+    /// A character followed by U+FE0F is drawn from the color emoji face and
+    /// one followed by U+FE0E from the text faces, where they have it. An
+    /// emoji sequence is one glyph where a face joins it; the characters the
+    /// glyph also stands for are then to be laid out with no room.
+    ///
+    /// Any other character, and so all text without emoji, is looked up as
+    /// [`Self::glyph_info`] does, after one look at the character after it.
+    pub(crate) fn glyph_info_at(&mut self, text: &str) -> (FontFaceKey, GlyphInfo, usize) {
+        let mut chars = text.chars();
+        let Some(c) = chars.next() else {
+            let (font, glyph_info) = self.cached_family.replacement_glyph;
+            return (font, glyph_info, 0);
+        };
+        let next = chars
+            .next()
+            .filter(|&next| emoji_sequence::may_join(c, next));
+        let Some(next) = next else {
+            let (font, glyph_info) = self.glyph_info(c);
+            return (font, glyph_info, 0);
+        };
+
+        let presentation = Presentation::asked_by(next);
+        let sequence = &text[..emoji_sequence::sequence_len(text)];
+        // A character and its selector are not a sequence for a face to join.
+        let selector_only =
+            presentation.is_some() && sequence.len() == c.len_utf8() + next.len_utf8();
+        if !selector_only && let Some((font, glyph_info)) = self.sequence_glyph_info(sequence) {
+            return (font, glyph_info, sequence.chars().count() - 1);
+        }
+
+        let (font, glyph_info) = match presentation {
+            Some(presentation) => self.glyph_info_as(c, presentation),
+            None => self.glyph_info(c),
+        };
+        (font, glyph_info, 0)
+    }
+
+    /// The face that draws `sequence` as one glyph, and the glyph.
+    fn sequence_glyph_info(&mut self, sequence: &str) -> Option<(FontFaceKey, GlyphInfo)> {
+        if let Some(joined) = self.cached_family.sequence_cache.get(sequence) {
+            return *joined;
+        }
+
+        let joined = self.cached_family.fonts.iter().find_map(|font_key| {
+            let glyph_info = self
+                .fonts_by_id
+                .get(font_key)?
+                .sequence_glyph_info(sequence)?;
+            Some((*font_key, glyph_info))
+        });
+        self.cached_family
+            .sequence_cache
+            .insert(sequence.into(), joined);
+        joined
+    }
+
+    /// `c` with the look a variation selector asks for, or as
+    /// [`Self::glyph_info`] has it where no face has that look.
+    fn glyph_info_as(&mut self, c: char, presentation: Presentation) -> (FontFaceKey, GlyphInfo) {
+        let key = (c, presentation);
+        if let Some(selected) = self.cached_family.presentation_cache.get(&key) {
+            return *selected;
+        }
+
+        let selected = self.cached_family.fonts.iter().find_map(|font_key| {
+            let font_impl = self.fonts_by_id.get_mut(font_key)?;
+            Some((*font_key, font_impl.glyph_info_as(c, presentation)?))
+        });
+        let selected = selected.unwrap_or_else(|| self.glyph_info(c));
+        self.cached_family.presentation_cache.insert(key, selected);
+        selected
+    }
+
     /// `\n` will (intentionally) show up as the replacement character.
     pub(crate) fn glyph_info(&mut self, c: char) -> (FontFaceKey, GlyphInfo) {
         if let Some(font_index_glyph_info) = self.cached_family.glyph_info_cache.get(&c) {
@@ -758,6 +902,13 @@ fn invisible_char(c: char) -> bool {
     // From https://www.fileformat.info/info/unicode/category/Cf/list.htm
 
     // TODO(emilk): heed bidi characters
+
+    // A variation selector picks the look of the character before it (U+FE0F
+    // asks for the emoji look, U+FE0E for the text look) and is never drawn
+    // itself. Fonts that map one to a visible "VS16" box are debugging aids.
+    if matches!(c, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}') {
+        return true;
+    }
 
     matches!(
         c,

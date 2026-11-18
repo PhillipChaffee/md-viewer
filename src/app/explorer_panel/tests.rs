@@ -100,7 +100,7 @@ fn the_explorer_is_titled_with_its_folder() {
         .to_owned();
     assert!(is_listed(&harness, &format!("FILES {folder}")));
 
-    harness.state_mut().file_explorer.root = None;
+    harness.state_mut().file_explorer = crate::explorer::FileExplorer::default();
     harness.frames(1);
 
     assert!(is_listed(&harness, "FILES No folder"));
@@ -175,13 +175,13 @@ fn an_opened_folder_is_watched_while_live_reload_is_on() {
     harness.key_press(Key::F5);
     harness.frames(2);
     let sub = harness.path("sub");
-    assert!(!harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(!harness.state().watched_explorer_dirs().contains(&sub));
 
     harness.click("sub");
-    assert!(harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(harness.state().watched_explorer_dirs().contains(&sub));
 
     harness.click("sub");
-    assert!(!harness.state().watched_explorer_dirs.contains(&sub));
+    assert!(!harness.state().watched_explorer_dirs().contains(&sub));
 }
 
 #[test]
@@ -189,8 +189,13 @@ fn a_folder_left_open_in_the_last_session_lists_its_files() {
     let mut harness = explorer();
     let sub = harness.path("sub");
 
-    harness.state_mut().file_explorer.expanded_dirs.insert(sub);
-    harness.frames(2);
+    let last_session = crate::explorer::FileExplorer::restored(
+        SortOrder::default(),
+        HashSet::from([sub]),
+        Some(harness.dir.clone()),
+    );
+    harness.state_mut().file_explorer = last_session;
+    harness.wait_for_explorer_scan();
 
     assert!(is_listed(&harness, "c.md"));
 }
@@ -215,11 +220,11 @@ fn expand_all_and_collapse_all_keep_the_watched_folders_in_step() {
     harness.frames(2);
 
     pick(&mut harness, "Expand All Folders");
-    let watched = &harness.state().watched_explorer_dirs;
+    let watched = harness.state().watched_explorer_dirs();
     assert!(watched.contains(&harness.path("sub/deep")));
 
     pick(&mut harness, "Collapse All Folders");
-    let watched = &harness.state().watched_explorer_dirs;
+    let watched = harness.state().watched_explorer_dirs();
     assert_eq!(watched, &HashSet::from([harness.dir.clone()]));
 }
 
@@ -324,8 +329,8 @@ fn nested_files_are_indented_under_their_folder() {
         text.unwrap()
     };
 
-    assert_close(left("c.md") - left("b.md"), INDENT);
-    assert_close(left("d.md") - left("c.md"), INDENT);
+    assert_close(left("c.md") - left("b.md"), sidebar::INDENT);
+    assert_close(left("d.md") - left("c.md"), sidebar::INDENT);
     // A file's name lines up with the folder's beside it.
     assert_close(left("sub"), left("b.md"));
 }

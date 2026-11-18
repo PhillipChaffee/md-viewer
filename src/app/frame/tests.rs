@@ -2,25 +2,22 @@
 //! the clicks its panels report turn into navigation.
 
 use std::fs;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, accesskit, Color32, Modifiers, PointerButton};
 use eframe::{App as _, Storage as _};
 
 use crate::app::action::AppAction;
+use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{
-    frame_on, frame_with, frames_until, launch, painted_text, MemoryStorage, ScratchDir, UiHarness,
-};
+use crate::app::ui_harness::{frame_on, frames_until, launch, MemoryStorage, UiHarness};
 use crate::app::MarkdownApp;
-use crate::explorer::{ExplorerScanResult, SortOrder};
+use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
-use crate::test_support::assert_close;
-use crate::theme::{self, ThemeId};
-use crate::watcher::FLASH_DURATION_MS;
+use crate::test_support::{assert_close, ScratchDir};
+use crate::theme::ThemeId;
 
 const LONG_DOCUMENT_PARAGRAPHS: usize = 400;
 
@@ -68,7 +65,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     let scrolled = scroll_offset_at_rest(&mut harness);
     assert!(scrolled > 0.0, "the wheel scrolled {scrolled}");
 
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,
@@ -78,7 +75,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     frame_on(&mut harness, vec![wheel(-3.0)]);
 
     assert_close(scroll_offset_at_rest(&mut harness), scrolled);
-    let zoom = harness.app.lightbox.as_ref().unwrap().zoom;
+    let zoom = harness.app.lightbox.open.as_ref().unwrap().zoom;
     assert!(
         zoom < 1.0,
         "scrolling down zoomed the lightbox out to {zoom}"
@@ -99,15 +96,15 @@ fn customized_session() -> Harness {
     app.reading_width = ReadingWidth::new(512.0);
     app.line_spacing = LineSpacing::Airy;
     app.math_scale = 1.5;
-    app.highlight_color = Some(Color32::from_rgb(200, 30, 30));
-    app.link_color = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
-    app.selected_font_family = Some("No Such Family".to_owned());
+    app.colors.highlight = Some(Color32::from_rgb(200, 30, 30));
+    app.colors.link = Some(Color32::from_rgba_premultiplied(1, 2, 3, 4));
+    app.fonts.family = Some("No Such Family".to_owned());
     app.smooth_text_rendering = true;
-    app.font_preset = FontPreset::Vscode;
-    app.text_size_class = TextSizeClass::Large;
+    app.fonts.preset = FontPreset::Vscode;
+    app.fonts.size = TextSizeClass::Large;
     app.show_explorer = false;
-    app.file_explorer.expanded_dirs.insert(guides);
-    app.file_explorer.sort_order = SortOrder::NameDesc;
+    app.file_explorer.toggle_expanded(&guides);
+    app.file_explorer.set_sort_order(SortOrder::NameDesc);
     app.explorer_width = 301.0;
     app.outline_width = 187.0;
     harness
@@ -130,17 +127,13 @@ fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
             app.explorer_width.to_bits(),
             app.outline_width.to_bits(),
         ),
-        (app.highlight_color, app.link_color),
-        (
-            app.selected_font_family.clone(),
-            app.font_preset,
-            app.text_size_class,
-        ),
+        (app.colors.highlight, app.colors.link),
+        (app.fonts.family.clone(), app.fonts.preset, app.fonts.size),
         (app.get_open_tab_paths(), app.active_tab),
         (
-            app.file_explorer.root.clone(),
-            app.file_explorer.expanded_dirs.clone(),
-            app.file_explorer.sort_order == SortOrder::NameDesc,
+            app.file_explorer.root().map(ToOwned::to_owned),
+            app.file_explorer.expanded_dirs().clone(),
+            app.file_explorer.sort_order() == SortOrder::NameDesc,
         ),
     )
 }
@@ -220,9 +213,9 @@ fn a_virtual_display_gets_a_frame_rate_cap() {
 /// moment of its own choosing.
 fn at_rest() -> Harness {
     let mut harness = Harness::with_three_docs();
-    harness.app.pending_font_family_scan = None;
+    harness.app.font_picker.scan = None;
     frames_until(&mut harness, "the explorer scan", |app| {
-        app.file_explorer.pending_scan.is_none()
+        !app.file_explorer.is_scanning()
     });
     harness.idle();
     harness
@@ -237,17 +230,16 @@ fn a_scan_still_running_keeps_the_frames_coming() {
     const POLL_INTERVAL: Duration = Duration::from_millis(100);
     let mut harness = at_rest();
     assert!(repaint_delay(&harness.idle()) > POLL_INTERVAL);
-    let (scan_tx, scan_rx) = mpsc::channel::<ExplorerScanResult>();
-    harness.app.file_explorer.pending_scan = Some(scan_rx);
 
+    harness.app.file_explorer.refresh();
     let output = harness.idle();
     assert!(repaint_delay(&output) <= POLL_INTERVAL);
-    assert!(harness.app.file_explorer.pending_scan.is_some());
 
-    drop(scan_tx);
-    harness.idle();
-    assert!(harness.app.file_explorer.pending_scan.is_none());
-    assert_eq!(harness.app.file_explorer.tree.len(), 3, "the listing stays");
+    frames_until(&mut harness, "the explorer scan", |app| {
+        !app.file_explorer.is_scanning()
+    });
+    assert!(repaint_delay(&harness.idle()) > POLL_INTERVAL);
+    assert_eq!(harness.app.file_explorer.tree().len(), 3);
 }
 
 #[test]
@@ -276,10 +268,10 @@ fn the_explorer_lists_the_folder_once_its_scan_lands() {
     let mut harness = Harness::with_three_docs();
 
     frames_until(&mut harness, "the explorer scan", |app| {
-        app.file_explorer.pending_scan.is_none()
+        !app.file_explorer.is_scanning()
     });
 
-    assert_eq!(harness.app.file_explorer.tree.len(), 3);
+    assert_eq!(harness.app.file_explorer.tree().len(), 3);
 }
 
 #[test]
@@ -304,35 +296,6 @@ fn the_window_title_follows_the_active_tab_down_to_no_tab() {
     harness.app.close_active_tab();
 
     assert_eq!(window_titles(&harness.idle()), ["Markdown Viewer"]);
-}
-
-#[test]
-fn files_dragged_over_the_window_get_a_drop_hint() {
-    let mut harness = Harness::with_three_docs();
-    let hint = "Drop markdown file here".to_owned();
-    let dragging = egui::RawInput {
-        hovered_files: vec![egui::HoveredFile::default()],
-        ..Default::default()
-    };
-
-    let output = frame_with(&mut harness, dragging);
-    assert!(painted_text(&output).contains(&hint));
-
-    let output = harness.idle();
-    assert!(!painted_text(&output).contains(&hint));
-}
-
-#[test]
-fn the_error_bar_shows_the_message_until_it_is_dismissed() {
-    let mut harness = UiHarness::with_three_docs();
-    harness.app_mut().error_message = Some("Unable to open notes.md".to_owned());
-    harness.settle();
-    assert!(harness.shows("Unable to open notes.md"));
-
-    harness.click_exact("Dismiss");
-
-    assert_eq!(harness.app().error_message, None);
-    assert!(!harness.shows("Unable to open notes.md"));
 }
 
 #[test]
@@ -431,6 +394,30 @@ fn a_ctrl_clicked_link_opens_its_target_in_a_new_tab_at_the_anchor() {
     assert_eq!(harness.app().tabs[0].path, harness.path("a.md"));
 }
 
+#[test]
+fn a_document_opened_from_the_home_page_is_recorded_and_searched() {
+    let mut harness = UiHarness::with_docs(&[
+        ("a.md", "# First\n\nA needle and a needle.\n"),
+        ("b.md", "# Second\n"),
+    ]);
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+    let app = harness.app_mut();
+    app.open_in_new_tab(b.clone());
+    app.close_active_tab();
+    app.close_active_tab();
+    app.open_search();
+    app.search.query = "needle".to_owned();
+    harness.settle();
+    assert_eq!(harness.app().recent_files[0].path, b);
+
+    harness.click("First");
+
+    assert_eq!(harness.active_path(), a);
+    assert_eq!(harness.app().recent_files[0].path, a);
+    assert_eq!(harness.app().tabs[0].search_matches.len(), 2);
+    assert!(harness.shows("1 / 2"));
+}
+
 /// A 64 by 48 picture.
 const PICTURE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48">
 <rect width="64" height="48" fill="#285ac8"/>
@@ -439,8 +426,8 @@ const PICTURE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64"
 /// A document showing one picture, with the picture loaded.
 fn with_picture(markdown: &str) -> UiHarness {
     let dir = ScratchDir::new();
-    dir.write("a.md", markdown);
-    dir.write("picture.svg", PICTURE_SVG);
+    dir.file("a.md", markdown);
+    dir.file("picture.svg", PICTURE_SVG);
     let mut harness = UiHarness::open(dir, Some("a.md"));
     harness.wait_until("the picture", |harness| {
         let pictures = harness.centers_with_role(accesskit::Role::Image);
@@ -452,12 +439,12 @@ fn with_picture(markdown: &str) -> UiHarness {
 #[test]
 fn clicking_a_picture_opens_it_in_the_lightbox_at_full_size() {
     let mut harness = with_picture("![a picture](picture.svg)\n");
-    assert!(harness.app().lightbox.is_none());
+    assert!(harness.app().lightbox.open.is_none());
 
     let picture = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(picture);
 
-    let lightbox = harness.app().lightbox.as_ref().unwrap();
+    let lightbox = harness.app().lightbox.open.as_ref().unwrap();
     assert_close(lightbox.zoom, 1.0);
     assert_eq!(lightbox.base_size, egui::vec2(64.0, 48.0));
     assert_eq!(lightbox.open_id, 1);
@@ -473,7 +460,7 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
     let diagram = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(diagram);
 
-    let lightbox = harness.app().lightbox.as_ref().unwrap();
+    let lightbox = harness.app().lightbox.open.as_ref().unwrap();
     assert!(matches!(lightbox.texture, LightboxTexture::Owned(_)));
     assert!(lightbox.base_size.x > 0.0 && lightbox.base_size.y > 0.0);
 }
@@ -483,7 +470,7 @@ fn clicking_a_rendered_diagram_opens_it_in_the_lightbox() {
 fn enlarged_diagram(harness: &mut UiHarness) -> egui::TextureId {
     let diagram = harness.centers_with_role(accesskit::Role::Image)[0];
     harness.click_at(diagram);
-    harness.app_mut().lightbox.take().unwrap().texture.id()
+    harness.app_mut().lightbox.open.take().unwrap().texture.id()
 }
 
 #[test]
@@ -508,7 +495,7 @@ fn a_diagram_is_redrawn_in_the_colors_of_the_theme_switched_to() {
 fn the_users_colors_stay_on_top_of_whichever_theme_is_picked() {
     let mut harness = Harness::with_three_docs();
     let highlight = Color32::from_rgb(200, 30, 30);
-    harness.app.highlight_color = Some(highlight);
+    harness.app.colors.highlight = Some(highlight);
     harness.idle();
 
     for theme in ThemeId::ALL {
@@ -520,7 +507,7 @@ fn the_users_colors_stay_on_top_of_whichever_theme_is_picked() {
         assert_eq!(visuals.panel_fill, theme.palette().page);
     }
 
-    harness.app.highlight_color = None;
+    harness.app.colors.highlight = None;
     harness.idle();
     assert_eq!(
         harness.ctx.style().visuals.selection.bg_fill,
@@ -555,7 +542,7 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     assert_close(body_size(&harness), 16.0 * 1.15);
 
     let before = revision(&harness);
-    harness.app.text_size_class = TextSizeClass::Large;
+    harness.app.fonts.size = TextSizeClass::Large;
     harness.idle();
     assert_close(body_size(&harness), 18.0 * 1.15);
     assert!(revision(&harness) > before);
@@ -565,82 +552,9 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     harness.idle();
     assert_eq!(revision(&harness), settled);
 
-    harness.app.font_preset = FontPreset::Current;
+    harness.app.fonts.preset = FontPreset::Current;
     harness.idle();
     assert_close(body_size(&harness), 18.0);
     assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);
     assert!(revision(&harness) > settled);
-}
-
-#[test]
-fn the_error_bar_is_written_in_the_themes_warning_color() {
-    let mut harness = Harness::with_three_docs();
-    harness.app.theme = ThemeId::Dusk;
-    harness.app.error_message = Some("Unable to open notes.md".to_owned());
-    harness.idle();
-
-    let output = harness.idle();
-
-    let message = crate::test_support::painted_text_starting(&output, "Unable to open");
-    assert_eq!(
-        message.galley.job.sections[0].format.color,
-        ThemeId::Dusk.palette().warning
-    );
-}
-
-#[test]
-fn the_drop_target_dims_the_window_with_the_scrim() {
-    let mut harness = Harness::with_three_docs();
-    let hovering = egui::RawInput {
-        hovered_files: vec![egui::HoveredFile::default()],
-        ..Default::default()
-    };
-
-    let output = frame_with(&mut harness, hovering);
-
-    let dimmed = crate::test_support::painted_shapes(&output)
-        .into_iter()
-        .any(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == theme::SCRIM));
-    assert!(dimmed);
-    let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
-    assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
-}
-
-#[test]
-fn the_error_bar_opens_with_a_warning_sign_and_keeps_its_dismiss_button_in_the_window() {
-    let mut harness = UiHarness::with_three_docs();
-    let long = "Unable to open a file with a very long name. ".repeat(12);
-    harness.app_mut().error_message = Some(long);
-    harness.settle();
-    let warning = ThemeId::Sepia.palette().warning;
-    let top = crate::app::chrome::BAR_HEIGHT;
-    let strip = top..=top + crate::app::chrome::STRIP_HEIGHT;
-
-    let dismiss = harness.labelled("Dismiss")[0].0;
-    assert_close(dismiss.x, harness.labelled("More")[0].0.x);
-    assert!(strip.contains(&dismiss.y));
-
-    let shapes = crate::test_support::painted_shapes(harness.ui.output());
-    let sign = shapes.iter().find_map(|shape| match shape {
-        egui::Shape::Circle(ring) if ring.stroke.color == warning => Some(ring.center),
-        _ => None,
-    });
-    let sign = sign.expect("no ringed sign in the warning color");
-    assert!(strip.contains(&sign.y));
-    let message = shapes
-        .iter()
-        .find_map(|shape| match shape {
-            egui::Shape::Text(text) if text.galley.text().starts_with("Unable to open") => {
-                Some(text)
-            }
-            _ => None,
-        })
-        .unwrap();
-    assert!(
-        message.galley.elided,
-        "cut short, not wrapped or pushed out"
-    );
-    assert!(sign.x < message.pos.x);
-    let right = message.pos.x + message.galley.size().x;
-    assert!(right < dismiss.x, "{right} runs under the button");
 }

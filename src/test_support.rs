@@ -1,4 +1,4 @@
-//! Assertions shared by the unit tests.
+//! Fixtures and assertions shared by the unit tests.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -38,7 +38,7 @@ impl ScratchDir {
 
     /// Write `content` to the file `name`, creating its parent directories,
     /// and return its path.
-    pub(crate) fn file(&self, name: &str, content: &str) -> PathBuf {
+    pub(crate) fn file(&self, name: &str, content: impl AsRef<[u8]>) -> PathBuf {
         let path = self.0.join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, content).unwrap();
@@ -94,13 +94,38 @@ pub(crate) fn painted_text_starting(
     output: &egui::FullOutput,
     prefix: &str,
 ) -> egui::epaint::TextShape {
-    let found = painted_shapes(output)
+    first_text_starting(output, prefix, f32::NEG_INFINITY)
+        .expect("no painted text starts with the prefix")
+}
+
+/// The first text a frame painted at or below the height `top` that starts
+/// with `prefix`, with where it was painted. For a frame that says the
+/// same thing twice, once above `top`.
+#[track_caller]
+pub(crate) fn painted_text_starting_below(
+    output: &egui::FullOutput,
+    prefix: &str,
+    top: f32,
+) -> egui::epaint::TextShape {
+    first_text_starting(output, prefix, top)
+        .expect("no text painted that far down starts with the prefix")
+}
+
+fn first_text_starting(
+    output: &egui::FullOutput,
+    prefix: &str,
+    top: f32,
+) -> Option<egui::epaint::TextShape> {
+    painted_shapes(output)
         .into_iter()
         .find_map(|shape| match shape {
-            egui::Shape::Text(text) if text.galley.text().starts_with(prefix) => Some(text),
+            egui::Shape::Text(text)
+                if text.pos.y >= top && text.galley.text().starts_with(prefix) =>
+            {
+                Some(text)
+            }
             _ => None,
-        });
-    found.expect("no painted text starts with the prefix")
+        })
 }
 
 /// Turn every log level on for the rest of the test process, so the

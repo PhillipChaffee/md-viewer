@@ -19,7 +19,6 @@ mod proofs;
 mod tests;
 
 pub(crate) const MAX_WATCHER_RETRIES: u32 = 3;
-pub(crate) const FLASH_DURATION_MS: u64 = 600;
 /// Quiet time after the last write before a change is reported.
 const DEBOUNCE: Duration = Duration::from_millis(200);
 /// How often GVFS documents are checked. Each check is a remote round trip.
@@ -114,14 +113,14 @@ pub(crate) fn explorer_watch_dirs(
 
 /// The registrations that move a watcher from one path set to another.
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct WatchDiff {
+struct WatchDiff {
     /// Paths to start watching, sorted.
-    pub(crate) add: Vec<PathBuf>,
+    add: Vec<PathBuf>,
     /// Paths to stop watching, sorted.
-    pub(crate) remove: Vec<PathBuf>,
+    remove: Vec<PathBuf>,
 }
 
-pub(crate) fn watch_diff(desired: &HashSet<PathBuf>, watched: &HashSet<PathBuf>) -> WatchDiff {
+fn watch_diff(desired: &HashSet<PathBuf>, watched: &HashSet<PathBuf>) -> WatchDiff {
     let sorted_difference = |from: &HashSet<PathBuf>, minus: &HashSet<PathBuf>| {
         let mut paths: Vec<PathBuf> = from.difference(minus).cloned().collect();
         paths.sort();
@@ -135,11 +134,7 @@ pub(crate) fn watch_diff(desired: &HashSet<PathBuf>, watched: &HashSet<PathBuf>)
 
 /// Whether `open_files` need a backend the running watcher does not have, for
 /// example when the first GVFS document opens beside local ones.
-pub(crate) fn needs_backend_restart(
-    open_files: &HashSet<PathBuf>,
-    has_inotify: bool,
-    has_poll: bool,
-) -> bool {
+fn needs_backend_restart(open_files: &HashSet<PathBuf>, has_inotify: bool, has_poll: bool) -> bool {
     let needs = |backend| {
         open_files
             .iter()
@@ -168,15 +163,6 @@ pub(crate) fn ancestors_within<'a>(
         .ancestors()
         .skip(1)
         .take_while(move |dir| dir.starts_with(root))
-}
-
-/// The explorer directory whose listing a change to `changed` can alter, if
-/// `changed` lies under `root`.
-pub(crate) fn listing_to_refresh<'a>(changed: &'a Path, root: &Path) -> Option<&'a Path> {
-    changed
-        .starts_with(root)
-        .then(|| changed.parent())
-        .flatten()
 }
 
 /// Registers `path` non-recursively. A refusal is logged, naming the path as
@@ -251,7 +237,8 @@ fn start_poll(
     Some(debouncer)
 }
 
-/// The paths a watcher start registered with its backends.
+/// The paths a watcher holds: after a start, the ones its backends accepted;
+/// after a sync, the ones that were asked for.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Watched {
     /// Open documents, local and GVFS.
@@ -260,76 +247,86 @@ pub(crate) struct Watched {
     pub(crate) explorer_dirs: HashSet<PathBuf>,
 }
 
-/// Wrapper for file watchers that supports both inotify (local) and poll (GVFS/remote).
-pub(crate) enum FileWatcher {
-    Inotify(Debouncer<RecommendedWatcher>),
-    Poll(Debouncer<PollWatcher>),
-    Dual {
-        inotify: Debouncer<RecommendedWatcher>,
-        poll: Debouncer<PollWatcher>,
-    },
+/// The running watcher backends: inotify for local paths, polling for GVFS
+/// documents. At least one runs.
+pub(crate) struct FileWatcher {
+    inotify: Option<Debouncer<RecommendedWatcher>>,
+    poll: Option<Debouncer<PollWatcher>>,
+    watched: Watched,
 }
+
+/// A document needs a backend that is not running. Only a fresh start adds
+/// one.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct MissingBackend;
 
 impl FileWatcher {
     /// Starts the backends `plan` has paths for and registers those paths
     /// non-recursively. `on_events` runs on a watcher thread with each
     /// debounced batch of changes, or with the error that stopped a backend.
     ///
-    /// Returns the watcher with the paths its backends accepted, or `None`
-    /// when no backend could start.
+    /// Returns the watcher, holding the paths its backends accepted, or
+    /// `None` when no backend could start.
     pub(crate) fn start(
         plan: &WatchPlan,
         on_events: impl DebounceEventHandler + Clone,
-    ) -> Option<(Self, Watched)> {
-        let mut accepted = Watched::default();
+    ) -> Option<Self> {
+        let mut watched = Watched::default();
         let inotify = plan
             .needs_inotify()
-            .then(|| start_inotify(plan, on_events.clone(), &mut accepted))
+            .then(|| start_inotify(plan, on_events.clone(), &mut watched))
             .flatten();
         let poll = plan
             .needs_poll()
-            .then(|| start_poll(plan, on_events, &mut accepted))
+            .then(|| start_poll(plan, on_events, &mut watched))
             .flatten();
-        Self::from_backends(inotify, poll).map(|watcher| (watcher, accepted))
+        (inotify.is_some() || poll.is_some()).then_some(Self {
+            inotify,
+            poll,
+            watched,
+        })
     }
 
-    /// Wraps whichever backends started; `None` when neither did.
-    fn from_backends(
-        inotify: Option<Debouncer<RecommendedWatcher>>,
-        poll: Option<Debouncer<PollWatcher>>,
-    ) -> Option<Self> {
-        match (inotify, poll) {
-            (Some(inotify), Some(poll)) => Some(Self::Dual { inotify, poll }),
-            (Some(inotify), None) => Some(Self::Inotify(inotify)),
-            (None, Some(poll)) => Some(Self::Poll(poll)),
-            (None, None) => None,
-        }
+    pub(crate) const fn watched(&self) -> &Watched {
+        &self.watched
     }
 
-    pub(crate) fn inotify_watcher(&mut self) -> Option<&mut dyn notify::Watcher> {
-        match self {
-            Self::Inotify(d) | Self::Dual { inotify: d, .. } => Some(d.watcher()),
-            Self::Poll(_) => None,
+    /// Moves the document watches to `desired`, which the watcher then holds
+    /// whether or not a backend refused one of its paths. When a document
+    /// needs a backend that is not running, nothing changes.
+    pub(crate) fn sync_files(&mut self, desired: HashSet<PathBuf>) -> Result<(), MissingBackend> {
+        if needs_backend_restart(&desired, self.inotify.is_some(), self.poll.is_some()) {
+            return Err(MissingBackend);
         }
+        self.apply(&watch_diff(&desired, &self.watched.files), "file");
+        self.watched.files = desired;
+        Ok(())
     }
 
-    pub(crate) fn poll_watcher(&mut self) -> Option<&mut dyn notify::Watcher> {
-        match self {
-            Self::Poll(d) | Self::Dual { poll: d, .. } => Some(d.watcher()),
-            Self::Inotify(_) => None,
-        }
+    /// Moves the explorer directory watches to `desired`, which the watcher
+    /// then holds whether or not inotify refused one of them.
+    pub(crate) fn sync_explorer_dirs(&mut self, desired: HashSet<PathBuf>) {
+        let diff = watch_diff(&desired, &self.watched.explorer_dirs);
+        self.apply(&diff, "explorer dir");
+        self.watched.explorer_dirs = desired;
     }
 
     fn backend(&mut self, backend: Backend) -> Option<&mut dyn notify::Watcher> {
         match backend {
-            Backend::Inotify => self.inotify_watcher(),
-            Backend::Poll => self.poll_watcher(),
+            Backend::Inotify => {
+                let debouncer = self.inotify.as_mut()?;
+                Some(debouncer.watcher())
+            }
+            Backend::Poll => {
+                let debouncer = self.poll.as_mut()?;
+                Some(debouncer.watcher())
+            }
         }
     }
 
     /// Applies `diff` through the backend each path needs. A path whose
     /// backend is not running is skipped; `what` names the paths in the log.
-    pub(crate) fn apply(&mut self, diff: &WatchDiff, what: &str) {
+    fn apply(&mut self, diff: &WatchDiff, what: &str) {
         for path in &diff.add {
             if let Some(watcher) = self.backend(Backend::for_path(path)) {
                 watch_path(watcher, path, what);

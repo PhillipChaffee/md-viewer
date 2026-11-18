@@ -10,6 +10,7 @@ use crate::{
     AlphaFromCoverage, TextureAtlas,
     text::{
         Galley, LayoutJob, LayoutSection,
+        emoji_sequence::Presentation,
         font::{Font, FontImpl, GlyphInfo},
     },
 };
@@ -129,6 +130,10 @@ pub struct FontData {
     /// (`Emoji_Presentation`), so a color-emoji font can supply 🟢✅ without
     /// claiming general symbols (▶ ⚠ ✔ arrows, …) that text faces should
     /// render. Default: `false`.
+    ///
+    /// md-viewer patch: a variation selector in the text overrides this for
+    /// the character before it. With U+FE0F after it, any character this
+    /// face maps is drawn from it; with U+FE0E after it, none is.
     #[cfg_attr(feature = "serde", serde(default))]
     pub emoji_only: bool,
 }
@@ -442,6 +447,14 @@ pub(super) struct CachedFamily {
     pub replacement_glyph: (FontFaceKey, GlyphInfo),
 
     pub glyph_info_cache: ahash::HashMap<char, (FontFaceKey, GlyphInfo)>,
+
+    /// md-viewer patch: characters with the look a variation selector after
+    /// them asks for.
+    pub presentation_cache: ahash::HashMap<(char, Presentation), (FontFaceKey, GlyphInfo)>,
+
+    /// md-viewer patch: the glyph each emoji sequence met so far is drawn
+    /// with, or `None` where no face joins it.
+    pub sequence_cache: ahash::HashMap<Box<str>, Option<(FontFaceKey, GlyphInfo)>>,
 }
 
 impl CachedFamily {
@@ -455,6 +468,8 @@ impl CachedFamily {
                 characters: None,
                 replacement_glyph: (FontFaceKey::INVALID, GlyphInfo::INVISIBLE),
                 glyph_info_cache: Default::default(),
+                presentation_cache: Default::default(),
+                sequence_cache: Default::default(),
             };
         }
 
@@ -463,6 +478,8 @@ impl CachedFamily {
             characters: None,
             replacement_glyph: (FontFaceKey::INVALID, GlyphInfo::INVISIBLE),
             glyph_info_cache: Default::default(),
+            presentation_cache: Default::default(),
+            sequence_cache: Default::default(),
         };
 
         const PRIMARY_REPLACEMENT_CHAR: char = '◻'; // white medium square

@@ -4,6 +4,7 @@
 
 #[doc(hidden)]
 pub mod alerts;
+pub mod animation;
 #[doc(hidden)]
 pub mod elements;
 #[doc(hidden)]

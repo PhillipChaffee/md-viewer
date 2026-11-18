@@ -1,15 +1,12 @@
-//! Local link classification, resolution, and fragment navigation.
+//! Local link classification and resolution, and which heading a fragment
+//! names.
 
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use egui_commonmark_extended::header_position_key;
-
 use crate::headers::Header;
-use crate::layout::line_fraction;
-use crate::tab::Tab;
 
 #[cfg(test)]
 mod tests;
@@ -47,22 +44,22 @@ fn slugify_heading(title: &str) -> String {
 }
 
 /// Where a `#fragment` landed inside a document.
-enum FragmentTarget<'a> {
-    /// The document title (the first `h1`, which the outline excludes) — the
-    /// very top of the document.
+pub(crate) enum FragmentTarget {
+    /// The document title (the first `h1`) — the very top of the document.
     DocumentTop,
-    Header(&'a Header),
+    /// The outline header at this index.
+    Header(usize),
     Missing,
 }
 
 /// Resolve a `#fragment` against a document's headings using slug semantics:
 /// exact slug match, first heading wins. The document title is matched before
 /// the outline headers because it is the page's primary anchor.
-fn find_fragment_target<'a>(
+pub(crate) fn find_fragment_target(
     document_title: Option<&str>,
-    headers: &'a [Header],
+    headers: &[Header],
     fragment: &str,
-) -> FragmentTarget<'a> {
+) -> FragmentTarget {
     let wanted = slugify_heading(fragment);
     if wanted.is_empty() {
         return FragmentTarget::Missing;
@@ -74,71 +71,8 @@ fn find_fragment_target<'a>(
     }
     headers
         .iter()
-        .find(|header| slugify_heading(&header.title) == wanted)
+        .position(|header| slugify_heading(&header.title) == wanted)
         .map_or(FragmentTarget::Missing, FragmentTarget::Header)
-}
-
-/// Point a tab at the heading a `#fragment` names, mirroring the outline-click
-/// flow: a cached heading position scrolls immediately, and a fresh document
-/// (no measured height, nothing cached) starts at the top and lets the
-/// post-render corrective pass snap to the recorded position once the
-/// bootstrap has painted. Returns whether the fragment named a heading.
-pub(crate) fn apply_fragment_navigation(tab: &mut Tab, fragment: &str) -> bool {
-    match find_fragment_target(
-        tab.document_title.as_deref(),
-        &tab.outline_headers,
-        fragment,
-    ) {
-        FragmentTarget::DocumentTop => {
-            tab.pending_scroll_offset = Some(0.0);
-            true
-        }
-        FragmentTarget::Header(header) => {
-            let key = header_position_key(header.source_start);
-            if let Some(y_pos) = tab.cache.get_header_position(&key) {
-                tab.pending_scroll_offset = Some((y_pos - 50.0).max(0.0));
-            } else if tab.last_content_height > 0.0 && tab.content_lines > 0 {
-                let estimated_y =
-                    line_fraction(header.line_number, tab.content_lines) * tab.last_content_height;
-                tab.pending_scroll_offset = Some((estimated_y - 50.0).max(0.0));
-                // The estimate only gets us near the target; one full paint
-                // records the exact position for the corrective pass.
-                tab.pending_header_click_key = Some(key);
-            } else {
-                tab.pending_header_click_key = Some(key);
-            }
-            true
-        }
-        FragmentTarget::Missing => false,
-    }
-}
-
-/// Handle a renderer link hook without coupling path resolution to the UI.
-///
-/// Plain click navigates the current tab, while Ctrl/Cmd+click returns a path
-/// and `#fragment` for the caller to open in a new tab. Both modes surface
-/// path-resolution errors consistently.
-pub(crate) fn handle_local_link_click(
-    tab: &mut Tab,
-    clicked_link: &str,
-    open_in_new_tab: bool,
-) -> (Option<(PathBuf, Option<String>)>, Option<String>) {
-    let result = if open_in_new_tab {
-        let (destination, fragment) = split_link_fragment(clicked_link);
-        tab.resolve_link(destination)
-            .map(|path| path.map(|p| (p, fragment.map(str::to_owned))))
-    } else {
-        tab.navigate_to_link(clicked_link)
-            .map(|_| None::<(PathBuf, Option<String>)>)
-    };
-
-    match result {
-        Ok(target) => (target, None),
-        Err(error) => (
-            None,
-            Some(format!("Unable to open {clicked_link}: {error}")),
-        ),
-    }
 }
 
 /// Parse explicit links plus bare local Markdown file references, skipping code blocks.
@@ -357,9 +291,9 @@ fn explicit_uri_scheme(destination: &str) -> Option<&str> {
     Some(scheme)
 }
 
-/// Resolve a relative/absolute filesystem path or a `file:` URI against the
-/// directory containing the Markdown document.
-/// Turn a destination into a path to try.
+/// Turn a destination into a path to try: a relative or absolute filesystem
+/// path, or a `file:` URI, resolved against the directory containing the
+/// Markdown document.
 ///
 /// `Ok(None)` means there is nothing to open — a fragment, or a destination
 /// this viewer treats as external. `Err` means the destination names a local

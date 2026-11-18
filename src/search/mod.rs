@@ -18,27 +18,40 @@ pub(crate) struct SearchMatch {
     pub(crate) line_number: usize,
 }
 
-/// Per-frame return from `render_search_bar`.
-#[derive(Default)]
-pub(crate) struct SearchBarOutcome {
-    pub(crate) close_requested: bool,
-    pub(crate) prev_clicked: bool,
-    pub(crate) next_clicked: bool,
-}
-
 /// App-level search state — only one find bar is visible at a time.
 #[derive(Default)]
 pub(crate) struct SearchState {
     pub(crate) is_open: bool,
     pub(crate) query: String,
-    /// Shadow copy of `query` used to detect changes across frames.
-    pub(crate) last_query: String,
-    /// Tab index the cached matches were built for; `None` forces rebuild.
-    pub(crate) last_tab: Option<usize>,
+    /// The tab index and the query the tabs' matches were found for.
+    /// `None` when they have to be found again whatever the two are.
+    built_for: Option<(usize, String)>,
     /// Set after Ctrl+F so the text input is focused next frame.
     pub(crate) focus_requested: bool,
     /// Index into the active tab's `search_matches`.
     pub(crate) active_match_index: usize,
+}
+
+impl SearchState {
+    /// Forget what the matches were found for, so that the next look finds
+    /// them again. For when the tab in a place holds other text than it
+    /// did: another document, a reload, an edit.
+    pub(crate) fn invalidate(&mut self) {
+        self.built_for = None;
+    }
+
+    /// Whether the matches are those of the tab at `tab` for the query as
+    /// it stands.
+    pub(crate) fn is_built_for(&self, tab: usize) -> bool {
+        let built_for = self.built_for.as_ref();
+        built_for.is_some_and(|(built_tab, query)| *built_tab == tab && *query == self.query)
+    }
+
+    /// Record that the matches are now those of the tab at `tab` for the
+    /// query as it stands.
+    pub(crate) fn mark_built_for(&mut self, tab: usize) {
+        self.built_for = Some((tab, self.query.clone()));
+    }
 }
 
 /// Find all occurrences of `query` in `content`, case-insensitive (ASCII only).
@@ -144,8 +157,4 @@ pub(crate) const fn stepped_match_index(current: usize, count: usize, direction:
     } else {
         current - 1
     }
-}
-
-pub(crate) fn take_search_correction_request(pending: &mut bool) -> bool {
-    std::mem::take(pending)
 }

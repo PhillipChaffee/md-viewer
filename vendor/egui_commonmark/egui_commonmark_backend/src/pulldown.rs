@@ -112,6 +112,33 @@ pub fn delayed_events_list_item<'e>(
     total_events
 }
 
+/// Collect the events of a blockquote whose start tag the caller has just
+/// consumed, up to and including the end tag that closes it.
+///
+/// A quote may hold quotes. Stopping at the first `TagEnd::BlockQuote`
+/// would close the outer quote where the inner one ends and hand the rest
+/// of it, with the outer end tag, back to the caller as if it stood outside
+/// any quote.
+pub fn delayed_events_blockquote<'e>(
+    events: &mut impl Iterator<Item = EventIteratorItem<'e>>,
+) -> Vec<(pulldown_cmark::Event<'e>, Range<usize>)> {
+    use pulldown_cmark::{Event, Tag, TagEnd};
+    let mut depth = 1_usize;
+    let mut total_events = Vec::new();
+    for (_, (event, range)) in events {
+        match &event {
+            Event::Start(Tag::BlockQuote(_)) => depth += 1,
+            Event::End(TagEnd::BlockQuote(_)) => depth -= 1,
+            _ => {}
+        }
+        total_events.push((event, range));
+        if depth == 0 {
+            break;
+        }
+    }
+    total_events
+}
+
 type Column<'e> = Vec<(pulldown_cmark::Event<'e>, Range<usize>)>;
 type Row<'e> = Vec<Column<'e>>;
 
@@ -358,6 +385,56 @@ mod tests {
         let mut iter = events.into_iter().enumerate();
         let collected = delayed_events_list_item(&mut iter);
         assert_eq!(collected.len(), 2);
+    }
+
+    /// The events after the first blockquote start tag of `md`.
+    fn after_first_quote_start(md: &str) -> impl Iterator<Item = EventIteratorItem<'static>> {
+        let events: Vec<_> = Parser::new_ext(md, parser_options())
+            .into_offset_iter()
+            .map(|(e, r)| (e.into_static(), r))
+            .collect();
+        let start = events
+            .iter()
+            .position(|(e, _)| matches!(e, Event::Start(Tag::BlockQuote(_))))
+            .expect("test markdown must contain a quote");
+        events.into_iter().enumerate().skip(start + 1)
+    }
+
+    #[test]
+    fn a_quote_is_collected_to_its_own_end_past_a_quote_inside_it() {
+        let mut iter = after_first_quote_start("> Outer\n>\n> > Inner\n>\n> Tail\n\nafter\n");
+
+        let collected = delayed_events_blockquote(&mut iter);
+
+        let ends = collected
+            .iter()
+            .filter(|(e, _)| matches!(e, Event::End(TagEnd::BlockQuote(_))))
+            .count();
+        assert_eq!(ends, 2, "the inner end and the outer end: {collected:?}");
+        assert!(
+            collected
+                .iter()
+                .any(|(e, _)| matches!(e, Event::Text(text) if text.as_ref() == "Tail")),
+            "what follows the inner quote is still the outer quote's: {collected:?}"
+        );
+        assert!(matches!(
+            collected.last(),
+            Some((Event::End(TagEnd::BlockQuote(_)), _))
+        ));
+        assert!(
+            matches!(iter.next(), Some((_, (Event::Start(Tag::Paragraph), _)))),
+            "the caller continues with the block after the quote"
+        );
+    }
+
+    #[test]
+    fn a_quote_cut_short_is_collected_as_far_as_it_goes() {
+        let events: Vec<(Event<'static>, Range<usize>)> =
+            vec![(Event::Text("orphaned".into()), 0..8)];
+
+        let collected = delayed_events_blockquote(&mut events.into_iter().enumerate());
+
+        assert_eq!(collected.len(), 1);
     }
 
     #[test]

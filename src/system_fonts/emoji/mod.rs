@@ -1,14 +1,13 @@
 //! Color and monochrome emoji fallback faces.
 
-use egui::{FontData, FontDefinitions, FontFamily};
-use fontique::{Collection, SourceCache};
+use egui::{FontData, FontDefinitions};
 
-use crate::system_fonts::install::select_family_font;
+use crate::system_fonts::install::SystemFonts;
 
 #[cfg(test)]
 mod tests;
 
-/// Bundled monochrome emoji face, appended last to both family chains.
+/// Bundled monochrome emoji face, appended last to every family chain.
 ///
 /// Color-emoji coverage comes first via the system color face (see
 /// `install_emoji_fonts`); this monochrome face fills any emoji codepoints
@@ -39,26 +38,19 @@ const MONOCHROME_EMOJI_KEY: &str = "NotoEmoji";
 /// of them in a chain, or they claim the glyph first.
 const BUILTIN_EMOJI_KEYS: [&str; 2] = ["NotoEmoji-Regular", "emoji-icon-font"];
 
-/// Install emoji faces into the fallback chains.
+/// Install emoji faces into every chain registered so far: regular,
+/// monospace and strong text, so each weight draws an emoji from the same
+/// face.
 ///
 /// The color face is only useful with the vendored epaint patch that
 /// rasterizes color-bitmap glyphs via swash (`ab_glyph` alone renders them
 /// blank). With the patch, emoji render in full color; without it, the
 /// monochrome face still provides visible glyphs.
 ///
-/// The color face is the one `collection` lists under `COLOR_EMOJI_FAMILY`;
+/// The color face is the one `fonts` lists under `COLOR_EMOJI_FAMILY`;
 /// where none is installed the chains get the monochrome face only.
-pub(crate) fn install_emoji_fonts(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-    definitions: &mut FontDefinitions,
-) {
-    let color_face = select_family_font(
-        collection,
-        source_cache,
-        COLOR_EMOJI_FAMILY,
-        COLOR_EMOJI_SAMPLE,
-    );
+pub(crate) fn install_emoji_fonts(fonts: &mut SystemFonts<'_>, definitions: &mut FontDefinitions) {
+    let color_face = fonts.named(COLOR_EMOJI_FAMILY, COLOR_EMOJI_SAMPLE);
     if let Some(face) = color_face {
         log::info!("Loaded system color emoji font from {}", face.source);
         install_color_emoji_face(definitions, face.data());
@@ -67,34 +59,32 @@ pub(crate) fn install_emoji_fonts(
 }
 
 /// Register `data` as the color emoji face, ahead of epaint's built-in
-/// monochrome emoji faces in both chains.
+/// monochrome emoji faces in every chain.
 fn install_color_emoji_face(definitions: &mut FontDefinitions, mut data: FontData) {
     // Restrict to default-emoji characters so the color face
-    // never claims general symbols (▶ ⚠ ✔ …) used by the UI.
+    // never claims general symbols (▶ ⚠ ✔ …) used by the UI. The vendored
+    // epaint still takes such a symbol from this face where U+FE0F follows
+    // it in the text, and takes no character from it where U+FE0E does.
     data.emoji_only = true;
     definitions
         .font_data
         .insert(COLOR_EMOJI_KEY.to_owned(), data.into());
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        if let Some(chain) = definitions.families.get_mut(&family) {
-            let position = chain
-                .iter()
-                .position(|name| BUILTIN_EMOJI_KEYS.contains(&name.as_str()))
-                .unwrap_or(chain.len());
-            chain.insert(position, COLOR_EMOJI_KEY.to_owned());
-        }
+    for chain in definitions.families.values_mut() {
+        let position = chain
+            .iter()
+            .position(|name| BUILTIN_EMOJI_KEYS.contains(&name.as_str()))
+            .unwrap_or(chain.len());
+        chain.insert(position, COLOR_EMOJI_KEY.to_owned());
     }
 }
 
-/// Register the bundled monochrome emoji face, last in both chains.
+/// Register the bundled monochrome emoji face, last in every chain.
 fn install_monochrome_emoji_face(definitions: &mut FontDefinitions) {
     definitions.font_data.insert(
         MONOCHROME_EMOJI_KEY.to_owned(),
         FontData::from_static(MONOCHROME_EMOJI_FONT).into(),
     );
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        if let Some(chain) = definitions.families.get_mut(&family) {
-            chain.push(MONOCHROME_EMOJI_KEY.to_owned());
-        }
+    for chain in definitions.families.values_mut() {
+        chain.push(MONOCHROME_EMOJI_KEY.to_owned());
     }
 }

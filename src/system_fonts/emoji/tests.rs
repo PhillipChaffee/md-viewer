@@ -2,14 +2,20 @@ use super::*;
 
 use std::borrow::Cow;
 
-use egui::Color32;
+use egui::{Color32, FontFamily};
+use egui_commonmark_extended::STRONG_FONT_FAMILY;
 use fontique::FontWeight;
 
+use crate::system_fonts::bundled::{
+    DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY, DOCUMENT_HEADING_FAMILY,
+};
 use crate::system_fonts::tests::{bundled_face, Fonts, LATIN_FACE};
+use crate::system_fonts::{font_definitions, FontConfig, FontPreset};
 
 /// Subset of Noto Color Emoji holding only the glyphs these tests name, so
 /// they run the same on a machine with no color emoji font installed. See
-/// `fixtures/README.txt` for how it was produced.
+/// `fixtures/README.txt` for how it was produced. The layout tests of the
+/// vendored epaint read the same file.
 const COLOR_EMOJI_FIXTURE: &[u8] = include_bytes!("fixtures/color-emoji-subset.ttf");
 
 /// 🟢 🔴 🔵 ⚪ ✅, the emoji the project's own documents use.
@@ -31,11 +37,7 @@ const UI_SYMBOLS_IN_COLOR_FONT: [char; 3] = ['\u{25B6}', '\u{26A0}', '\u{2714}']
 /// The emoji faces `setup_fonts` adds on a machine with `fonts` installed.
 fn emoji_definitions(mut fonts: Fonts) -> FontDefinitions {
     let mut definitions = FontDefinitions::default();
-    install_emoji_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-    );
+    install_emoji_fonts(&mut fonts.system(), &mut definitions);
     definitions
 }
 
@@ -105,8 +107,18 @@ impl RasterizedGlyph {
 }
 
 fn rasterize(ctx: &egui::Context, ch: char) -> RasterizedGlyph {
-    let job =
-        egui::text::LayoutJob::simple(ch.to_string(), font_id(), Color32::WHITE, f32::INFINITY);
+    rasterize_in(ctx, font_id(), ch)
+}
+
+/// `ch` as text set in `font` draws it.
+fn rasterize_in(ctx: &egui::Context, font: egui::FontId, ch: char) -> RasterizedGlyph {
+    rasterize_first(ctx, font, &ch.to_string())
+}
+
+/// The first character of `text` as text set in `font` draws it, which
+/// depends on the characters after it.
+fn rasterize_first(ctx: &egui::Context, font: egui::FontId, text: &str) -> RasterizedGlyph {
+    let job = egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
     ctx.fonts_mut(|fonts| {
         let galley = fonts.layout_job(job);
         let uv = galley.rows[0].glyphs[0].uv_rect;
@@ -312,14 +324,292 @@ fn definitions_without_family_chains_only_gain_the_font_data() {
     let mut definitions = FontDefinitions::empty();
     definitions.families.clear();
 
-    install_emoji_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        &mut definitions,
-    );
+    install_emoji_fonts(&mut fonts.system(), &mut definitions);
 
     let mut faces: Vec<&str> = definitions.font_data.keys().map(String::as_str).collect();
     faces.sort_unstable();
     assert_eq!(faces, [COLOR_EMOJI_KEY, MONOCHROME_EMOJI_KEY]);
     assert!(definitions.families.is_empty());
+}
+
+/// Every family the app sets text in, on a desktop with a sans (regular and
+/// bold), script fallbacks and the color emoji font.
+fn text_families() -> [FontFamily; 6] {
+    let named = |family: &str| FontFamily::Name(family.into());
+    [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        named(STRONG_FONT_FAMILY),
+        named(DOCUMENT_BODY_FAMILY),
+        named(DOCUMENT_HEADING_FAMILY),
+        named(DOCUMENT_EMPHASIS_FAMILY),
+    ]
+}
+
+/// The chains `preset` installs where the color emoji font is the fixture.
+fn preset_definitions(preset: FontPreset) -> FontDefinitions {
+    let mut fonts = Fonts::multilingual();
+    fonts.register_as_is(COLOR_EMOJI_FIXTURE);
+    let config = FontConfig {
+        preset,
+        ..FontConfig::default()
+    };
+    font_definitions(&mut fonts.system(), Some("en-US"), &config)
+}
+
+/// Bold text, headings and emphasis draw an emoji from the same face as the
+/// text around them: in color where the machine has a color emoji font.
+#[test]
+fn emoji_are_in_color_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            let glyph = rasterize_in(&ctx, egui::FontId::new(16.0, family.clone()), '\u{1F534}');
+            assert!(
+                glyph.colored && glyph.peak(Color32::r, Color32::g) > 128,
+                "{preset:?} draws 🔴 in {family:?} without color"
+            );
+        }
+    }
+}
+
+/// Every chain holds the same emoji faces in the same order, so no weight
+/// resolves an emoji differently from another.
+#[test]
+fn every_chain_ends_in_the_same_emoji_faces() {
+    let emoji_faces = [
+        COLOR_EMOJI_KEY,
+        BUILTIN_EMOJI_KEYS[0],
+        BUILTIN_EMOJI_KEYS[1],
+        MONOCHROME_EMOJI_KEY,
+    ];
+    for preset in FontPreset::ALL {
+        let definitions = preset_definitions(preset);
+        for family in text_families() {
+            let chain = &definitions.families[&family];
+            let emoji: Vec<&str> = chain
+                .iter()
+                .map(String::as_str)
+                .filter(|name| emoji_faces.contains(name))
+                .collect();
+            assert_eq!(emoji, emoji_faces, "{preset:?} {family:?}");
+            assert_eq!(chain.last().map(String::as_str), Some(MONOCHROME_EMOJI_KEY));
+        }
+    }
+}
+
+/// A variation selector picks the look of the character before it and is
+/// never drawn itself: it takes no room, in every family. The sign before it
+/// may change its width with its look, so the room is read off the selector.
+#[test]
+fn a_variation_selector_takes_no_room() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    for family in text_families() {
+        for selector in ['\u{FE0E}', '\u{FE0F}'] {
+            let text = format!("a\u{2764}{selector}b");
+            let galley = lay_out(&ctx, &family, &text);
+            let selector_glyph = &galley.rows[0].glyphs[2];
+            assert_eq!(selector_glyph.chr, selector);
+            assert!(
+                selector_glyph.uv_rect.is_nothing(),
+                "{selector:?} in {family:?}"
+            );
+            assert!(
+                selector_glyph.advance_width.abs() < f32::EPSILON,
+                "{selector:?} is {} wide in {family:?}",
+                selector_glyph.advance_width
+            );
+        }
+    }
+}
+
+/// ❤, a sign that is an emoji only with U+FE0F after it.
+const HEART: char = '\u{2764}';
+
+/// 👨‍👩‍👧 🇯🇵 👍🏽 1️⃣: a family held by joiners, a flag, a skin tone and a
+/// keycap. The fixture has one glyph for each, as Noto Color Emoji does.
+const JOINED_EMOJI: [&str; 4] = [
+    "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+    "\u{1F1EF}\u{1F1F5}",
+    "\u{1F44D}\u{1F3FD}",
+    "1\u{FE0F}\u{20E3}",
+];
+
+fn lay_out(ctx: &egui::Context, family: &FontFamily, text: &str) -> std::sync::Arc<egui::Galley> {
+    let font = egui::FontId::new(16.0, family.clone());
+    let job = egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
+    ctx.fonts_mut(|fonts| fonts.layout_job(job))
+}
+
+/// The room each character of `text` takes, in order.
+fn rooms(ctx: &egui::Context, family: &FontFamily, text: &str) -> Vec<f32> {
+    let galley = lay_out(ctx, family, text);
+    let glyphs = galley.rows[0].glyphs.iter();
+    glyphs.map(|glyph| glyph.advance_width).collect()
+}
+
+/// U+FE0F after a sign asks for its emoji look: ❤️ is red where the machine
+/// has a color emoji font, in every weight, and ❤ alone stays in the ink of
+/// the text.
+#[test]
+fn a_sign_with_the_emoji_selector_is_in_color_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            let font = egui::FontId::new(16.0, family.clone());
+            let selected = rasterize_first(&ctx, font.clone(), "\u{2764}\u{FE0F}");
+            assert!(
+                selected.colored && selected.peak(Color32::r, Color32::g) > 128,
+                "{preset:?} draws ❤️ in {family:?} without color"
+            );
+            let bare = rasterize_in(&ctx, font, HEART);
+            assert!(!bare.colored, "{preset:?} draws ❤ in {family:?} in color");
+            assert!(bare.ink_pixels() > 20);
+        }
+    }
+}
+
+/// U+FE0E after an emoji asks for its text look: ✅︎ and 😀︎ are in the ink
+/// of the text, where ✅ and 😀 alone are in color.
+#[test]
+fn an_emoji_with_the_text_selector_is_in_the_ink_of_the_text() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    for family in text_families() {
+        let font = egui::FontId::new(16.0, family.clone());
+        for emoji in ['\u{2705}', '\u{1F600}'] {
+            let selected = rasterize_first(&ctx, font.clone(), &format!("{emoji}\u{FE0E}"));
+            assert!(
+                !selected.colored,
+                "{emoji}\u{FE0E} is in color in {family:?}"
+            );
+            assert!(selected.ink_pixels() > 20, "{emoji}\u{FE0E} in {family:?}");
+            assert!(rasterize_in(&ctx, font.clone(), emoji).colored);
+        }
+    }
+}
+
+/// Without a color emoji font there is no emoji look to switch to: ❤️ is
+/// drawn as ❤ is.
+#[test]
+fn a_selector_changes_nothing_without_a_color_font() {
+    let ctx = context_with_fonts(definitions_without_color_font());
+    let bare = lay_out(&ctx, &FontFamily::Proportional, "\u{2764}");
+    for selector in ['\u{FE0E}', '\u{FE0F}'] {
+        let selected = lay_out(
+            &ctx,
+            &FontFamily::Proportional,
+            &format!("{HEART}{selector}"),
+        );
+        assert_eq!(
+            selected.rows[0].glyphs[0].uv_rect,
+            bare.rows[0].glyphs[0].uv_rect
+        );
+    }
+}
+
+/// A digit has no emoji look of its own, though the color face maps it as
+/// the base of a keycap: 1 with U+FE0F after it is still the digit.
+#[test]
+fn a_digit_with_the_emoji_selector_stays_a_digit() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    let selected = lay_out(&ctx, &FontFamily::Proportional, "1\u{FE0F}");
+    let bare = lay_out(&ctx, &FontFamily::Proportional, "1");
+
+    let digit = &selected.rows[0].glyphs[0];
+    assert_eq!(digit.uv_rect, bare.rows[0].glyphs[0].uv_rect);
+    assert!(!digit.uv_rect.is_nothing());
+}
+
+/// An emoji written as several characters is one color picture, in every
+/// weight: the first character carries it and the others take no room. The
+/// text keeps every character, so copying and finding work as before.
+#[test]
+fn a_joined_emoji_is_one_color_picture_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            for emoji in JOINED_EMOJI {
+                let galley = lay_out(&ctx, &family, emoji);
+                assert_eq!(galley.text(), emoji);
+
+                let glyphs = &galley.rows[0].glyphs;
+                assert_eq!(glyphs.len(), emoji.chars().count());
+                let (picture, rest) = glyphs.split_first().expect("a first character");
+                let place = format!("{emoji} in {family:?} of {preset:?}");
+                assert!(picture.uv_rect.colored, "{place}");
+                assert!(picture.advance_width > 0.0, "{place}");
+                for hidden in rest {
+                    assert!(hidden.uv_rect.is_nothing(), "{place}");
+                    assert!(hidden.advance_width.abs() < f32::EPSILON, "{place}");
+                }
+
+                let first = emoji.chars().next().expect("a first character");
+                let alone = lay_out(&ctx, &family, &first.to_string());
+                assert_ne!(picture.uv_rect, alone.rows[0].glyphs[0].uv_rect, "{place}");
+            }
+        }
+    }
+}
+
+/// The bundled monochrome face joins the same sequences, so a machine with
+/// no color emoji font draws each as one picture too, in the ink of the text.
+#[test]
+fn a_joined_emoji_is_one_picture_without_a_color_font() {
+    let ctx = context_with_fonts(definitions_without_color_font());
+    for emoji in JOINED_EMOJI {
+        let galley = lay_out(&ctx, &FontFamily::Proportional, emoji);
+        let (picture, rest) = galley.rows[0].glyphs.split_first().expect("a character");
+
+        assert!(!picture.uv_rect.colored, "{emoji}");
+        assert!(!picture.uv_rect.is_nothing(), "{emoji}");
+        assert!(
+            rest.iter().all(|hidden| hidden.uv_rect.is_nothing()),
+            "{emoji}"
+        );
+        let room: f32 = rooms(&ctx, &FontFamily::Proportional, emoji).iter().sum();
+        assert!(
+            (room - picture.advance_width).abs() < f32::EPSILON,
+            "{emoji}"
+        );
+    }
+}
+
+/// 👨‍😀 is no emoji: no face has a glyph for the pair, so each is drawn as
+/// it is alone, with the joiner between them taking no room.
+#[test]
+fn a_sequence_no_face_joins_is_drawn_as_its_parts() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    let family = FontFamily::Proportional;
+    let apart = lay_out(&ctx, &family, "\u{1F468}\u{1F600}");
+    let galley = lay_out(&ctx, &family, "\u{1F468}\u{200D}\u{1F600}");
+
+    let glyphs = &galley.rows[0].glyphs;
+    assert_eq!(glyphs[0].uv_rect, apart.rows[0].glyphs[0].uv_rect);
+    assert!(glyphs[1].advance_width.abs() < f32::EPSILON);
+    assert_eq!(glyphs[2].uv_rect, apart.rows[0].glyphs[1].uv_rect);
+}
+
+/// A click on either half of a joined emoji puts the cursor beside it and
+/// never between its characters, where typing would break it apart.
+#[test]
+fn a_click_on_a_joined_emoji_lands_before_or_after_all_of_it() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    for emoji in JOINED_EMOJI {
+        let text = format!("a{emoji}b");
+        let galley = lay_out(&ctx, &FontFamily::Proportional, &text);
+        let picture = galley.rows[0].glyphs[1].logical_rect();
+        // A click a little inside the left or the right edge of the picture.
+        let click = |edge: f32, inward: f32| {
+            let at = egui::vec2(edge + inward, picture.center().y);
+            galley.cursor_from_pos(at).index
+        };
+        let quarter = picture.width() / 4.0;
+
+        assert_eq!(click(picture.left(), quarter), 1, "{emoji}");
+        assert_eq!(
+            click(picture.right(), -quarter),
+            1 + emoji.chars().count(),
+            "{emoji}"
+        );
+    }
 }

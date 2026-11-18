@@ -2,7 +2,6 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use eframe::egui::{self, Key, Modifiers};
 use eframe::App as _;
@@ -11,10 +10,9 @@ use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
-use crate::test_support::assert_close;
+use crate::tab::SaveOutcome;
+use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
-
-static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
 
 const CTRL_SHIFT: Modifiers = Modifiers {
     alt: false,
@@ -31,21 +29,18 @@ pub(crate) struct Harness {
     pub(crate) ctx: egui::Context,
     pub(crate) frame: eframe::Frame,
     pub(crate) dir: PathBuf,
+    /// Removes `dir` when the harness is dropped.
+    _scratch: ScratchDir,
 }
 
 impl Harness {
     /// Write each `(name, content)` document and start the app on the first
     /// one, the way `md-viewer <file>` does. File watching starts off.
     pub(crate) fn with_docs(docs: &[(&str, &str)]) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "md-viewer-app-test-{}-{}",
-            std::process::id(),
-            NEXT_SCRATCH_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        let dir = dir.canonicalize().unwrap();
+        let scratch = ScratchDir::new();
+        let dir = scratch.path().to_path_buf();
         for (name, content) in docs {
-            fs::write(dir.join(name), content).unwrap();
+            scratch.file(name, content);
         }
         let first = docs.first().map(|(name, _)| dir.join(name));
 
@@ -56,6 +51,7 @@ impl Harness {
             ctx,
             frame: eframe::Frame::_new_kittest(),
             dir,
+            _scratch: scratch,
         }
     }
 
@@ -109,12 +105,6 @@ impl Harness {
         self.app.raw_input_hook(&self.ctx, &mut raw_input);
         let (app, frame) = (&mut self.app, &mut self.frame);
         self.ctx.run(raw_input, |ctx| app.update(ctx, frame))
-    }
-}
-
-impl Drop for Harness {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.dir);
     }
 }
 
@@ -297,14 +287,14 @@ fn scroll_keys_move_the_document_until_the_find_bar_takes_the_arrows() {
 fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     let mut harness = Harness::with_three_docs();
     let theme = harness.app.theme;
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,
         open_id: 1,
         scroll_offset: egui::Vec2::ZERO,
     });
-    let lightbox_zoom = |harness: &Harness| harness.app.lightbox.as_ref().unwrap().zoom;
+    let lightbox_zoom = |harness: &Harness| harness.app.lightbox.open.as_ref().unwrap().zoom;
 
     harness.press(Modifiers::CTRL, Key::Plus);
     assert!((lightbox_zoom(&harness) - 1.25).abs() < 1e-6);
@@ -321,7 +311,7 @@ fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     assert_eq!(harness.app.tabs.len(), 1);
 
     harness.press(Modifiers::NONE, Key::Escape);
-    assert!(harness.app.lightbox.is_none());
+    assert!(harness.app.lightbox.open.is_none());
 }
 
 #[test]
@@ -329,16 +319,26 @@ fn ctrl_s_writes_unsaved_edits_and_nothing_else() {
     let mut harness = Harness::with_docs(&[("a.md", "original")]);
     let path = harness.path("a.md");
 
-    harness.app.tabs[0].content = "changed outside edit mode".to_owned();
     harness.press(Modifiers::CTRL, Key::S);
-    assert_eq!(fs::read_to_string(&path).unwrap(), "original");
+    assert!(
+        harness.app.tabs[0].save_flash.is_none(),
+        "nothing was unsaved"
+    );
 
-    harness.app.tabs[0].content = "original".to_owned();
     harness.app.tabs[0].set_edit_mode(true);
     harness.app.tabs[0].content = "edited".to_owned();
     harness.press(Modifiers::CTRL, Key::S);
     assert_eq!(fs::read_to_string(&path).unwrap(), "edited");
-    assert!(matches!(harness.app.tabs[0].save_flash, Some((true, _))));
+    assert!(matches!(
+        harness.app.tabs[0].save_flash,
+        Some((SaveOutcome::Saved, _))
+    ));
+
+    // Edits left unsaved are saved from the preview of them too.
+    harness.app.tabs[0].content = "edited again".to_owned();
+    harness.app.tabs[0].set_edit_mode(false);
+    harness.press(Modifiers::CTRL, Key::S);
+    assert_eq!(fs::read_to_string(&path).unwrap(), "edited again");
 }
 
 #[test]
@@ -360,14 +360,14 @@ fn ctrl_q_asks_the_window_to_close() {
 #[test]
 fn f5_toggles_file_watching() {
     let mut harness = Harness::with_three_docs();
-    assert!(harness.app.watcher.is_none());
+    assert!(!harness.app.live_reload.is_live());
 
     harness.press(Modifiers::NONE, Key::F5);
-    assert!(harness.app.watcher.is_some());
-    assert!(harness.app.watch_enabled);
+    assert!(harness.app.live_reload.is_live());
+    assert!(harness.app.live_reload.is_enabled());
     harness.press(Modifiers::NONE, Key::F5);
-    assert!(harness.app.watcher.is_none());
-    assert!(!harness.app.watch_enabled);
+    assert!(!harness.app.live_reload.is_live());
+    assert!(!harness.app.live_reload.is_enabled());
 }
 
 #[test]
@@ -403,7 +403,7 @@ fn ctrl_alt_arrows_widen_and_narrow_the_text_column_one_step_a_press() {
     assert_close(harness.app.reading_width.get(), 640.0);
 
     // From a column that fills the window, a step starts at what is shown.
-    harness.apply(AppAction::SetReadingWidth(ReadingWidth::MAX));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
     harness.idle();
     let shown = ReadingWidth::FIT_WINDOW.resolve(harness.app.document_pane_width);
     harness.press(ctrl_alt, Key::ArrowLeft);

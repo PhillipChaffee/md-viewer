@@ -33,8 +33,7 @@ pub(crate) const CONTENT_RIGHT_RESIZE_GUTTER: i8 = 10;
 const KEYBOARD_LINE_SCROLL_STEP: f32 = 48.0;
 const KEYBOARD_PAGE_SCROLL_RATIO: f32 = 0.9;
 
-// App-level keyboard scroll actions; kept private until shortcut wiring needs
-// to pass them through `MarkdownApp::update`.
+/// A step the keyboard scrolls the document by, which a shortcut names.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum KeyboardScrollAction {
     LineUp,
@@ -203,8 +202,8 @@ impl LineSpacing {
 /// Display-zoom bounds and step, shared by keyboard, menu, and Ctrl+wheel
 /// zooming. Steps are multiplicative so the perceived change stays uniform
 /// across the whole range (like browsers and the lightbox already do).
-const ZOOM_MIN: f32 = 0.5;
-const ZOOM_MAX: f32 = 3.0;
+pub(crate) const ZOOM_MIN: f32 = 0.5;
+pub(crate) const ZOOM_MAX: f32 = 3.0;
 pub(crate) const ZOOM_STEP: f32 = 1.25;
 
 /// One multiplicative zoom step applied to `current`, clamped to the app's

@@ -40,6 +40,7 @@ fn each_kind_of_picture_is_shown_at_its_own_size_in_its_own_colors() {
         ("blue.png", (120.0, 80.0), "#3366CC"),
         ("red.jpg", (90.0, 60.0), "#CC3333"),
         ("shape.svg", (200.0, 100.0), "#22AA44"),
+        ("green.webp", (60.0, 40.0), "#33AA55"),
     ];
 
     for (file, (width, height), color) in kinds {
@@ -61,11 +62,7 @@ fn each_kind_of_picture_is_shown_at_its_own_size_in_its_own_colors() {
     }
 }
 
-/// Known bug, listed in `tests/README.md`: a GIF is looked for under its
-/// name with a frame number on the end, is not found, and a warning sign
-/// is shown in its place.
 #[test]
-#[should_panic(expected = "the GIF is not shown")]
 fn a_gif_is_shown() {
     let mut reader = framed("![a picture](green.gif)");
     reader.idle_for(std::time::Duration::from_millis(500));
@@ -74,6 +71,160 @@ fn a_gif_is_shown() {
 
     assert!(!pictures.is_empty(), "the GIF is not shown");
     assert_color(reader.picture_ink(pictures[0]), "#33AA55");
+}
+
+/// The three colors of the moving picture, in the order it shows them.
+const PULSE: [&str; 3] = ["#CC3333", "#33AA55", "#3366CC"];
+
+/// Which of the colors of [`PULSE`] `picture` shows now.
+#[track_caller]
+pub(crate) fn pulse_color(reader: &Reader, picture: Area) -> usize {
+    let ink = reader.picture_ink(picture);
+    let shown = PULSE.iter().position(|color| {
+        let Rgb(red, green, blue) = Rgb::hex(color);
+        ink.0.abs_diff(red) <= LOSSY
+            && ink.1.abs_diff(green) <= LOSSY
+            && ink.2.abs_diff(blue) <= LOSSY
+    });
+    shown.unwrap_or_else(|| panic!("{ink:?} is none of the picture's colors"))
+}
+
+/// Long enough for the app to draw once more, and so to move on by one
+/// step of its clock: half a frame of the moving picture.
+pub(crate) const ONE_STEP: std::time::Duration = std::time::Duration::from_millis(10);
+
+#[test]
+fn a_gif_or_webp_of_several_frames_plays_them_in_turn_at_one_size() {
+    for file in ["pulse.gif", "pulse.webp"] {
+        let mut reader = framed(&format!("![a picture]({file})"));
+        let picture = shown(&mut reader);
+        let mut seen = vec![pulse_color(&reader, picture)];
+
+        for _ in 0..12 {
+            reader.idle_for(ONE_STEP);
+            let now = pulse_color(&reader, picture);
+            if seen.last() != Some(&now) {
+                seen.push(now);
+            }
+        }
+
+        assert!(seen.len() >= 5, "{file} moved on only to {seen:?}");
+        for pair in seen.windows(2) {
+            assert_eq!(pair[1], (pair[0] + 1) % 3, "{file}: {seen:?}");
+        }
+        assert!((picture.width - 60.0).abs() < NEAR, "{file}: {picture:?}");
+        assert!((picture.height - 40.0).abs() < NEAR, "{file}: {picture:?}");
+        assert!(!reader.is_at_rest(), "{file} keeps moving");
+    }
+}
+
+#[test]
+fn a_gif_or_webp_of_one_frame_leaves_the_window_at_rest() {
+    for file in ["green.gif", "still.gif", "green.webp"] {
+        let mut reader = framed(&format!("![a picture]({file})"));
+        let picture = shown(&mut reader);
+        reader.idle_for(std::time::Duration::from_millis(100));
+
+        assert_color(reader.picture_ink(picture), "#33AA55");
+        assert!(reader.is_at_rest(), "{file} keeps the window drawing");
+    }
+}
+
+/// The one picture in view on a page too long for [`shown`], which needs
+/// the paragraph after the picture in view as well.
+#[track_caller]
+fn in_view(reader: &mut Reader) -> Area {
+    reader.wait_for("a picture to be drawn", |reader| {
+        !reader.pictures().is_empty()
+    });
+    reader.pictures()[0]
+}
+
+/// A small turn of the wheel, to stop as soon as a picture has left the
+/// window: it is then just past the edge and no further.
+const JUST_PAST: f32 = 10.0;
+
+#[test]
+fn a_moving_gif_scrolled_out_of_view_leaves_the_window_at_rest() {
+    let rest = super::pages::each(0..80, |line| format!("line {line}\n\n"));
+    let mut reader = framed(&format!("![a picture](pulse.gif)\n\n{rest}"));
+    in_view(&mut reader);
+    assert!(
+        !reader.is_at_rest(),
+        "the picture moves while it is in view"
+    );
+
+    let mut scrolled = 0.0;
+    while !reader.pictures().is_empty() {
+        assert!(scrolled < 1000.0, "the picture never left the window");
+        reader.scroll_down(JUST_PAST);
+        scrolled += JUST_PAST;
+    }
+    reader.idle_for(std::time::Duration::from_millis(100));
+
+    assert!(reader.is_at_rest(), "a picture nobody sees keeps drawing");
+
+    reader.scroll_up(scrolled);
+    let picture = in_view(&mut reader);
+    let before = pulse_color(&reader, picture);
+    reader.wait_for("the picture to move again", |reader| {
+        pulse_color(reader, picture) != before
+    });
+}
+
+#[test]
+fn a_moving_picture_plays_again_after_its_document_was_closed_and_opened_again() {
+    let mut reader = illustrated("![a picture](pulse.gif)\n\n[the other page](other.md)")
+        .doc("other.md", "# Other\n\n[the first page](page.md)")
+        .open();
+    in_view(&mut reader);
+    reader.ctrl_click("the other page");
+    reader.click("page.md");
+
+    reader.press("Ctrl+W");
+    reader.idle_for(std::time::Duration::from_millis(100));
+    let closed = (reader.pictures().len(), reader.is_at_rest());
+    reader.click("the first page");
+
+    assert_eq!(closed, (0, true), "the picture went with its document");
+    let picture = in_view(&mut reader);
+    let mut seen = vec![pulse_color(&reader, picture)];
+    for _ in 0..8 {
+        reader.idle_for(ONE_STEP);
+        seen.push(pulse_color(&reader, picture));
+    }
+    seen.dedup();
+    assert!(seen.len() >= 3, "it moved on only to {seen:?}");
+    for pair in seen.windows(2) {
+        assert_eq!(pair[1], (pair[0] + 1) % 3, "{seen:?}");
+    }
+    assert!((picture.width - 60.0).abs() < NEAR, "{picture:?}");
+}
+
+#[test]
+fn a_still_picture_is_shown_again_after_its_document_was_closed_and_opened_again() {
+    let mut reader = illustrated("![a picture](blue.png)\n\n[the other page](other.md)")
+        .doc("other.md", "# Other\n\n[the first page](page.md)")
+        .open();
+    let before = in_view(&mut reader);
+    reader.ctrl_click("the other page");
+    reader.click("page.md");
+
+    reader.press("Ctrl+W");
+    reader.click("the first page");
+
+    let again = in_view(&mut reader);
+    assert_color(reader.picture_ink(again), "#3366CC");
+    assert_eq!((again.width, again.height), (before.width, before.height));
+}
+
+#[test]
+fn a_page_without_a_moving_picture_leaves_the_window_at_rest() {
+    let mut reader = framed("![a picture](blue.png)");
+    shown(&mut reader);
+    reader.idle_for(std::time::Duration::from_millis(100));
+
+    assert!(reader.is_at_rest());
 }
 
 #[test]
@@ -273,11 +424,7 @@ fn a_file_that_is_not_a_picture_leaves_a_warning_too() {
     assert!(reader.pictures().is_empty());
 }
 
-/// Known bug, listed in `tests/README.md`: a picture that could not be
-/// loaded once is never tried again, so the warning stays after the file
-/// has appeared and the page has been reloaded.
 #[test]
-#[should_panic(expected = "the picture is still missing")]
 fn a_picture_that_appears_later_is_shown_once_the_page_is_reloaded() {
     let mut reader = framed("![late](late.png)");
     reader.wait_for("the warning sign", |reader| reader.sees("\u{26a0}"));

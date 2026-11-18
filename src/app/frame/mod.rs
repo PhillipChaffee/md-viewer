@@ -1,49 +1,46 @@
 //! The eframe integration: input hook, persistence, and the per-frame update sequence.
 
-use std::path::PathBuf;
-use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
 use eframe::egui;
 
-use crate::app::chrome::{self, QuietButton, STRIP_HEIGHT};
 use crate::app::content::look::DocumentLook;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
+use crate::app::drop;
+use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::MarkdownApp;
-use crate::icons::Icon;
-use crate::persist::{PersistedState, APP_KEY};
+use crate::persist::APP_KEY;
 use crate::system_fonts::{document_fonts, setup_fonts};
-use crate::theme::{self, ColorOverrides};
-use crate::watcher::FLASH_DURATION_MS;
+use crate::theme;
 
 #[cfg(test)]
 mod tests;
 
-/// Side of the warning sign the error bar opens with.
-const WARNING_SIDE: f32 = 16.0;
+/// The title in the window's frame, which names the document in front.
+pub(crate) struct WindowTitle {
+    /// The title the window was last given.
+    shown: String,
+    /// Whether the document in front may have changed since.
+    stale: bool,
+}
+
+impl WindowTitle {
+    /// The title of a window that has not been given one yet.
+    pub(crate) const fn unset() -> Self {
+        Self {
+            shown: String::new(),
+            stale: true,
+        }
+    }
+
+    /// Have the next frame work the title out again.
+    pub(crate) const fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+}
 
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        #[cfg(feature = "mcp")]
-        {
-            self.mcp_bridge.process_commands();
-            self.mcp_bridge.inject_raw_input(raw_input);
-        }
-
-        // When lightbox is open, intercept scroll events before they reach InputState.
-        // This prevents the document's ScrollArea from scrolling while letting us
-        // use the captured delta for lightbox zoom.
-        self.lightbox_scroll = 0.0;
-        if self.lightbox.is_some() {
-            for event in &raw_input.events {
-                if let egui::Event::MouseWheel { delta, .. } = event {
-                    self.lightbox_scroll += delta.y;
-                }
-            }
-            raw_input
-                .events
-                .retain(|e| !matches!(e, egui::Event::MouseWheel { .. }));
-        }
+        self.lightbox.capture_wheel(raw_input);
     }
 
     fn persist_egui_memory(&self) -> bool {
@@ -52,50 +49,21 @@ impl eframe::App for MarkdownApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        let state = PersistedState {
-            theme: Some(self.theme),
-            dark_mode: None,
-            zoom_level: Some(self.zoom_level),
-            show_outline: self.outline_rule.saved(self.show_outline),
-            reading_width: Some(self.reading_width.get()),
-            full_width_content: None,
-            line_spacing: Some(self.line_spacing),
-            math_scale: Some(self.math_scale),
-            highlight_color: self.highlight_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
-            link_color: self.link_color.map(|c| [c.r(), c.g(), c.b(), c.a()]),
-            selected_font_family: self.selected_font_family.clone(),
-            smooth_text_rendering: Some(self.smooth_text_rendering),
-            font_preset: Some(self.font_preset),
-            text_size_class: Some(self.text_size_class),
-            open_tabs: Some(self.get_open_tab_paths()),
-            active_tab: Some(self.active_tab),
-            show_explorer: Some(self.show_explorer),
-            explorer_root: self.file_explorer.root.clone(),
-            expanded_dirs: Some(self.file_explorer.expanded_dirs.iter().cloned().collect()),
-            explorer_sort_order: Some(self.file_explorer.sort_order),
-            explorer_width: Some(self.explorer_width),
-            outline_width: Some(self.outline_width),
-            recent_files: Some(self.recent_files.clone()),
-        };
-        eframe::set_value(storage, APP_KEY, &state);
+        eframe::set_value(storage, APP_KEY, &self.persisted());
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.begin_frame(ctx);
         self.handle_keyboard_shortcuts(ctx);
-        self.handle_dropped_files(ctx);
+        let files_hover = self.handle_dropped_files(ctx);
 
         // Get ctrl state for link handling
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
         self.render_top_bar(ctx);
-        self.render_top_bars(ctx);
+        self.render_strips(ctx);
         self.render_panels(ctx, ctrl_held);
-        self.render_overlays(ctx);
-
-        // Capture AccessKit output for MCP bridge
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge.capture_output(ctx);
+        self.render_overlays(ctx, files_hover);
     }
 }
 
@@ -103,16 +71,6 @@ impl MarkdownApp {
     /// Per-frame housekeeping that runs before any input or UI: file
     /// changes, async polls, and theme, font, zoom, and title application.
     fn begin_frame(&mut self, ctx: &egui::Context) {
-        // Enable AccessKit for MCP bridge
-        #[cfg(feature = "mcp")]
-        {
-            ctx.enable_accesskit();
-            self.mcp_bridge.begin_frame();
-            self.mcp_bridge.store_in_context(ctx); // Enable McpUiExt methods
-                                                   // Poll for MCP commands at reasonable rate (prevents CPU spin on virtual displays)
-            ctx.request_repaint_after(Duration::from_millis(50));
-        }
-
         self.poll_background_work(ctx);
 
         // Limit frame rate on virtual displays (e.g., Xvfb) which lack vsync
@@ -123,7 +81,7 @@ impl MarkdownApp {
         }
 
         let theme_changed = self.apply_theme(ctx);
-        self.poll_font_family_scan();
+        self.font_picker.poll(&self.egui_ctx);
         let fonts_changed = self.apply_fonts(ctx);
         if theme_changed || fonts_changed {
             self.rebuild_document_look(ctx);
@@ -160,7 +118,7 @@ impl MarkdownApp {
         }
 
         // Poll for asynchronous Explorer root scan completion.
-        if self.file_explorer.pending_scan.is_some() {
+        if self.file_explorer.is_scanning() {
             if self.file_explorer.poll_pending_scan() {
                 log::info!("Explorer directory scan completed");
             }
@@ -183,21 +141,12 @@ impl MarkdownApp {
     /// Rebuild the egui visuals when the theme or a color override changed.
     /// Returns whether it did.
     fn apply_theme(&mut self, ctx: &egui::Context) -> bool {
-        if self.last_applied_theme == Some(self.theme)
-            && self.last_applied_highlight_color == self.highlight_color
-            && self.last_applied_link_color == self.link_color
-        {
+        let wanted = Some((self.theme, self.colors));
+        if self.applied_visuals == wanted {
             return false;
         }
-        self.last_applied_theme = Some(self.theme);
-        self.last_applied_highlight_color = self.highlight_color;
-        self.last_applied_link_color = self.link_color;
-
-        let overrides = ColorOverrides {
-            highlight: self.highlight_color,
-            link: self.link_color,
-        };
-        ctx.set_visuals(theme::visuals(self.theme.palette(), overrides));
+        self.applied_visuals = wanted;
+        ctx.set_visuals(theme::visuals(self.theme.palette(), self.colors));
         true
     }
 
@@ -205,11 +154,7 @@ impl MarkdownApp {
     /// fonts now in force, and have every open document lay out again:
     /// a font change moves every line.
     fn rebuild_document_look(&mut self, ctx: &egui::Context) {
-        let fonts = document_fonts(
-            self.selected_font_family.as_deref(),
-            self.font_preset,
-            self.text_size_class,
-        );
+        let fonts = document_fonts(&self.fonts);
         self.document_look = DocumentLook::new(&ctx.style(), self.theme.palette(), &fonts);
         self.relayout_documents();
     }
@@ -221,87 +166,44 @@ impl MarkdownApp {
         }
     }
 
-    /// Collect the background font-family scan (async phase: poll the
-    /// channel, never block the UI thread). Fills the picker's family
-    /// list once, then drops the channel.
-    fn poll_font_family_scan(&mut self) {
-        let Some(scan) = &self.pending_font_family_scan else {
-            return;
-        };
-        match scan.try_recv() {
-            Ok(names) => {
-                self.available_font_families_lower =
-                    names.iter().map(|name| name.to_ascii_lowercase()).collect();
-                self.available_font_families = names;
-                self.pending_font_family_scan = None;
-                // The list may have landed while the font dialog was
-                // already open; repaint so it appears without input.
-                self.egui_ctx.request_repaint();
-            }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => {
-                // Sender dropped without sending (thread spawn raced or
-                // panicked) — stop polling, keep whatever list we have.
-                self.pending_font_family_scan = None;
-            }
-        }
-    }
-
     /// Reload fonts only when the selected family, preset, or size class
     /// actually changes — rescanning the system font collection on every
     /// frame would be expensive and is unnecessary. Returns whether it
     /// reloaded them.
     fn apply_fonts(&mut self, ctx: &egui::Context) -> bool {
-        let font_config = (
-            self.selected_font_family.clone(),
-            self.font_preset,
-            self.text_size_class,
-        );
-        if self.last_applied_font_config.as_ref() == Some(&font_config) {
+        if self.applied_fonts.as_ref() == Some(&self.fonts) {
             return false;
         }
-        self.last_applied_font_config = Some(font_config);
-        setup_fonts(
-            ctx,
-            self.selected_font_family.as_deref(),
-            self.font_preset,
-            self.text_size_class,
-        );
+        setup_fonts(ctx, &self.fonts);
+        self.applied_fonts = Some(self.fonts.clone());
         true
     }
 
     /// Send the window title to the viewport once a tab change made it stale.
     fn apply_window_title(&mut self, ctx: &egui::Context) {
-        if !self.title_dirty {
+        if !std::mem::take(&mut self.window_title.stale) {
             return;
         }
-        self.title_dirty = false;
         let title = self.tabs.get(self.active_tab).map_or_else(
             || "Markdown Viewer".to_string(),
             |tab| format!("{} - Markdown Viewer", tab.title()),
         );
-        if title != self.last_window_title {
-            self.last_window_title = title;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.last_window_title.clone()));
+        if title != self.window_title.shown {
+            self.window_title.shown.clone_from(&title);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         }
     }
 
     /// The error bar, the find bar, and the tab strip.
-    fn render_top_bars(&mut self, ctx: &egui::Context) {
+    fn render_strips(&mut self, ctx: &egui::Context) {
         self.render_error_bar(ctx);
 
         // Find bar (conditional, between error bar and tab bar)
-        let search_outcome = self.render_search_bar(ctx);
+        let find_actions = self.render_search_bar(ctx);
         // Rebuild matches if query or tab changed (TextEdit may have mutated the query)
         self.maybe_rebuild_search();
-        if search_outcome.close_requested {
-            self.close_search();
-        }
-        if search_outcome.next_clicked {
-            self.jump_match(1);
-        }
-        if search_outcome.prev_clicked {
-            self.jump_match(-1);
+        for action in find_actions {
+            self.apply_action(ctx, action);
         }
 
         // Close tab if requested
@@ -310,125 +212,30 @@ impl MarkdownApp {
         }
     }
 
-    /// The last thing that went wrong, in the warning color, until it is
-    /// dismissed.
-    fn render_error_bar(&mut self, ctx: &egui::Context) {
-        let Some(error) = &self.error_message else {
-            return;
-        };
-        let palette = self.theme.palette();
-        let mut dismissed = false;
-        egui::TopBottomPanel::top("error_bar")
-            .exact_height(STRIP_HEIGHT)
-            .frame(chrome::bar_frame(palette))
-            .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    ui.add_space(6.0);
-                    let (sign, _) = ui
-                        .allocate_exact_size(egui::Vec2::splat(WARNING_SIDE), egui::Sense::hover());
-                    Icon::Warning.paint(ui.painter(), sign, palette.warning);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let dismiss = QuietButton::icon(Icon::Close, "Dismiss")
-                            .show(ui, palette)
-                            .on_hover_text("Dismiss");
-                        dismissed = dismiss.clicked();
-                        // The message takes what the button leaves, and is
-                        // cut short rather than pushing the button out.
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(error)
-                                        .font(chrome::label_font())
-                                        .color(palette.warning),
-                                )
-                                .truncate(),
-                            );
-                        });
-                    });
-                });
-            });
-        if dismissed {
-            self.error_message = None;
-        }
-    }
-
     /// The explorer, the outline, and the document pane, with the
     /// navigation each of them requested.
     fn render_panels(&mut self, ctx: &egui::Context, ctrl_held: bool) {
-        // File explorer (left sidebar)
-        let explorer_action = self.render_file_explorer(ctx);
-
-        // Explorer matches document links: primary click replaces the active
-        // document, while Ctrl/Cmd+click opens (or focuses) a separate tab.
-        if let Some(path) = explorer_action.file_to_open {
-            if ctrl_held {
-                self.open_in_new_tab(path);
-            } else {
-                self.navigate_active_tab_to(&path);
-            }
-        }
-
-        // Close tab from explorer (middle-click on open file)
-        if let Some(path) = explorer_action.file_to_close {
-            if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-                self.close_tab(idx);
-            }
-        }
+        // File explorer (left sidebar). Its clicks land before the outline
+        // is drawn, so the outline is that of the document they opened.
+        self.render_file_explorer(ctx, ctrl_held);
 
         // Outline sidebar (right) - at top level for proper layout
         self.render_outline(ctx);
 
         // Main content area
-        let mut open_in_new_tab: Option<(PathBuf, Option<String>)> = None;
-        let path_before_render = self.tabs.get(self.active_tab).map(|tab| tab.path.clone());
-        egui::CentralPanel::default()
+        let clicked_link = egui::CentralPanel::default()
             .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::ZERO))
-            .show(ctx, |ui| {
-                open_in_new_tab = self.render_tab_content(ui, ctrl_held);
-            });
-
-        // A primary-clicked document link navigates inside Tab while it is
-        // rendered. Synchronize the app-level state that depends on tab paths.
-        let path_after_render = self.tabs.get(self.active_tab).map(|tab| tab.path.clone());
-        if path_after_render != path_before_render {
-            self.active_tab_navigated();
-        }
-
-        // Open link in new tab if requested
-        if let Some((path, fragment)) = open_in_new_tab {
-            self.open_in_new_tab_with_fragment(path, fragment.as_deref());
+            .show(ctx, |ui| self.render_tab_content(ui))
+            .inner;
+        if let Some(link) = clicked_link {
+            self.follow_link(&link, ctrl_held);
         }
     }
 
-    /// Show `texture` enlarged at 100% in a fresh lightbox.
-    fn open_lightbox(&mut self, texture: LightboxTexture, base_size: egui::Vec2) {
-        self.lightbox_open_count += 1;
-        self.lightbox = Some(LightboxState {
-            texture,
-            base_size,
-            zoom: 1.0,
-            open_id: self.lightbox_open_count,
-            scroll_offset: egui::Vec2::ZERO,
-        });
-    }
-
-    /// The lightbox, the settings dialogs, and the drag-and-drop overlay.
-    fn render_overlays(&mut self, ctx: &egui::Context) {
-        // Check if a mermaid diagram was clicked → open lightbox
-        // Texture is pre-rasterized at 2x by background thread — no work on click
-        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
-            let mermaid = tab.cache.take_clicked_mermaid();
-            let image = tab.cache.take_clicked_image();
-            if let Some((texture, base_size)) = mermaid {
-                self.open_lightbox(LightboxTexture::Owned(texture), base_size);
-            }
-            if let Some((texture_id, base_size)) = image {
-                self.open_lightbox(LightboxTexture::Loaded(texture_id), base_size);
-            }
-        }
-
-        // Lightbox overlay for enlarged diagrams or images
+    /// The lightbox, the settings dialogs, and the hint that shows while
+    /// files hover over the window.
+    fn render_overlays(&mut self, ctx: &egui::Context, files_hover: bool) {
+        self.open_clicked_picture();
         self.render_lightbox(ctx);
 
         // Highlight color picker window
@@ -436,23 +243,8 @@ impl MarkdownApp {
         // Document font picker window
         self.render_font_settings(ctx);
 
-        // Drag and drop overlay
-        if self.is_dragging {
-            let screen_rect = ctx.available_rect();
-            let painter = ctx.layer_painter(egui::LayerId::new(
-                egui::Order::Foreground,
-                egui::Id::new("drop_overlay"),
-            ));
-
-            painter.rect_filled(screen_rect, 0.0, theme::SCRIM);
-
-            painter.text(
-                screen_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                "Drop markdown file here",
-                egui::FontId::proportional(24.0),
-                theme::ON_SCRIM,
-            );
+        if files_hover {
+            drop::paint_hint(ctx);
         }
     }
 }

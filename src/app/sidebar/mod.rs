@@ -1,9 +1,11 @@
-//! What the explorer and the outline share: the panel's frame and its one
-//! hairline, the section header, the rows, and the small painted controls.
+//! What the explorer and the outline share: the panel's frame, its one
+//! hairline and its resize affordance, the section header, the rows, and the
+//! small painted controls.
 
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
+use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -16,6 +18,9 @@ const ROW_TEXT_SIZE: f32 = 13.0;
 pub(super) const RADIUS: f32 = 6.0;
 /// Space between a row's edge and what it shows.
 const ROW_INSET: f32 = 8.0;
+/// How far each level of a nested listing is pushed right of the one above
+/// it.
+pub(super) const INDENT: f32 = 14.0;
 /// Width of the column a row's chevron sits in.
 const CHEVRON_SLOT: f32 = 16.0;
 /// Space between a chevron and the row's text.
@@ -35,8 +40,50 @@ pub(super) enum Side {
     Right,
 }
 
+/// One sidebar: where it sits, what egui knows it as, and the space it
+/// keeps around what it lists.
+pub(super) struct Panel {
+    pub(super) side: Side,
+    /// Names the panel to egui, which keeps its dragged width under it.
+    pub(super) id: &'static str,
+    pub(super) margin: egui::Margin,
+}
+
+impl Panel {
+    /// Show the sidebar, `width` wide until the reader drags its edge, with
+    /// its hairline and its resize affordance on the edge it shares with the
+    /// page. Returns what `add` returned and the width the sidebar took.
+    pub(super) fn show<R>(
+        &self,
+        ctx: &egui::Context,
+        palette: &Palette,
+        width: f32,
+        add: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> (R, f32) {
+        let panel = match self.side {
+            Side::Left => egui::SidePanel::left(self.id),
+            Side::Right => egui::SidePanel::right(self.id),
+        };
+        let shown = panel
+            .resizable(true)
+            .show_separator_line(false)
+            .default_width(width)
+            .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
+            .frame(frame(palette, self.margin))
+            .show(ctx, add);
+        let rect = shown.response.rect;
+        paint_inner_edge(ctx, rect, self.side, palette);
+        let shared_edge = match self.side {
+            Side::Left => rect.right(),
+            Side::Right => rect.left(),
+        };
+        paint_resize_affordance(ctx, shared_edge, rect.y_range(), egui::Id::new(self.id));
+        (shown.inner, rect.width())
+    }
+}
+
 /// The frame both sidebars sit in: the surface color and no outline.
-pub(super) fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Frame {
+fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Frame {
     egui::Frame::NONE
         .fill(palette.surface)
         .inner_margin(inner_margin)
@@ -44,12 +91,7 @@ pub(super) fn frame(palette: &Palette, inner_margin: egui::Margin) -> egui::Fram
 
 /// The one line a sidebar is drawn with: a hairline down the edge it shares
 /// with the page. `panel` is the sidebar's whole rectangle.
-pub(super) fn paint_inner_edge(
-    ctx: &egui::Context,
-    panel: egui::Rect,
-    side: Side,
-    palette: &Palette,
-) {
+fn paint_inner_edge(ctx: &egui::Context, panel: egui::Rect, side: Side, palette: &Palette) {
     let x = match side {
         Side::Left => panel.right() - 0.5,
         Side::Right => panel.left() + 0.5,
@@ -58,6 +100,51 @@ pub(super) fn paint_inner_edge(
         x,
         panel.y_range(),
         egui::Stroke::new(1.0_f32, palette.rule),
+    );
+}
+
+/// Draw a visible affordance for a resizable sidebar's drag strip.
+///
+/// egui's `SidePanel` resize interaction paints nothing — the only hint is a
+/// cursor change on hover — and the strip (`±SIDEBAR_RESIZE_GRAB_RADIUS`
+/// around the panel border) sits over the content pane's edge, where users
+/// reach for table column separators and scrollbars. Pressing there grabs the
+/// sidebar resizer instead of the content, and the reflow reads as "the table
+/// slid behind the sidebar". A line that brightens on hover and while
+/// resizing makes the grab zone discoverable.
+fn paint_resize_affordance(
+    ctx: &egui::Context,
+    boundary_x: f32,
+    y_range: egui::Rangef,
+    panel_id: egui::Id,
+) {
+    // egui reads this same response at the top of `SidePanel::show`, so one
+    // frame of latency is already inherent to hover feedback there.
+    let Some(resize_response) = ctx.read_response(panel_id.with("__resize")) else {
+        return;
+    };
+    let resizing = resize_response.dragged();
+    let hover = resize_response.hovered();
+    if !hover && !resizing {
+        return;
+    }
+    let visuals = &ctx.style().visuals;
+    let stroke = if resizing {
+        visuals.widgets.active.bg_stroke
+    } else {
+        visuals.widgets.hovered.bg_stroke
+    };
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new(panel_id).with("resize_affordance"),
+    ));
+    painter.rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(boundary_x - 1.0, y_range.min),
+            egui::pos2(boundary_x + 1.0, y_range.max),
+        ),
+        0.0,
+        stroke.color,
     );
 }
 

@@ -1,7 +1,6 @@
-//! Keyboard shortcuts and dropped files.
+//! Keyboard shortcuts.
 
 use std::mem;
-use std::path::Path;
 
 use eframe::egui::{self, Key};
 
@@ -45,6 +44,16 @@ impl Chord {
             Self::CtrlAlt => modifiers.ctrl && modifiers.alt,
             Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,
         }
+    }
+
+    /// Whether the chord is a command: a key pressed with Ctrl or Alt. A
+    /// command is the app's alone. A plain key, such as Enter or an arrow,
+    /// is shared with whatever the keyboard is in.
+    const fn is_command(self) -> bool {
+        matches!(
+            self,
+            Self::Ctrl | Self::CtrlNoShift | Self::CtrlShift | Self::CtrlAlt | Self::AltNoCtrl
+        )
     }
 }
 
@@ -159,21 +168,43 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Unmodified + PageDown in Document => AppAction::Scroll(KeyboardScrollAction::PageDown),
 ];
 
+/// Whether `event` is `key` going down while `chord` is held. The chord is
+/// read off the key press itself and not off the modifiers held when the
+/// frame ends: a quick tap lets go of Ctrl inside the frame the key went
+/// down in.
+fn is_press(event: &egui::Event, chord: Chord, key: Key) -> bool {
+    matches!(
+        event,
+        egui::Event::Key { key: went_down, pressed: true, modifiers, .. }
+            if *went_down == key && chord.is_held(*modifiers)
+    )
+}
+
 /// The actions this frame's input asks for, in the order they run. Each kind
 /// of action is queued once per frame: when two bindings for the same kind
 /// fire together, the later row of [`BINDINGS`] replaces the earlier one.
-fn shortcut_actions(input: &egui::InputState, focus: Focus) -> Vec<AppAction> {
+///
+/// The key press of a command that fired is taken out of `input`, so no
+/// widget drawn later in the frame acts on it a second time: Ctrl+W closes
+/// the tab and does not also delete a word in the text field the keyboard
+/// is in.
+fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction> {
     let mut actions: Vec<AppAction> = Vec::new();
     for &(chord, key, scope, action) in BINDINGS {
-        if scope.covers(focus) && chord.is_held(input.modifiers) && input.key_pressed(key) {
-            let kind = mem::discriminant(&action);
-            match actions
-                .iter_mut()
-                .find(|queued| mem::discriminant(*queued) == kind)
-            {
-                Some(queued) => *queued = action,
-                None => actions.push(action),
-            }
+        let pressed = |event: &egui::Event| is_press(event, chord, key);
+        if !scope.covers(focus) || !input.events.iter().any(pressed) {
+            continue;
+        }
+        if chord.is_command() {
+            input.events.retain(|event| !pressed(event));
+        }
+        let kind = mem::discriminant(&action);
+        match actions
+            .iter_mut()
+            .find(|queued| mem::discriminant(*queued) == kind)
+        {
+            Some(queued) => *queued = action,
+            None => actions.push(action),
         }
     }
 
@@ -187,18 +218,10 @@ fn shortcut_actions(input: &egui::InputState, focus: Focus) -> Vec<AppAction> {
     actions
 }
 
-/// Whether a dropped file is one the viewer opens, judged by its extension.
-fn is_markdown_file(path: &Path) -> bool {
-    path.extension().is_some_and(|ext| {
-        let ext = ext.to_string_lossy().to_lowercase();
-        ext == "md" || ext == "markdown" || ext == "txt"
-    })
-}
-
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let focus = if self.lightbox.is_some() {
+        let focus = if self.lightbox.open.is_some() {
             Focus::Lightbox
         } else if egui::Popup::is_any_open(ctx) {
             Focus::Popup
@@ -207,32 +230,9 @@ impl MarkdownApp {
         } else {
             Focus::Reading
         };
-        let actions = ctx.input(|input| shortcut_actions(input, focus));
+        let actions = ctx.input_mut(|input| shortcut_actions(input, focus));
         for action in actions {
             self.apply_action(ctx, action);
         }
-    }
-
-    /// Track drag hover and open dropped markdown files.
-    pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
-        // Handle drag and drop
-        self.is_dragging = false;
-        ctx.input(|i| {
-            if !i.raw.hovered_files.is_empty() {
-                self.is_dragging = true;
-            }
-
-            for file in &i.raw.dropped_files {
-                if let Some(path) = &file.path {
-                    if is_markdown_file(path) {
-                        self.open_in_new_tab(path.clone());
-                    } else {
-                        self.error_message = Some(
-                            "Unsupported file type. Please drop a markdown file (.md, .markdown, .txt)".to_string(),
-                        );
-                    }
-                }
-            }
-        });
     }
 }

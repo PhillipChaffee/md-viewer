@@ -1,6 +1,7 @@
 //! The zoomable lightbox overlay for diagrams and images.
 
 use eframe::egui;
+use egui_commonmark_extended::animation;
 
 use crate::app::{zoom_percent, MarkdownApp};
 use crate::theme;
@@ -25,14 +26,40 @@ const DIAGRAM_SHEET_RADIUS: f32 = 8.0;
 pub(crate) enum LightboxTexture {
     Owned(egui::TextureHandle),
     Loaded(egui::TextureId),
+    /// A GIF or WebP that plays: the picture's address, and the frame of it
+    /// that is on screen.
+    Moving {
+        uri: String,
+        frame: egui::TextureId,
+    },
 }
 
 impl LightboxTexture {
     pub(crate) fn id(&self) -> egui::TextureId {
         match self {
             Self::Owned(handle) => handle.id(),
-            Self::Loaded(id) => *id,
+            Self::Loaded(id) | Self::Moving { frame: id, .. } => *id,
         }
+    }
+
+    /// Move a picture that plays on to the frame that is due, the same one
+    /// the page shows, and ask for a repaint when the next is due. This
+    /// runs only while the picture is enlarged, so a closed lightbox asks
+    /// for nothing.
+    fn play(&mut self, ctx: &egui::Context) {
+        let Self::Moving { uri, frame } = self else {
+            return;
+        };
+        if let Some(due) = animation::enlarged_frame(ctx, uri) {
+            *frame = due.id;
+        }
+    }
+
+    /// Whether the picture needs a sheet of the page laid under it. A
+    /// diagram does: it is drawn for the page and has no background of its
+    /// own. Diagrams are the textures the lightbox owns.
+    const fn wants_sheet(&self) -> bool {
+        matches!(self, Self::Owned(_))
     }
 }
 
@@ -47,6 +74,50 @@ pub(crate) struct LightboxState {
     /// Tracks scroll offset for zoom-to-cursor (we maintain our own copy because
     /// egui's `ScrollArea` may clamp the old offset when content size changes mid-zoom).
     pub(crate) scroll_offset: egui::Vec2,
+}
+
+/// The overlay that shows one picture enlarged.
+#[derive(Default)]
+pub(crate) struct Lightbox {
+    /// The picture being shown, while one is.
+    pub(crate) open: Option<LightboxState>,
+    /// How far the wheel turned this frame over a shown picture, which
+    /// zooms by it.
+    wheel: f32,
+    /// How many pictures have been shown. Each takes the count as its
+    /// `open_id`.
+    opened: u64,
+}
+
+impl Lightbox {
+    /// While a picture is shown, take the wheel out of the frame's input
+    /// before egui reads it: the document under the picture must not
+    /// scroll, and the picture zooms by what was taken.
+    pub(crate) fn capture_wheel(&mut self, raw_input: &mut egui::RawInput) {
+        self.wheel = 0.0;
+        if self.open.is_some() {
+            for event in &raw_input.events {
+                if let egui::Event::MouseWheel { delta, .. } = event {
+                    self.wheel += delta.y;
+                }
+            }
+            raw_input
+                .events
+                .retain(|e| !matches!(e, egui::Event::MouseWheel { .. }));
+        }
+    }
+
+    /// Show `texture` enlarged at 100%, in place of any picture shown now.
+    fn show(&mut self, texture: LightboxTexture, base_size: egui::Vec2) {
+        self.opened += 1;
+        self.open = Some(LightboxState {
+            texture,
+            base_size,
+            zoom: 1.0,
+            open_id: self.opened,
+            scroll_offset: egui::Vec2::ZERO,
+        });
+    }
 }
 
 /// What this frame's clicks on the picture's canvas ask for.
@@ -102,7 +173,6 @@ impl LightboxState {
         zoom_offset: Option<egui::Vec2>,
     ) -> bool {
         let display_size = self.base_size * self.zoom;
-        let mut clicked_beside_image = false;
 
         egui::Area::new(egui::Id::new("lightbox_image").with(self.open_id))
             .order(egui::Order::Tooltip)
@@ -137,7 +207,6 @@ impl LightboxState {
                 let mut scroll_output =
                     scroll_area.show(ui, |ui| self.image_canvas(ui, viewport_size));
                 let clicks = scroll_output.inner;
-                clicked_beside_image = clicks.beside_image;
 
                 if clicks.reset_view {
                     // The scroll area keeps an offset of its own. Unless the
@@ -151,9 +220,9 @@ impl LightboxState {
                     // Sync tracking: captures drag-to-scroll changes on non-zoom frames
                     self.scroll_offset = scroll_output.state.offset;
                 }
-            });
-
-        clicked_beside_image
+                clicks.beside_image
+            })
+            .inner
     }
 
     /// Paint the image centered in its scrollable canvas and report the
@@ -168,9 +237,7 @@ impl LightboxState {
         // scaling, no re-rasterization
         let image_rect = egui::Rect::from_center_size(content_rect.center(), display_size);
         if ui.is_rect_visible(image_rect) {
-            if matches!(self.texture, LightboxTexture::Owned(_)) {
-                // A diagram is drawn for the page and has no background of
-                // its own: lay a sheet of the page under it.
+            if self.texture.wants_sheet() {
                 ui.painter().rect_filled(
                     image_rect.expand(DIAGRAM_SHEET_MARGIN),
                     DIAGRAM_SHEET_RADIUS,
@@ -262,21 +329,52 @@ fn close_button_clicked(ctx: &egui::Context, screen_rect: egui::Rect, open_id: u
 }
 
 impl MarkdownApp {
+    /// Open the diagram or the image the reader clicked in the document
+    /// this frame. Its texture is already on the GPU, so the click costs
+    /// nothing. A picture that plays goes on playing.
+    pub(crate) fn open_clicked_picture(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            let mermaid = tab.cache.take_clicked_mermaid();
+            let image = tab.cache.take_clicked_image();
+            if let Some((texture, base_size)) = mermaid {
+                self.lightbox
+                    .show(LightboxTexture::Owned(texture), base_size);
+            }
+            if let Some(image) = image {
+                let texture = match image.moving {
+                    Some(uri) => LightboxTexture::Moving {
+                        uri,
+                        frame: image.texture,
+                    },
+                    None => LightboxTexture::Loaded(image.texture),
+                };
+                self.lightbox.show(texture, image.size);
+            }
+        }
+    }
+
     pub(crate) fn render_lightbox(&mut self, ctx: &egui::Context) {
-        let Some(lightbox) = &mut self.lightbox else {
+        let wheel = self.lightbox.wheel;
+        let Some(lightbox) = &mut self.lightbox.open else {
             return;
         };
+        lightbox.texture.play(ctx);
 
+        // The scrim and its input sink cover the whole window, the top bar
+        // included: nothing behind the picture may be reached. A click on
+        // the sink closes the lightbox.
+        let window_rect = ctx.content_rect();
+        paint_backdrop(ctx, window_rect);
+        let mut should_close = input_sink_clicked(ctx, window_rect, lightbox.open_id);
+
+        // The picture and its controls keep to the room under the top bar.
         let screen_rect = ctx.available_rect();
-        paint_backdrop(ctx, screen_rect);
-        // Clicking on the sink closes the lightbox.
-        let mut should_close = input_sink_clicked(ctx, screen_rect, lightbox.open_id);
 
         // Apply scroll-wheel zoom (proportional to scroll amount for smooth feel)
         let old_zoom = lightbox.zoom;
-        if self.lightbox_scroll != 0.0 {
+        if wheel != 0.0 {
             // ~10% per scroll notch, smooth with proportional delta
-            lightbox.zoom_by(self.lightbox_scroll.mul_add(0.08, 1.0).clamp(0.5, 2.0));
+            lightbox.zoom_by(wheel.mul_add(0.08, 1.0).clamp(0.5, 2.0));
         }
         let zoom_changed = (lightbox.zoom - old_zoom).abs() > f32::EPSILON;
 
@@ -306,7 +404,7 @@ impl MarkdownApp {
         should_close |= ctx.input(|i| i.key_pressed(egui::Key::Escape));
 
         if should_close {
-            self.lightbox = None;
+            self.lightbox.open = None;
         }
     }
 }

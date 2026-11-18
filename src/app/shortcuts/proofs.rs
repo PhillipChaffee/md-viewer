@@ -4,7 +4,7 @@
 //!
 //! The harnesses read the real `BINDINGS` table, every row of it, under
 //! every focus and all 32 combinations of the five modifier flags. What
-//! they do not run is `shortcut_actions`, which reads egui's input state:
+//! they do not run is `shortcut_actions`, which reads and consumes egui's input state:
 //! `tests.rs` covers it.
 
 use eframe::egui;

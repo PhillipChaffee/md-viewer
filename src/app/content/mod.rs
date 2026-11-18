@@ -1,6 +1,5 @@
 //! The document pane: rendered markdown, edit mode, and link handling.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use eframe::egui;
@@ -11,12 +10,9 @@ use egui_commonmark_extended::CommonMarkViewer;
 use crate::app::action::AppAction;
 use crate::app::content::column::{resize_strips, Column};
 use crate::app::content::look::DocumentLook;
-use crate::app::outline::HEADER_SCROLL_MARGIN;
 use crate::app::MarkdownApp;
-use crate::diagram::diagram_colors;
 use crate::layout::{whole_pixels, CONTENT_RIGHT_RESIZE_GUTTER};
-use crate::links::handle_local_link_click;
-use crate::search::take_search_correction_request;
+use crate::tab::scroll::{ScrollCorrections, HEADER_SCROLL_MARGIN, MATCH_INSET};
 use crate::tab::Tab;
 
 mod column;
@@ -49,22 +45,10 @@ struct PreviewSettings<'look> {
     force_full_render: bool,
 }
 
-/// One-shot requests to re-aim a scroll that was made from an estimate.
-struct ScrollCorrections {
-    /// The find bar jumped to a match this frame.
-    search: bool,
-    /// Position key of an outline header the user clicked.
-    header_key: Option<String>,
-}
-
 impl MarkdownApp {
-    /// Render the active tab's content. Returns a path and optional
-    /// `#fragment` when the renderer hook requests it be opened in a new tab.
-    pub(crate) fn render_tab_content(
-        &mut self,
-        ui: &mut egui::Ui,
-        ctrl_held: bool,
-    ) -> Option<(PathBuf, Option<String>)> {
+    /// Render the active tab's content. Returns the link the reader clicked
+    /// in it this frame, for the caller to follow.
+    pub(crate) fn render_tab_content(&mut self, ui: &mut egui::Ui) -> Option<String> {
         // Snapshot search state before taking a mutable borrow on the active tab
         let search_is_open = self.search.is_open;
         let active_idx = self.search.active_match_index;
@@ -77,36 +61,29 @@ impl MarkdownApp {
 
         push_search_ranges(tab, search_is_open, active_idx);
 
-        let corrections = ScrollCorrections {
-            // A search correction grants exactly one full-paint attempt. Some
-            // source matches (for example Markdown syntax markers) have no
-            // rendered glyph and therefore never record a Y; do not let those
-            // matches disable viewport clipping forever.
-            search: take_search_correction_request(&mut tab.correct_active_search_pending),
-            // A header click is corrected once too, in any mode: edit mode
-            // drops the request because it has no rendered headings.
-            header_key: tab.pending_header_click_key.take(),
-        };
+        // A search correction grants exactly one full-paint attempt. Some
+        // source matches (for example Markdown syntax markers) have no
+        // rendered glyph and therefore never record a Y; do not let those
+        // matches disable viewport clipping forever. A header click is
+        // corrected once too, in any mode: edit mode drops the request
+        // because it has no rendered headings.
+        let corrections = tab.take_corrections();
         let settings = PreviewSettings {
             look: &self.document_look,
             math_scale: self.math_scale,
             // Body lines follow the reader's spacing setting; code lines
             // follow the font preset, which owns the code face's metrics.
             line_height: self.line_spacing.line_height(),
-            code_line_height: self.font_preset.code_line_height(),
+            code_line_height: self.fonts.preset.code_line_height(),
             force_full_render: corrections.header_key.is_some() || corrections.search,
         };
 
         let (reading_width, palette) = (self.reading_width, self.theme.palette());
         let column_drag_grab = &mut self.column_drag_grab;
-        let mut pane_width = self.document_pane_width;
-        let mut requested_width = None;
-        #[cfg(feature = "mcp")]
-        let mut strips = None;
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
-        egui::Frame::NONE
+        let (pane_width, requested_width, edited) = egui::Frame::NONE
             .inner_margin(egui::Margin {
                 left: 8,
                 right: CONTENT_RIGHT_RESIZE_GUTTER,
@@ -117,61 +94,43 @@ impl MarkdownApp {
                 let raw_scroll = ui.ctx().input(|i| i.raw_scroll_delta.y);
                 let content_rect = ui.available_rect_before_wrap();
                 let column = Column::in_pane(content_rect, reading_width);
-                pane_width = content_rect.width();
 
                 // (the Preview|Edit toggle lives in the bars above)
-                if tab.is_editing {
-                    edit_pane(ui, tab, column);
+                let edited = if tab.is_editing {
+                    edit_pane(ui, tab, column)
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
-                    if corrected.is_some() {
-                        tab.pending_scroll_offset = corrected;
+                    if let Some(offset) = corrected {
+                        tab.scroll_to(offset);
                     }
                     wheel_scroll_during_selection(ui, tab, &mut scroll, raw_scroll, content_rect);
-                }
+                    false
+                };
                 // After the document, so the strips sit on top of it.
-                requested_width = resize_strips(ui, column, column_drag_grab, palette);
-                #[cfg(feature = "mcp")]
-                {
-                    strips = Some(column.strips());
-                }
+                let requested_width = resize_strips(ui, column, column_drag_grab, palette);
 
                 // Request repaint during smooth scrolling
                 if ui.ctx().input(|i| i.smooth_scroll_delta.length_sq() > 0.0) {
                     ui.ctx().request_repaint();
                 }
-            });
+                (content_rect.width(), requested_width, edited)
+            })
+            .inner;
 
-        let open_in_new_tab = follow_clicked_link(tab, ctrl_held, &mut self.error_message);
+        let clicked_link = tab.check_link_hooks();
+        if edited {
+            // The find bar's matches are of the text before the edit. They
+            // are found again next frame and counted in the one after.
+            self.search.invalidate();
+            ui.ctx().request_repaint();
+        }
         self.document_pane_width = pane_width;
-        #[cfg(feature = "mcp")]
-        for (name, rect) in strips.into_iter().flatten() {
-            self.mcp_bridge
-                .register_widget_rect(name, "slider", rect, None);
-        }
         if let Some(width) = requested_width {
-            self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width.get()));
+            self.apply_action(ui.ctx(), AppAction::SetReadingWidth(width));
         }
-        open_in_new_tab
+        clicked_link
     }
-}
-
-/// Act on the link the renderer reported clicked this frame, if any: a
-/// plain click navigates `tab`, and the path of a Ctrl+click is returned
-/// for the caller to open in a new tab.
-fn follow_clicked_link(
-    tab: &mut Tab,
-    ctrl_held: bool,
-    error_message: &mut Option<String>,
-) -> Option<(PathBuf, Option<String>)> {
-    let clicked_link = tab.check_link_hooks()?;
-    let (open_in_new_tab, navigation_error) =
-        handle_local_link_click(tab, &clicked_link, ctrl_held);
-    if let Some(error) = navigation_error {
-        *error_message = Some(error);
-    }
-    open_in_new_tab
 }
 
 /// Hands the find bar's matches to the renderer, which paints the highlights.
@@ -195,9 +154,11 @@ fn push_search_ranges(tab: &mut Tab, search_is_open: bool, active_idx: usize) {
 
 /// Edit mode: a scrollable `TextEdit` holding the raw markdown, as wide as
 /// the text column and centered like it. The `TextEdit`'s own `ScrollArea`
-/// handles the wheel natively.
-fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
+/// handles the wheel natively. Returns whether the text was edited this
+/// frame.
+fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
     let pending_edit = tab.pending_edit_scroll.take();
+    let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
         .id_salt(tab.id.with("edit-scroll"))
         .auto_shrink(false)
@@ -208,24 +169,27 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) {
                 ui.add_space(column.inset());
                 let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4_i8, 2_i8));
                 frame.show(ui, |ui| {
-                    egui::TextEdit::multiline(&mut tab.content)
+                    edited = egui::TextEdit::multiline(&mut tab.content)
                         .id_salt(ui.id().with("edit"))
                         .desired_width(column.width - 8.0)
                         .desired_rows(24)
                         .frame(false)
-                        .ui(ui);
+                        .ui(ui)
+                        .changed();
                 });
             });
         });
-    tab.scroll_offset = edit_out.state.offset.y;
-    tab.last_viewport_height = edit_out.inner_rect.height();
-    tab.last_content_height = edit_out.content_size.y;
+    if edited {
+        tab.content_edited();
+    }
+    tab.measured(&edit_out);
     if let Some(ratio) = pending_edit {
         let mut state = edit_out.state;
         state.offset.y = ratio * edit_out.content_size.y.max(1.0);
         state.store(ui.ctx(), edit_out.id);
         ui.ctx().request_repaint();
     }
+    edited
 }
 
 /// The meta line above the document. It is painted inside the renderer's
@@ -252,7 +216,7 @@ fn preview_pane(
     settings: &PreviewSettings<'_>,
     column: Column,
 ) -> ScrollAreaOutput<()> {
-    let pending = tab.pending_scroll_offset.take();
+    let pending = tab.take_pending_scroll();
     let look = settings.look;
     // The document's fonts, for everything the renderer lays out below.
     ui.set_style(Arc::clone(&look.style));
@@ -278,7 +242,7 @@ fn preview_pane(
         // paragraph of raw `key: value` lines (#117).
         .render_frontmatter(true)
         .math_scale(settings.math_scale)
-        .mermaid_colors(Some(diagram_colors(ui.visuals())))
+        .mermaid_colors(Some(look.diagrams))
         .show_alt_text_on_hover(true)
         .syntax_theme_dark(look.syntax_theme)
         .syntax_theme_light(look.syntax_theme)
@@ -294,9 +258,7 @@ fn preview_pane(
         })
         .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content);
 
-    tab.scroll_offset = output.state.offset.y;
-    tab.last_viewport_height = output.inner_rect.height();
-    tab.last_content_height = output.content_size.y;
+    tab.measured(&output);
     output
 }
 
@@ -308,7 +270,7 @@ fn scroll_correction(
     current_scroll: f32,
     corrections: &ScrollCorrections,
 ) -> Option<f32> {
-    // Gated by the one-shot `correct_active_search_pending` flag (set by
+    // Gated by the one-shot `ScrollCorrections::search` request (set by
     // `scroll_to_active_match`) so it fires at most once per jump — without
     // this gate the correction would re-trigger every frame the active match
     // is off-screen, fighting the user's wheel input and locking the view
@@ -338,7 +300,7 @@ fn search_correction(match_y: f32, current_scroll: f32, viewport_height: f32) ->
         return None;
     }
     // Place the active match ~35% from the top of the viewport
-    let inset = viewport_height * 0.35;
+    let inset = viewport_height * MATCH_INSET;
     worth_scrolling((match_y - inset).max(0.0), current_scroll)
 }
 

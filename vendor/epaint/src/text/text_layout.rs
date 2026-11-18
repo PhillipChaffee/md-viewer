@@ -6,7 +6,7 @@ use crate::{
     Color32, Mesh, Stroke, Vertex,
     stroke::PathStroke,
     text::{
-        font::{ScaledMetrics, is_cjk, is_cjk_break_allowed},
+        font::{GlyphInfo, ScaledMetrics, is_cjk, is_cjk_break_allowed},
         fonts::FontFaceKey,
     },
 };
@@ -178,13 +178,25 @@ fn layout_section(
     let mut current_font = FontFaceKey::INVALID;
     let mut current_font_impl_metrics = ScaledMetrics::default();
 
-    for chr in job.text[byte_range.clone()].chars() {
+    // md-viewer patch: the characters still to come that the glyph of an
+    // emoji sequence already stands for. They stay in the text, with no room.
+    let mut joined_chars = 0;
+
+    let text = &job.text[byte_range.clone()];
+    for (byte_index, chr) in text.char_indices() {
         if job.break_on_newline && chr == '\n' {
             out_paragraphs.push(Paragraph::from_section_index(section_index));
             paragraph = out_paragraphs.last_mut().unwrap();
             paragraph.empty_paragraph_height = line_height; // TODO(emilk): replace this hack with actually including `\n` in the glyphs?
         } else {
-            let (font_id, glyph_info) = font.glyph_info(chr);
+            let (font_id, glyph_info) = if joined_chars > 0 {
+                joined_chars -= 1;
+                (current_font, GlyphInfo::INVISIBLE)
+            } else {
+                let (font_id, glyph_info, joined) = font.glyph_info_at(&text[byte_index..]);
+                joined_chars = joined;
+                (font_id, glyph_info)
+            };
             let mut font_impl = font.fonts_by_id.get_mut(&font_id);
             if current_font != font_id {
                 current_font = font_id;
@@ -1264,5 +1276,142 @@ mod tests {
             Vec2::new(17.0, font_height.round() * 2.0),
             "Unexpected intrinsic size"
         );
+    }
+
+    /// md-viewer patch: a variation selector is kept in the text and takes
+    /// no room, whichever face maps it to a glyph.
+    #[test]
+    fn test_variation_selectors_are_invisible() {
+        let pixels_per_point = 1.0;
+        let mut fonts = FontsImpl::new(
+            1024,
+            AlphaFromCoverage::default(),
+            FontDefinitions::default(),
+        );
+        let mut lay_out = |text: &str| {
+            let job = LayoutJob::single_section(text.into(), TextFormat::default());
+            layout(&mut fonts, pixels_per_point, job.into())
+        };
+        let bare = lay_out("a\u{2764}b");
+
+        for selector in ['\u{FE0E}', '\u{FE0F}', '\u{FE00}', '\u{E0100}'] {
+            let text = format!("a\u{2764}{selector}b");
+            let galley = lay_out(&text);
+            assert_eq!(galley.text(), text);
+            assert_eq!(galley.size(), bare.size(), "{selector:?}");
+            let glyph = &galley.rows[0].row.glyphs[2];
+            assert_eq!(glyph.chr, selector);
+            assert_eq!(glyph.advance_width, 0.0, "{selector:?}");
+            assert!(glyph.uv_rect.is_nothing(), "{selector:?}");
+        }
+    }
+
+    /// md-viewer patch: the default faces with a color emoji face ahead of
+    /// the built-in emoji faces, kept to emoji as the app installs it. The
+    /// face is the fixture of the app's own emoji tests.
+    fn fonts_with_color_emoji() -> FontsImpl {
+        const COLOR_EMOJI: &[u8] = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../src/system_fonts/emoji/fixtures/color-emoji-subset.ttf"
+        ));
+        let mut definitions = FontDefinitions::default();
+        let mut face = crate::text::FontData::from_static(COLOR_EMOJI);
+        face.emoji_only = true;
+        definitions
+            .font_data
+            .insert("ColorEmoji".into(), face.into());
+        for chain in definitions.families.values_mut() {
+            let built_in = chain.iter().position(|name| name == "NotoEmoji-Regular");
+            chain.insert(built_in.unwrap(), "ColorEmoji".into());
+        }
+        FontsImpl::new(1024, AlphaFromCoverage::default(), definitions)
+    }
+
+    fn lay_out(fonts: &mut FontsImpl, text: &str) -> Galley {
+        let job = LayoutJob::single_section(text.into(), TextFormat::default());
+        layout(fonts, 1.0, job.into())
+    }
+
+    /// md-viewer patch: U+FE0F after a character draws it from the color
+    /// face and U+FE0E from the text faces. Without one, nothing changes.
+    #[test]
+    fn test_variation_selector_picks_the_face() {
+        let mut fonts = fonts_with_color_emoji();
+        let mut first_glyph = |text: &str| lay_out(&mut fonts, text).rows[0].glyphs[0].uv_rect;
+
+        // ❤ is text by default, ✅ and 😀 are emoji by default.
+        let heart = first_glyph("\u{2764}");
+        assert!(!heart.colored);
+        assert!(first_glyph("\u{2764}\u{FE0F}").colored);
+        assert_eq!(first_glyph("\u{2764}\u{FE0E}"), heart);
+        assert_eq!(first_glyph("\u{2764}\u{FE00}"), heart);
+
+        for emoji in ['\u{2705}', '\u{1F600}'] {
+            let colored = first_glyph(&emoji.to_string());
+            assert!(colored.colored);
+            assert_eq!(first_glyph(&format!("{emoji}\u{FE0F}")), colored);
+            let text_look = first_glyph(&format!("{emoji}\u{FE0E}"));
+            assert!(!text_look.colored && !text_look.is_nothing());
+        }
+
+        // The color face maps 1 as the base of a keycap, to an empty glyph.
+        let digit = first_glyph("1");
+        assert!(!digit.is_nothing());
+        assert_eq!(first_glyph("1\u{FE0F}"), digit);
+    }
+
+    /// md-viewer patch: an emoji sequence a face joins is one glyph on its
+    /// first character, and the other characters stay in the text with no
+    /// room. A sequence no face joins is drawn as its parts.
+    #[test]
+    fn test_emoji_sequence_is_one_glyph() {
+        let mut fonts = fonts_with_color_emoji();
+        let single = lay_out(&mut fonts, "\u{1F468}");
+
+        for sequence in [
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+            "\u{1F1EF}\u{1F1F5}",
+            "\u{1F44D}\u{1F3FD}",
+            "1\u{FE0F}\u{20E3}",
+            "1\u{20E3}",
+        ] {
+            let text = format!("a{sequence}b");
+            let galley = lay_out(&mut fonts, &text);
+            assert_eq!(galley.text(), text);
+
+            let glyphs = &galley.rows[0].glyphs;
+            let chars = sequence.chars().count();
+            assert_eq!(glyphs.len(), chars + 2);
+            assert!(glyphs[1].uv_rect.colored, "{sequence}");
+            assert_eq!(
+                glyphs[1].advance_width,
+                single.rows[0].glyphs[0].advance_width
+            );
+            assert_ne!(glyphs[1].uv_rect, single.rows[0].glyphs[0].uv_rect);
+            for (hidden, chr) in glyphs[2..=chars].iter().zip(sequence.chars().skip(1)) {
+                assert_eq!(hidden.chr, chr);
+                assert_eq!(hidden.advance_width, 0.0, "{sequence}");
+                assert!(hidden.uv_rect.is_nothing(), "{sequence}");
+            }
+            assert_eq!(glyphs[chars + 1].chr, 'b');
+            assert!(!glyphs[chars + 1].uv_rect.is_nothing());
+
+            // A click on the glyph lands before or after the whole sequence.
+            let row = &galley.rows[0];
+            let picture = glyphs[1].logical_rect();
+            assert_eq!(row.char_at(picture.left() + 0.25 * picture.width()), 1);
+            assert_eq!(
+                row.char_at(picture.left() + 0.75 * picture.width()),
+                chars + 1
+            );
+        }
+
+        // No face has a glyph for a man joined to a grinning face.
+        let apart = lay_out(&mut fonts, "\u{1F468}\u{1F600}");
+        let unjoined = lay_out(&mut fonts, "\u{1F468}\u{200D}\u{1F600}");
+        let glyphs = &unjoined.rows[0].glyphs;
+        assert_eq!(glyphs[0].uv_rect, apart.rows[0].glyphs[0].uv_rect);
+        assert_eq!(glyphs[1].advance_width, 0.0);
+        assert_eq!(glyphs[2].uv_rect, apart.rows[0].glyphs[1].uv_rect);
     }
 }

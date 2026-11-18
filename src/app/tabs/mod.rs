@@ -1,9 +1,11 @@
 //! Opening, closing, switching, and navigating tabs.
 
+use std::io;
 use std::path::{Path, PathBuf};
 
+use egui_commonmark_extended::animation;
+
 use crate::app::MarkdownApp;
-use crate::links::apply_fragment_navigation;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
 use crate::tab::Tab;
 
@@ -52,10 +54,9 @@ impl MarkdownApp {
             .tabs
             .get(self.active_tab)
             .and_then(|tab| tab.path.parent())
-            .map(Path::to_path_buf)
-            .or_else(|| self.file_explorer.root.clone());
+            .or_else(|| self.file_explorer.root());
 
-        match (self.file_picker)(initial_dir.as_deref()) {
+        match (self.file_picker)(initial_dir) {
             Ok(Some(path)) => self.open_in_new_tab(path),
             Ok(None) => {}
             Err(error) => {
@@ -68,14 +69,14 @@ impl MarkdownApp {
     /// Open a native folder picker and point the file explorer at the chosen
     /// directory (issue #28). The chosen root is persisted via `save()`.
     pub(crate) fn open_folder_dialog(&mut self) {
-        match (self.folder_picker)(self.file_explorer.root.as_deref()) {
+        match (self.folder_picker)(self.file_explorer.root()) {
             Ok(Some(path)) => {
                 self.file_explorer.set_root(path);
                 // Make sure the explorer is visible so the result is seen.
                 self.show_explorer = true;
                 // Rebuild the watcher so the new root is watched recursively
                 // (`update_watched_paths` only reconciles tab paths, not the root).
-                if self.watch_enabled {
+                if self.live_reload.is_enabled() {
                     self.start_watching();
                 }
             }
@@ -98,10 +99,9 @@ impl MarkdownApp {
         let path = path.canonicalize().unwrap_or(path);
         // Check if already open
         if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-            self.active_tab = idx;
-            self.title_dirty = true;
+            self.activate_tab(idx);
             if let (Some(fragment), Some(tab)) = (fragment, self.tabs.get_mut(idx)) {
-                apply_fragment_navigation(tab, fragment);
+                tab.go_to_fragment(fragment);
             }
             return;
         }
@@ -110,23 +110,17 @@ impl MarkdownApp {
         let mut tab = match Tab::new(path.clone()) {
             Ok(tab) => tab,
             Err(error) => {
-                self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
+                self.report_unopened(&path, &error);
                 return;
             }
         };
         if let Some(fragment) = fragment {
-            apply_fragment_navigation(&mut tab, fragment);
+            tab.go_to_fragment(fragment);
         }
         self.tabs.push(tab);
         self.record_recent(&path);
         self.active_tab = self.tabs.len() - 1;
-        self.title_dirty = true;
-        self.refresh_open_tab_paths();
-
-        // Update watcher if enabled
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.tab_documents_changed();
     }
 
     pub(crate) fn navigate_active_tab_to(&mut self, path: &Path) {
@@ -135,44 +129,93 @@ impl MarkdownApp {
             return;
         }
 
-        let changed = self
-            .tabs
-            .get_mut(self.active_tab)
-            .is_some_and(|tab| tab.navigate_to_path(path).unwrap_or(false));
-        if changed {
-            self.active_tab_navigated();
+        // A file that cannot be read leaves the document in front, and
+        // says so as one opened in a tab of its own does.
+        let shown = path
+            .canonicalize()
+            .and_then(|target| self.navigate_active(|tab| tab.navigate_to_path(&target)));
+        if let Err(error) = shown {
+            self.report_unopened(path, &error);
         }
     }
 
+    /// Say in the error bar that the file at `path` was asked for and
+    /// could not be opened.
+    fn report_unopened(&mut self, path: &Path, error: &io::Error) {
+        self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
+    }
+
     pub(crate) fn navigate_active_history(&mut self, go_back: bool) {
-        let result = self.tabs.get_mut(self.active_tab).map(|tab| {
+        let stepped = self.navigate_active(|tab| {
             if go_back {
                 tab.navigate_back()
             } else {
                 tab.navigate_forward()
             }
         });
-        match result {
-            Some(Ok(true)) => self.active_tab_navigated(),
-            Some(Err(error)) => {
-                self.error_message = Some(format!("Unable to navigate history: {error}"));
-            }
-            Some(Ok(false)) | None => {}
+        if let Err(error) = stepped {
+            self.error_message = Some(format!("Unable to navigate history: {error}"));
         }
     }
 
-    /// Bring everything that mirrors tab paths back in line after the active
-    /// tab moved to another document: the recent list, the window title, the
-    /// explorer's open-file highlight, and the watched paths.
-    pub(crate) fn active_tab_navigated(&mut self) {
+    /// Follow a link the reader clicked in the active document: a plain
+    /// click shows its target in place, and `in_new_tab` gives the target
+    /// a tab of its own.
+    pub(crate) fn follow_link(&mut self, link: &str, in_new_tab: bool) {
+        let followed = if in_new_tab {
+            let active = self.tabs.get(self.active_tab);
+            active.map_or(Ok(None), |tab| tab.link_target(link))
+        } else {
+            let shown = self.navigate_active(|tab| tab.navigate_to_link(link));
+            shown.map(|()| None)
+        };
+        match followed {
+            Ok(Some((path, fragment))) => {
+                self.open_in_new_tab_with_fragment(path, fragment.as_deref());
+            }
+            Ok(None) => {}
+            Err(error) => self.error_message = Some(format!("Unable to open {link}: {error}")),
+        }
+    }
+
+    /// Let `go` take the active tab to another document, and bring what
+    /// follows the tabs along when it did. What `go` reports of itself is
+    /// not asked: a link to a heading of the same document reports success
+    /// and moves no tab.
+    fn navigate_active(&mut self, go: impl FnOnce(&mut Tab) -> io::Result<bool>) -> io::Result<()> {
+        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+            return Ok(());
+        };
+        let from = tab.path.clone();
+        let outcome = go(tab);
+        if tab.path != from {
+            self.active_tab_navigated();
+        }
+        outcome.map(drop)
+    }
+
+    /// The active tab moved to another document: it is the most recent
+    /// one, and what mirrors the tabs follows.
+    fn active_tab_navigated(&mut self) {
         if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
             self.record_recent(&path);
         }
-        self.title_dirty = true;
+        self.tab_documents_changed();
+    }
+
+    /// Bring everything that mirrors which document each tab holds back in
+    /// line, after a tab opened, closed, or moved to another document: the
+    /// window title, the find bar's matches, the explorer's open-file
+    /// highlight, and the watched paths.
+    ///
+    /// The find bar holds its matches by a tab's place in the strip. A
+    /// place can hold another document after any of these, the first place
+    /// included when a document opens into an empty strip.
+    fn tab_documents_changed(&mut self) {
+        self.window_title.mark_stale();
+        self.search.invalidate();
         self.refresh_open_tab_paths();
-        if self.watch_enabled {
-            self.update_watched_paths();
-        }
+        self.update_watched_paths();
     }
 
     /// Record a file in the recent list (most-recent first, deduped, capped),
@@ -191,17 +234,32 @@ impl MarkdownApp {
             return;
         }
 
-        self.tabs.remove(idx);
-        self.title_dirty = true;
-        self.refresh_open_tab_paths();
-
+        let closed = self.tabs.remove(idx);
+        self.forget_pictures(&[closed]);
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
         // which renders the welcome page (active_tab kept in range / at 0).
         self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
+        self.tab_documents_changed();
+    }
 
-        // Update watcher
-        if self.watch_enabled {
-            self.update_watched_paths();
+    /// Close every tab but the one at `keep`, which comes to the front.
+    pub(crate) fn close_other_tabs(&mut self, keep: usize) {
+        let kept = self.tabs.remove(keep);
+        let closed = std::mem::replace(&mut self.tabs, vec![kept]);
+        self.forget_pictures(&closed);
+        self.active_tab = 0;
+        self.tab_documents_changed();
+    }
+
+    /// Give back the memory egui keeps for the pictures the `closed` tabs
+    /// showed: egui keeps a picture for as long as the app runs otherwise.
+    /// A picture a tab still open has shown stays.
+    fn forget_pictures(&self, closed: &[Tab]) {
+        for uri in closed.iter().flat_map(Tab::pictures) {
+            let still_shown = self.tabs.iter().flat_map(Tab::pictures);
+            if !still_shown.into_iter().any(|shown| shown == uri) {
+                animation::forget(&self.egui_ctx, uri);
+            }
         }
     }
 
@@ -211,23 +269,27 @@ impl MarkdownApp {
 
     pub(crate) const fn next_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = next_index(self.active_tab, self.tabs.len());
-            self.title_dirty = true;
+            self.activate_tab(next_index(self.active_tab, self.tabs.len()));
         }
     }
 
     pub(crate) const fn prev_tab(&mut self) {
         if self.tabs.len() > 1 {
-            self.active_tab = previous_index(self.active_tab, self.tabs.len());
-            self.title_dirty = true;
+            self.activate_tab(previous_index(self.active_tab, self.tabs.len()));
         }
     }
 
     pub(crate) const fn focus_tab(&mut self, idx: usize) {
         if idx < self.tabs.len() {
-            self.active_tab = idx;
-            self.title_dirty = true;
+            self.activate_tab(idx);
         }
+    }
+
+    /// Bring the tab at `index` to the front. The window is named after
+    /// the document in front, so the title follows.
+    const fn activate_tab(&mut self, index: usize) {
+        self.active_tab = index;
+        self.window_title.mark_stale();
     }
 
     pub(crate) fn get_open_tab_paths(&self) -> Vec<PathBuf> {
@@ -238,7 +300,7 @@ impl MarkdownApp {
             .collect()
     }
 
-    /// Rebuild the cached `open_tab_paths` set (call after tab open/close/navigate).
+    /// Rebuild the cached `open_tab_paths` set.
     pub(crate) fn refresh_open_tab_paths(&mut self) {
         self.open_tab_paths.clear();
         for tab in &self.tabs {

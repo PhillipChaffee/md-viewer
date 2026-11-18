@@ -10,19 +10,33 @@ use eframe::egui;
 
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
-use crate::explorer::{ExplorerAction, FileTreeNode, SortOrder};
-use crate::icons::paint_sidebar_resize_affordance;
-use crate::layout::{EXPLORER_RIGHT_RESIZE_GUTTER, SIDEBAR_MIN_WIDTH};
+use crate::explorer::{FileTreeNode, SortOrder};
+use crate::layout::EXPLORER_RIGHT_RESIZE_GUTTER;
 use crate::theme::Palette;
-use crate::watcher::FLASH_DURATION_MS;
 
 #[cfg(kani)]
 mod proofs;
 #[cfg(test)]
 mod tests;
 
-/// How far each level of the tree is pushed right of the one above it.
-const INDENT: f32 = 14.0;
+/// What the reader's clicks on the listing ask of the app.
+#[derive(Default)]
+struct ExplorerAction {
+    /// File selected with the primary mouse button. Whether it replaces
+    /// the active document or opens a tab is the Ctrl modifier's say.
+    file_to_open: Option<PathBuf>,
+    /// File to close (middle-click on open file).
+    file_to_close: Option<PathBuf>,
+}
+
+/// What one frame's rows were clicked for. A later row's click replaces an
+/// earlier one of its kind.
+#[derive(Default)]
+struct TreeClicks {
+    files: ExplorerAction,
+    /// The folder to open or close, once the rows are drawn.
+    dir_to_toggle: Option<PathBuf>,
+}
 
 /// What a pick from the explorer's menu asks for.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -34,50 +48,58 @@ enum MenuPick {
 }
 
 impl MarkdownApp {
-    /// Render the file explorer sidebar.
-    /// Returns actions for files to open or close.
-    pub(crate) fn render_file_explorer(&mut self, ctx: &egui::Context) -> ExplorerAction {
-        let mut action = ExplorerAction::default();
-
+    /// Render the file explorer sidebar, then open or close the files its
+    /// rows were clicked for. `in_new_tab` is whether a clicked file gets a
+    /// tab of its own.
+    pub(crate) fn render_file_explorer(&mut self, ctx: &egui::Context, in_new_tab: bool) {
         if !self.show_explorer {
-            return action;
+            return;
         }
 
         let palette = self.theme.palette();
-        let margin = egui::Margin {
-            left: 8,
-            right: EXPLORER_RIGHT_RESIZE_GUTTER,
-            top: 8,
-            bottom: 8,
+        let panel = sidebar::Panel {
+            side: Side::Left,
+            id: "file_explorer",
+            margin: egui::Margin {
+                left: 8,
+                right: EXPLORER_RIGHT_RESIZE_GUTTER,
+                top: 8,
+                bottom: 8,
+            },
         };
-        let panel = egui::SidePanel::left("file_explorer")
-            .resizable(true)
-            .show_separator_line(false)
-            .default_width(self.explorer_width)
-            .width_range(SIDEBAR_MIN_WIDTH..=f32::INFINITY)
-            .frame(sidebar::frame(palette, margin))
-            .show(ctx, |ui| {
-                // The header stays outside the ScrollArea.
-                self.explorer_header(ui, palette);
-                self.explorer_tree(ui, palette, &mut action);
-            });
-        self.explorer_width = panel.response.rect.width();
-        sidebar::paint_inner_edge(ctx, panel.response.rect, Side::Left, palette);
-        // Left panel: the draggable edge is its right border.
-        paint_sidebar_resize_affordance(
-            ctx,
-            panel.response.rect.right(),
-            panel.response.rect.y_range(),
-            egui::Id::new("file_explorer"),
-        );
+        let (action, width) = panel.show(ctx, palette, self.explorer_width, |ui| {
+            // The header stays outside the ScrollArea.
+            self.explorer_header(ui, palette);
+            self.explorer_tree(ui, palette)
+        });
+        self.explorer_width = width;
+        self.apply_file_clicks(action, in_new_tab);
+    }
 
-        action
+    /// Open and close what the file rows were clicked for.
+    fn apply_file_clicks(&mut self, action: ExplorerAction, in_new_tab: bool) {
+        // Explorer matches document links: primary click replaces the active
+        // document, while Ctrl/Cmd+click opens (or focuses) a separate tab.
+        if let Some(path) = action.file_to_open {
+            if in_new_tab {
+                self.open_in_new_tab(path);
+            } else {
+                self.navigate_active_tab_to(&path);
+            }
+        }
+
+        // Close tab from explorer (middle-click on open file)
+        if let Some(path) = action.file_to_close {
+            if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
+                self.close_tab(idx);
+            }
+        }
     }
 
     /// "FILES", the folder they are in, and the menu that holds what the
     /// explorer can do to its listing.
     fn explorer_header(&mut self, ui: &mut egui::Ui, palette: &Palette) {
-        let root = self.file_explorer.root.as_deref();
+        let root = self.file_explorer.root();
         let folder = root.map_or(Cow::Borrowed("No folder"), folder_name);
         let header = sidebar::Header {
             caption: "FILES",
@@ -85,13 +107,8 @@ impl MarkdownApp {
             menu: Some("Explorer options"),
         };
         let more = sidebar::header(ui, palette, &header);
-        #[cfg(feature = "mcp")]
-        if let Some(more) = &more {
-            self.mcp_bridge
-                .register_widget("Explorer: Options", "button", more, None);
-        }
 
-        let sort_order = self.file_explorer.sort_order;
+        let sort_order = self.file_explorer.sort_order();
         let picked = more
             .and_then(|more| egui::Popup::menu(&more).show(|ui| explorer_menu(ui, sort_order)))
             .and_then(|menu| menu.inner);
@@ -111,65 +128,51 @@ impl MarkdownApp {
     }
 
     /// The scrollable file tree. Applies a directory toggle itself and
-    /// records it, with any file click, in `action`.
-    fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette, action: &mut ExplorerAction) {
-        // Pre-load children for all expanded dirs to avoid mutation during render
-        let unloaded: Vec<PathBuf> = self
-            .file_explorer
-            .expanded_dirs
-            .iter()
-            .filter(|dir| self.file_explorer.get_children(dir).is_none())
-            .cloned()
-            .collect();
-        for dir in &unloaded {
-            self.file_explorer.load_children(dir);
-        }
-
-        // Take tree to iterate without cloning, then put it back
-        let tree = std::mem::take(&mut self.file_explorer.tree);
-        // Clone the small set of open tab paths (avoids borrow conflict with &mut self)
-        let open_paths = self.open_tab_paths.clone();
+    /// returns any file click.
+    fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette) -> ExplorerAction {
         let active_tab = self.tabs.get(self.active_tab);
         let listing = Listing {
             palette,
-            open_paths: &open_paths,
+            open_paths: &self.open_tab_paths,
             current: active_tab.map(|tab| tab.path.as_path()),
         };
 
+        let mut clicks = TreeClicks::default();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .id_salt("file_explorer")
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                for node in &tree {
-                    self.render_tree_node(ui, node, 0, &listing, action);
+                for node in self.file_explorer.tree() {
+                    self.render_tree_node(ui, node, 0, &listing, &mut clicks);
                 }
             });
 
-        // Put tree back and apply deferred toggle
-        self.file_explorer.tree = tree;
-        if let Some(ref dir_path) = action.dir_to_toggle {
+        // The rows only read the tree; the toggle is applied once they are
+        // drawn.
+        if let Some(dir_path) = &clicks.dir_to_toggle {
             self.file_explorer.toggle_expanded(dir_path);
             // Keep the non-recursive explorer watches in sync with the
             // newly expanded/collapsed directory.
             self.reconcile_explorer_watches();
         }
+        clicks.files
     }
 
     /// Render a single node in the file tree (recursive). Clicks are
-    /// recorded in `action`; a later row's click replaces an earlier one.
+    /// recorded in `clicks`.
     fn render_tree_node(
         &self,
         ui: &mut egui::Ui,
         node: &FileTreeNode,
         depth: u16,
         listing: &Listing<'_>,
-        action: &mut ExplorerAction,
+        clicks: &mut TreeClicks,
     ) {
         match node {
             FileTreeNode::File { path, name, .. } => {
                 let row = TreeRow { path, name, depth };
-                self.file_row(ui, &row, listing, action);
+                self.file_row(ui, &row, listing, clicks);
             }
             FileTreeNode::Directory {
                 path,
@@ -179,10 +182,10 @@ impl MarkdownApp {
             } => {
                 let row = TreeRow { path, name, depth };
                 let is_expanded = self.file_explorer.is_expanded(path);
-                self.directory_row(ui, &row, is_expanded, listing.palette, action);
+                self.directory_row(ui, &row, is_expanded, listing.palette, clicks);
                 if is_expanded {
                     for child in children.iter().flatten() {
-                        self.render_tree_node(ui, child, depth + 1, listing, action);
+                        self.render_tree_node(ui, child, depth + 1, listing, clicks);
                     }
                 }
             }
@@ -194,7 +197,7 @@ impl MarkdownApp {
         ui: &mut egui::Ui,
         row: &TreeRow<'_>,
         listing: &Listing<'_>,
-        action: &mut ExplorerAction,
+        clicks: &mut TreeClicks,
     ) {
         let is_open = listing.open_paths.contains(row.path);
         let shown = Row {
@@ -205,23 +208,13 @@ impl MarkdownApp {
             chevron: Chevron::Blank,
         };
         let response = sidebar::row(ui, listing.palette, &shown).response;
-        #[cfg(feature = "mcp")]
-        {
-            let state_value = if is_open { "open" } else { "" };
-            self.mcp_bridge.register_widget(
-                &format!("File: {}", row.name),
-                "button",
-                &response,
-                Some(state_value),
-            );
-        }
 
         if response.clicked() {
-            action.file_to_open = Some(row.path.to_path_buf());
+            clicks.files.file_to_open = Some(row.path.to_path_buf());
         }
         // Middle-click to close tab (only if file is open)
         if response.middle_clicked() && is_open {
-            action.file_to_close = Some(row.path.to_path_buf());
+            clicks.files.file_to_close = Some(row.path.to_path_buf());
         }
         response.context_menu(|ui| file_context_menu(ui, row.path));
         self.paint_flash(ui, row.path, response.rect);
@@ -233,7 +226,7 @@ impl MarkdownApp {
         row: &TreeRow<'_>,
         is_expanded: bool,
         palette: &Palette,
-        action: &mut ExplorerAction,
+        clicks: &mut TreeClicks,
     ) {
         let shown = Row {
             text: row.name,
@@ -246,20 +239,10 @@ impl MarkdownApp {
             },
         };
         let response = sidebar::row(ui, palette, &shown).response;
-        #[cfg(feature = "mcp")]
-        {
-            let state_value = if is_expanded { "expanded" } else { "collapsed" };
-            self.mcp_bridge.register_widget(
-                &format!("Directory: {}", row.name),
-                "button",
-                &response,
-                Some(state_value),
-            );
-        }
 
-        // The toggle is applied after the tree is put back (avoids a clone).
+        // The toggle is applied after the rows are drawn.
         if response.clicked() {
-            action.dir_to_toggle = Some(row.path.to_path_buf());
+            clicks.dir_to_toggle = Some(row.path.to_path_buf());
         }
         self.paint_flash(ui, row.path, response.rect);
     }
@@ -299,7 +282,7 @@ struct TreeRow<'a> {
 
 impl TreeRow<'_> {
     fn indent(&self) -> f32 {
-        f32::from(self.depth) * INDENT
+        f32::from(self.depth) * sidebar::INDENT
     }
 }
 
@@ -352,6 +335,9 @@ fn file_context_menu(ui: &mut egui::Ui, path: &Path) {
         ui.close();
     }
 }
+
+/// How long a changed file's highlight lasts, in milliseconds.
+pub(super) const FLASH_DURATION_MS: u64 = 600;
 
 /// Opacity of the change highlight `elapsed` after a file changed. It fades
 /// from 180 to a floor of 60 that stays visible until the flash ends, after

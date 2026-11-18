@@ -115,9 +115,9 @@ compiles them. `cargo fmt` does format them.
 | `tab::reading_minutes_never_overflow` | Reading time is at least 1 minute and never overflows. | Every `usize` | Proven |
 | `tab::reading_minutes_round_up` | Reading time is the least whole number of minutes covering the words. | Up to `u32::MAX` words | Bounded |
 | `startup::restored_active_tab_names_an_open_tab` | Any saved tab index restores to an open tab, and to itself where it still exists. | Every `Option<usize>` × `usize` | Proven |
-| `startup::restored_zoom_is_in_range` | A saved zoom restores into [0.5, 3.0]. | Every `Option<f32>` but NaN | Proven |
-| `startup::restored_math_scale_is_in_range` | A saved formula size restores into [1, 2]. | Every `Option<f32>` but NaN | Proven |
-| `startup::restored_zoom_passes_nan_through` | Pins finding 1 below. | NaN | Proven |
+| `persist::restored_zoom_is_in_range` | A saved zoom restores into [0.5, 3.0]. | Every `Option<f32>` but NaN | Proven |
+| `persist::restored_math_scale_is_in_range` | A saved formula size restores into [1, 2]. | Every `Option<f32>` but NaN | Proven |
+| `persist::restored_zoom_passes_nan_through` | Pins finding 1 below. | NaN | Proven |
 | `persist::restored_sidebar_width_is_usable` | Any saved sidebar width restores finite and at least 70 px. | Every `Option<f32>`; finite default ≥ 70 | Proven |
 
 The three history harnesses run the two helpers `Tab` calls
@@ -129,7 +129,7 @@ the two halves of a step. That wiring is tested only.
 
 | Harness | Property | Inputs | Status |
 | --- | --- | --- | --- |
-| `headers::a_heading_is_hidden_exactly_under_a_collapsed_ancestor` | A heading is hidden if and only if its parent is collapsed or hidden; no index reads out of bounds. | Up to 5 headings, any levels, any collapsed set, any index | Bounded |
+| `headers::a_heading_is_hidden_exactly_under_a_collapsed_ancestor` | The one-pass fold lists a heading if and only if the walk back through its ancestors does not hide it, once each and in document order. By that walk a heading is hidden if and only if its parent is collapsed or hidden. No index reads out of bounds. | Up to 5 headings, any levels, any collapsed set, any index | Bounded |
 | `headers::has_children_reads_only_the_next_heading` | "Has children" agrees with the next heading's level and never reads out of bounds. | Same | Bounded |
 | `headers::heading_levels_are_one_to_six` | H1 to H6 map to 1 to 6. | All 6 | Proven |
 | `spy::heading_in_view_names_a_heading_or_none` | The binary search ends, never overflows, and returns a valid index or none, sorted input or not. | Up to 6 headings, any `f32` positions, finite view | Bounded |
@@ -140,9 +140,18 @@ the two halves of a step. That wiring is tested only.
 | `room::a_wider_window_keeps_its_room` | Widening the window never loses the outline. | Finite widths | Proven |
 | `room::the_explorer_only_takes_room` | Opening the explorer never makes room for the outline. | Finite widths | Proven |
 
-`header_is_hidden` looks collapsed headings up in a `HashSet`, which Kani
-cannot run. The proof runs `has_collapsed_ancestor`, the function
-`header_is_hidden` hands that lookup to.
+The first harness holds shipped code to a specification that is not
+shipped. The app folds the outline with `headers::visible_rows`, one pass
+over the headings. `headers/proofs.rs` keeps `has_collapsed_ancestor`,
+the walk back through one heading's ancestors that the app ran before,
+and the harness proves two things: the pass lists a heading exactly when
+the walk does not hide it, and the walk obeys the parent rule. The second
+is a statement about the specification, not about the app. Both hold for
+outlines of up to 5 headings only. `headers/tests.rs` checks the pass
+against the parent rule, written a third way, on every outline of up to
+6 headings over four levels. `headers::Outline`, which keeps the folds in
+a `HashSet` and runs the pass when a fold or the document changes, is
+tested only.
 
 ### Document pane, lightbox, chrome
 
@@ -174,7 +183,7 @@ cannot run. The proof runs `has_collapsed_ancestor`, the function
 | `system_fonts::all_lists_the_sizes_in_step_order` | `ALL` lists the sizes one step apart. | All 5 | Proven |
 
 The shortcut harnesses read the real `BINDINGS` table. They do not run
-`shortcut_actions`, which reads egui's input, nor the code that decides
+`shortcut_actions`, which reads and consumes egui's input, nor the code that decides
 which focus the app is in. Both are tested only.
 
 **Counts: 67 harnesses. 54 proven, 13 bounded.**
@@ -224,12 +233,17 @@ behavior.
 Two checks say no.
 
 - **Cover checks.** Every harness with symbolic inputs has `kani::cover!`
-  statements for its interesting cases (157 in all), and `run-proofs.sh`
+  statements for its interesting cases (162 in all), and `run-proofs.sh`
   fails if one is unreachable.
 - **Mutants.** `scripts/proof-mutants.tsv` lists 76 one-line faults in the
   shipped code, at least one for each harness but the one that pins
   finding 1. `scripts/kill-proof-mutants.sh` plants each and expects Kani
-  to reject it. Last run: 76 killed, 0 survived, in 19 minutes.
+  to reject it. Last full run: 75 killed and one not decided, because
+  the fault it planted (an insert at the front of a history stack) made
+  the solver run out of memory, which the script counts as a survivor.
+  That row now plants a fault the solver can decide (the stack reversed
+  after the push); run on its own, it is killed. So all 76 current rows
+  are killed, 75 of them in one run.
 
 The cover gate has already earned its place: it rejected the first
 version of `a_step_out_and_back_is_the_identity`, whose assumptions made

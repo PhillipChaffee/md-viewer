@@ -21,7 +21,7 @@ fn three_tabs() -> Harness {
 }
 
 fn tab_names(app: &MarkdownApp) -> Vec<String> {
-    app.tabs.iter().map(crate::tab::Tab::title).collect()
+    app.tabs.iter().map(|tab| tab.title().to_owned()).collect()
 }
 
 fn recent_paths(app: &MarkdownApp) -> Vec<PathBuf> {
@@ -76,9 +76,8 @@ fn a_fragment_lands_on_its_heading_in_a_new_tab_and_in_an_open_one() {
         .app
         .open_in_new_tab_with_fragment(b.clone(), Some("details"));
     assert_eq!(harness.active_path(), b);
-    assert!(harness.app.tabs[1].pending_header_click_key.is_some());
+    assert!(harness.app.tabs[1].take_corrections().header_key.is_some());
 
-    harness.app.tabs[1].pending_header_click_key = None;
     harness.app.focus_tab(0);
     harness
         .app
@@ -86,13 +85,12 @@ fn a_fragment_lands_on_its_heading_in_a_new_tab_and_in_an_open_one() {
     assert_eq!(harness.active_path(), b);
     assert_eq!(harness.app.tabs.len(), 2);
     assert!(
-        harness.app.tabs[1].pending_header_click_key.is_some(),
+        harness.app.tabs[1].take_corrections().header_key.is_some(),
         "focusing the open tab still follows the anchor"
     );
 
-    harness.app.tabs[1].pending_header_click_key = None;
     harness.app.open_in_new_tab(b);
-    assert!(harness.app.tabs[1].pending_header_click_key.is_none());
+    assert!(harness.app.tabs[1].take_corrections().header_key.is_none());
 }
 
 #[test]
@@ -139,6 +137,31 @@ fn navigating_replaces_the_active_document_and_updates_what_mirrors_it() {
         [a],
         "navigating to the document already shown is not a history step"
     );
+}
+
+#[test]
+fn navigating_to_a_file_that_cannot_be_read_stays_put_and_says_why() {
+    let mut harness = Harness::with_three_docs();
+    let (a, missing) = (harness.path("a.md"), harness.path("missing.md"));
+
+    harness.app.navigate_active_tab_to(&missing);
+
+    assert_eq!(harness.active_path(), a);
+    assert!(harness.app.tabs[0].history_back.is_empty());
+    let message = harness.app.error_message.clone().unwrap();
+    assert!(message.starts_with("Unable to open "), "{message}");
+    assert!(message.contains(&missing.display().to_string()));
+}
+
+#[test]
+fn navigating_to_a_folder_stays_put_and_says_nothing() {
+    let mut harness = Harness::with_three_docs();
+    let a = harness.path("a.md");
+
+    harness.app.navigate_active_tab_to(&harness.dir.clone());
+
+    assert_eq!(harness.active_path(), a);
+    assert_eq!(harness.app.error_message, None);
 }
 
 #[test]
@@ -235,18 +258,18 @@ fn the_watcher_follows_tabs_as_they_open_navigate_and_close() {
         harness.path("c.md"),
     );
     harness.apply(AppAction::ToggleWatch);
-    assert!(harness.app.watched_paths.contains(&a));
+    assert!(harness.app.watched_files().contains(&a));
 
     harness.app.open_in_new_tab(b.clone());
-    assert!(harness.app.watched_paths.contains(&b));
+    assert!(harness.app.watched_files().contains(&b));
 
     harness.app.navigate_active_tab_to(&c);
-    assert!(harness.app.watched_paths.contains(&c));
-    assert!(!harness.app.watched_paths.contains(&b));
+    assert!(harness.app.watched_files().contains(&c));
+    assert!(!harness.app.watched_files().contains(&b));
 
     harness.app.close_active_tab();
-    assert!(!harness.app.watched_paths.contains(&c));
-    assert!(harness.app.watched_paths.contains(&a));
+    assert!(!harness.app.watched_files().contains(&c));
+    assert!(harness.app.watched_files().contains(&a));
 }
 
 #[test]
@@ -276,14 +299,17 @@ fn without_a_tab_the_file_dialog_starts_in_the_explorer_root() {
         "a cancelled dialog opens nothing"
     );
     assert!(harness.app.error_message.is_none());
-    assert_eq!(*started_in.borrow(), harness.app.file_explorer.root);
+    assert_eq!(
+        started_in.borrow().as_deref(),
+        harness.app.file_explorer.root()
+    );
     assert!(started_in.borrow().is_some());
 }
 
 #[test]
 fn a_dialog_that_fails_to_open_is_reported() {
     let mut harness = Harness::with_three_docs();
-    let root = harness.app.file_explorer.root.clone();
+    let root = harness.app.file_explorer.root().map(PathBuf::from);
     harness.app.file_picker = answer_with(Err("no portal".to_owned())).0;
     harness.app.folder_picker = answer_with(Err("no display".to_owned())).0;
 
@@ -295,7 +321,7 @@ fn a_dialog_that_fails_to_open_is_reported() {
     let folder_error = harness.app.error_message.take().unwrap();
     assert!(folder_error.contains("no display"));
     assert_eq!(harness.app.tabs.len(), 1);
-    assert_eq!(harness.app.file_explorer.root, root);
+    assert_eq!(harness.app.file_explorer.root(), root.as_deref());
 }
 
 #[test]
@@ -311,10 +337,10 @@ fn the_folder_dialog_starts_in_the_explorer_root_and_repoints_it() {
     harness.apply(AppAction::OpenFolder);
 
     assert_eq!(*started_in.borrow(), Some(harness.dir.clone()));
-    assert_eq!(harness.app.file_explorer.root, Some(folder.clone()));
+    assert_eq!(harness.app.file_explorer.root(), Some(folder.as_path()));
     assert!(harness.app.show_explorer);
     assert!(
-        harness.app.watched_explorer_dirs.contains(&folder),
+        harness.app.watched_explorer_dirs().contains(&folder),
         "live reload follows the explorer to its new root"
     );
 }
@@ -327,7 +353,106 @@ fn a_cancelled_folder_dialog_leaves_the_explorer_alone() {
 
     harness.apply(AppAction::OpenFolder);
 
-    assert_eq!(harness.app.file_explorer.root, Some(harness.dir.clone()));
+    assert_eq!(
+        harness.app.file_explorer.root(),
+        Some(harness.dir.as_path())
+    );
     assert!(!harness.app.show_explorer);
     assert!(harness.app.error_message.is_none());
+}
+
+/// How many textures egui keeps for the picture in the file `name`.
+fn textures_of(harness: &Harness, name: &str) -> usize {
+    let textures = harness.ctx.tex_manager();
+    let of_the_picture =
+        |(_, texture): &(_, &egui::epaint::textures::TextureMeta)| texture.name.contains(name);
+    let kept = textures.read().allocated().filter(of_the_picture).count();
+    kept
+}
+
+/// Draw frames until egui keeps `count` textures for each picture of
+/// `names`. A picture is read from its file on a thread of egui's own.
+#[track_caller]
+fn wait_for_textures(harness: &mut Harness, names: &[&str], count: usize) {
+    for _ in 0..2000 {
+        harness.idle();
+        if names.iter().all(|name| textures_of(harness, name) == count) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let kept: Vec<_> = names
+        .iter()
+        .map(|name| textures_of(harness, name))
+        .collect();
+    panic!("{names:?} are kept as {kept:?} textures, not {count} each");
+}
+
+/// The app on `a.md`, which shows a moving picture of its own and the
+/// picture `shared.gif`, with both pictures read. `b.md` beside it shows
+/// `shared.gif` too, and `c.md` no picture.
+fn a_document_with_pictures() -> Harness {
+    let own = "![moving](own.gif)\n\n![shared](shared.gif)\n\n[on](c.md)";
+    let docs = [
+        ("a.md", own),
+        ("b.md", "![shared](shared.gif)"),
+        ("c.md", "# C"),
+    ];
+    let mut harness = Harness::with_docs(&docs);
+    let pulse = include_bytes!("../../../tests/fixtures/pulse.gif");
+    fs::write(harness.path("own.gif"), pulse).unwrap();
+    fs::write(harness.path("shared.gif"), pulse).unwrap();
+    wait_for_textures(&mut harness, &["own.gif", "shared.gif"], 3);
+    harness
+}
+
+/// [`a_document_with_pictures`] with `b.md` shown in a second tab.
+fn pictures_in_two_tabs() -> Harness {
+    let mut harness = a_document_with_pictures();
+    harness.app.open_in_new_tab(harness.path("b.md"));
+    harness.idle();
+    harness
+}
+
+#[test]
+fn closing_a_tab_gives_back_the_pictures_no_other_tab_has_shown() {
+    let mut harness = pictures_in_two_tabs();
+
+    harness.app.close_tab(0);
+    harness.idle();
+
+    assert_eq!(tab_names(&harness.app), ["b.md"]);
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 3);
+}
+
+#[test]
+fn closing_the_other_tabs_gives_back_their_pictures() {
+    let mut harness = pictures_in_two_tabs();
+
+    harness.app.close_other_tabs(1);
+    harness.idle();
+
+    assert_eq!(tab_names(&harness.app), ["b.md"]);
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 3);
+}
+
+#[test]
+fn closing_a_tab_gives_back_the_pictures_of_a_document_it_had_left() {
+    let mut harness = a_document_with_pictures();
+    let left = harness.app.tabs[0].navigate_to_link("c.md");
+    assert!(left.unwrap(), "the link was not followed");
+    harness.idle();
+    let kept_while_open = (
+        textures_of(&harness, "own.gif"),
+        textures_of(&harness, "shared.gif"),
+    );
+
+    harness.app.close_tab(0);
+    harness.idle();
+
+    assert_eq!(kept_while_open, (3, 3), "going back shows them at once");
+    assert_eq!(textures_of(&harness, "own.gif"), 0);
+    assert_eq!(textures_of(&harness, "shared.gif"), 0);
 }

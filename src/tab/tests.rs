@@ -1,20 +1,12 @@
 use super::*;
 
-use crate::recent::now_epoch_secs;
 use crate::test_support::ScratchDir;
 
 #[test]
 fn tab_history_changes_only_after_successful_loads() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-history-safety-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    let first = root.join("first.md");
-    let second = root.join("second.md");
-    fs::write(&first, "# First").unwrap();
-    fs::write(&second, "# Second").unwrap();
+    let dir = ScratchDir::new();
+    let first = dir.file("first.md", "# First");
+    let second = dir.file("second.md", "# Second");
 
     let mut tab = Tab::new(first.clone()).unwrap();
     assert!(tab.navigate_to_link("second.md").unwrap());
@@ -26,32 +18,19 @@ fn tab_history_changes_only_after_successful_loads() {
     assert_eq!(tab.path, second.canonicalize().unwrap());
     assert!(tab.can_go_back());
     assert!(!tab.can_go_forward());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn unreadable_new_tab_returns_an_error() {
-    let missing = std::env::temp_dir().join(format!(
-        "md-viewer-missing-{}-{}.md",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    assert!(Tab::new(missing).is_err());
+    let dir = ScratchDir::new();
+    assert!(Tab::new(dir.path().join("missing.md")).is_err());
 }
 
 #[test]
 fn tab_path_navigation_tracks_back_and_forward_history() {
-    let root = std::env::temp_dir().join(format!(
-        "md-viewer-navigation-{}-{}",
-        std::process::id(),
-        now_epoch_secs()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    let first = root.join("first.md");
-    let second = root.join("second.md");
-    fs::write(&first, "# First").unwrap();
-    fs::write(&second, "# Second").unwrap();
+    let dir = ScratchDir::new();
+    let first = dir.file("first.md", "# First");
+    let second = dir.file("second.md", "# Second");
 
     let mut tab = Tab::new(first.canonicalize().unwrap()).unwrap();
     assert!(tab.navigate_to_path(&second).unwrap());
@@ -65,7 +44,6 @@ fn tab_path_navigation_tracks_back_and_forward_history() {
 
     tab.navigate_forward().unwrap();
     assert_eq!(tab.path, second.canonicalize().unwrap());
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A scratch directory holding `docs`, with a tab on the first of them.
@@ -88,12 +66,16 @@ mod document {
     use crate::test_support::assert_close;
 
     #[test]
-    fn tab_is_titled_after_its_file() {
-        let (_dir, mut tab) = tab_on(&[("notes.md", "# Notes")]);
+    fn tab_is_titled_after_the_file_it_shows() {
+        let (dir, mut tab) = tab_on(&[("notes.md", "# Notes"), ("other.md", "# Other")]);
         assert_eq!(tab.title(), "notes.md");
 
-        tab.path = PathBuf::from("/");
-        assert_eq!(tab.title(), "Unknown");
+        assert!(tab.navigate_to_path(&dir.path().join("other.md")).unwrap());
+        assert_eq!(tab.title(), "other.md");
+        tab.navigate_back().unwrap();
+        assert_eq!(tab.title(), "notes.md");
+
+        assert_eq!(file_title(Path::new("/")), "Unknown");
     }
 
     #[test]
@@ -112,7 +94,7 @@ mod document {
         dir.file("notes.md", "# Notes\n\n## New\n\nSee [other](other.md).\n");
         tab.reload().unwrap();
 
-        assert_eq!(tab.outline_headers[1].title, "New");
+        assert_eq!(tab.outline.headers()[1].title, "New");
         assert_eq!(tab.content_lines, 5);
         assert_eq!(tab.saved_content, tab.content);
         assert_close(tab.scroll_offset, 120.0);
@@ -159,6 +141,48 @@ mod editing {
     use crate::test_support::assert_close;
 
     #[test]
+    fn an_edit_brings_the_contents_the_meta_line_and_the_links_up_to_date() {
+        let (_dir, mut tab) = tab_on(&[
+            ("notes.md", "# Notes\n\n## One\n\n## Two\n"),
+            ("other.md", "# Other"),
+        ]);
+        tab.outline.toggle(1);
+
+        tab.content.push_str("\nA line of prose.");
+        tab.content_edited();
+        assert_eq!(tab.content_lines, 7);
+        assert!(
+            tab.outline.is_collapsed(1),
+            "typing prose folds nothing open"
+        );
+
+        tab.content = format!(
+            "# Renamed\n\nSee [other](other.md).\n\n{}",
+            "word ".repeat(700)
+        );
+        tab.content_edited();
+
+        let titles: Vec<&str> = tab
+            .outline
+            .headers()
+            .iter()
+            .map(|header| header.title.as_str())
+            .collect();
+        assert_eq!(titles, ["Renamed"]);
+        assert_eq!(tab.document_title.as_deref(), Some("Renamed"));
+        assert_eq!(tab.kicker, "notes.md \u{b7} 4 min read");
+        assert!(
+            !tab.outline.is_collapsed(1),
+            "a fold is kept by position, which a removed heading shifts"
+        );
+        // The new link is one the renderer reports clicks on.
+        tab.cache
+            .link_hooks_mut()
+            .insert("other.md".to_owned(), true);
+        assert_eq!(tab.check_link_hooks().as_deref(), Some("other.md"));
+    }
+
+    #[test]
     fn switching_to_the_editor_and_back_keeps_the_place_in_the_document() {
         let (_dir, mut tab) = tab_with("# Notes");
         tab.scroll_offset = 200.0;
@@ -188,6 +212,38 @@ mod editing {
         assert_eq!(tab.pending_scroll_offset, None);
         tab.set_edit_mode(true);
         assert_ne!(tab.content_version, version, "a real switch re-renders");
+    }
+
+    #[test]
+    fn a_tab_is_dirty_while_its_text_differs_from_the_file() {
+        let (_dir, mut tab) = tab_with("# Notes");
+        assert!(!tab.is_dirty());
+
+        tab.content.push('!');
+        assert!(tab.is_dirty());
+
+        tab.content.pop();
+        assert!(!tab.is_dirty(), "typed back to what is on disk");
+
+        tab.content.push('!');
+        tab.save_to_disk().unwrap();
+        assert!(!tab.is_dirty());
+    }
+
+    #[test]
+    fn a_save_notes_how_it_went() {
+        let (dir, mut tab) = tab_with("# Notes");
+        tab.content.push('!');
+
+        tab.save().unwrap();
+        assert!(matches!(tab.save_flash, Some((SaveOutcome::Saved, _))));
+        assert!(!tab.is_dirty());
+
+        tab.content.push('!');
+        fs::remove_dir_all(dir.path()).unwrap();
+        assert!(tab.save().is_err());
+        assert!(matches!(tab.save_flash, Some((SaveOutcome::Failed, _))));
+        assert!(tab.is_dirty());
     }
 
     #[test]
@@ -334,7 +390,7 @@ fn reading_time_is_a_minute_per_230_words_rounded_up_and_never_zero() {
 fn the_meta_line_names_the_file_and_follows_the_content_that_is_loaded() {
     let dir = ScratchDir::new();
     let short = dir.file("short.md", "# Short\n\nA few words.");
-    let long = dir.file("long read.md", &"word ".repeat(700));
+    let long = dir.file("long read.md", "word ".repeat(700));
 
     let mut tab = Tab::new(short).unwrap();
     assert_eq!(tab.kicker, "short.md \u{b7} 1 min read");

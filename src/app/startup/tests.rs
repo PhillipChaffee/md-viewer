@@ -8,14 +8,14 @@ use eframe::Storage as _;
 
 use super::is_virtual_display;
 use crate::app::outline::OutlineRule;
-use crate::app::ui_harness::{launch, MemoryStorage, ScratchDir};
+use crate::app::ui_harness::{launch, MemoryStorage};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::persist::{PersistedState, APP_KEY};
 use crate::recent::RecentEntry;
 use crate::system_fonts::{FontPreset, TextSizeClass};
-use crate::test_support::assert_close;
+use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
 
 /// Launch with `persisted` as the last session's settings.
@@ -54,13 +54,13 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert!(!app.smooth_text_rendering);
     assert_close(app.zoom_level, 1.0);
     assert_close(app.math_scale, 1.0);
-    assert_eq!(app.highlight_color, None);
-    assert_eq!(app.font_preset, FontPreset::Reader);
-    assert_eq!(app.text_size_class, TextSizeClass::Normal);
-    assert!(app.watcher.is_none());
+    assert_eq!(app.colors.highlight, None);
+    assert_eq!(app.fonts.preset, FontPreset::Reader);
+    assert_eq!(app.fonts.size, TextSizeClass::Normal);
+    assert!(!app.live_reload.is_live());
     assert_eq!(
-        app.file_explorer.root,
-        std::env::current_dir().ok(),
+        app.file_explorer.root(),
+        std::env::current_dir().ok().as_deref(),
         "with nothing else to go on, the explorer shows the working directory"
     );
 }
@@ -69,11 +69,11 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
 fn a_file_on_the_command_line_wins_over_the_last_session() {
     let dir = ScratchDir::new();
     let elsewhere = ScratchDir::new();
-    let a = dir.write("a.md", "# A");
+    let a = dir.file("a.md", "# A");
     let persisted = PersistedState {
-        open_tabs: Some(vec![elsewhere.write("old.md", "# Old")]),
+        open_tabs: Some(vec![elsewhere.file("old.md", "# Old")]),
         active_tab: Some(3),
-        explorer_root: Some(elsewhere.root()),
+        explorer_root: Some(elsewhere.path().to_path_buf()),
         ..PersistedState::default()
     };
 
@@ -81,7 +81,7 @@ fn a_file_on_the_command_line_wins_over_the_last_session() {
 
     assert_eq!(tab_paths(&app), std::slice::from_ref(&a));
     assert_eq!(app.active_tab, 0);
-    assert_eq!(app.file_explorer.root, Some(dir.root()));
+    assert_eq!(app.file_explorer.root(), Some(dir.path()));
     assert_eq!(recent_paths(&app), [a], "an explicit open is a recent file");
     assert!(app.error_message.is_none());
 }
@@ -89,7 +89,7 @@ fn a_file_on_the_command_line_wins_over_the_last_session() {
 #[test]
 fn a_file_that_cannot_be_read_leaves_the_welcome_page_and_says_why() {
     let dir = ScratchDir::new();
-    let missing = dir.path("missing.md");
+    let missing = dir.path().join("missing.md");
 
     let app = launch(&MemoryStorage::default(), Some(missing.clone()), false);
 
@@ -99,17 +99,21 @@ fn a_file_that_cannot_be_read_leaves_the_welcome_page_and_says_why() {
         message.contains(&missing.display().to_string()),
         "the message names the file: {message}"
     );
+    assert!(
+        app.recent_files.is_empty(),
+        "a file that never opened was not read"
+    );
 }
 
 #[test]
 fn the_last_session_tabs_return_without_the_ones_that_no_longer_open() {
     let dir = ScratchDir::new();
-    let (a, c) = (dir.write("a.md", "# A"), dir.write("c.md", "# C"));
+    let (a, c) = (dir.file("a.md", "# A"), dir.file("c.md", "# C"));
     let persisted = PersistedState {
         open_tabs: Some(vec![
             a.clone(),
-            dir.path("deleted.md"),
-            dir.subdir("now-a-folder.md"),
+            dir.path().join("deleted.md"),
+            dir.dir("now-a-folder.md"),
             c.clone(),
         ]),
         active_tab: Some(3),
@@ -125,15 +129,15 @@ fn the_last_session_tabs_return_without_the_ones_that_no_longer_open() {
         recent_paths(&app).is_empty(),
         "a restored tab is not a fresh open"
     );
-    assert_eq!(app.file_explorer.root, Some(dir.root()));
+    assert_eq!(app.file_explorer.root(), Some(dir.path()));
 }
 
 #[test]
 fn the_saved_explorer_root_is_used_while_it_exists() {
     let docs = ScratchDir::new();
     let saved_root = ScratchDir::new();
-    let a = docs.write("a.md", "# A");
-    let expanded = saved_root.subdir("guides");
+    let a = docs.file("a.md", "# A");
+    let expanded = saved_root.dir("guides");
     let session = |root: PathBuf| PersistedState {
         open_tabs: Some(vec![a.clone()]),
         explorer_root: Some(root),
@@ -142,15 +146,15 @@ fn the_saved_explorer_root_is_used_while_it_exists() {
         ..PersistedState::default()
     };
 
-    let app = relaunch(&session(saved_root.root()), None);
-    assert_eq!(app.file_explorer.root, Some(saved_root.root()));
-    assert!(app.file_explorer.expanded_dirs.contains(&expanded));
-    assert!(app.file_explorer.sort_order == SortOrder::DateDesc);
+    let app = relaunch(&session(saved_root.path().to_path_buf()), None);
+    assert_eq!(app.file_explorer.root(), Some(saved_root.path()));
+    assert!(app.file_explorer.expanded_dirs().contains(&expanded));
+    assert!(app.file_explorer.sort_order() == SortOrder::DateDesc);
 
-    let app = relaunch(&session(saved_root.path("gone")), None);
+    let app = relaunch(&session(saved_root.path().join("gone")), None);
     assert_eq!(
-        app.file_explorer.root,
-        Some(docs.root()),
+        app.file_explorer.root(),
+        Some(docs.path()),
         "a root that vanished gives way to the first tab's folder"
     );
 }
@@ -193,15 +197,15 @@ fn saved_settings_come_back_and_out_of_range_values_are_pulled_in() {
     assert_close(app.reading_width.get(), ReadingWidth::MAX);
     assert_eq!(app.line_spacing, LineSpacing::Airy);
     assert_close(app.math_scale, 1.0);
-    assert_eq!(app.highlight_color, Some(Color32::from_rgb(10, 20, 30)));
+    assert_eq!(app.colors.highlight, Some(Color32::from_rgb(10, 20, 30)));
     assert_eq!(
-        app.link_color,
+        app.colors.link,
         Some(Color32::from_rgba_premultiplied(1, 2, 3, 4))
     );
-    assert_eq!(app.selected_font_family.as_deref(), Some("No Such Family"));
+    assert_eq!(app.fonts.family.as_deref(), Some("No Such Family"));
     assert!(app.smooth_text_rendering);
-    assert_eq!(app.font_preset, FontPreset::Github);
-    assert_eq!(app.text_size_class, TextSizeClass::Huge);
+    assert_eq!(app.fonts.preset, FontPreset::Github);
+    assert_eq!(app.fonts.size, TextSizeClass::Huge);
     assert!(!app.show_explorer);
     assert_close(app.explorer_width, 333.0);
     assert_close(app.outline_width, crate::layout::OUTLINE_DEFAULT_WIDTH);
@@ -225,12 +229,12 @@ fn a_zoom_saved_below_the_range_is_raised_to_the_smallest_zoom() {
 #[test]
 fn launching_with_watch_starts_live_reload() {
     let dir = ScratchDir::new();
-    let a = dir.write("a.md", "# A");
+    let a = dir.file("a.md", "# A");
 
     let app = launch(&MemoryStorage::default(), Some(a), true);
 
-    assert!(app.watch_enabled);
-    assert!(app.watcher.is_some());
+    assert!(app.live_reload.is_enabled());
+    assert!(app.live_reload.is_live());
 }
 
 #[test]
@@ -280,7 +284,7 @@ fn a_session_saved_before_the_reader_keeps_its_light_or_dark_choice_and_its_widt
 
     // It had picked its fonts too, and keeps them.
     let own_fonts = launch_on_saved("(dark_mode: Some(true), font_preset: Some(Github))");
-    assert_eq!(own_fonts.font_preset, FontPreset::Github);
+    assert_eq!(own_fonts.fonts.preset, FontPreset::Github);
 }
 
 #[test]

@@ -264,6 +264,36 @@ fn a_gap_is_the_larger_wish_of_two_neighbors_not_their_sum() {
 }
 
 #[test]
+fn a_quote_inside_a_quote_is_a_quote_of_its_own() {
+    let frame = show("> Outer.\n>\n> > Inner.\n>\n> Tail.\n\nAfter.\n", &rhythm());
+    let [outer, inner, tail, after] =
+        ["Outer", "Inner", "Tail", "After"].map(|marker| frame.text(marker));
+
+    assert!(outer.left > after.left, "a quote steps in");
+    assert_close(
+        inner.left - outer.left,
+        outer.left - after.left,
+        "the inner quote steps in as far again",
+    );
+    assert_eq!(frame.vertical_lines(), 2, "each quote has its bar");
+    assert_close(frame.gap("Outer", "Inner"), 1.5 * EM, "above the inner quote");
+    assert_close(frame.gap("Inner", "Tail"), 1.5 * EM, "below the inner quote");
+    assert_close(tail.left, outer.left, "back in the outer quote");
+    assert_eq!(tail.color, outer.color, "and still quoted");
+    assert_ne!(tail.color, after.color, "the control: prose is not weak");
+}
+
+#[test]
+fn a_link_in_a_heading_is_set_where_it_is_written() {
+    let frame = show("## Read [go](guide.md) now\n\nText.\n", &rhythm());
+    let [read, go, now] = ["Read", "go", "now"].map(|marker| frame.text(marker));
+
+    assert_close(go.left, read.rect.right(), "the link follows the text before it");
+    assert!(now.left > go.left + 5.0, "and the rest follows the link");
+    assert_close(go.rect.top(), read.rect.top(), "on the heading's line");
+}
+
+#[test]
 fn the_last_block_leaves_no_gap_below_it() {
     let frame = show("Para one.\n\nLast para.\n", &rhythm());
 

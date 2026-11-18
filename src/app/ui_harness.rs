@@ -3,19 +3,17 @@
 //! files and in-memory settings store a hermetic launch needs.
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use eframe::egui::{self, accesskit};
 use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
+use super::settings::FontPicker;
 use super::tests::Harness;
 use super::MarkdownApp;
-
-static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
+use crate::test_support::ScratchDir;
 
 /// The frames an interaction gets to come to rest before the harness starts
 /// waiting on the clock for background work.
@@ -28,50 +26,6 @@ const SCREEN: egui::Vec2 = egui::vec2(1200.0, 800.0);
 /// apart, is ten seconds.
 const WAIT_FRAMES: usize = 1000;
 const WAIT_STEP: Duration = Duration::from_millis(10);
-
-/// A directory of one test's files, removed when dropped.
-pub(crate) struct ScratchDir(PathBuf);
-
-impl ScratchDir {
-    pub(crate) fn new() -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "md-viewer-ui-test-{}-{}",
-            std::process::id(),
-            NEXT_SCRATCH_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        Self(dir.canonicalize().unwrap())
-    }
-
-    /// Where `name` lives in this directory, whether or not it exists.
-    pub(crate) fn path(&self, name: &str) -> PathBuf {
-        self.0.join(name)
-    }
-
-    /// Write a file and return its path.
-    pub(crate) fn write(&self, name: &str, content: impl AsRef<[u8]>) -> PathBuf {
-        let path = self.path(name);
-        fs::write(&path, content).unwrap();
-        path
-    }
-
-    /// Create a subdirectory and return its path.
-    pub(crate) fn subdir(&self, name: &str) -> PathBuf {
-        let path = self.path(name);
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
-
-    pub(crate) fn root(&self) -> PathBuf {
-        self.0.clone()
-    }
-}
-
-impl Drop for ScratchDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 /// The settings store eframe hands the app, kept in memory instead of in the
 /// user's data directory.
@@ -168,7 +122,7 @@ impl UiHarness {
     pub(crate) fn with_docs(docs: &[(&str, &str)]) -> Self {
         let dir = ScratchDir::new();
         for (name, content) in docs {
-            dir.write(name, content);
+            dir.file(name, content);
         }
         Self::open(dir, docs.first().map(|(name, _)| *name))
     }
@@ -178,16 +132,14 @@ impl UiHarness {
     ///
     /// The scan of installed fonts is cut loose, so no test depends on which
     /// fonts the machine has or on when the scan lands. A test of the family
-    /// list feeds `pending_font_family_scan` itself.
+    /// list feeds the font picker's `scan` itself.
     pub(crate) fn open(dir: ScratchDir, name: Option<&str>) -> Self {
-        let file = name.map(|name| dir.path(name));
+        let file = name.map(|name| dir.path().join(name));
         let mut ui = egui_kittest::Harness::builder()
             .with_size(SCREEN)
             .build_eframe(|creation| MarkdownApp::new(creation, file, false));
         let app = ui.state_mut();
-        app.pending_font_family_scan = None;
-        app.available_font_families.clear();
-        app.available_font_families_lower.clear();
+        app.font_picker = FontPicker::default();
         Self {
             ui,
             dir,
@@ -209,7 +161,7 @@ impl UiHarness {
     }
 
     pub(crate) fn path(&self, name: &str) -> PathBuf {
-        self.dir.path(name)
+        self.dir.path().join(name)
     }
 
     /// The document the active tab shows.

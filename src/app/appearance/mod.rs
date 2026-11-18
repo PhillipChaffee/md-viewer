@@ -74,11 +74,7 @@ fn theme_swatch(
         egui::FontId::proportional(15.0),
         shown.text,
     );
-    let name_color = if chosen || pointed {
-        chrome_palette.text
-    } else {
-        chrome_palette.muted
-    };
+    let name_color = chrome::ink(chrome_palette, true, chosen || pointed);
     painter.text(
         egui::pos2(center.x, response.rect.bottom() - 2.0),
         egui::Align2::CENTER_BOTTOM,
@@ -128,9 +124,6 @@ impl MarkdownApp {
                     });
                 chrome::hairline(ui, palette);
                 let fonts = MenuRow::new("Fonts…").flush().show(ui, palette);
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge
-                    .register_widget("Appearance: Fonts", "button", &fonts, None);
                 if fonts.clicked() {
                     *picked = Some(AppAction::OpenFontSettings);
                     ui.close();
@@ -150,13 +143,6 @@ impl MarkdownApp {
             for theme in ThemeId::ALL {
                 let chosen = self.theme == theme;
                 let swatch = theme_swatch(ui, theme, chosen, cell, palette);
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge.register_widget(
-                    &format!("Appearance: Theme: {}", theme.label()),
-                    "button",
-                    &swatch,
-                    Some(if chosen { "selected" } else { "unselected" }),
-                );
                 if swatch.clicked() {
                     *picked = Some(AppAction::SetTheme(theme));
                 }
@@ -168,7 +154,7 @@ impl MarkdownApp {
     /// use. Each steps one size class and goes dim at the end of the scale.
     fn text_size_row(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let palette = self.theme.palette();
-        let size = self.text_size_class;
+        let size = self.fonts.size;
         chrome::control_row(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             chrome::small_label(ui, palette, "Text size");
@@ -179,9 +165,6 @@ impl MarkdownApp {
                 .labelled("Smaller text")
                 .enabled(size.smaller().is_some())
                 .show(ui, palette);
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Appearance: Smaller Text", "button", &smaller, None);
             if let Some(size) = size.smaller().filter(|_| smaller.clicked()) {
                 *picked = Some(AppAction::SetTextSize(size));
             }
@@ -196,9 +179,6 @@ impl MarkdownApp {
                 .labelled("Larger text")
                 .enabled(size.larger().is_some())
                 .show(ui, palette);
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Appearance: Larger Text", "button", &larger, None);
             if let Some(size) = size.larger().filter(|_| larger.clicked()) {
                 *picked = Some(AppAction::SetTextSize(size));
             }
@@ -236,30 +216,21 @@ impl MarkdownApp {
         );
         slider
             .widget_info(|| egui::WidgetInfo::slider(true, f64::from(width), "Text column width"));
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Appearance: Width", "slider", &slider, Some(&readout));
         if slider.changed() {
-            *picked = Some(AppAction::SetReadingWidth(width));
+            *picked = Some(AppAction::SetReadingWidth(ReadingWidth::new(width)));
         }
 
         ui.horizontal(|ui| {
             let fit = QuietButton::text("Fit window").show(ui, palette);
-            #[cfg(feature = "mcp")]
-            self.mcp_bridge
-                .register_widget("Appearance: Fit Window", "button", &fit, None);
             if fit.clicked() {
-                *picked = Some(AppAction::SetReadingWidth(ReadingWidth::MAX));
+                *picked = Some(AppAction::SetReadingWidth(ReadingWidth::FIT_WINDOW));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let reset = QuietButton::text("Reset")
                     .labelled("Reset width")
                     .show(ui, palette);
-                #[cfg(feature = "mcp")]
-                self.mcp_bridge
-                    .register_widget("Appearance: Reset Width", "button", &reset, None);
                 if reset.clicked() {
-                    *picked = Some(AppAction::SetReadingWidth(ReadingWidth::DEFAULT.get()));
+                    *picked = Some(AppAction::SetReadingWidth(ReadingWidth::DEFAULT));
                 }
             });
         });

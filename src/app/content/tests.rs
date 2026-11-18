@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use eframe::egui::accesskit::Role;
 use eframe::egui::{Event, Key, Modifiers, MouseWheelUnit};
 use egui_kittest::kittest::Queryable as _;
@@ -7,7 +9,7 @@ use super::*;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{frame_on, painted_text};
 use crate::layout::{centered_column_left, LineSpacing, ReadingWidth, READING_COLUMN_MARGIN};
-use crate::test_support::{assert_close, painted_shapes};
+use crate::test_support::{assert_close, painted_shapes, painted_text_starting_below};
 use crate::theme::ThemeId;
 
 mod blocks;
@@ -17,19 +19,8 @@ pub(crate) mod label_harness;
 /// with where it was painted. The top bar above the pane repeats the
 /// document's title, and is passed over.
 #[track_caller]
-fn painted_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
-    let in_the_pane = painted_shapes(output)
-        .into_iter()
-        .find_map(|shape| match shape {
-            egui::Shape::Text(text)
-                if text.pos.y >= crate::app::chrome::BAR_HEIGHT
-                    && text.galley.text().starts_with(prefix) =>
-            {
-                Some(text)
-            }
-            _ => None,
-        });
-    in_the_pane.expect("the document pane painted no text starting with the prefix")
+fn pane_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
+    painted_text_starting_below(output, prefix, crate::app::chrome::BAR_HEIGHT)
 }
 
 /// One document that links to `b.md` and to a file that does not exist.
@@ -109,8 +100,26 @@ fn a_link_to_a_missing_document_is_reported_and_changes_nothing() {
     harness.click("nowhere");
 
     assert_eq!(open_paths(&harness), [harness.path("a.md")]);
-    let message = harness.state().error_message.clone().unwrap();
-    assert!(message.contains("gone.md"), "{message}");
+    assert_eq!(harness.state().error_message, Some(gone_md_error(&harness)));
+}
+
+/// What the error bar says of the link to `gone.md`.
+fn gone_md_error(harness: &LabelHarness) -> String {
+    let cause = harness.path("gone.md").canonicalize().unwrap_err();
+    format!("Unable to open gone.md: {cause}")
+}
+
+#[test]
+fn ctrl_clicking_a_link_to_a_missing_document_reports_it_the_same_way() {
+    let mut harness = linked_docs();
+
+    harness
+        .get_by_label("nowhere")
+        .click_modifiers(Modifiers::CTRL);
+    harness.frames(2);
+
+    assert_eq!(open_paths(&harness), [harness.path("a.md")]);
+    assert_eq!(harness.state().error_message, Some(gone_md_error(&harness)));
 }
 
 #[test]
@@ -127,6 +136,57 @@ fn edit_mode_shows_the_source_and_takes_typing() {
     harness.frames(2);
 
     assert_eq!(harness.state().tabs[0].content, "# Title!");
+}
+
+#[test]
+fn a_heading_typed_in_the_editor_is_in_the_contents_at_once() {
+    let mut harness = LabelHarness::with_docs(&[("a.md", "# Title")]);
+    harness.click("More");
+    harness.click("Edit Document");
+    harness.get_by_role(Role::MultilineTextInput).click();
+    harness.frames(2);
+
+    let editor = harness.get_by_role(Role::MultilineTextInput);
+    editor.type_text("\n\n## Afterword");
+    harness.frames(2);
+
+    let tab = &harness.state().tabs[0];
+    let titles: Vec<&str> = tab
+        .outline
+        .headers()
+        .iter()
+        .map(|header| header.title.as_str())
+        .collect();
+    assert_eq!(titles, ["Title", "Afterword"]);
+    assert_eq!(tab.content_lines, 3);
+}
+
+#[test]
+fn typing_in_the_editor_with_the_find_bar_open_finds_the_matches_again() {
+    let mut harness = LabelHarness::with_docs(&[("a.md", "needle")]);
+    harness.state_mut().open_search();
+    harness.state_mut().search.query = "needle".to_owned();
+    harness.click("More");
+    harness.click("Edit Document");
+    harness.get_by_role(Role::MultilineTextInput).click();
+    harness.frames(2);
+    assert!(harness.query_by_label("1 / 1").is_some());
+
+    let editor = harness.get_by_role(Role::MultilineTextInput);
+    editor.type_text("s and needle");
+    harness.frames(3);
+
+    assert_eq!(harness.state().tabs[0].content, "needles and needle");
+    assert!(
+        harness.query_by_label("1 / 2").is_some(),
+        "the count is of the text before the edit"
+    );
+    let ranges: Vec<_> = harness.state().tabs[0]
+        .search_matches
+        .iter()
+        .map(|found| found.byte_start..found.byte_end)
+        .collect();
+    assert_eq!(ranges, [0..6, 12..18]);
 }
 
 #[test]
@@ -326,7 +386,7 @@ fn pointer_button(pos: egui::Pos2, pressed: bool) -> Event {
 /// The font and color of the first run of the painted text starting with
 /// `prefix`.
 fn text_format(output: &egui::FullOutput, prefix: &str) -> egui::TextFormat {
-    let text = painted_text_starting(output, prefix);
+    let text = pane_text_starting(output, prefix);
     text.galley.job.sections[0].format.clone()
 }
 
@@ -340,14 +400,14 @@ fn the_document_is_set_in_a_centered_column_of_the_reading_width() {
         (ReadingWidth::new(400.0), 400.0),
         (ReadingWidth::FIT_WINDOW, fit_window),
     ] {
-        harness.apply(AppAction::SetReadingWidth(width.get()));
+        harness.apply(AppAction::SetReadingWidth(width));
         harness.idle();
         let output = harness.idle();
 
         let left = column_left(column);
-        let body = painted_text_starting(&output, "word");
+        let body = pane_text_starting(&output, "word");
         assert_close(body.pos.x, left);
-        assert_close(painted_text_starting(&output, "Title").pos.x, left);
+        assert_close(pane_text_starting(&output, "Title").pos.x, left);
         // The paragraph wraps at the column's right edge, not short of it.
         let widest_line = body.galley.size().x;
         assert!(
@@ -382,7 +442,7 @@ fn a_pane_narrower_than_the_column_narrows_it_and_keeps_the_margins() {
         column,
         (2.0_f32.mul_add(-READING_COLUMN_MARGIN, pane)).floor(),
     );
-    let widest_line = painted_text_starting(&output, "word").galley.size().x;
+    let widest_line = pane_text_starting(&output, "word").galley.size().x;
     assert!(widest_line <= column + 0.5, "{widest_line} in {column}");
 }
 
@@ -391,9 +451,9 @@ fn a_meta_line_with_the_file_name_and_reading_time_sits_above_the_title() {
     let mut harness = reader("# Title\n\nBody.");
     let output = harness.idle();
 
-    let kicker = painted_text_starting(&output, "a.md \u{b7}");
+    let kicker = pane_text_starting(&output, "a.md \u{b7}");
     assert_eq!(kicker.galley.text(), "a.md · 1 min read");
-    let title = painted_text_starting(&output, "Title");
+    let title = pane_text_starting(&output, "Title");
     assert_close(kicker.pos.x, title.pos.x);
     assert!(kicker.pos.y < title.pos.y);
     // Small, muted, and in the chrome's sans whatever the document is set in.
@@ -410,8 +470,8 @@ fn the_meta_line_keeps_its_room_whether_all_or_a_slice_of_the_document_is_painte
     ));
     let positions = |output: &egui::FullOutput| {
         (
-            painted_text_starting(output, "a.md \u{b7}").pos.y,
-            painted_text_starting(output, "Title").pos.y,
+            pane_text_starting(output, "a.md \u{b7}").pos.y,
+            pane_text_starting(output, "Title").pos.y,
         )
     };
     // By now the renderer paints only the slice of the document in view.
@@ -461,7 +521,7 @@ fn the_reader_sets_body_headings_emphasis_and_code_each_in_its_own_face() {
 #[test]
 fn a_font_preset_without_an_italic_face_slants_emphasis_instead() {
     let mut harness = reader("Plain *leaning* text.");
-    harness.app.font_preset = crate::system_fonts::FontPreset::Current;
+    harness.app.fonts.preset = crate::system_fonts::FontPreset::Current;
     harness.idle();
     let output = harness.idle();
 
@@ -505,7 +565,7 @@ fn a_code_block_is_a_rounded_borderless_box_in_the_themes_raised_color() {
             "{:?}",
             block.rect
         );
-        let code = painted_text_starting(&output, "fn main");
+        let code = pane_text_starting(&output, "fn main");
         assert_close(code.pos.x - block.rect.left(), 16.0);
         // One line of code and the padding: no empty line under it.
         assert_eq!(code.galley.rows.len(), 1);
@@ -544,7 +604,7 @@ fn line_spacing_sets_the_pitch_of_body_lines_and_the_length_of_the_page() {
         harness.apply(AppAction::SetLineSpacing(spacing));
         harness.idle();
         let output = harness.idle();
-        let galley = painted_text_starting(&output, "word").galley;
+        let galley = pane_text_starting(&output, "word").galley;
         let pitch = galley.rows[1].pos.y - galley.rows[0].pos.y;
         (pitch, harness.app.tabs[0].last_content_height)
     };
@@ -579,7 +639,7 @@ fn dragging_a_column_edge_resizes_the_column_about_the_pane_center() {
     // The next frame lays the document out at the new width and says so.
     let dragging = frame_on(&mut harness, Vec::new());
     assert_close(
-        painted_text_starting(&dragging, "word").pos.x,
+        pane_text_starting(&dragging, "word").pos.x,
         column_left(780.0),
     );
     assert!(painted_text(&dragging).contains(&"780 px".to_owned()));
@@ -593,7 +653,7 @@ fn dragging_a_column_edge_resizes_the_column_about_the_pane_center() {
 #[test]
 fn double_clicking_a_column_edge_goes_back_to_the_default_width() {
     let mut harness = reader(&title_and_long_paragraph());
-    harness.apply(AppAction::SetReadingWidth(400.0));
+    harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(400.0)));
     harness.idle();
     harness.idle();
     let on_edge = egui::pos2(column_left(400.0) - 5.0, 400.0);
@@ -636,7 +696,7 @@ fn the_editor_is_as_wide_as_the_column_and_centered_like_it() {
     harness.idle();
     let output = harness.idle();
 
-    let source = painted_text_starting(&output, "# Title");
+    let source = pane_text_starting(&output, "# Title");
     let left = column_left(680.0);
     assert!(
         (left..=left + 12.0).contains(&source.pos.x),
@@ -658,12 +718,12 @@ fn a_table_squeezed_by_a_narrow_column_spreads_out_again_when_the_column_widens(
                  | Language selection | 120 | 0.031% | 64% |\n";
     let mut harness = reader(table);
     let mut header_lines = |width: f32| {
-        harness.apply(AppAction::SetReadingWidth(width));
+        harness.apply(AppAction::SetReadingWidth(ReadingWidth::new(width)));
         for _ in 0..3 {
             harness.idle();
         }
         let output = harness.idle();
-        painted_text_starting(&output, "Share").galley.rows.len()
+        pane_text_starting(&output, "Share").galley.rows.len()
     };
 
     assert_eq!(header_lines(680.0), 1);

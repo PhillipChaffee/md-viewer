@@ -80,13 +80,20 @@ folder, reading time and opening lines.
 **Rendering**
 
 - GitHub Flavored Markdown: tables, task lists, footnotes, strikethrough and
-  emoji shortcodes such as `:pushpin:`.
+  emoji shortcodes such as `:pushpin:`. An emoji looks the same in bold
+  text and headings as in the text around them. An emoji written as
+  several characters is one picture: a family (👨‍👩‍👧), a flag (🇯🇵), a skin
+  tone (👍🏽), a keycap (1️⃣). A variation selector picks the look of the
+  sign before it: ❤️ is the color emoji and ❤︎ the sign in the ink of the
+  text.
 - LaTeX math, inline `$…$` and display `$$…$$`.
 - Mermaid diagrams: flowcharts, sequence, class, state, ER, gantt and pie.
   Click a diagram to enlarge it.
 - Syntax highlighting for 200+ languages, with a color scheme per theme.
-- Images (PNG, JPEG, GIF, SVG, local or over HTTP), HTML tables and YAML
-  frontmatter.
+- Images (PNG, JPEG, GIF, WebP, SVG, local or over HTTP), HTML tables and
+  YAML frontmatter. Animated GIFs and WebPs play while they are in view.
+  Click a picture to enlarge it; a moving one goes on playing while it is
+  enlarged.
 - System font fallbacks for CJK and other non-Latin scripts.
 
 **Getting around**
@@ -95,7 +102,8 @@ folder, reading time and opening lines.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
 - Drag a file onto the window to open it.
-- Live reload when the file changes on disk.
+- Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
+  is checked while the setting is on, also with nothing open to follow.
 - An edit mode (`Ctrl+E`) that shows the source and saves with `Ctrl+S`.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
@@ -267,7 +275,19 @@ Two things to know before you rely on those gates:
 
 ## Known limits
 
-- Color emoji fonts are drawn in one color.
+- Emoji are in color where Noto Color Emoji is installed, and in the ink of
+  the text elsewhere. An emoji written as several characters is drawn as
+  its parts where no installed emoji font has one picture for it, as with
+  an emoji newer than the font. The keycap *️⃣ is drawn as its parts,
+  because Markdown reads its `*` apart from the characters after it.
+- In edit mode the arrow keys and Backspace move through an emoji written
+  as several characters one character at a time.
+- An animated GIF or WebP is decoded whole when it is first shown, which
+  takes a moment and four bytes of memory for each pixel of each frame. One
+  whose frames need more than 256 MiB (139 frames of 800 × 600) then shows
+  its first frame and does not move. When the frames of all moving pictures
+  pass 512 MiB, those out of view are let go, and decoded again when they
+  are scrolled back to.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
 

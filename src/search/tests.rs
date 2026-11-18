@@ -1,15 +1,6 @@
 use super::*;
 
 #[test]
-fn search_correction_request_is_consumed_even_without_a_rendered_match() {
-    let mut pending = true;
-
-    assert!(take_search_correction_request(&mut pending));
-    assert!(!pending);
-    assert!(!take_search_correction_request(&mut pending));
-}
-
-#[test]
 fn find_matches_empty_query_returns_none() {
     assert_eq!(find_matches("hello world", ""), vec![]);
 }
@@ -161,4 +152,30 @@ fn literal_unicode_emoji_still_matches_raw_source() {
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].byte_start, 7);
     assert_eq!(matches[0].byte_end, 11);
+}
+
+#[test]
+fn matches_are_current_for_the_tab_and_the_query_they_were_built_for() {
+    let mut state = SearchState {
+        query: "needle".to_owned(),
+        ..SearchState::default()
+    };
+    assert!(!state.is_built_for(0), "nothing is built at first");
+
+    state.mark_built_for(0);
+    assert!(state.is_built_for(0));
+    assert!(!state.is_built_for(1), "another tab is in front");
+
+    state.query.push('s');
+    assert!(!state.is_built_for(0), "the query changed");
+}
+
+#[test]
+fn invalidating_makes_the_matches_stale_whatever_they_were_built_for() {
+    let mut state = SearchState::default();
+    state.mark_built_for(0);
+
+    state.invalidate();
+
+    assert!(!state.is_built_for(0));
 }

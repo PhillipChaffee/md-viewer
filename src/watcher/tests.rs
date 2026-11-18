@@ -1,45 +1,21 @@
 use std::fs;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
 use notify_debouncer_mini::DebounceEventResult;
 
 use super::*;
+use crate::test_support::{evaluate_log_arguments, ScratchDir};
 
 /// How long a test waits for the watcher before it fails.
 const EVENT_TIMEOUT: Duration = Duration::from_secs(10);
 
-static NEXT_SCRATCH_DIR: AtomicUsize = AtomicUsize::new(0);
-
-/// A directory of real files for the watcher backends, removed on drop.
-struct ScratchDir(PathBuf);
-
-impl ScratchDir {
-    fn new() -> Self {
-        // Format log arguments as a run with `RUST_LOG` set does, so one
-        // that panics fails a test.
-        log::set_max_level(log::LevelFilter::Trace);
-        let dir = std::env::temp_dir().join(format!(
-            "md-viewer-watcher-test-{}-{}",
-            std::process::id(),
-            NEXT_SCRATCH_DIR.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        Self(dir.canonicalize().unwrap())
-    }
-
-    fn file(&self, name: &str) -> PathBuf {
-        let path = self.0.join(name);
-        fs::write(&path, "before").unwrap();
-        path
-    }
-}
-
-impl Drop for ScratchDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
+/// A directory of real files for the watcher backends. Log arguments are
+/// formatted as a run with `RUST_LOG` set does, so one that panics fails a
+/// test.
+fn scratch_dir() -> ScratchDir {
+    evaluate_log_arguments();
+    ScratchDir::new()
 }
 
 /// A plan whose `polled` files go to the poll backend, as GVFS documents do.
@@ -50,6 +26,18 @@ fn plan_with_polled(local: &[&Path], polled: &[&Path]) -> WatchPlan {
         gvfs_files: owned(polled),
         explorer_dirs: Vec::new(),
     }
+}
+
+impl FileWatcher {
+    /// Whether `backend` is running, for tests outside this module.
+    pub(crate) fn runs(&mut self, backend: Backend) -> bool {
+        self.backend(backend).is_some()
+    }
+}
+
+/// The poll backend of `watcher`, which must be running.
+fn poll(watcher: &mut FileWatcher) -> &mut dyn notify::Watcher {
+    watcher.backend(Backend::Poll).unwrap()
 }
 
 /// Every settled change the watcher reports up to and including the first
@@ -72,28 +60,28 @@ fn changes_until(events: &Receiver<DebounceEventResult>, last: &Path) -> Vec<Pat
 
 #[test]
 fn starting_a_plan_registers_its_documents_and_explorer_directories() {
-    let dir = ScratchDir::new();
-    let doc = dir.file("a.md");
-    let plan = WatchPlan::new(vec![doc.clone()], vec![dir.0.clone()]);
+    let dir = scratch_dir();
+    let doc = dir.file("a.md", "before");
+    let plan = WatchPlan::new(vec![doc.clone()], vec![dir.path().to_path_buf()]);
     let (handler, _events) = mpsc::channel();
 
-    let (mut watcher, accepted) = FileWatcher::start(&plan, handler).unwrap();
+    let mut watcher = FileWatcher::start(&plan, handler).unwrap();
 
     assert_eq!(
-        accepted,
+        *watcher.watched(),
         Watched {
             files: HashSet::from([doc]),
-            explorer_dirs: HashSet::from([dir.0.clone()]),
+            explorer_dirs: HashSet::from([dir.path().to_path_buf()]),
         }
     );
-    assert!(watcher.inotify_watcher().is_some());
-    assert!(watcher.poll_watcher().is_none());
+    assert!(watcher.runs(Backend::Inotify));
+    assert!(!watcher.runs(Backend::Poll));
 }
 
 #[test]
 fn a_started_watcher_reports_a_document_written_afterwards() {
-    let dir = ScratchDir::new();
-    let doc = dir.file("a.md");
+    let dir = scratch_dir();
+    let doc = dir.file("a.md", "before");
     let (handler, events) = mpsc::channel();
     let _watcher = FileWatcher::start(&plan_with_polled(&[&doc], &[]), handler).unwrap();
 
@@ -104,59 +92,61 @@ fn a_started_watcher_reports_a_document_written_afterwards() {
 
 #[test]
 fn a_watched_directory_reports_a_file_created_in_it() {
-    let dir = ScratchDir::new();
-    let plan = WatchPlan::new(Vec::new(), vec![dir.0.clone()]);
+    let dir = scratch_dir();
+    let plan = WatchPlan::new(Vec::new(), vec![dir.path().to_path_buf()]);
     let (handler, events) = mpsc::channel();
     let _watcher = FileWatcher::start(&plan, handler).unwrap();
 
-    let created = dir.file("new.md");
+    let created = dir.file("new.md", "before");
 
     assert!(changes_until(&events, &created).contains(&created));
 }
 
 #[test]
 fn a_path_that_cannot_be_watched_is_left_out_of_what_was_registered() {
-    let dir = ScratchDir::new();
-    let doc = dir.file("a.md");
-    let gone = dir.0.join("deleted.md");
+    let dir = scratch_dir();
+    let doc = dir.file("a.md", "before");
+    let gone = dir.path().join("deleted.md");
     let (handler, _events) = mpsc::channel();
 
-    let (_watcher, accepted) =
-        FileWatcher::start(&plan_with_polled(&[&gone, &doc], &[]), handler).unwrap();
+    let watcher = FileWatcher::start(&plan_with_polled(&[&gone, &doc], &[]), handler).unwrap();
 
-    assert_eq!(accepted.files, HashSet::from([doc]));
+    assert_eq!(watcher.watched().files, HashSet::from([doc]));
 }
 
 #[test]
 fn polled_documents_start_the_poll_backend_alone() {
-    let dir = ScratchDir::new();
-    let doc = dir.file("remote.md");
+    let dir = scratch_dir();
+    let doc = dir.file("remote.md", "before");
     let (handler, _events) = mpsc::channel();
 
-    let (mut watcher, accepted) =
-        FileWatcher::start(&plan_with_polled(&[], &[&doc]), handler).unwrap();
+    let mut watcher = FileWatcher::start(&plan_with_polled(&[], &[&doc]), handler).unwrap();
 
-    assert_eq!(accepted.files, HashSet::from([doc.clone()]));
-    assert!(watcher.inotify_watcher().is_none());
+    assert_eq!(watcher.watched().files, HashSet::from([doc.clone()]));
+    assert!(!watcher.runs(Backend::Inotify));
     // The poll backend holds the document: only a watched path can be unwatched.
-    assert!(watcher.poll_watcher().unwrap().unwatch(&doc).is_ok());
+    assert!(poll(&mut watcher).unwatch(&doc).is_ok());
 }
 
 #[test]
 fn local_and_polled_documents_start_both_backends() {
-    let dir = ScratchDir::new();
-    let (local, remote) = (dir.file("local.md"), dir.file("remote.md"));
+    let dir = scratch_dir();
+    let (local, remote) = (
+        dir.file("local.md", "before"),
+        dir.file("remote.md", "before"),
+    );
     let (handler, _events) = mpsc::channel();
 
-    let (mut watcher, accepted) =
+    let mut watcher =
         FileWatcher::start(&plan_with_polled(&[&local], &[&remote]), handler).unwrap();
 
     assert_eq!(
-        accepted.files,
+        watcher.watched().files,
         HashSet::from([local.clone(), remote.clone()])
     );
-    assert!(watcher.inotify_watcher().unwrap().unwatch(&local).is_ok());
-    assert!(watcher.poll_watcher().unwrap().unwatch(&remote).is_ok());
+    let inotify = watcher.backend(Backend::Inotify).unwrap();
+    assert!(inotify.unwatch(&local).is_ok());
+    assert!(poll(&mut watcher).unwatch(&remote).is_ok());
 }
 
 #[test]
@@ -178,31 +168,84 @@ fn a_backend_that_cannot_be_created_is_reported_as_not_started() {
 }
 
 #[test]
-fn applying_a_diff_watches_added_documents_and_drops_removed_ones() {
-    let dir = ScratchDir::new();
-    let (closed, opened) = (dir.file("closed.md"), dir.file("opened.md"));
+fn syncing_documents_watches_the_opened_ones_and_drops_the_closed_ones() {
+    let dir = scratch_dir();
+    let (closed, opened) = (
+        dir.file("closed.md", "before"),
+        dir.file("opened.md", "before"),
+    );
     let (handler, events) = mpsc::channel();
-    let (mut watcher, _) = FileWatcher::start(&plan_with_polled(&[&closed], &[]), handler).unwrap();
+    let mut watcher = FileWatcher::start(&plan_with_polled(&[&closed], &[]), handler).unwrap();
 
-    let diff = WatchDiff {
-        add: vec![opened.clone()],
-        remove: vec![closed.clone()],
-    };
-    watcher.apply(&diff, "file");
+    let synced = watcher.sync_files(HashSet::from([opened.clone()]));
     // Written first, so a change to it would be reported no later than the
     // change to the document that is still watched.
     fs::write(&closed, "after").unwrap();
     fs::write(&opened, "after").unwrap();
 
+    assert_eq!(synced, Ok(()));
+    assert_eq!(watcher.watched().files, HashSet::from([opened.clone()]));
     assert_eq!(changes_until(&events, &opened), [opened]);
 }
 
 #[test]
-fn a_diff_skips_documents_whose_backend_is_not_running() {
-    let dir = ScratchDir::new();
-    let (remote, local) = (dir.file("remote.md"), dir.file("local.md"));
+fn a_sync_holds_what_was_asked_for_even_when_a_path_is_refused() {
+    let dir = scratch_dir();
+    let doc = dir.file("a.md", "before");
+    let gone = dir.path().join("deleted.md");
     let (handler, _events) = mpsc::channel();
-    let (mut watcher, _) = FileWatcher::start(&plan_with_polled(&[], &[&remote]), handler).unwrap();
+    let mut watcher = FileWatcher::start(&plan_with_polled(&[&doc], &[]), handler).unwrap();
+    let desired = HashSet::from([doc, gone]);
+
+    assert_eq!(watcher.sync_files(desired.clone()), Ok(()));
+
+    assert_eq!(watcher.watched().files, desired);
+}
+
+#[test]
+fn a_sync_that_needs_a_backend_that_is_not_running_changes_nothing() {
+    let dir = scratch_dir();
+    let (remote, local) = (
+        dir.file("remote.md", "before"),
+        dir.file("local.md", "before"),
+    );
+    let (handler, _events) = mpsc::channel();
+    let mut watcher = FileWatcher::start(&plan_with_polled(&[], &[&remote]), handler).unwrap();
+
+    let synced = watcher.sync_files(HashSet::from([local]));
+
+    assert_eq!(synced, Err(MissingBackend));
+    assert_eq!(watcher.watched().files, HashSet::from([remote.clone()]));
+    assert!(poll(&mut watcher).unwatch(&remote).is_ok());
+}
+
+#[test]
+fn syncing_explorer_directories_watches_the_opened_ones_and_drops_the_closed_ones() {
+    let dir = scratch_dir();
+    let (closed, opened) = (dir.dir("closed"), dir.dir("opened"));
+    let plan = WatchPlan::new(Vec::new(), vec![closed.clone()]);
+    let (handler, events) = mpsc::channel();
+    let mut watcher = FileWatcher::start(&plan, handler).unwrap();
+
+    watcher.sync_explorer_dirs(HashSet::from([opened.clone()]));
+    fs::write(closed.join("x.md"), "new").unwrap();
+    let created = opened.join("x.md");
+    fs::write(&created, "new").unwrap();
+
+    assert_eq!(watcher.watched().explorer_dirs, HashSet::from([opened]));
+    let changed = changes_until(&events, &created);
+    assert!(!changed.iter().any(|path| path.starts_with(&closed)));
+}
+
+#[test]
+fn a_diff_skips_documents_whose_backend_is_not_running() {
+    let dir = scratch_dir();
+    let (remote, local) = (
+        dir.file("remote.md", "before"),
+        dir.file("local.md", "before"),
+    );
+    let (handler, _events) = mpsc::channel();
+    let mut watcher = FileWatcher::start(&plan_with_polled(&[], &[&remote]), handler).unwrap();
 
     let diff = WatchDiff {
         add: vec![local.clone()],
@@ -211,15 +254,18 @@ fn a_diff_skips_documents_whose_backend_is_not_running() {
     watcher.apply(&diff, "file");
 
     // A local document needs inotify; the poll backend must not take it.
-    assert!(watcher.poll_watcher().unwrap().unwatch(&local).is_err());
+    assert!(poll(&mut watcher).unwatch(&local).is_err());
 }
 
 #[test]
 fn a_gvfs_document_added_by_a_diff_goes_to_the_poll_backend() {
-    let dir = ScratchDir::new();
-    let (local, remote) = (dir.file("local.md"), dir.file("remote.md"));
+    let dir = scratch_dir();
+    let (local, remote) = (
+        dir.file("local.md", "before"),
+        dir.file("remote.md", "before"),
+    );
     let (handler, events) = mpsc::channel();
-    let (mut watcher, _) =
+    let mut watcher =
         FileWatcher::start(&plan_with_polled(&[&local], &[&remote]), handler).unwrap();
 
     let diff = WatchDiff {
@@ -419,16 +465,19 @@ fn a_change_outside_the_root_has_no_ancestors_within_it() {
 }
 
 #[test]
-fn a_change_under_the_root_refreshes_its_parent_listing() {
+fn the_nearest_ancestor_within_the_root_is_the_directory_holding_the_change() {
     let root = Path::new("/home/me");
 
     assert_eq!(
-        listing_to_refresh(Path::new("/home/me/docs/new.md"), root),
+        ancestors_within(Path::new("/home/me/docs/new.md"), root).next(),
         Some(Path::new("/home/me/docs"))
     );
     assert_eq!(
-        listing_to_refresh(Path::new("/home/me/new.md"), root),
+        ancestors_within(Path::new("/home/me/new.md"), root).next(),
         Some(root)
     );
-    assert_eq!(listing_to_refresh(Path::new("/tmp/new.md"), root), None);
+    assert_eq!(
+        ancestors_within(Path::new("/tmp/new.md"), root).next(),
+        None
+    );
 }

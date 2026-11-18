@@ -193,6 +193,14 @@ impl Reader {
         found
     }
 
+    /// Whether the window is at rest: the last frame asked for no other
+    /// after it, so nothing on screen changes until the reader acts or a
+    /// file does.
+    pub(crate) fn is_at_rest(&self) -> bool {
+        let root = &self.kit.output().viewport_output[&egui::ViewportId::ROOT];
+        root.repaint_delay == std::time::Duration::MAX
+    }
+
     /// Whether `text` is in the window: in the name or the content of
     /// something a screen reader would read, or in text that is painted.
     pub(crate) fn sees(&self, text: &str) -> bool {

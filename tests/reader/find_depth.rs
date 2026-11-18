@@ -408,12 +408,7 @@ fn closing_the_tab_in_front_counts_the_one_behind_it() {
     assert_eq!(reader.typed(), ["tent"]);
 }
 
-/// Known bug, listed in `tests/README.md`: a link followed in place leaves
-/// the find bar counting nothing, although the query is still in it and
-/// the new page has matches. This test states the right behavior and is
-/// expected to fail until the app has it.
 #[test]
-#[should_panic(expected = "the count does not follow a link opened in place")]
 fn following_a_link_counts_the_document_arrived_at() {
     let mut reader = Reader::with_docs(&[
         ("one.md", "# One\n\nA tent. Now [onward](two.md)."),

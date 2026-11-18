@@ -3,25 +3,24 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui::{self, FontId, TextStyle};
-#[cfg(feature = "mcp")]
-use egui_mcp_bridge::McpBridge;
 
 use crate::app::content::look::DocumentLook;
+use crate::app::frame::WindowTitle;
+use crate::app::lightbox::Lightbox;
 use crate::app::outline::{HeadingSpy, OutlineRule};
+use crate::app::settings::FontPicker;
+use crate::app::watching::LiveReload;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
-use crate::layout::{
-    ReadingWidth, EXPLORER_DEFAULT_WIDTH, OUTLINE_DEFAULT_WIDTH, SIDEBAR_RESIZE_GRAB_RADIUS,
-};
-use crate::persist::{restored_sidebar_width, PersistedState, APP_KEY};
+use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
+use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
 use crate::search::SearchState;
-use crate::system_fonts::{document_fonts, scan_pickable_font_families, setup_fonts};
+use crate::system_fonts::{document_fonts, setup_fonts, FontConfig};
 use crate::tab::Tab;
-use crate::theme::ThemeId;
+use crate::theme::{ColorOverrides, ThemeId};
 
 #[cfg(kani)]
 mod proofs;
@@ -88,22 +87,6 @@ fn configure_context(ctx: &egui::Context) {
     });
 }
 
-/// Scan the picker's family list off the UI thread: probing every family's
-/// Latin coverage takes ~0.5s on a stock Arch system (see
-/// `scan_pickable_font_families`). Until the result lands, the font dialog
-/// shows "System Default" plus a scanning note. `None` means the thread
-/// could not be started, and the list stays empty.
-fn spawn_font_family_scan() -> Option<Receiver<Vec<String>>> {
-    let (font_family_tx, font_family_rx) = mpsc::channel();
-    std::thread::Builder::new()
-        .name("font-family-scan".to_owned())
-        .spawn(move || {
-            let _ = font_family_tx.send(scan_pickable_font_families());
-        })
-        .is_ok()
-        .then_some(font_family_rx)
-}
-
 /// The tabs to start with, and the message to show when the requested file
 /// could not be opened. A file from the command line takes priority over the
 /// previous session's tabs; with neither, the app starts on the welcome page.
@@ -143,13 +126,6 @@ fn initial_explorer(
     persisted_root: Option<PathBuf>,
     expanded_dirs: Option<Vec<PathBuf>>,
 ) -> FileExplorer {
-    let mut file_explorer = FileExplorer::default();
-
-    // Restore sort order before scanning (so initial scan uses correct order)
-    if let Some(sort_order) = sort_order {
-        file_explorer.sort_order = sort_order;
-    }
-
     let root = file
         .and_then(Path::parent)
         .map(Path::to_path_buf)
@@ -160,15 +136,8 @@ fn initial_explorer(
                 .map(Path::to_path_buf)
         })
         .or_else(|| std::env::current_dir().ok());
-    if let Some(root) = root {
-        file_explorer.set_root(root);
-    }
-
-    // Restore expanded directories (children will lazy-load on first render)
-    if let Some(expanded) = expanded_dirs {
-        file_explorer.expanded_dirs = expanded.into_iter().collect();
-    }
-    file_explorer
+    let expanded_dirs = expanded_dirs.into_iter().flatten().collect();
+    FileExplorer::restored(sort_order.unwrap_or_default(), expanded_dirs, root)
 }
 
 /// Whether `display`, the value of `DISPLAY`, names a virtual display (e.g.,
@@ -180,15 +149,23 @@ fn is_virtual_display(display: Option<&str>) -> bool {
 
 /// The theme of the last session, and what the document pane renders with
 /// until frame 1, which rebuilds it once the theme's visuals are applied.
-fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, DocumentLook) {
-    let theme = ThemeId::restored(persisted.theme, persisted.dark_mode);
-    let fonts = document_fonts(
-        persisted.selected_font_family.as_deref(),
-        persisted.font_preset.unwrap_or_default(),
-        persisted.text_size_class.unwrap_or_default(),
-    );
-    let look = DocumentLook::new(&ctx.style(), theme.palette(), &fonts);
+fn restored_look(
+    ctx: &egui::Context,
+    persisted: &PersistedState,
+    fonts: &FontConfig,
+) -> (ThemeId, DocumentLook) {
+    let theme = persisted.theme();
+    let look = DocumentLook::new(&ctx.style(), theme.palette(), &document_fonts(fonts));
     (theme, look)
+}
+
+/// The font choices of the last session.
+fn restored_fonts(persisted: &PersistedState) -> FontConfig {
+    FontConfig {
+        family: persisted.selected_font_family.clone(),
+        preset: persisted.font_preset(),
+        size: persisted.text_size_class(),
+    }
 }
 
 /// The tab a saved session comes back on: the one it saved, or the last
@@ -196,20 +173,6 @@ fn restored_look(ctx: &egui::Context, persisted: &PersistedState) -> (ThemeId, D
 /// none.
 fn restored_active_tab(saved: Option<usize>, tab_count: usize) -> usize {
     saved.unwrap_or(0).min(tab_count.saturating_sub(1))
-}
-
-/// The document zoom a saved session comes back at.
-fn restored_zoom(saved: Option<f32>) -> f32 {
-    saved.unwrap_or(1.0).clamp(0.5, 3.0)
-}
-
-/// The formula size a saved session comes back at, relative to the text.
-fn restored_math_scale(saved: Option<f32>) -> f32 {
-    saved.unwrap_or(1.0).clamp(1.0, 2.0)
-}
-
-const fn color_from_persisted([r, g, b, a]: [u8; 4]) -> egui::Color32 {
-    egui::Color32::from_rgba_premultiplied(r, g, b, a)
 }
 
 impl MarkdownApp {
@@ -228,12 +191,7 @@ impl MarkdownApp {
         // Setup fonts with system font fallbacks for Unicode support, led by
         // the user's picked family (font picker) or the preset's emulated
         // stack; the text-size class is shared by every preset.
-        setup_fonts(
-            &cc.egui_ctx,
-            persisted.selected_font_family.as_deref(),
-            persisted.font_preset.unwrap_or_default(),
-            persisted.text_size_class.unwrap_or_default(),
-        );
+        setup_fonts(&cc.egui_ctx, &restored_fonts(&persisted));
         configure_context(&cc.egui_ctx);
 
         Self::from_persisted(&cc.egui_ctx, persisted, file, watch)
@@ -247,7 +205,24 @@ impl MarkdownApp {
         file: Option<PathBuf>,
         watch: bool,
     ) -> Self {
-        let (theme, document_look) = restored_look(ctx, &persisted);
+        let fonts = restored_fonts(&persisted);
+        let (theme, document_look) = restored_look(ctx, &persisted, &fonts);
+        // Each setting is read here, before the paths leave `persisted`.
+        let zoom_level = persisted.zoom();
+        let show_outline = persisted.show_outline();
+        let outline_rule = OutlineRule::restored(persisted.show_outline);
+        let reading_width = persisted.reading_width();
+        let line_spacing = persisted.line_spacing();
+        let math_scale = persisted.math_scale();
+        let colors = ColorOverrides {
+            highlight: persisted.highlight_color(),
+            link: persisted.link_color(),
+        };
+        let smooth_text_rendering = persisted.smooth_text_rendering();
+        let show_explorer = persisted.show_explorer();
+        let explorer_width = persisted.explorer_width();
+        let outline_width = persisted.outline_width();
+
         let (tabs, startup_error) = initial_tabs(file.as_deref(), persisted.open_tabs);
         let active_tab = restored_active_tab(persisted.active_tab, tabs.len());
         let file_explorer = initial_explorer(
@@ -258,95 +233,83 @@ impl MarkdownApp {
             persisted.expanded_dirs,
         );
 
-        #[cfg(feature = "mcp")]
-        let mcp_bridge = McpBridge::builder().port(9877).build();
-        #[cfg(feature = "mcp")]
-        log::info!("MCP bridge listening on port {}", mcp_bridge.port());
-
-        let highlight_color = persisted.highlight_color.map(color_from_persisted);
-        let link_color = persisted.link_color.map(color_from_persisted);
-        let font_preset = persisted.font_preset.unwrap_or_default();
-        let text_size_class = persisted.text_size_class.unwrap_or_default();
-        let reading_width =
-            ReadingWidth::restored(persisted.reading_width, persisted.full_width_content);
-
         let mut app = Self {
             tabs,
             active_tab,
+            revealed_tab: None,
             theme,
-            zoom_level: restored_zoom(persisted.zoom_level),
-            show_outline: persisted.show_outline.unwrap_or(true),
-            outline_rule: OutlineRule::restored(persisted.show_outline),
+            zoom_level,
+            show_outline,
+            outline_rule,
             heading_spy: HeadingSpy::default(),
             reading_width,
             document_pane_width: f32::INFINITY,
             column_drag_grab: None,
-            line_spacing: persisted.line_spacing.unwrap_or_default(),
+            line_spacing,
             document_look,
-            math_scale: restored_math_scale(persisted.math_scale),
-            // Frame 1 always rebuilds Visuals anyway (last_applied_theme
-            // starts at None), so this just avoids a spurious second rebuild
-            // afterward if nothing further changes.
-            highlight_color,
-            last_applied_highlight_color: highlight_color,
-            link_color,
-            last_applied_link_color: link_color,
+            math_scale,
+            colors,
+            applied_visuals: None,
             show_color_settings_dialog: false,
-            // Already applied by `new` via setup_fonts(); last_applied starts in
-            // sync so update() doesn't redundantly reload fonts on frame 1.
-            last_applied_font_config: Some((
-                persisted.selected_font_family.clone(),
-                font_preset,
-                text_size_class,
-            )),
-            selected_font_family: persisted.selected_font_family,
-            available_font_families: Vec::new(),
-            available_font_families_lower: Vec::new(),
-            pending_font_family_scan: spawn_font_family_scan(),
-            show_font_dialog: false,
-            font_filter: String::new(),
-            smooth_text_rendering: persisted.smooth_text_rendering.unwrap_or(false),
-            font_preset,
-            text_size_class,
+            // Already applied by `new` via setup_fonts(); `applied_fonts` starts
+            // in sync so update() doesn't redundantly reload fonts on frame 1.
+            applied_fonts: Some(fonts.clone()),
+            fonts,
+            font_picker: FontPicker::scanning(),
+            smooth_text_rendering,
             file_picker: Box::new(pick_file),
             folder_picker: Box::new(pick_folder),
-            watch_enabled: watch,
+            live_reload: LiveReload::new(watch),
             error_message: startup_error,
-            is_dragging: false,
-            watcher: None,
-            watcher_rx: None,
-            watcher_retry_count: 0,
-            watched_paths: HashSet::new(),
-            watched_explorer_dirs: HashSet::new(),
             file_explorer,
-            // A fresh install opens on the document alone.
-            show_explorer: persisted.show_explorer.unwrap_or(false),
-            explorer_width: restored_sidebar_width(
-                persisted.explorer_width,
-                EXPLORER_DEFAULT_WIDTH,
-            ),
-            outline_width: restored_sidebar_width(persisted.outline_width, OUTLINE_DEFAULT_WIDTH),
+            show_explorer,
+            explorer_width,
+            outline_width,
             flashing_paths: HashMap::new(),
             is_virtual_display: is_virtual_display(std::env::var("DISPLAY").ok().as_deref()),
             egui_ctx: ctx.clone(),
-            last_applied_theme: None,
             last_applied_zoom_level: None,
-            last_window_title: String::new(),
-            title_dirty: true,
+            window_title: WindowTitle::unset(),
             open_tab_paths: HashSet::new(),
-            lightbox: None,
-            lightbox_scroll: 0.0,
-            lightbox_open_count: 0,
+            lightbox: Lightbox::default(),
             search: SearchState::default(),
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,
             home_list: None,
-            #[cfg(feature = "mcp")]
-            mcp_bridge,
         };
 
         app.begin_session(file, watch);
         app
+    }
+
+    /// What this session saves, for `from_persisted` to start the next
+    /// one from.
+    pub(crate) fn persisted(&self) -> PersistedState {
+        PersistedState {
+            theme: Some(self.theme),
+            dark_mode: None,
+            zoom_level: Some(self.zoom_level),
+            show_outline: self.outline_rule.saved(self.show_outline),
+            reading_width: Some(self.reading_width.get()),
+            full_width_content: None,
+            line_spacing: Some(self.line_spacing),
+            math_scale: Some(self.math_scale),
+            highlight_color: self.colors.highlight.map(color_to_persisted),
+            link_color: self.colors.link.map(color_to_persisted),
+            selected_font_family: self.fonts.family.clone(),
+            smooth_text_rendering: Some(self.smooth_text_rendering),
+            font_preset: Some(self.fonts.preset),
+            text_size_class: Some(self.fonts.size),
+            open_tabs: Some(self.get_open_tab_paths()),
+            active_tab: Some(self.active_tab),
+            show_explorer: Some(self.show_explorer),
+            explorer_root: self.file_explorer.root().map(Path::to_path_buf),
+            expanded_dirs: Some(self.file_explorer.expanded_dirs().iter().cloned().collect()),
+            explorer_sort_order: Some(self.file_explorer.sort_order()),
+            explorer_width: Some(self.explorer_width),
+            outline_width: Some(self.outline_width),
+            recent_files: Some(self.recent_files.clone()),
+        }
     }
 
     /// What a launch does once the state is built: note which documents
@@ -357,7 +320,8 @@ impl MarkdownApp {
 
         // Record a CLI-provided file as recent (an explicit open). Session-restored
         // tabs are not treated as explicit opens, so they are not recorded here.
-        if let Some(file) = file {
+        // A file that did not open left no tab, and was never read.
+        if let Some(file) = file.filter(|_| !self.tabs.is_empty()) {
             let file = file.canonicalize().unwrap_or(file);
             self.record_recent(&file);
         }

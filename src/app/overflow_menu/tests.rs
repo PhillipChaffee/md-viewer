@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 use crate::app::ui_harness::UiHarness;
 use crate::app::MarkdownApp;
+use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::test_support::assert_close;
 use crate::theme::ThemeId;
@@ -70,10 +71,10 @@ fn the_dialog_items_open_their_dialogs() {
 
     harness.pick("Colors");
     assert!(harness.app().show_color_settings_dialog);
-    assert!(!harness.app().show_font_dialog);
+    assert!(!harness.app().font_picker.open);
 
     harness.pick("Fonts");
-    assert!(harness.app().show_font_dialog);
+    assert!(harness.app().font_picker.open);
 }
 
 #[test]
@@ -183,12 +184,29 @@ fn live_reload_turns_file_watching_on_and_off_and_is_ticked_while_on() {
     assert!(!harness.is_on("Live Reload"));
 
     harness.click("Live Reload");
-    assert!(harness.app().watcher.is_some());
+    assert!(harness.app().live_reload.is_live());
     harness.open_more();
     assert!(harness.is_on("Live Reload"));
 
     harness.click("Live Reload");
-    assert!(harness.app().watcher.is_none());
+    assert!(!harness.app().live_reload.is_live());
+}
+
+#[test]
+fn live_reload_is_ticked_while_on_with_nothing_to_watch_and_a_click_unticks_it() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.app_mut().close_active_tab();
+    harness.app_mut().file_explorer = FileExplorer::default();
+    harness.open_more();
+    harness.click("Live Reload");
+    assert!(!harness.app().live_reload.is_live());
+
+    harness.open_more();
+    assert!(harness.is_on("Live Reload"));
+
+    harness.click("Live Reload");
+    harness.open_more();
+    assert!(!harness.is_on("Live Reload"));
 }
 
 #[test]
@@ -225,7 +243,7 @@ fn open_folder_points_the_explorer_at_the_picked_folder() {
 
     harness.pick("Open Folder");
 
-    assert_eq!(harness.app().file_explorer.root, Some(folder));
+    assert_eq!(harness.app().file_explorer.root(), Some(folder.as_path()));
     assert!(harness.app().show_explorer, "the new root is put on screen");
 }
 

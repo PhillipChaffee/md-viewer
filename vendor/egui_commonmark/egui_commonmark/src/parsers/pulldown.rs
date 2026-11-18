@@ -1854,6 +1854,15 @@ struct DefinitionList {
     is_def_list_def: bool,
 }
 
+/// One piece of a heading, kept until the heading ends and is laid out
+/// from the left edge in one go.
+enum HeadingPiece {
+    Text(egui::RichText),
+    /// A whole link. Rendered where it ended it would be laid out before
+    /// the heading's text, on top of the heading's start.
+    Link(Link),
+}
+
 pub struct CommonMarkViewerInternal {
     curr_table: usize,
     curr_code_block: usize,
@@ -1879,8 +1888,8 @@ pub struct CommonMarkViewerInternal {
     current_heading_y: Option<f32>,
     current_heading_source_start: Option<usize>,
     current_heading_text: String,
-    /// Accumulate heading RichText fragments for single render at end
-    current_heading_rich_texts: Vec<egui::RichText>,
+    /// Accumulate the heading's text and links for single render at end
+    current_heading_pieces: Vec<HeadingPiece>,
     /// Content-space Y of the first event rendered by the current slice.
     slice_start_y: f32,
     /// Screen-space Y of the root UI for the current full or sliced render.
@@ -1931,7 +1940,7 @@ impl CommonMarkViewerInternal {
             current_heading_y: None,
             current_heading_source_start: None,
             current_heading_text: String::new(),
-            current_heading_rich_texts: Vec::new(),
+            current_heading_pieces: Vec::new(),
             slice_start_y: 0.0,
             render_origin_y: 0.0,
         }
@@ -2070,6 +2079,10 @@ fn is_likely_currency(tex: &str) -> bool {
         return false;
     }
 
+    if is_plain_arithmetic(trimmed) {
+        return false;
+    }
+
     // For ^ and _, only trust them as math if the content is short and
     // doesn't look like English prose. Long text with underscores from
     // identifiers (total_usd, miss_cost) is a false positive.
@@ -2086,6 +2099,23 @@ fn is_likely_currency(tex: &str) -> bool {
 
     // No math syntax found — this is almost certainly a currency/misparse
     true
+}
+
+/// Whether `tex` is arithmetic on numbers and one-letter variables and
+/// nothing else: `b + c`, `2x - 1`, `a / b`.
+///
+/// Prose caught between two dollar signs has words in it (`5/mo and 6`) or
+/// stops at an operator (`3,000-`). An expression of single letters and
+/// numbers that ends in an operand has neither.
+fn is_plain_arithmetic(tex: &str) -> bool {
+    let is_operator = |c: char| matches!(c, '+' | '-' | '*' | '/');
+    let is_word = |pair: &[u8]| pair.iter().all(u8::is_ascii_alphabetic);
+    tex.contains(is_operator)
+        && !tex.ends_with(is_operator)
+        && tex.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == ' ' || c == '.' || c == ',' || is_operator(c)
+        })
+        && !tex.as_bytes().windows(2).any(is_word)
 }
 
 /// Find source-visible references that the host registered as local links.
@@ -2801,43 +2831,57 @@ impl CommonMarkViewerInternal {
         ui: &mut Ui,
     ) {
         if self.is_blockquote {
-            let mut collected_events = delayed_events(events, |tag| {
-                matches!(tag, pulldown_cmark::TagEnd::BlockQuote(_))
-            });
-            self.block_start(ui, options, BlockKind::Boxed);
-
-            // Currently the blockquotes are made in such a way that they need a newline at the end
-            // and the start so when this is the first element in the markdown the newline must be
-            // manually enabled
-            self.line.should_not_start_newline_forced = false;
-            if let Some(alert) = parse_alerts(&options.alerts, &mut collected_events) {
-                egui_commonmark_backend_extended::alert_ui(alert, ui, |ui| {
-                    self.quoted_events(ui, collected_events, cache, options, max_width);
-                })
-            } else {
-                let bar = options
-                    .block_style
-                    .blockquote_bar
-                    .unwrap_or_else(|| ui.visuals().weak_text_color());
-                blockquote(ui, bar, |ui| {
-                    self.text_style.quote = true;
-                    self.quoted_events(ui, collected_events, cache, options, max_width);
-                    self.text_style.quote = false;
-                });
-            }
-
-            if events.peek().is_none() {
-                self.line.should_end_newline_forced = false;
-            }
-
-            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
-            self.block_end(ui, options, BlockKind::Boxed);
+            self.quote(events, max_width, cache, options, ui);
             self.is_blockquote = false;
         }
     }
 
+    /// Render the quote whose start tag was just consumed from `events`,
+    /// in a frame of its own.
+    fn quote<'e>(
+        &mut self,
+        events: &mut Peekable<impl Iterator<Item = EventIteratorItem<'e>>>,
+        max_width: f32,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        ui: &mut Ui,
+    ) {
+        let mut collected_events = delayed_events_blockquote(events);
+        self.block_start(ui, options, BlockKind::Boxed);
+
+        // Currently the blockquotes are made in such a way that they need a newline at the end
+        // and the start so when this is the first element in the markdown the newline must be
+        // manually enabled
+        self.line.should_not_start_newline_forced = false;
+        if let Some(alert) = parse_alerts(&options.alerts, &mut collected_events) {
+            egui_commonmark_backend_extended::alert_ui(alert, ui, |ui| {
+                self.quoted_events(ui, collected_events, cache, options, max_width);
+            })
+        } else {
+            let bar = options
+                .block_style
+                .blockquote_bar
+                .unwrap_or_else(|| ui.visuals().weak_text_color());
+            blockquote(ui, bar, |ui| {
+                // A quote inside this one ends first; the text after it
+                // is still quoted.
+                let outer = std::mem::replace(&mut self.text_style.quote, true);
+                self.quoted_events(ui, collected_events, cache, options, max_width);
+                self.text_style.quote = outer;
+            });
+        }
+
+        if events.peek().is_none() {
+            self.line.should_end_newline_forced = false;
+        }
+
+        self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
+        self.block_end(ui, options, BlockKind::Boxed);
+    }
+
     /// Render the events of a blockquote, which are not driven through
-    /// [`Self::process_event`].
+    /// [`Self::process_event`]. A quote among them is a quote of its own,
+    /// framed and stepped in from this one.
     fn quoted_events(
         &mut self,
         ui: &mut Ui,
@@ -2846,9 +2890,16 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
         max_width: f32,
     ) {
-        let mut events = events.into_iter().peekable();
-        while let Some((event, src_span)) = events.next() {
-            self.upcoming = upcoming_block(events.peek().map(|(event, _)| event));
+        let mut events = events.into_iter().enumerate().peekable();
+        while let Some((_, (event, src_span))) = events.next() {
+            if matches!(
+                event,
+                pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote(_))
+            ) {
+                self.quote(&mut events, max_width, cache, options, ui);
+                continue;
+            }
+            self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
             self.event(ui, event, src_span, cache, options, max_width);
         }
     }
@@ -3407,7 +3458,7 @@ impl CommonMarkViewerInternal {
                     }
                     if auto_link.is_some() {
                         if let Some(link) = self.link.take() {
-                            link.end(ui, cache);
+                            self.end_link(link, ui, cache);
                         }
                     }
                     if wrap {
@@ -3467,8 +3518,9 @@ impl CommonMarkViewerInternal {
             }
             pulldown_cmark::Event::InlineMath(tex) => {
                 if is_likely_currency(&tex) {
-                    // Render as plain text with $ prefix instead of math
-                    let text: CowStr = format!("${tex}").into();
+                    // Render as plain text instead of math, between the two
+                    // dollar signs the parser took for its delimiters.
+                    let text: CowStr = format!("${tex}$").into();
                     self.event_text(text, ui, options);
                 } else {
                     #[cfg(feature = "math")]
@@ -3513,6 +3565,16 @@ impl CommonMarkViewerInternal {
                     start_row_below(ui, 0.0);
                 }
             }
+        }
+    }
+
+    /// A link is complete: show it, or in a heading keep it for its place
+    /// among the heading's pieces.
+    fn end_link(&mut self, link: Link, ui: &mut Ui, cache: &mut CommonMarkCache) {
+        if self.text_style.heading.is_some() {
+            self.current_heading_pieces.push(HeadingPiece::Link(link));
+        } else {
+            link.end(ui, cache);
         }
     }
 
@@ -3570,7 +3632,8 @@ impl CommonMarkViewerInternal {
             self.current_heading_text
                 .push_str(raw_heading_text.unwrap_or(&text));
             // Accumulate RichText - will render all at once in end_tag(Heading)
-            self.current_heading_rich_texts.push(rich_text);
+            self.current_heading_pieces
+                .push(HeadingPiece::Text(rich_text));
         } else if self.is_table {
             match self.code_chip_radius(bg, options) {
                 Some(radius) => inline_code_label(ui, rich_text, radius, true),
@@ -3931,17 +3994,22 @@ impl CommonMarkViewerInternal {
             }
             pulldown_cmark::TagEnd::Heading { .. } => {
                 // Render all accumulated heading fragments at once, positioned at left edge
-                if !self.current_heading_rich_texts.is_empty() {
+                if !self.current_heading_pieces.is_empty() {
                     let available = ui.available_rect_before_wrap();
                     let left_edge = ui.min_rect().left();
                     let heading_rect = egui::Rect::from_min_size(
                         egui::pos2(left_edge, available.top()),
                         egui::vec2(available.width() + (available.left() - left_edge), available.height()),
                     );
-                    let rich_texts = std::mem::take(&mut self.current_heading_rich_texts);
+                    let pieces = std::mem::take(&mut self.current_heading_pieces);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(heading_rect), |ui| {
-                        for rt in rich_texts {
-                            ui.label(rt);
+                        for piece in pieces {
+                            match piece {
+                                HeadingPiece::Text(rt) => {
+                                    ui.label(rt);
+                                }
+                                HeadingPiece::Link(link) => link.end(ui, cache),
+                            }
                         }
                     });
                 }
@@ -4070,7 +4138,7 @@ impl CommonMarkViewerInternal {
                     // the previous one. Empty links have no visible widget to
                     // render; keep the cursor where the image left it.
                     if !link.text.is_empty() {
-                        link.end(ui, cache);
+                        self.end_link(link, ui, cache);
                     }
                 }
             }
@@ -5858,6 +5926,73 @@ mod tests {
         assert_eq!(expanded_visible_text(markdown), "Paragraph 📌 🚀 📌");
     }
 
+    /// The pieces a heading has kept so far, a link as `[text](destination)`.
+    fn heading_display(renderer: &CommonMarkViewerInternal) -> Vec<String> {
+        renderer
+            .current_heading_pieces
+            .iter()
+            .map(|piece| match piece {
+                HeadingPiece::Text(text) => text.text().to_owned(),
+                HeadingPiece::Link(link) => {
+                    let text: String = link.text.iter().map(|text| text.text()).collect();
+                    format!("[{text}]({})", link.destination)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn arithmetic_on_letters_and_numbers_is_a_formula() {
+        for formula in ["b + c", "2x - 1", "a / b", "1 + 2", "a*b", "x_i", "8.5", "f(x)"] {
+            assert!(!is_likely_currency(formula), "{formula:?} is a formula");
+        }
+        for prose in ["5/mo and 6", "3,000-", "20 to 30", "5 or so, then 6"] {
+            assert!(is_likely_currency(prose), "{prose:?} is prose");
+        }
+    }
+
+    #[test]
+    fn prose_between_dollar_signs_keeps_both_of_them() {
+        egui::__run_test_ui(|ui| {
+            let mut renderer = CommonMarkViewerInternal::new();
+            let mut cache = CommonMarkCache::default();
+            renderer.text_style.heading = Some(1);
+
+            renderer.event(
+                ui,
+                Event::InlineMath("5 or so, then 6".into()),
+                0..17,
+                &mut cache,
+                &CommonMarkOptions::default(),
+                540.0,
+            );
+
+            assert_eq!(heading_display(&renderer), ["$5 or so, then 6$"]);
+        });
+    }
+
+    #[test]
+    fn a_link_in_a_heading_keeps_its_place_among_the_heading_text() {
+        egui::__run_test_ui(|ui| {
+            let mut renderer = CommonMarkViewerInternal::new();
+            let mut cache = CommonMarkCache::default();
+            let options = CommonMarkOptions::default();
+            let markdown = "## Read [go](guide.md) now";
+
+            for (event, span) in Parser::new_ext(markdown, Options::empty()).into_offset_iter() {
+                if matches!(event, Event::End(pulldown_cmark::TagEnd::Heading(_))) {
+                    break;
+                }
+                renderer.event(ui, event, span, &mut cache, &options, 540.0);
+            }
+
+            assert_eq!(
+                heading_display(&renderer),
+                ["Read ", "[go](guide.md)", " now"]
+            );
+        });
+    }
+
     #[test]
     fn production_inline_code_stays_literal_and_keeps_source_highlighting() {
         // Drive the production Event::Code branch and inspect its heading accumulator output.
@@ -5878,8 +6013,7 @@ mod tests {
                 540.0,
             );
 
-            assert_eq!(renderer.current_heading_rich_texts.len(), 1);
-            assert_eq!(renderer.current_heading_rich_texts[0].text(), ":pushpin:");
+            assert_eq!(heading_display(&renderer), [":pushpin:"]);
             assert_eq!(renderer.current_heading_text, ":pushpin:");
             assert!(
                 cache.active_search_y().is_some(),
@@ -5905,12 +6039,7 @@ mod tests {
                 540.0,
             );
 
-            let display: String = renderer
-                .current_heading_rich_texts
-                .iter()
-                .map(|text| text.text())
-                .collect();
-            assert_eq!(display, "Pin 📌");
+            assert_eq!(heading_display(&renderer).concat(), "Pin 📌");
             assert_eq!(renderer.current_heading_text, "Pin :pushpin:");
         });
     }

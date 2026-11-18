@@ -22,23 +22,54 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Sidebars and a home page.** The explorer and contents sidebars are frameless, and the contents list marks the heading being read. With no document open, the home page lists what was read recently: title, folder, reading time and the opening lines.
 
+- **Animated GIFs and WebPs play.** A picture of several frames shows each for the time the file asks for and starts over, instead of standing on its first frame. It asks the window to redraw only while it is in view, so a page with no moving picture on screen costs nothing at rest. Clicking one enlarges it, and it goes on playing there in step with the page. Its frames are kept once, as textures: up to 256 MiB for one picture, which past that shows its first frame only, and 512 MiB for all of them, past which pictures out of view are let go and read again when they come back.
+
 ### Fixes
 
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
 - **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
+- **Emoji in bold text and headings were black outlines** where the same emoji in plain text was in color. Every weight now draws an emoji from the same font.
+- **❤️ was followed by a dotted "VS16" box.** A variation selector (U+FE0F, U+FE0E) now takes no room on the page, and the text itself is unchanged.
+- **❤️ was black where 🔴 was red.** A sign followed by the emoji selector (U+FE0F) is now drawn from the color emoji font, and an emoji followed by the text selector (U+FE0E), such as ☎︎ or 😀︎, in the ink of the text. A character with no selector is drawn as before.
+- **👨‍👩‍👧 was drawn as three faces.** An emoji written as several characters is now one picture where an emoji font has one for it: families and other joined emoji, flags (🇯🇵), skin tones (👍🏽) and keycaps (1️⃣). The text is unchanged, so copying and finding work as before, and in edit mode a click lands before or after the whole emoji.
 - **One mouse wheel step scrolled the page twice.** A notch now moves the document once, also while text is being selected.
 - **Escape closed an open menu and the find bar together.** It now closes the menu first and the find bar on the next press.
 - **Entering edit mode with one document open moved the page down.** The Preview and Edit switch for a lone document is now in the top bar.
 - **The app aborted at startup on a machine where fontconfig lists no fonts.** Fixed by fontique 0.12.
 - **Live reload switched itself off** when a remote folder was open with no document.
+- **Live Reload in ⋯ showed unchecked, and a click on it changed nothing, while there was nothing to watch.** The check mark now shows the setting, and a click or `F5` switches it off or on at any time. Switched on with nothing to watch, it follows the next document opened.
+- **A file that cannot be read said nothing when clicked in the files sidebar** while a document was open. The error bar now says why, as it does with no document open, and the open document stays.
+- **A picture stayed in memory until the app quit,** decoded and as a texture, after the last tab that showed it was closed. Closing a tab now gives back the pictures no other tab has shown.
 - **A tab's close button did not follow the pointer,** and a double click in the image lightbox reset the zoom but not the pan.
 - **Fence tags by language name (`rust`, not `rs`) never reached the configured syntax theme.**
 - **A text size restored from a saved session was overwritten at launch.**
+- A quote inside a quote is set in from the quote around it, with a bar of its own, and a list that follows it starts in line.
+- A link in a heading sits where it is written and can be followed.
+- A plain sum between dollar signs, such as `$b + c$`, is shown as a formula, and text that is not a formula keeps both of its dollar signs.
+- A GIF in a document is shown instead of a warning sign.
+- A picture that was missing is shown once its file exists and the page reloads.
+- A diagram too large for the graphics card is shown at a lower resolution instead of crashing the app.
+- While a picture is enlarged, the top bar is dimmed with the rest of the window and its buttons no longer act.
+- A file named on the command line that could not be opened no longer appears under Recently Read.
+- The contents sidebar, the reading time and links follow what you type in edit mode.
+- A keyboard shortcut tapped very quickly is no longer dropped.
+- The find bar counts matches in the new document after you follow a link, go back or forward, or close a tab.
+- With many tabs open, the tab strip scrolls to the tab in front, and the open-file button no longer sits on the Preview/Edit switch.
+- Ctrl+S saves unsaved edits from the preview as well as from edit mode.
+- Ctrl+W in the find bar closes the tab without also deleting the last word of the search.
+- Unsaved edits are kept when the file changes on disk while you are looking at the preview, not only in edit mode.
+- The find bar counts the matches again as you type in edit mode, and back in the preview the highlights sit on the edited text.
+- The find bar searches the document that "Close Others" keeps.
+- A document opened while the find bar holds a query, with nothing open before it, is searched at once instead of showing "0 matches".
+- After the tab in front is closed, the tab strip scrolls to the tab that takes its place.
+- A refresh of the file explorer is no longer undone by an older scan that finishes after it.
 
 ### Internals
 
 - **The crate runs under the [full-lint](https://github.com/PhillipChaffee/full-lint) Rust baseline.** `./run-gates.sh` runs 23 gates: clippy's pedantic, nursery and cargo groups as errors, denied rustdoc lints, a cognitive-complexity cap of 15, a 1000-effective-line file cap, 95% coverage on lines, regions and functions, and the dependency and hygiene checks. `src/main.rs` (7384 lines) is now modules of at most 500 effective lines, and no test shares a file with the code it tests.
 - **The vendored forks moved from `crates/` to `vendor/`.**
+- **The app's state was regrouped by owner.** Live reload, the fonts, the color overrides, the font picker, the lightbox and the window title are each one value with its own module, and the app holds 40 fields where it held 59. A document owns its scrolling, its jumps to a heading or a match, and its folded outline. The explorer keeps its open folders read by itself. Nothing a reader sees changed apart from the fixes above.
+- **The `mcp` test-bridge feature was removed.** It could not be built: its dependency, egui-mcp-bridge, was a path on one developer's machine and was commented out of `Cargo.toml`. The widget registrations that fed it are gone with it. The tests drive the app through its accessibility tree, which is unchanged.
 
 ## [0.3.0] - 2026-09-13
 

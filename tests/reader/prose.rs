@@ -139,10 +139,7 @@ fn a_quote_keeps_the_lists_and_paragraphs_inside_it_together() {
     assert!((reader.text_area("after").left - edge).abs() < NEAR);
 }
 
-/// Known bug, listed in `tests/README.md`: a quote inside a quote is set
-/// at the same indent as the quote around it, so the two read as one.
 #[test]
-#[should_panic(expected = "a quote inside a quote does not step in")]
 fn a_quote_inside_a_quote_steps_in_again() {
     let reader = page("# Said\n\n> Outer quote\n>\n> > Inner quote\n\nafter");
 
@@ -155,11 +152,7 @@ fn a_quote_inside_a_quote_steps_in_again() {
     );
 }
 
-/// Known bug, listed in `tests/README.md`: the first item of a list that
-/// follows a quote inside a quote is pushed far to the right of the items
-/// under it.
 #[test]
-#[should_panic(expected = "the first item is out of line")]
 fn a_list_after_a_quote_inside_a_quote_is_set_straight() {
     let reader = page("# Said\n\n> Outer\n>\n> > Inner\n\n- first item\n- second item");
 
@@ -199,6 +192,161 @@ fn emoji_shortcodes_become_the_emoji() {
     for (code, emoji) in cases {
         reader.assert_sees(emoji);
         reader.assert_hides(code);
+    }
+}
+
+#[test]
+fn an_emoji_in_bold_text_is_drawn_as_in_the_text_around_it() {
+    let faces = [
+        '\u{1f600}',
+        '\u{1f389}',
+        '\u{2705}',
+        '\u{1f680}',
+        '\u{231a}',
+    ];
+    // Each emoji starts its line. A picture is drawn for where it lands
+    // between two dots of the screen, so the same emoji further along a
+    // plain and a bold line can differ by a few dots at its edges.
+    let lines = each(faces, |face| {
+        format!("{face} plain\n\n**{face} strong**\n\n")
+    });
+    let reader = page(&format!("# Signs\n\n{lines}"));
+
+    for face in faces {
+        let plain = reader.drawing_of(&format!("{face} plain"), face);
+        assert!(!plain.is_blank(), "{face} is drawn in plain text");
+        let strong = reader.drawing_of(&format!("{face} strong"), face);
+        assert_eq!(strong, plain, "{face}");
+    }
+}
+
+#[test]
+fn an_emoji_in_a_heading_is_in_color_where_one_in_the_text_is() {
+    let rocket = '\u{1f680}';
+    let reader = page(&format!(
+        "# Signs\n\n## Launch {rocket} day\n\nplain {rocket} here"
+    ));
+
+    // The heading is on the page and in the contents beside it.
+    let headings = reader.drawings_of("Launch", rocket);
+    let plain = reader.drawing_of("plain", rocket);
+
+    assert!(headings.len() >= 2, "{headings:?}");
+    for heading in &headings {
+        assert!(!heading.is_blank());
+        assert_eq!(
+            heading.is_in_color(),
+            plain.is_in_color(),
+            "{headings:?} beside {plain:?}"
+        );
+    }
+}
+
+/// U+FE0F asks for the emoji look of the sign before it and U+FE0E for the
+/// text look. Neither is a character to draw: the line is as wide as the
+/// sign alone makes it, which for the emoji look is as wide as an emoji.
+#[test]
+fn a_variation_selector_takes_no_room_and_stays_in_the_text() {
+    let (heart, dot) = ('\u{2764}', '\u{1f534}');
+    let (bare, emoji) = (format!("a{heart}b"), format!("a{dot}b"));
+    let (as_emoji, as_text) = (format!("a{heart}\u{fe0f}b"), format!("a{heart}\u{fe0e}b"));
+    for (open, close) in [("", ""), ("**", "**")] {
+        let lines = each([&bare, &emoji, &as_emoji, &as_text], |line| {
+            format!("{open}{line}{close}\n\n")
+        });
+        let reader = page(&format!("# Signs\n\n{lines}"));
+
+        let alike = if reader.drawing_of(&as_emoji, heart).is_in_color() {
+            &emoji
+        } else {
+            &bare
+        };
+        for (line, alike) in [(&as_emoji, alike), (&as_text, &bare)] {
+            reader.assert_sees(line);
+            let (with, without) = (reader.width_of(line), reader.width_of(alike));
+            assert!(
+                (with - without).abs() < 0.01,
+                "{open}{line}{close} is {with} wide and {alike} is {without}"
+            );
+        }
+    }
+}
+
+/// ❤ is a sign in the ink of the text, and ❤️ asks for it as an emoji: it
+/// is in color where the emoji beside it are, in plain and in bold text.
+#[test]
+fn a_sign_with_the_emoji_selector_is_drawn_as_the_emoji_around_it_are() {
+    let (heart, dot) = ('\u{2764}', '\u{1f534}');
+    for (open, close) in [("", ""), ("**", "**")] {
+        let reader = page(&format!(
+            "# Signs\n\n{open}selected {heart}\u{fe0f} end{close}\n\n\
+             {open}bare {heart} end{close}\n\n{open}emoji {dot} end{close}"
+        ));
+
+        let selected = reader.drawing_of("selected", heart);
+        assert!(!selected.is_blank());
+        assert_eq!(
+            selected.is_in_color(),
+            reader.drawing_of("emoji", dot).is_in_color(),
+            "{open}{selected:?}{close}"
+        );
+        assert!(!reader.drawing_of("bare", heart).is_in_color());
+    }
+}
+
+/// 😀︎ and ✅︎ ask for an emoji in the ink of the text, as a letter is.
+#[test]
+fn an_emoji_with_the_text_selector_is_in_the_ink_of_the_text() {
+    let faces = ['\u{1f600}', '\u{2705}'];
+    let lines = each(faces, |face| format!("as text {face}\u{fe0e} end\n\n"));
+    let reader = page(&format!("# Signs\n\n{lines}"));
+
+    for face in faces {
+        let drawing = reader.drawing_of(&format!("{face}\u{fe0e}"), face);
+        assert!(!drawing.is_blank(), "{face}");
+        assert!(!drawing.is_in_color(), "{face}: {drawing:?}");
+    }
+}
+
+/// A family, a flag, a skin tone and a keycap are each written as several
+/// characters and drawn as one picture: the first character carries it and
+/// the others draw nothing, though each is still in the text.
+#[test]
+fn an_emoji_written_as_several_characters_is_one_picture() {
+    let joined = [
+        "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}",
+        "\u{1f1ef}\u{1f1f5}",
+        "\u{1f44d}\u{1f3fd}",
+        "1\u{fe0f}\u{20e3}",
+    ];
+    for (open, close) in [("", ""), ("**", "**")] {
+        let lines = each(joined, |emoji| format!("{open}one {emoji} end{close}\n\n"));
+        let reader = page(&format!("# Signs\n\n{lines}"));
+
+        for emoji in joined {
+            reader.assert_sees(emoji);
+            let mut characters = emoji.chars();
+            let first = characters.next().expect("a first character");
+            assert!(!reader.drawing_of(emoji, first).is_blank(), "{emoji}");
+            for later in characters {
+                assert!(
+                    reader.drawing_of(emoji, later).is_blank(),
+                    "{later} of {open}{emoji}{close} is drawn apart"
+                );
+            }
+        }
+    }
+}
+
+/// The same people side by side with no joiner are three pictures.
+#[test]
+fn emoji_that_are_not_joined_are_drawn_apart() {
+    let people = ['\u{1f468}', '\u{1f469}', '\u{1f467}'];
+    let line: String = people.iter().collect();
+    let reader = page(&format!("# Signs\n\napart {line} end"));
+
+    for person in people {
+        assert!(!reader.drawing_of("apart", person).is_blank(), "{person}");
     }
 }
 

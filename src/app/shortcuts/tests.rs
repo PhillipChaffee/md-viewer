@@ -1,11 +1,10 @@
-use std::path::PathBuf;
-
 use eframe::egui::Modifiers;
+use egui_kittest::kittest::Queryable as _;
 
 use super::*;
 use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_on, frame_with, UiHarness};
+use crate::app::ui_harness::{frame_on, UiHarness};
 use crate::test_support::assert_close;
 
 const CTRL_SHIFT: Modifiers = Modifiers {
@@ -31,7 +30,81 @@ fn actions_for(modifiers: Modifiers, keys: &[Key], focus: Focus) -> Vec<AppActio
             modifiers,
         })
         .collect();
-    shortcut_actions(&input, focus)
+    shortcut_actions(&mut input, focus)
+}
+
+#[test]
+fn a_shortcut_counts_by_what_was_held_when_its_key_went_down() {
+    let press = |modifiers| egui::Event::Key {
+        key: Key::D,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    let mut input = egui::InputState::default();
+
+    // A quick tap: Ctrl is up again before the frame ends.
+    input.modifiers = Modifiers::NONE;
+    input.events = vec![press(Modifiers::CTRL)];
+    let tapped = shortcut_actions(&mut input, Focus::Reading);
+    assert!(matches!(tapped[..], [AppAction::NextTheme]));
+
+    // Ctrl went down after the key did, inside the same frame.
+    input.modifiers = Modifiers::CTRL;
+    input.events = vec![press(Modifiers::NONE)];
+    assert!(shortcut_actions(&mut input, Focus::Reading).is_empty());
+}
+
+#[test]
+fn a_command_that_fired_is_taken_from_the_input_and_a_plain_key_is_left() {
+    let press = |modifiers, key| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    let mut input = egui::InputState::default();
+    input.events = vec![
+        press(Modifiers::CTRL, Key::W),
+        press(Modifiers::NONE, Key::Enter),
+        press(Modifiers::CTRL, Key::K),
+        egui::Event::Text("w".to_owned()),
+    ];
+
+    let actions = shortcut_actions(&mut input, Focus::FindBar);
+
+    assert!(matches!(
+        actions[..],
+        [AppAction::CloseTab, AppAction::NextMatch]
+    ));
+    assert_eq!(
+        input.events,
+        [
+            press(Modifiers::NONE, Key::Enter),
+            press(Modifiers::CTRL, Key::K),
+            egui::Event::Text("w".to_owned()),
+        ],
+        "Enter is the field's too, and Ctrl+K is no shortcut of the app"
+    );
+}
+
+#[test]
+fn ctrl_w_in_the_find_bar_closes_the_tab_and_leaves_the_query() {
+    let mut harness = UiHarness::with_three_docs();
+    harness.press(Modifiers::CTRL, Key::F);
+    harness
+        .ui
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .type_text("one two");
+    harness.settle();
+    assert_eq!(harness.app().search.query, "one two");
+
+    harness.press(Modifiers::CTRL, Key::W);
+
+    assert!(harness.app().tabs.is_empty());
+    assert_eq!(harness.app().search.query, "one two");
 }
 
 #[test]
@@ -123,7 +196,7 @@ fn a_pinch_zooms_the_document_but_not_under_a_lightbox() {
     frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
     assert_close(harness.app.zoom_level, 1.5);
 
-    harness.app.lightbox = Some(LightboxState {
+    harness.app.lightbox.open = Some(LightboxState {
         texture: LightboxTexture::Loaded(egui::TextureId::default()),
         base_size: egui::vec2(100.0, 100.0),
         zoom: 1.0,
@@ -132,66 +205,6 @@ fn a_pinch_zooms_the_document_but_not_under_a_lightbox() {
     });
     frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
     assert_close(harness.app.zoom_level, 1.5);
-}
-
-#[test]
-fn markdown_and_text_files_are_recognized_by_extension_in_any_case() {
-    for name in ["notes.md", "NOTES.MD", "guide.markdown", "todo.txt"] {
-        assert!(is_markdown_file(Path::new(name)), "{name}");
-    }
-    for name in ["paper.pdf", "md", "archive.md.zip", ".md"] {
-        assert!(!is_markdown_file(Path::new(name)), "{name}");
-    }
-}
-
-fn dropping(paths: Vec<Option<PathBuf>>) -> egui::RawInput {
-    let dropped_files = paths.into_iter().map(|path| egui::DroppedFile {
-        path,
-        ..Default::default()
-    });
-    egui::RawInput {
-        dropped_files: dropped_files.collect(),
-        ..Default::default()
-    }
-}
-
-#[test]
-fn a_dropped_markdown_file_opens_in_a_new_tab() {
-    let mut harness = Harness::with_three_docs();
-    let b = harness.path("b.md");
-
-    frame_with(&mut harness, dropping(vec![None, Some(b.clone())]));
-
-    assert_eq!(harness.app.tabs.len(), 2);
-    assert_eq!(harness.active_path(), b);
-    assert!(harness.app.error_message.is_none());
-    assert!(!harness.app.is_dragging);
-}
-
-#[test]
-fn a_dropped_file_of_another_kind_is_refused_with_a_message() {
-    let mut harness = Harness::with_three_docs();
-    let picture = harness.path("picture.png");
-
-    frame_with(&mut harness, dropping(vec![Some(picture)]));
-
-    assert_eq!(harness.app.tabs.len(), 1);
-    assert!(harness.app.error_message.is_some());
-}
-
-#[test]
-fn the_drag_state_lasts_only_while_files_hover() {
-    let mut harness = Harness::with_three_docs();
-    let hovering = egui::RawInput {
-        hovered_files: vec![egui::HoveredFile::default()],
-        ..Default::default()
-    };
-
-    frame_with(&mut harness, hovering);
-    assert!(harness.app.is_dragging);
-
-    harness.idle();
-    assert!(!harness.app.is_dragging);
 }
 
 #[test]

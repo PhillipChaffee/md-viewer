@@ -79,25 +79,8 @@ thread, use `reader.wait_for(...)` and never a fixed sleep.
 
 ## Known bugs
 
-The tests in this table state behavior the app does not have yet. Each is marked
-`#[should_panic(expected = "...")]`, so it passes while the bug exists and
-fails on the day the bug is fixed. Remove the marker then.
-
-| Test | The bug |
-| --- | --- |
-| `opening::a_file_that_could_not_be_opened_is_not_listed_as_read` | `md-viewer missing.md` puts the missing file on the recently read list |
-| `editing::the_contents_follow_what_was_typed` | After an edit, the preview shows a new heading and the contents sidebar does not |
-| `themes::a_shortcut_tapped_inside_one_frame_still_counts` | A shortcut whose modifier is released in the same frame as the key is ignored |
-| `prose::a_quote_inside_a_quote_steps_in_again` | A quote inside a quote is set at the same indent as the quote around it |
-| `prose::a_list_after_a_quote_inside_a_quote_is_set_straight` | The first item of a list that follows a quote inside a quote is pushed far to the right |
-| `links::a_link_in_a_heading_can_be_followed` | A link written in a heading is drawn over the start of the heading and does nothing when clicked |
-| `pictures::a_gif_is_shown` | A GIF is looked for under its name with `#0` on the end, is not found, and a warning sign is shown instead |
-| `pictures::a_picture_that_appears_later_is_shown_once_the_page_is_reloaded` | A picture that failed to load once is not tried again when the page reloads |
-| `lightbox::the_buttons_of_the_top_bar_do_not_act_while_a_picture_is_enlarged` | The enlarged view does not cover the top bar, so its buttons act on the window behind the picture |
-| `math::a_plain_sum_between_dollar_signs_is_a_formula` | `$b + c$` is taken for prose and shown as typed, less its closing dollar sign |
-| `diagrams::a_diagram_too_large_for_the_screen_does_not_stop_the_app` | A diagram drawn larger than the graphics card's biggest texture makes the app panic |
-| `find_depth::following_a_link_counts_the_document_arrived_at` | With the find bar open, a link followed in place leaves the bar on `0 matches` although the new page has matches |
-| `tabs_depth::the_tab_in_front_is_scrolled_into_the_strip` | With more tabs than fit, the strip does not scroll to the tab in front, so a document just opened has no tab on screen |
-| `tabs_depth::with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch` | With more tabs than fit, the open-file button is drawn over the Preview and Edit switch |
-| `editing_depth::ctrl_s_saves_from_the_preview_too` | Back in the preview the unsaved mark says to press Ctrl+S, and Ctrl+S saves nothing there |
-| `keyboard::closing_a_tab_from_the_find_bar_leaves_the_query_alone` | With the keyboard in the find bar, Ctrl+W closes the tab and also deletes the last word of the query |
+None at the moment. When a test finds behavior the app does not have yet
+and the fix has to wait, state the right behavior in the test, mark it
+`#[should_panic(expected = "...")]` and list it in a table here. It then
+passes while the bug exists and fails on the day the bug is fixed; remove
+the marker and the row then.

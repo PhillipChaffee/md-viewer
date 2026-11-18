@@ -26,19 +26,30 @@ fn names(nodes: &[FileTreeNode]) -> Vec<&str> {
     nodes.iter().map(FileTreeNode::name).collect()
 }
 
+/// What the tree has read of `directory`: `None` when it does not list the
+/// directory, or lists it unread.
+fn children_of<'tree>(
+    nodes: &'tree [FileTreeNode],
+    directory: &Path,
+) -> Option<&'tree [FileTreeNode]> {
+    nodes.iter().find_map(|node| match node {
+        FileTreeNode::Directory { path, children, .. } if path == directory => children.as_deref(),
+        FileTreeNode::Directory {
+            children: Some(loaded),
+            ..
+        } => children_of(loaded, directory),
+        _ => None,
+    })
+}
+
 /// Names of the loaded children of `directory`, in display order.
 fn child_names<'tree>(explorer: &'tree FileExplorer, directory: &Path) -> Vec<&'tree str> {
-    names(
-        explorer
-            .get_children(directory)
-            .expect("directory is loaded"),
-    )
+    names(children_of(&explorer.tree, directory).expect("directory is loaded"))
 }
 
 /// Whether the loaded children of `directory` include an entry called `name`.
 fn lists(explorer: &FileExplorer, directory: &Path, name: &str) -> bool {
-    explorer
-        .get_children(directory)
+    children_of(&explorer.tree, directory)
         .is_some_and(|children| children.iter().any(|node| node.name() == name))
 }
 
@@ -167,6 +178,14 @@ fn entries_without_a_modification_time_go_last_in_both_date_orders() {
 }
 
 #[test]
+fn entries_modified_at_the_same_time_keep_the_order_they_were_listed_in() {
+    for order in [SortOrder::DateAsc, SortOrder::DateDesc] {
+        let same_time = vec![file_node("b.md", Some(5)), file_node("a.md", Some(5))];
+        assert_eq!(sorted(same_time, order), ["b.md", "a.md"]);
+    }
+}
+
+#[test]
 fn folders_are_ordered_among_themselves_like_files() {
     let folder = |name: &str, modified_secs: u64| FileTreeNode::Directory {
         path: PathBuf::from(name),
@@ -213,12 +232,8 @@ fn asynchronous_explorer_result_restores_expanded_children() {
     dir.file("docs/guide.md", "# Guide");
 
     let (tx, rx) = mpsc::channel();
-    tx.send(ExplorerScanResult {
-        root: dir.path().to_path_buf(),
-        sort_order: SortOrder::NameAsc,
-        tree: FileExplorer::scan_directory_shallow(dir.path(), SortOrder::NameAsc),
-    })
-    .unwrap();
+    let listing = FileExplorer::scan_directory_shallow(dir.path(), SortOrder::NameAsc);
+    tx.send(listing).unwrap();
     let mut explorer = FileExplorer {
         root: Some(dir.path().to_path_buf()),
         expanded_dirs: HashSet::from([expanded.clone()]),
@@ -231,7 +246,7 @@ fn asynchronous_explorer_result_restores_expanded_children() {
 }
 
 /// An explorer on `root` holding the sending end of its pending scan.
-fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<ExplorerScanResult>) {
+fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<Vec<FileTreeNode>>) {
     let (tx, rx) = mpsc::channel();
     let explorer = FileExplorer {
         root: Some(root.to_path_buf()),
@@ -242,30 +257,29 @@ fn explorer_awaiting_scan(root: &Path) -> (FileExplorer, mpsc::Sender<ExplorerSc
 }
 
 #[test]
-fn scan_result_for_a_previous_root_is_dropped() {
-    let (mut explorer, tx) = explorer_awaiting_scan(Path::new("/current"));
-    tx.send(ExplorerScanResult {
-        root: PathBuf::from("/previous"),
-        sort_order: SortOrder::NameAsc,
-        tree: vec![file_node("stale.md", None)],
-    })
-    .unwrap();
+fn a_scan_started_for_a_new_root_takes_the_place_of_the_one_before() {
+    let previous = ScratchDir::new();
+    previous.file("stale.md", "# Stale");
+    let current = ScratchDir::new();
+    current.file("fresh.md", "# Fresh");
+    let (mut explorer, older_scan) = explorer_awaiting_scan(previous.path());
 
-    assert!(!explorer.poll_pending_scan());
-    assert!(explorer.tree.is_empty());
-    assert!(explorer.pending_scan.is_none());
+    explorer.set_root(current.path().to_path_buf());
+    assert!(
+        older_scan.send(vec![file_node("stale.md", None)]).is_err(),
+        "nothing waits for the older scan any more"
+    );
+    wait_for_scan(&mut explorer);
+
+    assert_eq!(names(&explorer.tree), ["fresh.md"]);
 }
 
 #[test]
 fn scan_result_is_resorted_when_the_order_changed_while_it_ran() {
     let (mut explorer, tx) = explorer_awaiting_scan(Path::new("/current"));
     explorer.sort_order = SortOrder::NameDesc;
-    tx.send(ExplorerScanResult {
-        root: PathBuf::from("/current"),
-        sort_order: SortOrder::NameAsc,
-        tree: vec![file_node("a.md", None), file_node("b.md", None)],
-    })
-    .unwrap();
+    tx.send(vec![file_node("a.md", None), file_node("b.md", None)])
+        .unwrap();
 
     assert!(explorer.poll_pending_scan());
     assert_eq!(names(&explorer.tree), ["b.md", "a.md"]);
@@ -283,6 +297,39 @@ fn polling_reports_nothing_until_a_scan_lands() {
     drop(tx);
     assert!(!explorer.poll_pending_scan());
     assert!(explorer.pending_scan.is_none());
+}
+
+#[test]
+fn a_restored_explorer_lists_its_root_in_its_order_with_its_folders_open() {
+    let dir = ScratchDir::new();
+    let docs = dir.dir("docs");
+    dir.file("docs/guide.md", "# Guide");
+    dir.file("a.md", "# A");
+    dir.file("b.md", "# B");
+
+    let mut explorer = FileExplorer::restored(
+        SortOrder::NameDesc,
+        HashSet::from([docs.clone()]),
+        Some(dir.path().to_path_buf()),
+    );
+    assert!(explorer.is_scanning());
+    wait_for_scan(&mut explorer);
+
+    assert!(!explorer.is_scanning());
+    assert_eq!(explorer.root(), Some(dir.path()));
+    assert!(explorer.sort_order() == SortOrder::NameDesc);
+    assert_eq!(explorer.expanded_dirs(), &HashSet::from([docs.clone()]));
+    assert_eq!(names(explorer.tree()), ["docs", "b.md", "a.md"]);
+    assert!(lists(&explorer, &docs, "guide.md"));
+}
+
+#[test]
+fn an_explorer_restored_without_a_root_scans_nothing() {
+    let explorer = FileExplorer::restored(SortOrder::NameAsc, HashSet::new(), None);
+
+    assert!(!explorer.is_scanning());
+    assert_eq!(explorer.root(), None);
+    assert!(explorer.tree().is_empty());
 }
 
 #[test]
@@ -327,6 +374,73 @@ fn root_scan_restores_expanded_folders_at_every_depth() {
     assert!(lists(&explorer, &folder, "deepest.md"));
 }
 
+/// How expanded folders were loaded before one walk did it: shallowest
+/// first, each found by its own search from the top of the tree.
+fn load_by_search(tree: &mut [FileTreeNode], expanded: &HashSet<PathBuf>, order: SortOrder) {
+    let mut paths: Vec<&PathBuf> = expanded.iter().collect();
+    paths.sort_by_key(|path| path.components().count());
+    for path in paths {
+        if let Some(children) = FileExplorer::children_slot_mut(tree, path) {
+            children.get_or_insert_with(|| FileExplorer::scan_directory_shallow(path, order));
+        }
+    }
+}
+
+/// Every node in display order, with whether it is a loaded folder.
+fn shape(nodes: &[FileTreeNode]) -> Vec<(PathBuf, bool)> {
+    let mut rows = Vec::new();
+    for node in nodes {
+        match node {
+            FileTreeNode::File { path, .. } => rows.push((path.clone(), false)),
+            FileTreeNode::Directory { path, children, .. } => {
+                rows.push((path.clone(), children.is_some()));
+                rows.extend(shape(children.as_deref().unwrap_or_default()));
+            }
+        }
+    }
+    rows
+}
+
+#[test]
+fn one_walk_loads_the_same_folders_as_a_search_for_each_expanded_path() {
+    let dir = ScratchDir::new();
+    let nested = dir.dir("open/nested");
+    let below_closed = dir.dir("open/nested/closed/deeper");
+    let loaded_not_expanded = dir.dir("loaded");
+    let below_loaded = dir.dir("loaded/inner");
+    let below_unloaded = dir.dir("unloaded/inner");
+    for name in [
+        "open/b.md",
+        "open/a.md",
+        "open/nested/c.md",
+        "loaded/inner/d.md",
+    ] {
+        dir.file(name, "text");
+    }
+    let expanded = HashSet::from([
+        dir.path().join("open"),
+        nested.clone(),
+        below_closed.clone(),
+        below_loaded.clone(),
+        below_unloaded.clone(),
+        PathBuf::from("/md-viewer/not/in/the/tree"),
+    ]);
+    let order = SortOrder::NameDesc;
+    let mut searched = FileExplorer::scan_directory_shallow(dir.path(), order);
+    *FileExplorer::children_slot_mut(&mut searched, &loaded_not_expanded).unwrap() = Some(
+        FileExplorer::scan_directory_shallow(&loaded_not_expanded, order),
+    );
+    let mut walked = searched.clone();
+
+    load_by_search(&mut searched, &expanded, order);
+    FileExplorer::load_expanded(&mut walked, &expanded, order);
+
+    assert_eq!(shape(&walked), shape(&searched));
+    let loaded = |path: &Path| shape(&walked).contains(&(path.to_path_buf(), true));
+    assert!(loaded(&nested) && loaded(&below_loaded));
+    assert!(!loaded(&below_closed) && !loaded(&below_unloaded));
+}
+
 #[test]
 fn root_is_scanned_in_place_when_no_thread_can_be_started() {
     let dir = ScratchDir::new();
@@ -344,6 +458,22 @@ fn root_is_scanned_in_place_when_no_thread_can_be_started() {
     assert!(explorer.pending_scan.is_none());
     assert_eq!(names(&explorer.tree), ["docs"]);
     assert!(lists(&explorer, &expanded, "guide.md"));
+}
+
+#[test]
+fn scan_in_place_is_not_overwritten_by_an_older_scan_still_running() {
+    let dir = ScratchDir::new();
+    dir.file("fresh.md", "# Fresh");
+    let (mut explorer, older_scan) = explorer_awaiting_scan(dir.path());
+
+    explorer.scan_root(dir.path().to_path_buf(), "explorer-refresh", |_, _| {
+        Err(io::Error::other("out of threads"))
+    });
+    // The older worker may already be gone by the time it reports.
+    let _ = older_scan.send(vec![file_node("stale.md", None)]);
+
+    assert!(!explorer.poll_pending_scan());
+    assert_eq!(names(&explorer.tree), ["fresh.md"]);
 }
 
 #[test]
@@ -434,8 +564,8 @@ fn refreshing_a_directory_below_an_unloaded_parent_changes_nothing() {
 
     explorer.refresh_directory(&deep);
 
-    assert!(explorer.get_children(&docs).is_none());
-    assert!(explorer.get_children(&deep).is_none());
+    assert!(children_of(&explorer.tree, &docs).is_none());
+    assert!(children_of(&explorer.tree, &deep).is_none());
 }
 
 #[test]
@@ -445,7 +575,10 @@ fn toggling_a_folder_loads_it_once_and_then_only_flips_its_expansion() {
     dir.file("docs/guide.md", "# Guide");
     let mut explorer = explorer_at(dir.path());
     assert!(!explorer.is_expanded(&docs));
-    assert!(explorer.get_children(&docs).is_none(), "loaded lazily");
+    assert!(
+        children_of(&explorer.tree, &docs).is_none(),
+        "loaded lazily"
+    );
 
     explorer.toggle_expanded(&docs);
     assert!(explorer.is_expanded(&docs));
@@ -459,6 +592,31 @@ fn toggling_a_folder_loads_it_once_and_then_only_flips_its_expansion() {
     assert_eq!(child_names(&explorer, &docs), ["guide.md"]);
 }
 
+/// A folder stays expanded while a folder above it is closed. A rescan then
+/// leaves the closed folder unread, so the one below it is not in the tree.
+#[test]
+fn expanding_a_folder_loads_the_expanded_folders_remembered_below_it() {
+    let dir = ScratchDir::new();
+    let docs = dir.dir("docs");
+    let deep = dir.dir("docs/deep");
+    dir.file("docs/deep/guide.md", "# Guide");
+    let mut explorer = explorer_at(dir.path());
+    explorer.toggle_expanded(&docs);
+    explorer.toggle_expanded(&deep);
+    explorer.toggle_expanded(&docs);
+    explorer.refresh();
+    wait_for_scan(&mut explorer);
+    assert!(
+        children_of(&explorer.tree, &docs).is_none(),
+        "closed, so unread"
+    );
+
+    explorer.toggle_expanded(&docs);
+
+    assert!(explorer.is_expanded(&deep));
+    assert_eq!(child_names(&explorer, &deep), ["guide.md"]);
+}
+
 #[test]
 fn expanding_a_folder_that_is_not_in_the_tree_loads_nothing() {
     let dir = ScratchDir::new();
@@ -469,7 +627,7 @@ fn expanding_a_folder_that_is_not_in_the_tree_loads_nothing() {
     explorer.toggle_expanded(&elsewhere);
 
     assert!(explorer.is_expanded(&elsewhere));
-    assert!(explorer.get_children(&elsewhere).is_none());
+    assert!(children_of(&explorer.tree, &elsewhere).is_none());
     assert_eq!(names(&explorer.tree), ["a.md"]);
 }
 
@@ -495,7 +653,7 @@ fn expand_all_opens_every_folder_and_collapse_all_closes_them() {
 }
 
 #[test]
-fn expand_all_stops_loading_below_the_depth_limit() {
+fn expand_all_stops_at_the_depth_limit_with_every_expanded_folder_loaded() {
     let dir = ScratchDir::new();
     let mut levels = vec![dir.path().to_path_buf()];
     for depth in 0..=FileExplorer::MAX_EXPAND_DEPTH + 1 {
@@ -507,10 +665,12 @@ fn expand_all_stops_loading_below_the_depth_limit() {
 
     explorer.expand_all();
 
-    // `levels[n]` sits n levels below the root; the limit loads ten of them.
-    let last_loaded = &levels[FileExplorer::MAX_EXPAND_DEPTH];
-    let first_unloaded = &levels[FileExplorer::MAX_EXPAND_DEPTH + 1];
-    assert!(explorer.get_children(last_loaded).is_some());
-    assert!(explorer.get_children(first_unloaded).is_none());
-    assert!(!explorer.is_expanded(levels.last().unwrap()));
+    // `levels[n]` sits n levels below the root. The limit reads ten of them
+    // and expands the folder the tenth lists, which is then read as well.
+    let last_expanded = &levels[FileExplorer::MAX_EXPAND_DEPTH + 1];
+    let first_closed = &levels[FileExplorer::MAX_EXPAND_DEPTH + 2];
+    assert!(explorer.is_expanded(last_expanded));
+    assert!(lists(&explorer, last_expanded, "level-11"));
+    assert!(!explorer.is_expanded(first_closed));
+    assert!(children_of(&explorer.tree, first_closed).is_none());
 }

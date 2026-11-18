@@ -58,6 +58,14 @@ impl Fonts {
         }
     }
 
+    /// The collection as the font code takes it.
+    pub(crate) fn system(&mut self) -> SystemFonts<'_> {
+        SystemFonts {
+            collection: &mut self.collection,
+            source_cache: &mut self.source_cache,
+        }
+    }
+
     /// Install `face` as the `weight` face of `family`.
     pub(crate) fn register(&mut self, face: &[u8], family: &str, weight: FontWeight) -> FamilyId {
         let registered = self.collection.register_fonts(
@@ -111,17 +119,20 @@ impl Fonts {
     }
 
     fn definitions(&mut self, preferred: Option<&str>, preset: FontPreset) -> FontDefinitions {
-        font_definitions(
-            &mut self.collection,
-            &mut self.source_cache,
-            None,
-            preferred,
-            preset,
-        )
+        let config = config(preferred, preset, TextSizeClass::default());
+        font_definitions(&mut self.system(), None, &config)
     }
 
     fn pickable(&mut self) -> Vec<String> {
-        pickable_family_names(&mut self.collection, &mut self.source_cache)
+        pickable_family_names(&mut self.system())
+    }
+}
+
+fn config(family: Option<&str>, preset: FontPreset, size: TextSizeClass) -> FontConfig {
+    FontConfig {
+        family: family.map(str::to_owned),
+        preset,
+        size,
     }
 }
 
@@ -163,14 +174,9 @@ fn text_sizes_grow_in_order_and_are_told_apart_by_label() {
 #[test]
 fn applying_fonts_installs_the_faces_and_derives_heading_and_code_sizes() {
     let context = egui::Context::default();
-    let setup = FontSetup {
-        locale: None,
-        preferred_family: None,
-        preset: FontPreset::default(),
-        size: TextSizeClass::Large,
-    };
+    let config = config(None, FontPreset::default(), TextSizeClass::Large);
 
-    apply_fonts(&context, &mut Fonts::with_sans().collection, &setup);
+    apply_fonts(&context, &mut Fonts::with_sans().collection, None, &config);
 
     let styles = context.style().text_styles.clone();
     assert_eq!(styles[&TextStyle::Body], FontId::proportional(18.0));
@@ -228,13 +234,7 @@ fn preset_code_face_leads_the_monospace_chain_when_installed() {
 #[test]
 fn installed_fonts_cover_reported_scripts() {
     let mut fonts = Fonts::multilingual();
-    let definitions = font_definitions(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
-        Some("en-US"),
-        None,
-        FontPreset::default(),
-    );
+    let definitions = font_definitions(&mut fonts.system(), Some("en-US"), &FontConfig::default());
     let context = egui::Context::default();
     context.set_fonts(definitions);
     context.begin_pass(egui::RawInput::default());
@@ -280,8 +280,9 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     // Sans, asks for Segoe UI before Noto Sans, and ends the named part of
     // its body stack at Arial.
     let github_body = FontPreset::Github
-        .body_families()
-        .expect("github body list");
+        .emulated_stack()
+        .expect("github stack")
+        .body;
     assert_eq!(github_body[..3], ["Mona Sans VF", "Mona Sans", "Segoe UI"]);
     assert!(github_body.contains(&"Noto Sans"));
     assert_eq!(*github_body.last().expect("non-empty"), "Arial");
@@ -289,8 +290,9 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     // VS Code preview lists Ubuntu and Droid Sans behind the system-ui
     // resolutions.
     let vscode_body = FontPreset::Vscode
-        .body_families()
-        .expect("vscode body list");
+        .emulated_stack()
+        .expect("vscode stack")
+        .body;
     let ubuntu_pos = vscode_body
         .iter()
         .position(|f| *f == "Ubuntu")
@@ -302,18 +304,17 @@ fn preset_family_lists_follow_the_emulated_css_stacks() {
     assert!(adwaita_pos < ubuntu_pos, "system-ui precedes Ubuntu");
 
     // The default preset keeps the app's own sans selection.
-    assert_eq!(FontPreset::Current.body_families(), None);
-    assert!(FontPreset::Current.mono_families().is_empty());
+    assert!(FontPreset::Current.emulated_stack().is_none());
 }
 
 #[test]
 fn preset_mono_lists_lead_with_linux_generic_monospace_resolutions() {
     assert_eq!(
-        FontPreset::Github.mono_families()[..2],
+        emulated_families(FontPreset::Github).1[..2],
         ["Noto Sans Mono", "DejaVu Sans Mono"]
     );
     assert_eq!(
-        FontPreset::Vscode.mono_families(),
+        emulated_families(FontPreset::Vscode).1,
         ["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"]
     );
 }
@@ -358,9 +359,14 @@ fn system_font_picker_list_is_sorted_canonical_and_body_capable() {
 
     let mut collection = Collection::new(CollectionOptions::default());
     let mut source_cache = SourceCache::default();
+    let mut fonts = SystemFonts {
+        collection: &mut collection,
+        source_cache: &mut source_cache,
+    };
     let mut seen_ids = HashSet::new();
     for name in &names {
-        let id = collection
+        let id = fonts
+            .collection
             .family_id(name)
             .unwrap_or_else(|| panic!("listed family {name:?} does not resolve"));
         assert!(
@@ -368,12 +374,16 @@ fn system_font_picker_list_is_sorted_canonical_and_body_capable() {
             "duplicate family id behind {name:?} — alias leak"
         );
         assert_eq!(
-            collection.family_name(id).map(str::to_owned).as_deref(),
+            fonts
+                .collection
+                .family_name(id)
+                .map(str::to_owned)
+                .as_deref(),
             Some(name.as_str()),
             "{name:?} is an alias, not the family's canonical name"
         );
         assert!(
-            select_body_font(&mut collection, &mut source_cache, &[id]).is_some(),
+            fonts.regular(&[id], LATIN_SAMPLE).is_some(),
             "listed family {name:?} cannot serve as a body font"
         );
     }
@@ -385,12 +395,11 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
     fonts.register_latin("Noto Sans");
 
     let installed = install_regular_fonts(
-        &mut fonts.collection,
-        &mut fonts.source_cache,
+        &mut fonts.system(),
         &mut FontDefinitions::default(),
         None,
         None,
-        FontPreset::Github.body_families(),
+        Some(emulated_families(FontPreset::Github).0),
     );
 
     let primary = installed
@@ -402,7 +411,7 @@ fn github_preset_takes_its_body_face_from_the_emulated_stack() {
 
 #[test]
 fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller() {
-    let fonts = document_fonts(None, FontPreset::Reader, TextSizeClass::Normal);
+    let fonts = document_fonts(&FontConfig::default());
 
     assert_close(fonts.body.size, 16.0 * 1.15);
     assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
@@ -421,7 +430,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
 
     // Every size class scales the same way.
     for size in TextSizeClass::ALL {
-        let fonts = document_fonts(None, FontPreset::Reader, size);
+        let fonts = document_fonts(&config(None, FontPreset::Reader, size));
         assert_close(fonts.body.size, size.px() * 1.15);
     }
 }
@@ -429,7 +438,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
 #[test]
 fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face() {
     for preset in [FontPreset::Current, FontPreset::Github, FontPreset::Vscode] {
-        let fonts = document_fonts(None, preset, TextSizeClass::Large);
+        let fonts = document_fonts(&config(None, preset, TextSizeClass::Large));
 
         assert_close(fonts.body.size, 18.0);
         assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
@@ -441,11 +450,11 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
 
 #[test]
 fn a_picked_family_outranks_the_readers_serif() {
-    let fonts = document_fonts(
+    let fonts = document_fonts(&config(
         Some("Fixture Sans"),
         FontPreset::Reader,
         TextSizeClass::Normal,
-    );
+    ));
     // The serif's scale stays with the preset; its faces do not lead.
     assert_eq!(fonts.emphasis, None);
     assert_eq!(fonts.inline_code_scale, None);
@@ -529,5 +538,163 @@ fn a_machine_with_no_fonts_still_gets_a_font_list() {
         output.status.success() && stdout.contains("1 passed"),
         "{stdout}{}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The families of the viewer `preset` emulates, body then code.
+fn emulated_families(preset: FontPreset) -> (&'static [&'static str], &'static [&'static str]) {
+    preset
+        .emulated_stack()
+        .map_or((&[], &[]), |stack| (stack.body, stack.mono))
+}
+
+#[test]
+fn each_preset_names_its_viewers_families_in_the_stylesheets_order() {
+    let none: &[&str] = &[];
+    assert_eq!(emulated_families(FontPreset::Reader), (none, none));
+    assert_eq!(emulated_families(FontPreset::Current), (none, none));
+    assert_eq!(
+        emulated_families(FontPreset::Github),
+        (
+            &[
+                "Mona Sans VF",
+                "Mona Sans",
+                "Segoe UI",
+                "Adwaita Sans",
+                "Noto Sans",
+                "Helvetica",
+                "Arial",
+            ][..],
+            &[
+                "Noto Sans Mono",
+                "DejaVu Sans Mono",
+                "SFMono-Regular",
+                "SF Mono",
+                "Menlo",
+                "Consolas",
+                "Liberation Mono",
+            ][..],
+        )
+    );
+    assert_eq!(
+        emulated_families(FontPreset::Vscode),
+        (
+            &[
+                "Segoe WPC",
+                "Segoe UI",
+                "Adwaita Sans",
+                "Cantarell",
+                "Ubuntu",
+                "Droid Sans",
+            ][..],
+            &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"][..],
+        )
+    );
+}
+
+/// The chains and faces one preset installs.
+#[derive(Debug, PartialEq)]
+struct InstalledChains {
+    proportional: Vec<String>,
+    monospace: Vec<String>,
+    strong: Vec<String>,
+    body: Vec<String>,
+    /// The egui face whose bytes the primary sans holds.
+    sans_face: &'static str,
+    /// The egui face whose bytes the preset's code face holds.
+    code_face: Option<&'static str>,
+}
+
+fn face_behind(definitions: &FontDefinitions, key: &str) -> Option<&'static str> {
+    let data = &definitions.font_data.get(key)?.font;
+    [LATIN_FACE, MONO_FACE]
+        .into_iter()
+        .find(|face| bundled_face(face) == data.as_ref())
+}
+
+fn installed_chains(fonts: &mut Fonts, preset: FontPreset) -> InstalledChains {
+    let definitions = fonts.definitions(None, preset);
+    InstalledChains {
+        proportional: chain(&definitions, &FontFamily::Proportional),
+        monospace: chain(&definitions, &FontFamily::Monospace),
+        strong: chain(&definitions, &FontFamily::Name(STRONG_FONT_FAMILY.into())),
+        body: chain(&definitions, &FontFamily::Name("MarkdownBody".into())),
+        sans_face: face_behind(&definitions, "SystemSans").expect("a primary sans"),
+        code_face: face_behind(&definitions, "PresetMono"),
+    }
+}
+
+#[test]
+fn each_preset_installs_its_own_faces_in_a_fixed_order() {
+    let mut fonts = Fonts::multilingual();
+    // One family from each emulated stack, told apart by the face behind it.
+    fonts.register(&bundled_face(MONO_FACE), "Noto Sans", FontWeight::NORMAL);
+    fonts.register(&bundled_face(MONO_FACE), "Ubuntu", FontWeight::NORMAL);
+    fonts.register(
+        &bundled_face(LATIN_FACE),
+        "Noto Sans Mono",
+        FontWeight::NORMAL,
+    );
+    fonts.register(
+        &bundled_face(MONO_FACE),
+        "Droid Sans Mono",
+        FontWeight::NORMAL,
+    );
+    let led_by = |lead: &[&str], rest: &[&str]| -> Vec<String> {
+        lead.iter().chain(rest).map(|&key| key.to_owned()).collect()
+    };
+    let proportional = [
+        "SystemSans",
+        "Ubuntu-Light",
+        "NotoEmoji-Regular",
+        "emoji-icon-font",
+        "SystemHanFallback",
+        "NotoEmoji",
+    ];
+    let monospace = [
+        "Hack",
+        "Ubuntu-Light",
+        "NotoEmoji-Regular",
+        "emoji-icon-font",
+        "SystemSans",
+        "SystemHanFallback",
+        "NotoEmoji",
+    ];
+    // Strong text ends in the same emoji faces as the text around it.
+    let strong = &proportional;
+    let expected = |strong_lead: &[&str], body_lead: &[&str], sans_face, code_face: Option<_>| {
+        let code_lead: &[&str] = code_face.map_or(&[], |_| &["PresetMono"]);
+        InstalledChains {
+            proportional: led_by(&[], &proportional),
+            monospace: led_by(code_lead, &monospace),
+            strong: led_by(strong_lead, strong),
+            body: led_by(body_lead, &proportional),
+            sans_face,
+            code_face,
+        }
+    };
+
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Reader),
+        expected(
+            &["ReaderSemibold", "SystemSansBold"],
+            &["ReaderRegular"],
+            LATIN_FACE,
+            None
+        )
+    );
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Current),
+        expected(&["SystemSansBold"], &[], LATIN_FACE, None)
+    );
+    // GitHub takes "Noto Sans" and "Noto Sans Mono"; neither has a bold face.
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Github),
+        expected(&[], &[], MONO_FACE, Some(LATIN_FACE))
+    );
+    // VS Code takes "Ubuntu" and "Droid Sans Mono".
+    assert_eq!(
+        installed_chains(&mut fonts, FontPreset::Vscode),
+        expected(&[], &[], MONO_FACE, Some(MONO_FACE))
     );
 }

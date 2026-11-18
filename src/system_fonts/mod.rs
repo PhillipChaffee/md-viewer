@@ -10,7 +10,8 @@ use crate::system_fonts::bundled::{
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
-    install_preset_mono_font, install_regular_fonts, install_strong_font_family, select_body_font,
+    install_preset_mono_font, install_regular_fonts, install_strong_font_family, SystemFonts,
+    LATIN_SAMPLE,
 };
 
 mod bundled;
@@ -110,35 +111,27 @@ impl FontPreset {
         matches!(self, Self::Reader) && preferred_family.is_none()
     }
 
-    /// Body families from the emulated viewer's CSS stack, in resolution
-    /// order. `None` keeps the app's own primary sans selection.
-    ///
-    /// Pure macOS keywords (`-apple-system`, `BlinkMacSystemFont`) are skipped.
-    /// `"Adwaita Sans"` directly follows `"Segoe UI"` because modern fontconfig
-    /// setups substitute Segoe UI with GNOME's Adwaita Sans, which is what
-    /// Linux browsers actually render for stacks asking for Segoe UI first.
-    const fn body_families(self) -> Option<&'static [&'static str]> {
+    /// The font stacks of the viewer this preset emulates. `None` keeps the
+    /// app's own primary sans selection and egui's bundled monospace first.
+    const fn emulated_stack(self) -> Option<&'static ViewerStack> {
         match self {
             Self::Reader | Self::Current => None,
-            Self::Github => Some(GITHUB_BODY_FAMILIES),
-            Self::Vscode => Some(VSCODE_BODY_FAMILIES),
+            Self::Github => Some(&GITHUB),
+            Self::Vscode => Some(&VSCODE),
         }
     }
+}
 
-    /// Code families from the emulated viewer's monospace stack, in resolution
-    /// order. Empty keeps egui's bundled monospace first.
-    const fn mono_families(self) -> &'static [&'static str] {
-        match self {
-            // GitHub puts ui-monospace first; on Linux browsers that resolves
-            // through fontconfig's generic monospace alias before any of the
-            // named proprietary faces are reached, so the Linux defaults lead.
-            Self::Github => GITHUB_MONO_FAMILIES,
-            // VS Code webviews always inject editor.fontFamily; its Linux
-            // default is 'Droid Sans Mono', monospace.
-            Self::Vscode => VSCODE_MONO_FAMILIES,
-            Self::Reader | Self::Current => &[],
-        }
-    }
+/// The families an emulated viewer's stylesheet asks for, in resolution
+/// order.
+///
+/// Pure macOS keywords (`-apple-system`, `BlinkMacSystemFont`) are skipped.
+/// `"Adwaita Sans"` directly follows `"Segoe UI"` because modern fontconfig
+/// setups substitute Segoe UI with GNOME's Adwaita Sans, which is what
+/// Linux browsers actually render for stacks asking for Segoe UI first.
+struct ViewerStack {
+    body: &'static [&'static str],
+    mono: &'static [&'static str],
 }
 
 /// Discrete base text sizes shared by every font preset. Unlike the presets
@@ -212,50 +205,60 @@ impl TextSizeClass {
     }
 }
 
-/// Primer `.markdown-body` body stack without macOS-only aliases; the generic
-/// `sans-serif` tail is covered by the app's existing fallback chain.
+/// Primer `.markdown-body`.
 ///
-/// GitHub prepends its open-source Mona Sans (primer/primitives#1332); it
-/// renders only where installed locally because GitHub ships no markdown
-/// webfont. `"Noto Sans Backtick Fix"` is intentionally skipped: it is a
+/// The body stack is without macOS-only aliases; the generic `sans-serif`
+/// tail is covered by the app's existing fallback chain. GitHub prepends its
+/// open-source Mona Sans (primer/primitives#1332); it renders only where
+/// installed locally because GitHub ships no markdown webfont.
+/// `"Noto Sans Backtick Fix"` is intentionally skipped: it is a
 /// `local()`-only `@font-face` shim covering just U+60, not a real family.
-const GITHUB_BODY_FAMILIES: &[&str] = &[
-    "Mona Sans VF",
-    "Mona Sans",
-    "Segoe UI",
-    "Adwaita Sans", // fontconfig substitutes Segoe UI with Adwaita Sans on modern GNOME
-    "Noto Sans",
-    "Helvetica",
-    "Arial",
-];
+///
+/// In the code stack generic monospace leads because `ui-monospace` precedes
+/// every named face in the CSS: on Linux browsers it resolves through
+/// fontconfig's generic monospace alias before any of the named proprietary
+/// faces are reached.
+const GITHUB: ViewerStack = ViewerStack {
+    body: &[
+        "Mona Sans VF",
+        "Mona Sans",
+        "Segoe UI",
+        "Adwaita Sans", // fontconfig substitutes Segoe UI with Adwaita Sans on modern GNOME
+        "Noto Sans",
+        "Helvetica",
+        "Arial",
+    ],
+    mono: &[
+        "Noto Sans Mono",
+        "DejaVu Sans Mono",
+        "SFMono-Regular",
+        "SF Mono",
+        "Menlo",
+        "Consolas",
+        "Liberation Mono",
+    ],
+};
 
-/// Primer `.markdown-body` code stack. Generic monospace leads because
-/// `ui-monospace` precedes every named face in the CSS and resolves on Linux.
-const GITHUB_MONO_FAMILIES: &[&str] = &[
-    "Noto Sans Mono",
-    "DejaVu Sans Mono",
-    "SFMono-Regular",
-    "SF Mono",
-    "Menlo",
-    "Consolas",
-    "Liberation Mono",
-];
-
-/// VS Code preview body stack without macOS-only aliases; `system-ui` is
-/// transcribed to its common desktop resolutions and `sans-serif` remains
-/// covered by the app's existing fallback chain.
-const VSCODE_BODY_FAMILIES: &[&str] = &[
-    "Segoe WPC",
-    "Segoe UI",
-    "Adwaita Sans", // system-ui on GNOME 47+
-    "Cantarell",    // system-ui on older GNOME releases
-    "Ubuntu",
-    "Droid Sans",
-];
-
-/// VS Code preview code stack: the Linux `editor.fontFamily` default followed
-/// by the generic monospace resolutions.
-const VSCODE_MONO_FAMILIES: &[&str] = &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"];
+/// VS Code's markdown preview.
+///
+/// The body stack is without macOS-only aliases; `system-ui` is transcribed
+/// to its common desktop resolutions and `sans-serif` remains covered by the
+/// app's existing fallback chain.
+///
+/// The code stack is the Linux `editor.fontFamily` default, which VS Code
+/// webviews always inject (`'Droid Sans Mono', monospace`), followed by the
+/// generic monospace resolutions.
+const VSCODE: ViewerStack = ViewerStack {
+    body: &[
+        "Segoe WPC",
+        "Segoe UI",
+        "Adwaita Sans", // system-ui on GNOME 47+
+        "Cantarell",    // system-ui on older GNOME releases
+        "Ubuntu",
+        "Droid Sans",
+    ],
+    mono: &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"],
+};
 
 /// Code is set this much smaller than the body text around it: a
 /// monospace face looks larger than a proportional one at the same size.
@@ -280,15 +283,27 @@ pub(crate) struct DocumentFonts {
     pub(crate) emphasis: Option<FontFamily>,
 }
 
+/// What the reader chose the document to be set in.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FontConfig {
+    /// The picked body and heading family. `None` is the preset's own.
+    pub(crate) family: Option<String>,
+    pub(crate) preset: FontPreset,
+    pub(crate) size: TextSizeClass,
+}
+
+impl FontConfig {
+    /// Whether the document is set in the bundled serif faces.
+    fn uses_bundled_faces(&self) -> bool {
+        self.preset.uses_bundled_faces(self.family.as_deref())
+    }
+}
+
 /// The document fonts for one font configuration. The named families are
 /// the ones [`setup_fonts`] registers for the same configuration.
-pub(crate) fn document_fonts(
-    preferred_family: Option<&str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-) -> DocumentFonts {
-    let body = size.px() * preset.body_scale();
-    let bundled = preset.uses_bundled_faces(preferred_family);
+pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
+    let body = config.size.px() * config.preset.body_scale();
+    let bundled = config.uses_bundled_faces();
     DocumentFonts {
         body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
         heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
@@ -315,94 +330,58 @@ fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     });
 }
 
-pub(crate) fn setup_fonts(
-    ctx: &egui::Context,
-    preferred_family: Option<&str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-) {
+pub(crate) fn setup_fonts(ctx: &egui::Context, config: &FontConfig) {
     let mut collection = Collection::new(CollectionOptions::default());
     let locale = sys_locale::get_locale();
-    let setup = FontSetup {
-        locale: locale.as_deref(),
-        preferred_family,
-        preset,
-        size,
-    };
-    apply_fonts(ctx, &mut collection, &setup);
+    apply_fonts(ctx, &mut collection, locale.as_deref(), config);
 }
 
-/// What the document is set in: the user's choices plus the system locale,
-/// which steers the script fallbacks.
-struct FontSetup<'a> {
-    locale: Option<&'a str>,
-    preferred_family: Option<&'a str>,
-    preset: FontPreset,
-    size: TextSizeClass,
-}
-
-/// Give `ctx` the faces `collection` has for `setup`, at its text size.
-fn apply_fonts(ctx: &egui::Context, collection: &mut Collection, setup: &FontSetup<'_>) {
-    let definitions = font_definitions(
+/// Give `ctx` the faces `collection` has for `config`, at its text size.
+/// The system locale steers the script fallbacks.
+fn apply_fonts(
+    ctx: &egui::Context,
+    collection: &mut Collection,
+    locale: Option<&str>,
+    config: &FontConfig,
+) {
+    let mut fonts = SystemFonts {
         collection,
-        &mut SourceCache::default(),
-        setup.locale,
-        setup.preferred_family,
-        setup.preset,
-    );
+        source_cache: &mut SourceCache::default(),
+    };
+    let definitions = font_definitions(&mut fonts, locale, config);
     ctx.set_fonts(definitions);
-    apply_text_size_class(ctx, setup.size);
+    apply_text_size_class(ctx, config.size);
 }
 
 /// The font chains for one font configuration, with every face taken from
-/// `collection`: egui's bundled faces stay in as the last resort.
+/// `fonts`: egui's bundled faces stay in as the last resort.
 fn font_definitions(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
+    fonts: &mut SystemFonts<'_>,
     locale: Option<&str>,
-    preferred_family: Option<&str>,
-    preset: FontPreset,
+    config: &FontConfig,
 ) -> FontDefinitions {
     let started = std::time::Instant::now();
-    let family_count = collection.family_names().count();
+    let family_count = fonts.collection.family_names().count();
     let mut definitions = FontDefinitions::default();
     let defaults = definitions
         .families
         .get(&FontFamily::Proportional)
         .cloned()
         .unwrap_or_default();
+    let stack = config.preset.emulated_stack();
     let installed = install_regular_fonts(
-        collection,
-        source_cache,
+        fonts,
         &mut definitions,
         locale,
-        preferred_family,
-        preset.body_families(),
+        config.family.as_deref(),
+        stack.map(|stack| stack.body),
     );
-    let bold_count = install_strong_font_family(
-        collection,
-        source_cache,
-        &mut definitions,
-        &installed,
-        &defaults,
-    );
-    let preset_mono_families = preset.mono_families();
-    let preset_mono = if preset_mono_families.is_empty() {
-        false
-    } else {
-        install_preset_mono_font(
-            collection,
-            source_cache,
-            &mut definitions,
-            preset_mono_families,
-        )
-    };
-    install_emoji_fonts(collection, source_cache, &mut definitions);
+    let bold_count = install_strong_font_family(fonts, &mut definitions, &installed, &defaults);
+    let preset_mono =
+        stack.is_some_and(|stack| install_preset_mono_font(fonts, &mut definitions, stack.mono));
+    install_emoji_fonts(fonts, &mut definitions);
     // Last, so the document chains end in every fallback installed above.
-    install_document_families(
-        &mut definitions,
-        preset.uses_bundled_faces(preferred_family),
-    );
+    install_document_families(&mut definitions, config.uses_bundled_faces());
     if installed.is_empty() {
         log::warn!("No suitable system font fallbacks found; using egui defaults.");
     } else {
@@ -438,19 +417,19 @@ fn font_definitions(
 pub(crate) fn scan_pickable_font_families() -> Vec<String> {
     let mut collection = Collection::new(CollectionOptions::default());
     let mut source_cache = SourceCache::default();
-    pickable_family_names(&mut collection, &mut source_cache)
+    pickable_family_names(&mut SystemFonts {
+        collection: &mut collection,
+        source_cache: &mut source_cache,
+    })
 }
 
-fn pickable_family_names(
-    collection: &mut Collection,
-    source_cache: &mut SourceCache,
-) -> Vec<String> {
-    let mut names: Vec<String> = collection.family_names().map(str::to_owned).collect();
+fn pickable_family_names(fonts: &mut SystemFonts<'_>) -> Vec<String> {
+    let mut names: Vec<String> = fonts.collection.family_names().map(str::to_owned).collect();
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup();
     names.retain(|name| {
-        canonical_family_id(collection, name)
-            .is_some_and(|id| select_body_font(collection, source_cache, &[id]).is_some())
+        canonical_family_id(fonts.collection, name)
+            .is_some_and(|id| fonts.regular(&[id], LATIN_SAMPLE).is_some())
     });
     names
 }

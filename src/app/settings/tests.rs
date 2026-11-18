@@ -34,16 +34,16 @@ fn picking_a_color_overrides_the_theme_color_it_belongs_to() {
 
     change_color(&mut harness, 0);
 
-    let highlight = harness.app().highlight_color.unwrap();
+    let highlight = harness.app().colors.highlight.unwrap();
     assert_ne!(highlight, theme_highlight);
-    assert_eq!(harness.app().link_color, None);
+    assert_eq!(harness.app().colors.link, None);
     assert_eq!(drawn_colors(&harness), (highlight, theme_link));
 
     change_color(&mut harness, 1);
 
-    let link = harness.app().link_color.unwrap();
+    let link = harness.app().colors.link.unwrap();
     assert_ne!(link, theme_link);
-    assert_eq!(harness.app().highlight_color, Some(highlight));
+    assert_eq!(harness.app().colors.highlight, Some(highlight));
     assert_eq!(drawn_colors(&harness), (highlight, link));
 }
 
@@ -54,22 +54,22 @@ fn reset_is_offered_per_override_and_brings_the_theme_color_back() {
     harness.pick("Colors");
     assert_eq!(harness.enabled("Reset"), [false, false]);
 
-    harness.app_mut().highlight_color = Some(RED);
-    harness.app_mut().link_color = Some(GREEN);
+    harness.app_mut().colors.highlight = Some(RED);
+    harness.app_mut().colors.link = Some(GREEN);
     harness.settle();
     assert_eq!(harness.enabled("Reset"), [true, true]);
     assert_eq!(drawn_colors(&harness), (RED, GREEN));
 
     let highlight_reset = harness.labelled("Reset")[0].0;
     harness.click_at(highlight_reset);
-    assert_eq!(harness.app().highlight_color, None);
-    assert_eq!(harness.app().link_color, Some(GREEN));
+    assert_eq!(harness.app().colors.highlight, None);
+    assert_eq!(harness.app().colors.link, Some(GREEN));
     assert_eq!(drawn_colors(&harness), (theme_highlight, GREEN));
     assert_eq!(harness.enabled("Reset"), [false, true]);
 
     let link_reset = harness.labelled("Reset")[1].0;
     harness.click_at(link_reset);
-    assert_eq!(harness.app().link_color, None);
+    assert_eq!(harness.app().colors.link, None);
     assert_eq!(drawn_colors(&harness), (theme_highlight, theme_link));
 }
 
@@ -86,7 +86,7 @@ fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
     harness.pick("Fonts");
     assert!(harness.shows("Text Size"));
     harness.click("Close window");
-    assert!(!harness.app().show_font_dialog);
+    assert!(!harness.app().font_picker.open);
     assert!(!harness.shows("Text Size"));
 }
 
@@ -95,8 +95,8 @@ fn each_dialog_closes_from_its_title_bar_and_stays_closed() {
 fn fonts_dialog_while_scanning() -> (UiHarness, Sender<Vec<String>>) {
     let mut harness = UiHarness::with_three_docs();
     let (scan_tx, scan_rx) = mpsc::channel();
-    harness.app_mut().pending_font_family_scan = Some(scan_rx);
-    harness.app_mut().show_font_dialog = true;
+    harness.app_mut().font_picker.scan = Some(scan_rx);
+    harness.app_mut().font_picker.open = true;
     harness.frames(2);
     (harness, scan_tx)
 }
@@ -132,24 +132,21 @@ fn a_scan_that_dies_leaves_only_the_system_default() {
 
     assert!(!harness.shows("Scanning installed fonts"));
     assert!(harness.shows("System Default"));
-    assert!(harness.app().available_font_families.is_empty());
+    assert!(harness.app().font_picker.families.is_empty());
 }
 
 #[test]
 fn clicking_a_family_selects_it_and_system_default_clears_it() {
     let mut harness = fonts_dialog(&["Alpha Sans", "Beta Serif"]);
-    assert_eq!(harness.app().selected_font_family, None);
+    assert_eq!(harness.app().fonts.family, None);
     assert!(!harness.shows("A picked family leads the body chain"));
 
     harness.click("Beta Serif");
-    assert_eq!(
-        harness.app().selected_font_family.as_deref(),
-        Some("Beta Serif")
-    );
+    assert_eq!(harness.app().fonts.family.as_deref(), Some("Beta Serif"));
     assert!(harness.shows("A picked family leads the body chain"));
 
     harness.click("System Default");
-    assert_eq!(harness.app().selected_font_family, None);
+    assert_eq!(harness.app().fonts.family, None);
 }
 
 #[test]
@@ -172,27 +169,24 @@ fn the_search_box_narrows_the_list_without_regard_to_case() {
     );
 
     harness.click("Gamma Beta");
-    assert_eq!(
-        harness.app().selected_font_family.as_deref(),
-        Some("Gamma Beta")
-    );
+    assert_eq!(harness.app().fonts.family.as_deref(), Some("Gamma Beta"));
 }
 
 #[test]
 fn a_preset_click_switches_the_preset() {
     let mut harness = fonts_dialog(&[]);
-    assert_eq!(harness.app().font_preset, FontPreset::Reader);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Reader);
 
     harness.click_exact("System");
-    assert_eq!(harness.app().font_preset, FontPreset::Current);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Current);
     harness.click_exact("Reader");
-    assert_eq!(harness.app().font_preset, FontPreset::Reader);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Reader);
     harness.click_exact("GitHub");
-    assert_eq!(harness.app().font_preset, FontPreset::Github);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Github);
     harness.click_exact("VS Code");
-    assert_eq!(harness.app().font_preset, FontPreset::Vscode);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Vscode);
     harness.click_exact("VS Code");
-    assert_eq!(harness.app().font_preset, FontPreset::Vscode);
+    assert_eq!(harness.app().fonts.preset, FontPreset::Vscode);
 }
 
 #[test]
@@ -202,12 +196,12 @@ fn a_text_size_click_resizes_the_body_text() {
         let style = harness.ui.ctx.style();
         style.text_styles[&TextStyle::Body].size
     };
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Normal);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Normal);
     let normal = body_size(&harness);
 
     harness.click_exact(TextSizeClass::Large.label());
 
-    assert_eq!(harness.app().text_size_class, TextSizeClass::Large);
+    assert_eq!(harness.app().fonts.size, TextSizeClass::Large);
     assert_close(
         body_size(&harness) / normal,
         TextSizeClass::Large.px() / TextSizeClass::Normal.px(),

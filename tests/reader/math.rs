@@ -139,10 +139,7 @@ fn every_formula_of_a_sentence_is_drawn() {
     );
 }
 
-/// Known bug, listed in `tests/README.md`: a formula as plain as `b + c`
-/// is taken for prose. It is shown as typed, less its closing dollar sign.
 #[test]
-#[should_panic(expected = "the sum is shown as text")]
 fn a_plain_sum_between_dollar_signs_is_a_formula() {
     let mut reader = page("# Sums\n\nOnly $b + c$ here.");
     reader.idle_for(std::time::Duration::from_millis(500));

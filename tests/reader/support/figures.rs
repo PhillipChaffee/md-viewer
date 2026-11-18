@@ -1,7 +1,7 @@
 //! What a picture on the page looks like, how a text is set, and what the
 //! app asked of the desktop around it.
 
-use super::paint::{marks, pictures, Painted, Picture};
+use super::paint::{marks, pictures, Drawing, Painted, Picture};
 use super::{Area, Reader, Rgb};
 
 /// How far apart, in pixels, two areas may be and still be one picture.
@@ -52,6 +52,38 @@ impl Reader {
     #[track_caller]
     pub(crate) fn inks_of(&self, text: &str) -> Vec<Rgb> {
         self.painted_with(text).inks
+    }
+
+    /// How wide the first line of the first painted text that contains
+    /// `text` is, in pixels.
+    #[track_caller]
+    pub(crate) fn width_of(&self, text: &str) -> f32 {
+        self.painted_with(text).first_line_width * self.scale()
+    }
+
+    /// How `character` is drawn on the first line of the first painted text
+    /// that contains `text`: its picture, before the ink of the text.
+    #[track_caller]
+    pub(crate) fn drawing_of(&self, text: &str, character: char) -> Drawing {
+        let drawings = self.drawings_of(text, character);
+        let first = drawings.into_iter().next();
+        first.unwrap_or_else(|| panic!("no painted `{text}` has `{character}` on its first line"))
+    }
+
+    /// How `character` is drawn in every painted text that contains `text`
+    /// and has it on its first line, in the order painted: a heading is on
+    /// the page, in the top bar and in the contents.
+    pub(crate) fn drawings_of(&self, text: &str, character: char) -> Vec<Drawing> {
+        let mut painted = self.painted();
+        painted.retain(|painted| painted.text.contains(text));
+        self.kit.ctx.fonts(|fonts| {
+            // The sheet the frame keeps the picture of every character on.
+            let sheet = fonts.image();
+            let drawings = painted.iter();
+            drawings
+                .filter_map(|painted| painted.drawing_of(character, &sheet))
+                .collect()
+        })
     }
 
     /// Whether a line is drawn through the painted text that contains

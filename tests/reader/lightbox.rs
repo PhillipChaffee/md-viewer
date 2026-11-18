@@ -3,6 +3,7 @@
 
 use super::docs::long_document;
 use super::pages::{illustrated, picture_between, NEAR};
+use super::pictures::{pulse_color, ONE_STEP};
 use super::support::{Area, Reader, Rgb};
 
 /// What the close button in the corner of the enlarged view is called.
@@ -411,10 +412,7 @@ fn a_click_on_the_dimmed_page_does_not_reach_what_is_under_it() {
     assert!(!reader.is_enabled("Go back"));
 }
 
-/// Known bug, listed in `tests/README.md`: the dimmed view does not cover
-/// the top bar, so its buttons still act on the window behind the picture.
 #[test]
-#[should_panic(expected = "the find bar opened behind the picture")]
 fn the_buttons_of_the_top_bar_do_not_act_while_a_picture_is_enlarged() {
     let mut reader = enlarged("blue.png");
 
@@ -451,6 +449,121 @@ fn a_diagram_is_enlarged_on_a_sheet_of_the_page() {
         paper
     );
     assert_ne!(reader.color_at(diagram.left - 40.0, diagram.top), paper);
+}
+
+#[test]
+fn every_kind_of_picture_is_enlarged_by_the_first_click() {
+    let kinds = [
+        "blue.png",
+        "red.jpg",
+        "shape.svg",
+        "green.gif",
+        "still.gif",
+        "green.webp",
+        "pulse.gif",
+        "pulse.webp",
+    ];
+
+    for file in kinds {
+        let mut reader = gallery(file);
+        let (x, y) = middle(in_the_text(&mut reader));
+
+        reader.click_point(x, y);
+
+        assert_eq!(reader.count(CLOSE), 1, "{file} did not enlarge");
+    }
+}
+
+#[test]
+fn a_moving_picture_goes_on_playing_when_it_is_enlarged_in_step_with_the_page() {
+    for file in ["pulse.gif", "pulse.webp"] {
+        let mut reader = enlarged(file);
+        let small = in_the_text(&mut reader);
+        let large_one = large(&reader);
+        let mut seen = vec![pulse_color(&reader, large_one)];
+
+        for _ in 0..12 {
+            reader.idle_for(ONE_STEP);
+            let now = pulse_color(&reader, large(&reader));
+            assert_eq!(now, pulse_color(&reader, small), "{file}: out of step");
+            if seen.last() != Some(&now) {
+                seen.push(now);
+            }
+        }
+
+        assert!(seen.len() >= 5, "{file} moved on only to {seen:?}");
+        for pair in seen.windows(2) {
+            assert_eq!(pair[1], (pair[0] + 1) % 3, "{file}: {seen:?}");
+        }
+        assert_eq!(large(&reader), large_one, "{file} moved or changed size");
+        assert!((large_one.width - 60.0).abs() < NEAR, "{large_one:?}");
+        assert!((large_one.height - 40.0).abs() < NEAR, "{large_one:?}");
+        assert_centered(&reader);
+    }
+}
+
+#[test]
+fn an_enlarged_moving_picture_is_zoomed_moved_and_closed_like_any_other() {
+    let mut reader = enlarged("pulse.gif");
+
+    reader.press("Ctrl++");
+    let zoomed = large(&reader);
+    reader.assert_sees("125%");
+    let (x, y) = middle(zoomed);
+    reader.click_point(x, y);
+    let clicked = reader.count(CLOSE);
+    reader.double_click_point(x, y);
+    let reset = large(&reader);
+    reader.click_point(reset.left - 150.0, reset.top);
+
+    assert!((zoomed.width - 75.0).abs() < NEAR, "{zoomed:?}");
+    assert_eq!(clicked, 1, "a click on the picture closed it");
+    assert!((reset.width - 60.0).abs() < NEAR, "{reset:?}");
+    assert_eq!(reader.count(CLOSE), 0, "a click beside it left it open");
+    assert_eq!(reader.pictures().len(), 1);
+
+    let mut reader = enlarged("pulse.gif");
+    reader.press("Escape");
+    assert_eq!(reader.count(CLOSE), 0, "Escape left it open");
+}
+
+#[test]
+fn closing_the_enlarged_view_of_a_moving_picture_lets_the_window_come_to_rest() {
+    let mut reader = enlarged("pulse.gif");
+    // The page loses its picture while the picture is enlarged, so nothing
+    // but the enlarged view moves.
+    reader.save_over("page.md", "words before\n\nwords after");
+    reader.wait_for("the page to be read again", |reader| {
+        reader.pictures().len() == 1
+    });
+    let enlarged = reader.pictures()[0];
+    let before = pulse_color(&reader, enlarged);
+    let moving = !reader.is_at_rest();
+    reader.wait_for("the enlarged picture to move on", |reader| {
+        pulse_color(reader, enlarged) != before
+    });
+
+    reader.press("Escape");
+    reader.idle_for(std::time::Duration::from_millis(100));
+
+    assert!(moving, "the enlarged picture asked for no next frame");
+    assert_eq!(reader.count(CLOSE), 0);
+    assert!(
+        reader.is_at_rest(),
+        "a closed view keeps the window drawing"
+    );
+}
+
+#[test]
+fn a_still_picture_enlarged_leaves_the_window_at_rest() {
+    for file in ["blue.png", "still.gif", "green.webp"] {
+        let mut reader = enlarged(file);
+        let ink = reader.picture_ink(large(&reader));
+        reader.idle_for(std::time::Duration::from_millis(100));
+
+        assert!(reader.is_at_rest(), "{file} keeps the window drawing");
+        assert_eq!(reader.picture_ink(large(&reader)), ink, "{file}");
+    }
 }
 
 #[test]

@@ -137,6 +137,90 @@ pub(crate) struct Painted {
     /// The middle of its first line, where a person would click on it. A
     /// text that wraps has its own middle off its words.
     pub(crate) first_line: Pos2,
+    /// How far its first line runs, from the left of its first character to
+    /// the right of its last.
+    pub(crate) first_line_width: f32,
+    /// Each character of its first line, with the corners of its picture on
+    /// the sheet the frame keeps them on.
+    glyphs: Vec<(char, [u16; 4])>,
+}
+
+impl Painted {
+    /// The drawing of the first `character` on its first line, cut from
+    /// `sheet`. `None` when the line has no such character.
+    pub(crate) fn drawing_of(&self, character: char, sheet: &ColorImage) -> Option<Drawing> {
+        let (_, [left, top, right, bottom]) =
+            self.glyphs.iter().find(|(set, _)| *set == character)?;
+        let columns = usize::from(*left)..usize::from(*right).min(sheet.size[0]);
+        let rows = usize::from(*top)..usize::from(*bottom).min(sheet.size[1]);
+        let dots = rows.flat_map(|row| columns.clone().map(move |column| sheet[(column, row)]));
+        Some(Drawing {
+            width: columns.len(),
+            dots: dots.map(|dot| dot.to_array()).collect(),
+        })
+    }
+}
+
+/// The picture of one character, as the frame keeps it: before the ink of
+/// the text is laid on it.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct Drawing {
+    width: usize,
+    dots: Vec<[u8; 4]>,
+}
+
+impl Drawing {
+    /// Whether any of it has a color of its own, as a color emoji has. A
+    /// letter is a shape for the ink of the text to fill.
+    pub(crate) fn is_in_color(&self) -> bool {
+        self.dots
+            .iter()
+            .any(|[red, green, blue, _]| red.abs_diff(*green).max(green.abs_diff(*blue)) > 32)
+    }
+
+    /// Whether nothing is drawn.
+    pub(crate) fn is_blank(&self) -> bool {
+        self.dots.iter().all(|dot| dot[3] == 0)
+    }
+}
+
+impl fmt::Debug for Drawing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let inked = self.dots.iter().filter(|dot| dot[3] > 0).count();
+        let kind = if self.is_in_color() {
+            "color"
+        } else {
+            "one ink"
+        };
+        let height = self.dots.len() / self.width.max(1);
+        write!(
+            f,
+            "a {}x{height} drawing in {kind}, {inked} dots inked",
+            self.width
+        )
+    }
+}
+
+/// How far the first line of `text` runs.
+fn first_line_width(text: &TextShape) -> f32 {
+    let glyphs = text.galley.rows.first().map(|line| &line.row.glyphs);
+    let ends = glyphs.and_then(|glyphs| Some((glyphs.first()?, glyphs.last()?)));
+    ends.map_or(0.0, |(first, last)| {
+        last.pos.x + last.advance_width - first.pos.x
+    })
+}
+
+/// Each character on the first line of `text`, with the corners of its
+/// picture on the sheet the frame keeps them on.
+fn glyphs(text: &TextShape) -> Vec<(char, [u16; 4])> {
+    let glyphs = text.galley.rows.first().map(|line| &line.row.glyphs);
+    let glyphs = glyphs.into_iter().flatten();
+    glyphs
+        .map(|glyph| {
+            let ([left, top], [right, bottom]) = (glyph.uv_rect.min, glyph.uv_rect.max);
+            (glyph.chr, [left, top, right, bottom])
+        })
+        .collect()
 }
 
 /// The middle of the glyphs on the first line of `text`.
@@ -195,6 +279,8 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                     underlined: sections.iter().any(underlined),
                     marker: marker.map(Rgb::of),
                     first_line: first_line(text),
+                    first_line_width: first_line_width(text),
+                    glyphs: glyphs(text),
                 });
             }
             _ => {}

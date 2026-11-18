@@ -130,6 +130,18 @@ fn the_buttons_read_left_to_right_in_the_order_the_tab_key_walks_them() {
 }
 
 #[test]
+fn the_buttons_at_the_right_fill_the_room_the_bar_keeps_for_them() {
+    let harness = UiHarness::with_three_docs();
+    let first = harness.ui.get_by_label("Appearance").rect();
+    let last = harness.ui.get_by_label("More").rect();
+    let files = harness.ui.get_by_label("Files sidebar").rect();
+
+    let kept = TRAILING_BUTTONS.mul_add(BUTTON_SIDE, (TRAILING_BUTTONS - 1.0) * BUTTON_GAP);
+    assert_close(last.right() - first.left(), kept);
+    assert_close(WINDOW_WIDTH - last.right(), files.left());
+}
+
+#[test]
 fn the_bar_names_the_document_by_its_first_heading_else_by_its_file() {
     let harness = field_notes();
     assert_eq!(

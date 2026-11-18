@@ -44,10 +44,8 @@ fn title_center(bar_center: f32, free: egui::Rangef, width: f32) -> f32 {
 }
 
 /// What the bar calls a document: its first heading, else its file name.
-fn document_name(tab: &Tab) -> std::borrow::Cow<'_, str> {
-    tab.document_title
-        .as_deref()
-        .map_or_else(|| tab.title().into(), Into::into)
+fn document_name(tab: &Tab) -> &str {
+    tab.document_title.as_deref().unwrap_or_else(|| tab.title())
 }
 
 /// The hover text of the title: where the document is, and whether it is
@@ -128,27 +126,18 @@ impl MarkdownApp {
         let files = QuietButton::icon(Icon::Sidebar, "Files sidebar")
             .show(ui, palette)
             .on_hover_text("Files (Ctrl+Shift+E)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Files", "button", &files, None);
         pick(&files, AppAction::ToggleExplorer, picked);
 
         let back = QuietButton::icon(Icon::Back, "Go back")
             .enabled(can_back)
             .show(ui, palette)
             .on_hover_text("Back (Alt+Left)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Navigate Back", "button", &back, None);
         pick(&back, AppAction::NavigateBack, picked);
 
         let forward = QuietButton::icon(Icon::Forward, "Go forward")
             .enabled(can_forward)
             .show(ui, palette)
             .on_hover_text("Forward (Alt+Right)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Navigate Forward", "button", &forward, None);
         pick(&forward, AppAction::NavigateForward, picked);
     }
 
@@ -161,34 +150,22 @@ impl MarkdownApp {
             .snug()
             .lit(chrome::next_widget_popup_is_open(ui))
             .show(ui, palette);
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Appearance", "button", &appearance, None);
         self.appearance_popover(&appearance, picked);
         appearance.on_hover_text("Theme, text size, width and spacing");
 
         let find = QuietButton::icon(Icon::Search, "Find in document")
             .show(ui, palette)
             .on_hover_text("Find (Ctrl+F)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Find", "button", &find, None);
         pick(&find, AppAction::OpenSearch, picked);
 
         let contents = QuietButton::icon(Icon::Outline, "Contents sidebar")
             .show(ui, palette)
             .on_hover_text("Contents (Ctrl+Shift+O)");
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: Contents", "button", &contents, None);
         pick(&contents, AppAction::ToggleOutline, picked);
 
         let more = QuietButton::icon(Icon::More, "More")
             .lit(chrome::next_widget_popup_is_open(ui))
             .show(ui, palette);
-        #[cfg(feature = "mcp")]
-        self.mcp_bridge
-            .register_widget("Top Bar: More", "button", &more, None);
         self.overflow_menu(&more, picked);
     }
 
@@ -201,7 +178,7 @@ impl MarkdownApp {
         let palette = self.theme.palette();
         let name = document_name(tab);
         let mut job = egui::text::LayoutJob::simple_singleline(
-            name.clone().into_owned(),
+            name.to_owned(),
             chrome::label_font(),
             egui::Color32::PLACEHOLDER,
         );
@@ -215,16 +192,10 @@ impl MarkdownApp {
         let rect = egui::Rect::from_center_size(center, galley.size());
 
         let response = ui.allocate_rect(rect, egui::Sense::hover());
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name.as_ref())
-        });
-        let color = if response.hovered() {
-            palette.text
-        } else {
-            palette.muted
-        };
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name));
+        let color = chrome::ink(palette, true, response.hovered());
         ui.painter().galley(rect.min, galley, color);
-        let live = self.watcher.is_some();
+        let live = self.live_reload.is_live();
         response.on_hover_ui(|ui| title_hover(ui, tab, live, palette));
     }
 }
