@@ -204,15 +204,19 @@ fn an_emoji_in_bold_text_is_drawn_as_in_the_text_around_it() {
         '\u{1f680}',
         '\u{231a}',
     ];
-    let line: String = faces.iter().flat_map(|face| [' ', *face]).collect();
-    let reader = page(&format!(
-        "# Signs\n\nplain{line} end\n\n**strong{line} end**"
-    ));
+    // Each emoji starts its line. A picture is drawn for where it lands
+    // between two dots of the screen, so the same emoji further along a
+    // plain and a bold line can differ by a few dots at its edges.
+    let lines = each(faces, |face| {
+        format!("{face} plain\n\n**{face} strong**\n\n")
+    });
+    let reader = page(&format!("# Signs\n\n{lines}"));
 
     for face in faces {
-        let plain = reader.drawing_of("plain", face);
+        let plain = reader.drawing_of(&format!("{face} plain"), face);
         assert!(!plain.is_blank(), "{face} is drawn in plain text");
-        assert_eq!(reader.drawing_of("strong", face), plain, "{face}");
+        let strong = reader.drawing_of(&format!("{face} strong"), face);
+        assert_eq!(strong, plain, "{face}");
     }
 }
 
