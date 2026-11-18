@@ -765,19 +765,46 @@ impl Image {
         }
     }
 
+    /// The picture from `source` at the size the page gives it.
+    fn on_the_page<'a>(
+        source: egui::ImageSource<'a>,
+        ui: &Ui,
+        options: &CommonMarkOptions,
+    ) -> egui::Image<'a> {
+        egui::Image::new(source)
+            .fit_to_original_size(1.0)
+            .max_width(options.max_width(ui))
+            .sense(egui::Sense::click())
+    }
+
+    /// Hold the place of a moving picture whose frames, of `size`, were let
+    /// go, and have it read again once that place is in view. Out of view
+    /// it is left alone: asking egui for it would read it at once.
+    fn hold_place(&self, ui: &mut Ui, options: &CommonMarkOptions, size: egui::Vec2) {
+        let by_address = egui::ImageSource::Uri(self.uri.as_str().into());
+        let place = Self::on_the_page(by_address, ui, options)
+            .calc_size(ui.available_size(), Some(size));
+        let (rect, _) = ui.allocate_exact_size(place, egui::Sense::hover());
+        if ui.is_rect_visible(rect) {
+            crate::animation::bring_back(ui.ctx(), &self.uri);
+        }
+    }
+
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
+        use crate::animation::Drawn;
         // A moving picture is drawn from the frame that is due. Every
         // frame has the size of the whole picture, so its place on the
         // page never changes.
-        let frame = crate::animation::current_frame(ui.ctx(), &self.uri);
+        let frame = match crate::animation::to_draw(ui.ctx(), &self.uri) {
+            Drawn::Frame(texture) => Some(texture),
+            Drawn::ByAddress => None,
+            Drawn::LetGo(size) => return self.hold_place(ui, options, size),
+        };
         let source = match frame {
             Some(frame) => egui::ImageSource::Texture(frame),
             None => egui::ImageSource::Uri(self.uri.as_str().into()),
         };
-        let image = egui::Image::new(source)
-            .fit_to_original_size(1.0)
-            .max_width(options.max_width(ui))
-            .sense(egui::Sense::click());
+        let image = Self::on_the_page(source, ui, options);
         // egui's loaders keep a failure for as long as the app runs. A
         // cache that has not shown this picture yet belongs to a page just
         // loaded or reloaded: a failure it finds is left from before, and
@@ -790,9 +817,13 @@ impl Image {
         }
         let response = ui.add(image);
         cache.observe_image_size(&self.uri, response.rect.size());
+        if frame.is_none() {
+            // A moving picture that egui has read in this frame.
+            crate::animation::taken_in(ui.ctx(), &self.uri);
+        }
         // Only a picture in view keeps the window drawing.
         if ui.is_rect_visible(response.rect) {
-            crate::animation::repaint_for_next_frame(ui.ctx(), &self.uri);
+            crate::animation::in_view(ui.ctx(), &self.uri);
         }
 
         if response.hovered() {

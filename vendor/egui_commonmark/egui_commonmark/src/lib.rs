@@ -96,6 +96,7 @@ pub use egui_commonmark_backend_extended::RenderHtmlFn;
 pub use egui_commonmark_backend_extended::RenderMathFn;
 pub use egui_commonmark_backend_extended::PreambleFn;
 pub use egui_commonmark_backend_extended::alerts::{Alert, AlertBundle};
+pub use egui_commonmark_backend_extended::animation;
 pub use egui_commonmark_backend_extended::misc::{
     header_position_key, CommonMarkCache, STRONG_FONT_FAMILY,
 };
