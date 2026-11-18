@@ -426,10 +426,26 @@ fn a_variation_selector_takes_no_room() {
 /// ❤, a sign that is an emoji only with U+FE0F after it.
 const HEART: char = '\u{2764}';
 
+/// 👨‍👩‍👧 🇯🇵 👍🏽 1️⃣: a family held by joiners, a flag, a skin tone and a
+/// keycap. The fixture has one glyph for each, as Noto Color Emoji does.
+const JOINED_EMOJI: [&str; 4] = [
+    "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+    "\u{1F1EF}\u{1F1F5}",
+    "\u{1F44D}\u{1F3FD}",
+    "1\u{FE0F}\u{20E3}",
+];
+
 fn lay_out(ctx: &egui::Context, family: &FontFamily, text: &str) -> std::sync::Arc<egui::Galley> {
     let font = egui::FontId::new(16.0, family.clone());
     let job = egui::text::LayoutJob::simple(text.to_owned(), font, Color32::WHITE, f32::INFINITY);
     ctx.fonts_mut(|fonts| fonts.layout_job(job))
+}
+
+/// The room each character of `text` takes, in order.
+fn rooms(ctx: &egui::Context, family: &FontFamily, text: &str) -> Vec<f32> {
+    let galley = lay_out(ctx, family, text);
+    let glyphs = galley.rows[0].glyphs.iter();
+    glyphs.map(|glyph| glyph.advance_width).collect()
 }
 
 /// U+FE0F after a sign asks for its emoji look: ❤️ is red where the machine
@@ -502,4 +518,98 @@ fn a_digit_with_the_emoji_selector_stays_a_digit() {
     let digit = &selected.rows[0].glyphs[0];
     assert_eq!(digit.uv_rect, bare.rows[0].glyphs[0].uv_rect);
     assert!(!digit.uv_rect.is_nothing());
+}
+
+/// An emoji written as several characters is one color picture, in every
+/// weight: the first character carries it and the others take no room. The
+/// text keeps every character, so copying and finding work as before.
+#[test]
+fn a_joined_emoji_is_one_color_picture_in_every_weight_of_every_preset() {
+    for preset in FontPreset::ALL {
+        let ctx = context_with_fonts(preset_definitions(preset));
+        for family in text_families() {
+            for emoji in JOINED_EMOJI {
+                let galley = lay_out(&ctx, &family, emoji);
+                assert_eq!(galley.text(), emoji);
+
+                let glyphs = &galley.rows[0].glyphs;
+                assert_eq!(glyphs.len(), emoji.chars().count());
+                let (picture, rest) = glyphs.split_first().expect("a first character");
+                let place = format!("{emoji} in {family:?} of {preset:?}");
+                assert!(picture.uv_rect.colored, "{place}");
+                assert!(picture.advance_width > 0.0, "{place}");
+                for hidden in rest {
+                    assert!(hidden.uv_rect.is_nothing(), "{place}");
+                    assert!(hidden.advance_width.abs() < f32::EPSILON, "{place}");
+                }
+
+                let first = emoji.chars().next().expect("a first character");
+                let alone = lay_out(&ctx, &family, &first.to_string());
+                assert_ne!(picture.uv_rect, alone.rows[0].glyphs[0].uv_rect, "{place}");
+            }
+        }
+    }
+}
+
+/// The bundled monochrome face joins the same sequences, so a machine with
+/// no color emoji font draws each as one picture too, in the ink of the text.
+#[test]
+fn a_joined_emoji_is_one_picture_without_a_color_font() {
+    let ctx = context_with_fonts(definitions_without_color_font());
+    for emoji in JOINED_EMOJI {
+        let galley = lay_out(&ctx, &FontFamily::Proportional, emoji);
+        let (picture, rest) = galley.rows[0].glyphs.split_first().expect("a character");
+
+        assert!(!picture.uv_rect.colored, "{emoji}");
+        assert!(!picture.uv_rect.is_nothing(), "{emoji}");
+        assert!(
+            rest.iter().all(|hidden| hidden.uv_rect.is_nothing()),
+            "{emoji}"
+        );
+        let room: f32 = rooms(&ctx, &FontFamily::Proportional, emoji).iter().sum();
+        assert!(
+            (room - picture.advance_width).abs() < f32::EPSILON,
+            "{emoji}"
+        );
+    }
+}
+
+/// 👨‍😀 is no emoji: no face has a glyph for the pair, so each is drawn as
+/// it is alone, with the joiner between them taking no room.
+#[test]
+fn a_sequence_no_face_joins_is_drawn_as_its_parts() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    let family = FontFamily::Proportional;
+    let apart = lay_out(&ctx, &family, "\u{1F468}\u{1F600}");
+    let galley = lay_out(&ctx, &family, "\u{1F468}\u{200D}\u{1F600}");
+
+    let glyphs = &galley.rows[0].glyphs;
+    assert_eq!(glyphs[0].uv_rect, apart.rows[0].glyphs[0].uv_rect);
+    assert!(glyphs[1].advance_width.abs() < f32::EPSILON);
+    assert_eq!(glyphs[2].uv_rect, apart.rows[0].glyphs[1].uv_rect);
+}
+
+/// A click on either half of a joined emoji puts the cursor beside it and
+/// never between its characters, where typing would break it apart.
+#[test]
+fn a_click_on_a_joined_emoji_lands_before_or_after_all_of_it() {
+    let ctx = context_with_fonts(preset_definitions(FontPreset::Reader));
+    for emoji in JOINED_EMOJI {
+        let text = format!("a{emoji}b");
+        let galley = lay_out(&ctx, &FontFamily::Proportional, &text);
+        let picture = galley.rows[0].glyphs[1].logical_rect();
+        // A click a little inside the left or the right edge of the picture.
+        let click = |edge: f32, inward: f32| {
+            let at = egui::vec2(edge + inward, picture.center().y);
+            galley.cursor_from_pos(at).index
+        };
+        let quarter = picture.width() / 4.0;
+
+        assert_eq!(click(picture.left(), quarter), 1, "{emoji}");
+        assert_eq!(
+            click(picture.right(), -quarter),
+            1 + emoji.chars().count(),
+            "{emoji}"
+        );
+    }
 }

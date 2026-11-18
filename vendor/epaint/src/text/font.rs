@@ -7,7 +7,7 @@ use crate::{
     TextureAtlas,
     text::{
         FontTweak,
-        emoji_sequence::Presentation,
+        emoji_sequence::{self, EMOJI_SELECTOR, Presentation},
         fonts::{CachedFamily, FontFaceKey},
     },
 };
@@ -286,6 +286,46 @@ impl FontImpl {
         } else {
             None
         }
+    }
+
+    /// md-viewer patch: the one glyph this face draws the whole of
+    /// `sequence` with, when its substitution table joins the characters:
+    /// a flag, a skin tone, a keycap, people held by zero-width joiners.
+    ///
+    /// This shapes the sequence, which is slow next to a character lookup;
+    /// [`Font::glyph_info_at`] keeps the answer.
+    pub(super) fn sequence_glyph_info(&self, sequence: &str) -> Option<GlyphInfo> {
+        let first = sequence.chars().next()?;
+        if self.ab_glyph_font.glyph_id(first).0 == 0 {
+            return None;
+        }
+        // Faces spell their sequences without the emoji selector.
+        let spelled: String = sequence.chars().filter(|&c| c != EMOJI_SELECTOR).collect();
+        if spelled.chars().nth(1).is_none() {
+            return None;
+        }
+
+        let font = swash::FontRef::from_index(&self.raw_bytes, self.font_index as usize)?;
+        let mut context = swash::shape::ShapeContext::new();
+        let mut shaper = context.builder(font).build();
+        shaper.add_str(&spelled);
+        let mut glyph_count = 0;
+        let mut glyph_id = 0;
+        shaper.shape_with(|cluster| {
+            glyph_count += cluster.glyphs.len();
+            if let Some(glyph) = cluster.glyphs.first() {
+                glyph_id = glyph.id;
+            }
+        });
+        if glyph_count != 1 || glyph_id == 0 {
+            return None;
+        }
+
+        let glyph_id = ab_glyph::GlyphId(glyph_id);
+        Some(GlyphInfo {
+            id: Some(glyph_id),
+            advance_width_unscaled: self.ab_glyph_font.h_advance_unscaled(glyph_id).into(),
+        })
     }
 
     /// The glyph this face maps `c` to, whether or not the face is kept to
@@ -595,21 +635,62 @@ impl Font<'_> {
     }
 
     /// md-viewer patch: what draws the first character of `text`, given the
-    /// character after it. A character followed by U+FE0F is drawn from the
-    /// color emoji face and one followed by U+FE0E from the text faces,
-    /// where they have it.
+    /// characters after it, and how many of those the glyph stands for too.
     ///
-    /// Any other character is looked up as [`Self::glyph_info`] does, after
-    /// one look at the character after it.
-    pub(crate) fn glyph_info_at(&mut self, text: &str) -> (FontFaceKey, GlyphInfo) {
+    /// A character followed by U+FE0F is drawn from the color emoji face and
+    /// one followed by U+FE0E from the text faces, where they have it. An
+    /// emoji sequence is one glyph where a face joins it; the characters the
+    /// glyph also stands for are then to be laid out with no room.
+    ///
+    /// Any other character, and so all text without emoji, is looked up as
+    /// [`Self::glyph_info`] does, after one look at the character after it.
+    pub(crate) fn glyph_info_at(&mut self, text: &str) -> (FontFaceKey, GlyphInfo, usize) {
         let mut chars = text.chars();
         let Some(c) = chars.next() else {
-            return self.cached_family.replacement_glyph;
+            let (font, glyph_info) = self.cached_family.replacement_glyph;
+            return (font, glyph_info, 0);
         };
-        match chars.next().and_then(Presentation::asked_by) {
+        let next = chars
+            .next()
+            .filter(|&next| emoji_sequence::may_join(c, next));
+        let Some(next) = next else {
+            let (font, glyph_info) = self.glyph_info(c);
+            return (font, glyph_info, 0);
+        };
+
+        let presentation = Presentation::asked_by(next);
+        let sequence = &text[..emoji_sequence::sequence_len(text)];
+        // A character and its selector are not a sequence for a face to join.
+        let selector_only =
+            presentation.is_some() && sequence.len() == c.len_utf8() + next.len_utf8();
+        if !selector_only && let Some((font, glyph_info)) = self.sequence_glyph_info(sequence) {
+            return (font, glyph_info, sequence.chars().count() - 1);
+        }
+
+        let (font, glyph_info) = match presentation {
             Some(presentation) => self.glyph_info_as(c, presentation),
             None => self.glyph_info(c),
+        };
+        (font, glyph_info, 0)
+    }
+
+    /// The face that draws `sequence` as one glyph, and the glyph.
+    fn sequence_glyph_info(&mut self, sequence: &str) -> Option<(FontFaceKey, GlyphInfo)> {
+        if let Some(joined) = self.cached_family.sequence_cache.get(sequence) {
+            return *joined;
         }
+
+        let joined = self.cached_family.fonts.iter().find_map(|font_key| {
+            let glyph_info = self
+                .fonts_by_id
+                .get(font_key)?
+                .sequence_glyph_info(sequence)?;
+            Some((*font_key, glyph_info))
+        });
+        self.cached_family
+            .sequence_cache
+            .insert(sequence.into(), joined);
+        joined
     }
 
     /// `c` with the look a variation selector asks for, or as

@@ -308,6 +308,48 @@ fn an_emoji_with_the_text_selector_is_in_the_ink_of_the_text() {
     }
 }
 
+/// A family, a flag, a skin tone and a keycap are each written as several
+/// characters and drawn as one picture: the first character carries it and
+/// the others draw nothing, though each is still in the text.
+#[test]
+fn an_emoji_written_as_several_characters_is_one_picture() {
+    let joined = [
+        "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}",
+        "\u{1f1ef}\u{1f1f5}",
+        "\u{1f44d}\u{1f3fd}",
+        "1\u{fe0f}\u{20e3}",
+    ];
+    for (open, close) in [("", ""), ("**", "**")] {
+        let lines = each(joined, |emoji| format!("{open}one {emoji} end{close}\n\n"));
+        let reader = page(&format!("# Signs\n\n{lines}"));
+
+        for emoji in joined {
+            reader.assert_sees(emoji);
+            let mut characters = emoji.chars();
+            let first = characters.next().expect("a first character");
+            assert!(!reader.drawing_of(emoji, first).is_blank(), "{emoji}");
+            for later in characters {
+                assert!(
+                    reader.drawing_of(emoji, later).is_blank(),
+                    "{later} of {open}{emoji}{close} is drawn apart"
+                );
+            }
+        }
+    }
+}
+
+/// The same people side by side with no joiner are three pictures.
+#[test]
+fn emoji_that_are_not_joined_are_drawn_apart() {
+    let people = ['\u{1f468}', '\u{1f469}', '\u{1f467}'];
+    let line: String = people.iter().collect();
+    let reader = page(&format!("# Signs\n\napart {line} end"));
+
+    for person in people {
+        assert!(!reader.drawing_of("apart", person).is_blank(), "{person}");
+    }
+}
+
 #[test]
 fn a_shortcode_that_names_no_emoji_stays_as_typed() {
     let reader = page("# Signs\n\nSee :not_an_emoji: and 10:30:45 here.");

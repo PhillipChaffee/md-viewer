@@ -748,6 +748,12 @@ impl Row {
     /// Returns something in the range `[0, char_count_excluding_newline()]`.
     pub fn char_at(&self, desired_x: f32) -> usize {
         for (i, glyph) in self.glyphs.iter().enumerate() {
+            // md-viewer patch: a character with no room (a selector, a
+            // joiner, the rest of an emoji drawn as one glyph) is not a place
+            // to point at, so a click lands before or after the whole emoji.
+            if glyph.advance_width == 0.0 {
+                continue;
+            }
             if desired_x < glyph.logical_rect().center().x {
                 return i;
             }

@@ -81,9 +81,11 @@ folder, reading time and opening lines.
 
 - GitHub Flavored Markdown: tables, task lists, footnotes, strikethrough and
   emoji shortcodes such as `:pushpin:`. An emoji looks the same in bold
-  text and headings as in the text around them. A variation
-  selector picks the look of the sign before it: ❤️ is the color emoji and
-  ❤︎ the sign in the ink of the text.
+  text and headings as in the text around them. An emoji written as
+  several characters is one picture: a family (👨‍👩‍👧), a flag (🇯🇵), a skin
+  tone (👍🏽), a keycap (1️⃣). A variation selector picks the look of the
+  sign before it: ❤️ is the color emoji and ❤︎ the sign in the ink of the
+  text.
 - LaTeX math, inline `$…$` and display `$$…$$`.
 - Mermaid diagrams: flowcharts, sequence, class, state, ER, gantt and pie.
   Click a diagram to enlarge it.
@@ -274,8 +276,12 @@ Two things to know before you rely on those gates:
 ## Known limits
 
 - Emoji are in color where Noto Color Emoji is installed, and in the ink of
-  the text elsewhere. A joined sequence such as 👨‍👩‍👧 is drawn as its
-  parts.
+  the text elsewhere. An emoji written as several characters is drawn as
+  its parts where no installed emoji font has one picture for it, as with
+  an emoji newer than the font. The keycap *️⃣ is drawn as its parts,
+  because Markdown reads its `*` apart from the characters after it.
+- In edit mode the arrow keys and Backspace move through an emoji written
+  as several characters one character at a time.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
 

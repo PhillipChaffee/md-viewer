@@ -6,7 +6,7 @@ use crate::{
     Color32, Mesh, Stroke, Vertex,
     stroke::PathStroke,
     text::{
-        font::{ScaledMetrics, is_cjk, is_cjk_break_allowed},
+        font::{GlyphInfo, ScaledMetrics, is_cjk, is_cjk_break_allowed},
         fonts::FontFaceKey,
     },
 };
@@ -178,6 +178,10 @@ fn layout_section(
     let mut current_font = FontFaceKey::INVALID;
     let mut current_font_impl_metrics = ScaledMetrics::default();
 
+    // md-viewer patch: the characters still to come that the glyph of an
+    // emoji sequence already stands for. They stay in the text, with no room.
+    let mut joined_chars = 0;
+
     let text = &job.text[byte_range.clone()];
     for (byte_index, chr) in text.char_indices() {
         if job.break_on_newline && chr == '\n' {
@@ -185,9 +189,14 @@ fn layout_section(
             paragraph = out_paragraphs.last_mut().unwrap();
             paragraph.empty_paragraph_height = line_height; // TODO(emilk): replace this hack with actually including `\n` in the glyphs?
         } else {
-            // md-viewer patch: the character after this one may be a
-            // variation selector that picks its look.
-            let (font_id, glyph_info) = font.glyph_info_at(&text[byte_index..]);
+            let (font_id, glyph_info) = if joined_chars > 0 {
+                joined_chars -= 1;
+                (current_font, GlyphInfo::INVISIBLE)
+            } else {
+                let (font_id, glyph_info, joined) = font.glyph_info_at(&text[byte_index..]);
+                joined_chars = joined;
+                (font_id, glyph_info)
+            };
             let mut font_impl = font.fonts_by_id.get_mut(&font_id);
             if current_font != font_id {
                 current_font = font_id;
@@ -1349,5 +1358,60 @@ mod tests {
         let digit = first_glyph("1");
         assert!(!digit.is_nothing());
         assert_eq!(first_glyph("1\u{FE0F}"), digit);
+    }
+
+    /// md-viewer patch: an emoji sequence a face joins is one glyph on its
+    /// first character, and the other characters stay in the text with no
+    /// room. A sequence no face joins is drawn as its parts.
+    #[test]
+    fn test_emoji_sequence_is_one_glyph() {
+        let mut fonts = fonts_with_color_emoji();
+        let single = lay_out(&mut fonts, "\u{1F468}");
+
+        for sequence in [
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+            "\u{1F1EF}\u{1F1F5}",
+            "\u{1F44D}\u{1F3FD}",
+            "1\u{FE0F}\u{20E3}",
+            "1\u{20E3}",
+        ] {
+            let text = format!("a{sequence}b");
+            let galley = lay_out(&mut fonts, &text);
+            assert_eq!(galley.text(), text);
+
+            let glyphs = &galley.rows[0].glyphs;
+            let chars = sequence.chars().count();
+            assert_eq!(glyphs.len(), chars + 2);
+            assert!(glyphs[1].uv_rect.colored, "{sequence}");
+            assert_eq!(
+                glyphs[1].advance_width,
+                single.rows[0].glyphs[0].advance_width
+            );
+            assert_ne!(glyphs[1].uv_rect, single.rows[0].glyphs[0].uv_rect);
+            for (hidden, chr) in glyphs[2..=chars].iter().zip(sequence.chars().skip(1)) {
+                assert_eq!(hidden.chr, chr);
+                assert_eq!(hidden.advance_width, 0.0, "{sequence}");
+                assert!(hidden.uv_rect.is_nothing(), "{sequence}");
+            }
+            assert_eq!(glyphs[chars + 1].chr, 'b');
+            assert!(!glyphs[chars + 1].uv_rect.is_nothing());
+
+            // A click on the glyph lands before or after the whole sequence.
+            let row = &galley.rows[0];
+            let picture = glyphs[1].logical_rect();
+            assert_eq!(row.char_at(picture.left() + 0.25 * picture.width()), 1);
+            assert_eq!(
+                row.char_at(picture.left() + 0.75 * picture.width()),
+                chars + 1
+            );
+        }
+
+        // No face has a glyph for a man joined to a grinning face.
+        let apart = lay_out(&mut fonts, "\u{1F468}\u{1F600}");
+        let unjoined = lay_out(&mut fonts, "\u{1F468}\u{200D}\u{1F600}");
+        let glyphs = &unjoined.rows[0].glyphs;
+        assert_eq!(glyphs[0].uv_rect, apart.rows[0].glyphs[0].uv_rect);
+        assert_eq!(glyphs[1].advance_width, 0.0);
+        assert_eq!(glyphs[2].uv_rect, apart.rows[0].glyphs[1].uv_rect);
     }
 }
