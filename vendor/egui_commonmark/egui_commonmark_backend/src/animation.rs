@@ -280,8 +280,8 @@ pub(crate) enum Drawn {
     /// As egui's `Image` draws the address: it is no moving picture, or it
     /// is still being read.
     ByAddress,
-    /// As this frame of it.
-    Frame(SizedTexture),
+    /// As this frame of it. `plays` if other frames follow it.
+    Frame { texture: SizedTexture, plays: bool },
     /// Not at all: its frames, of this size, were let go. Its place is
     /// held, and [`bring_back`] reads it again.
     LetGo(Vec2),
@@ -301,7 +301,11 @@ pub(crate) fn to_draw(ctx: &egui::Context, uri: &str) -> Drawn {
             Duration::try_from_secs_f64(now(ctx)).map_or(0, |now| frame_at(&delays, now).0)
         }
     };
-    frame_texture(ctx, uri, index).map_or(Drawn::ByAddress, Drawn::Frame)
+    let plays = picture.kept == Kept::Every && picture.frames > 1;
+    match frame_texture(ctx, uri, index) {
+        Some(texture) => Drawn::Frame { texture, plays },
+        None => Drawn::ByAddress,
+    }
 }
 
 /// The picture at `uri` was drawn in view. It is kept while it is, and if
@@ -363,6 +367,18 @@ pub(crate) fn bring_back(ctx: &egui::Context, uri: &str) {
     pictures(ctx, |pictures| pictures.known.remove(uri));
     taken_in(ctx, uri);
     ctx.request_repaint();
+}
+
+/// The frame to show now in an enlarged view of the moving picture at
+/// `uri`. Asks for a repaint when the next frame is due, so call it only
+/// in a frame that shows the picture. `None` once the picture's frames
+/// were let go.
+pub fn enlarged_frame(ctx: &egui::Context, uri: &str) -> Option<SizedTexture> {
+    let Drawn::Frame { texture, .. } = to_draw(ctx, uri) else {
+        return None;
+    };
+    in_view(ctx, uri);
+    Some(texture)
 }
 
 #[cfg(test)]

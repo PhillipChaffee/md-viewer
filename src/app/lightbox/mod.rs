@@ -1,6 +1,7 @@
 //! The zoomable lightbox overlay for diagrams and images.
 
 use eframe::egui;
+use egui_commonmark_extended::animation;
 
 use crate::app::{zoom_percent, MarkdownApp};
 use crate::theme;
@@ -25,13 +26,32 @@ const DIAGRAM_SHEET_RADIUS: f32 = 8.0;
 pub(crate) enum LightboxTexture {
     Owned(egui::TextureHandle),
     Loaded(egui::TextureId),
+    /// A GIF or WebP that plays: the picture's address, and the frame of it
+    /// that is on screen.
+    Moving {
+        uri: String,
+        frame: egui::TextureId,
+    },
 }
 
 impl LightboxTexture {
     pub(crate) fn id(&self) -> egui::TextureId {
         match self {
             Self::Owned(handle) => handle.id(),
-            Self::Loaded(id) => *id,
+            Self::Loaded(id) | Self::Moving { frame: id, .. } => *id,
+        }
+    }
+
+    /// Move a picture that plays on to the frame that is due, the same one
+    /// the page shows, and ask for a repaint when the next is due. This
+    /// runs only while the picture is enlarged, so a closed lightbox asks
+    /// for nothing.
+    fn play(&mut self, ctx: &egui::Context) {
+        let Self::Moving { uri, frame } = self else {
+            return;
+        };
+        if let Some(due) = animation::enlarged_frame(ctx, uri) {
+            *frame = due.id;
         }
     }
 
@@ -311,7 +331,7 @@ fn close_button_clicked(ctx: &egui::Context, screen_rect: egui::Rect, open_id: u
 impl MarkdownApp {
     /// Open the diagram or the image the reader clicked in the document
     /// this frame. Its texture is already on the GPU, so the click costs
-    /// nothing.
+    /// nothing. A picture that plays goes on playing.
     pub(crate) fn open_clicked_picture(&mut self) {
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
             let mermaid = tab.cache.take_clicked_mermaid();
@@ -320,9 +340,15 @@ impl MarkdownApp {
                 self.lightbox
                     .show(LightboxTexture::Owned(texture), base_size);
             }
-            if let Some((texture_id, base_size)) = image {
-                self.lightbox
-                    .show(LightboxTexture::Loaded(texture_id), base_size);
+            if let Some(image) = image {
+                let texture = match image.moving {
+                    Some(uri) => LightboxTexture::Moving {
+                        uri,
+                        frame: image.texture,
+                    },
+                    None => LightboxTexture::Loaded(image.texture),
+                };
+                self.lightbox.show(texture, image.size);
             }
         }
     }
@@ -332,6 +358,7 @@ impl MarkdownApp {
         let Some(lightbox) = &mut self.lightbox.open else {
             return;
         };
+        lightbox.texture.play(ctx);
 
         // The scrim and its input sink cover the whole window, the top bar
         // included: nothing behind the picture may be reached. A click on

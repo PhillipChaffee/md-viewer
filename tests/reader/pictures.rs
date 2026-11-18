@@ -78,7 +78,7 @@ const PULSE: [&str; 3] = ["#CC3333", "#33AA55", "#3366CC"];
 
 /// Which of the colors of [`PULSE`] `picture` shows now.
 #[track_caller]
-fn pulse_color(reader: &Reader, picture: Area) -> usize {
+pub(crate) fn pulse_color(reader: &Reader, picture: Area) -> usize {
     let ink = reader.picture_ink(picture);
     let shown = PULSE.iter().position(|color| {
         let Rgb(red, green, blue) = Rgb::hex(color);
@@ -91,7 +91,7 @@ fn pulse_color(reader: &Reader, picture: Area) -> usize {
 
 /// Long enough for the app to draw once more, and so to move on by one
 /// step of its clock: half a frame of the moving picture.
-const ONE_STEP: std::time::Duration = std::time::Duration::from_millis(10);
+pub(crate) const ONE_STEP: std::time::Duration = std::time::Duration::from_millis(10);
 
 #[test]
 fn a_gif_or_webp_of_several_frames_plays_them_in_turn_at_one_size() {

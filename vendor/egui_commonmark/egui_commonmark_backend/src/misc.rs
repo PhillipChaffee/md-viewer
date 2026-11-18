@@ -740,6 +740,19 @@ impl Link {
     }
 }
 
+/// A picture in the document that was clicked, for an enlarged view of it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClickedImage {
+    /// What the picture showed when it was clicked. The texture belongs to
+    /// egui's loader: the id holds for as long as the picture stays loaded.
+    pub texture: egui::TextureId,
+    /// The picture's own size.
+    pub size: egui::Vec2,
+    /// The address of a picture that plays. [`crate::animation::enlarged_frame`]
+    /// gives the frame of it to show in each later frame.
+    pub moving: Option<String>,
+}
+
 pub struct Image {
     pub uri: String,
     pub alt_text: Vec<RichText>,
@@ -795,9 +808,9 @@ impl Image {
         // A moving picture is drawn from the frame that is due. Every
         // frame has the size of the whole picture, so its place on the
         // page never changes.
-        let frame = match crate::animation::to_draw(ui.ctx(), &self.uri) {
-            Drawn::Frame(texture) => Some(texture),
-            Drawn::ByAddress => None,
+        let (frame, plays) = match crate::animation::to_draw(ui.ctx(), &self.uri) {
+            Drawn::Frame { texture, plays } => (Some(texture), plays),
+            Drawn::ByAddress => (None, false),
             Drawn::LetGo(size) => return self.hold_place(ui, options, size),
         };
         let source = match frame {
@@ -831,8 +844,8 @@ impl Image {
         }
 
         if response.clicked() {
-            // The enlarged view of a moving picture is the frame that was
-            // clicked, held still.
+            // The enlarged view of a moving picture starts from the frame
+            // that was clicked.
             let texture = frame.or_else(|| {
                 // Any other picture is asked for the way egui's `Image`
                 // asked for it, which for a GIF or WebP of one frame is
@@ -849,7 +862,11 @@ impl Image {
                 }
             });
             if let Some(texture) = texture {
-                cache.clicked_image = Some((texture.id, texture.size));
+                cache.clicked_image = Some(ClickedImage {
+                    texture: texture.id,
+                    size: texture.size,
+                    moving: plays.then(|| self.uri.clone()),
+                });
             }
         }
 
@@ -2541,9 +2558,8 @@ pub struct CommonMarkCache {
     #[cfg(feature = "mermaid")]
     clicked_mermaid: Option<(egui::TextureHandle, egui::Vec2)>,
 
-    /// Set when a regular image is clicked (texture id + intrinsic size for lightbox).
-    /// Texture lifetime is owned by egui's loader, so we only carry the id.
-    clicked_image: Option<(egui::TextureId, egui::Vec2)>,
+    /// Set when a regular image is clicked, for the lightbox.
+    clicked_image: Option<ClickedImage>,
 
     /// Last allocated size per ordinary image URI. Loader completion can
     /// replace a placeholder with a differently sized image.
@@ -2700,9 +2716,8 @@ impl CommonMarkCache {
         self.clicked_mermaid.take()
     }
 
-    /// Take the clicked image texture id and size (if any). Returns `Some` once per click.
-    /// The texture is owned by egui's loader; the id is valid for as long as it stays loaded.
-    pub fn take_clicked_image(&mut self) -> Option<(egui::TextureId, egui::Vec2)> {
+    /// Take the clicked image (if any). Returns `Some` once per click.
+    pub fn take_clicked_image(&mut self) -> Option<ClickedImage> {
         self.clicked_image.take()
     }
 

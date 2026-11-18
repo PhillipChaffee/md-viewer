@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use egui::load::TexturePoll;
 use egui_commonmark_extended::animation::{self, FrameBudget};
-use egui_commonmark_extended::{CommonMarkCache, CommonMarkViewer};
+use egui_commonmark_extended::{ClickedImage, CommonMarkCache, CommonMarkViewer};
 use image::codecs::gif::{GifEncoder, Repeat};
 
 const WINDOW: egui::Vec2 = egui::vec2(400.0, 300.0);
@@ -78,6 +78,9 @@ struct Shown {
     pictures: Vec<(egui::TextureId, egui::Rect)>,
     /// How long until the window asked to be drawn again.
     next_repaint: Duration,
+    /// The frame an enlarged view of the picture would show, if the window
+    /// has one.
+    enlarged: Option<egui::TextureId>,
 }
 
 /// A window on a page whose one picture is the GIF at [`PULSE`]. The page
@@ -88,6 +91,8 @@ struct Window {
     page: String,
     above: f32,
     events: Vec<egui::Event>,
+    /// Whether an enlarged view of the picture at [`PULSE`] is open.
+    enlarged: bool,
 }
 
 impl Window {
@@ -106,6 +111,7 @@ impl Window {
             page: page.to_owned(),
             above: 0.0,
             events: Vec::new(),
+            enlarged: false,
         }
     }
 
@@ -118,11 +124,15 @@ impl Window {
             ..Default::default()
         };
         let (cache, above, page) = (&mut self.cache, self.above, &self.page);
+        let mut enlarged = None;
         let output = self.ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.add_space(above);
                 CommonMarkViewer::new().show(ui, cache, page);
             });
+            if self.enlarged {
+                enlarged = animation::enlarged_frame(ctx, PULSE).map(|frame| frame.id);
+            }
         });
         assert!(
             !self.ctx.has_pending_images(),
@@ -139,6 +149,7 @@ impl Window {
         Shown {
             pictures,
             next_repaint: output.viewport_output[&egui::ViewportId::ROOT].repaint_delay,
+            enlarged,
         }
     }
 
@@ -262,7 +273,11 @@ fn a_click_on_a_gif_hands_over_the_frame_that_was_clicked() {
     assert_eq!(on_screen.0, second.id);
     assert_eq!(
         window.cache.take_clicked_image(),
-        Some((second.id, second.size))
+        Some(ClickedImage {
+            texture: second.id,
+            size: second.size,
+            moving: Some(PULSE.to_owned()),
+        })
     );
 }
 
@@ -298,6 +313,39 @@ fn the_frames_are_kept_as_textures_and_not_as_decoded_pictures_too() {
 }
 
 #[test]
+fn an_enlarged_view_is_shown_the_frame_that_is_due_and_wakes_the_window_for_the_next() {
+    let mut window = Window::new(3);
+    window.frame_at(0.1);
+    window.above = WINDOW.y + 50.0;
+    window.frame_at(0.2);
+
+    window.enlarged = true;
+    let enlarged: Vec<_> = [0.3, 0.6, 1.1, 1.6]
+        .into_iter()
+        .map(|seconds| window.frame_at(seconds))
+        .collect();
+    window.enlarged = false;
+    window.frame_at(1.7);
+    let closed = window.frame_at(1.8);
+
+    let frames: Vec<_> = (0..3)
+        .map(|index| frame_texture(&window.ctx, index).unwrap().id)
+        .collect();
+    let shown: Vec<_> = enlarged.iter().map(|shown| shown.enlarged).collect();
+    let due = [frames[0], frames[1], frames[2], frames[0]].map(Some);
+    assert_eq!(shown, due);
+    let step = Duration::from_millis(u64::from(DELAY_MS));
+    for shown in &enlarged {
+        assert!(shown.next_repaint <= step, "{:?}", shown.next_repaint);
+        assert!(
+            shown.pictures.is_empty(),
+            "the page's picture is out of view"
+        );
+    }
+    assert_eq!(closed.next_repaint, Duration::MAX);
+}
+
+#[test]
 fn a_gif_too_large_to_play_shows_its_first_frame_and_leaves_the_window_at_rest() {
     let mut window = Window::new(3);
     animation::set_frame_budget(
@@ -321,10 +369,8 @@ fn a_gif_too_large_to_play_shows_its_first_frame_and_leaves_the_window_at_rest()
     assert_eq!(shown[0].pictures[0].1.size(), egui::vec2(6.0, 4.0));
     assert_eq!(textures_of(&window.ctx, PULSE), 1);
     assert_eq!(decoded_bytes(&window.ctx), 0);
-    assert_eq!(
-        window.cache.take_clicked_image(),
-        Some((first.id, first.size))
-    );
+    let clicked = window.cache.take_clicked_image().unwrap();
+    assert_eq!((clicked.texture, clicked.moving), (first.id, None));
 }
 
 const FIRST: &str = "bytes://first.gif";
