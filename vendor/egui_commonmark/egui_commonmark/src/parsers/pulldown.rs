@@ -2482,6 +2482,12 @@ impl CommonMarkViewerInternal {
             let out = make_scroll_area(pending_scroll_offset).show(ui, |ui| {
                 cache.set_scroll_offset(pending_scroll_offset.unwrap_or(0.0));
                 self.show(ui, cache, options, text, Some(source_id));
+                // md-viewer patch: the room below the last block. It is
+                // measured into the page's height here, so the slices
+                // that follow keep it without laying anything out.
+                if options.end_space > 0.0 {
+                    ui.add_space(options.end_space);
+                }
             });
             let sc = scroll_cache(cache, &source_id);
             if let Some(page_size) = &mut sc.page_size {

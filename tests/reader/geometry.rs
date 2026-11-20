@@ -481,3 +481,42 @@ fn the_quieter_text_can_still_be_read_on_every_theme() {
         }
     }
 }
+
+/// A page long enough to scroll in a window 500 high, with words of its
+/// own on its last line.
+fn long_page() -> Launch {
+    let paragraphs = format!("{SENTENCE}\n\n").repeat(40);
+    Reader::launch()
+        .doc("long.md", &format!("# Tides\n\n{paragraphs}the very end"))
+        .args(&["long.md"])
+        .window(900.0, 500.0)
+}
+
+/// The least room, in pixels, between the text and an end of the page.
+const PAGE_END: f32 = 30.0;
+
+#[test]
+fn the_last_line_of_a_page_scrolled_to_its_end_stands_clear_of_the_bottom() {
+    let mut reader = long_page().open();
+
+    reader.scroll_down(100_000.0);
+
+    let last = reader.text_area("the very end");
+    assert!(last.bottom() <= 500.0 - PAGE_END, "{last:?}");
+    assert!(last.bottom() > 250.0, "and it is at the end: {last:?}");
+}
+
+#[test]
+fn the_first_line_of_the_source_stands_as_clear_of_the_top_as_the_last_does_of_the_bottom() {
+    let mut reader = long_page().open();
+    let bar = reader.area_of("More").bottom();
+
+    reader.press("Ctrl+E");
+
+    let source = reader.text_field_area(0);
+    assert!(source.top >= bar + PAGE_END, "{source:?} under {bar}");
+
+    reader.scroll_down(100_000.0);
+    let source = reader.text_field_area(0);
+    assert!(source.bottom() <= 500.0, "{source:?}");
+}
