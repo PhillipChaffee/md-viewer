@@ -94,7 +94,9 @@ has one. The Home button again, Back, or a click on a tab leads back.
   Click a diagram to enlarge it.
 - Syntax highlighting for 200+ languages, with a color scheme per theme.
 - Images (PNG, JPEG, GIF, WebP, SVG, local or over HTTP), HTML tables and
-  YAML frontmatter. Animated GIFs and WebPs play while they are in view.
+  YAML frontmatter. A picture is read only once you are near it, so a
+  long page of pictures opens at once. Animated GIFs and WebPs play while
+  they are in view.
   Click a picture to enlarge it; a moving one goes on playing while it is
   enlarged.
 - System font fallbacks for CJK and other non-Latin scripts.
@@ -306,12 +308,23 @@ Two things to know before you rely on those gates:
   of a keycap: `a*️⃣b*️⃣c` sets the `b` in italics. Write `\*️⃣` there.
 - While the find bar marks part of an emoji written as several characters,
   such as the `1` of 1️⃣, that emoji is drawn as its parts.
-- An animated GIF or WebP is decoded whole when it is first shown, which
-  takes a moment and four bytes of memory for each pixel of each frame. One
-  whose frames need more than 256 MiB (139 frames of 800 × 600) then shows
-  its first frame and does not move. When the frames of all moving pictures
-  pass 512 MiB, those out of view are let go, and decoded again when they
-  are scrolled back to.
+- A picture is read when you come within a window's height of it, and
+  decoded in the background. Until it is there its place is empty, with a
+  spinner while it is in view. An animated GIF or WebP is decoded whole:
+  120 frames of 800 × 600 take about a second in a release build, and
+  each frame takes four bytes of memory for each of its pixels.
+- The size of a picture on the web, and of an SVG, is not known until it
+  has been read. Its place is a small one until then, and the text after it
+  moves down when it arrives. What you are reading stays where it is if the
+  picture is above it, unless the page shows that picture more than once.
+- A moving picture whose frames need more than 256 MiB (139 frames of
+  800 × 600) shows its first frame and does not move. When the frames of
+  all moving pictures pass 512 MiB, those more than a window's height from
+  the view are let go, and decoded again when you come back to them. A
+  picture that is being decoded counts as 256 MiB until it is there, so
+  others can be let go before 512 MiB are in use.
+- A picture that does not move stays in memory, once read, until its tab
+  is closed.
 - Very large documents (tens of thousands of lines) scroll less smoothly.
 - In edit mode the source is plain text with no highlighting.
 
