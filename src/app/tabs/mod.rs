@@ -7,7 +7,7 @@ use egui_commonmark_extended::animation;
 
 use crate::app::MarkdownApp;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
-use crate::tab::Tab;
+use crate::tab::{Route, Tab};
 
 #[cfg(kani)]
 mod proofs;
@@ -164,23 +164,15 @@ impl MarkdownApp {
         self.tab_documents_changed();
     }
 
-    /// Show the document at `path` in the tab in front. From the home
-    /// page, where no tab is in front, it gets a tab of its own, or the
-    /// one it has.
+    /// Show the document at `path` in the tab in front, asking first if
+    /// that would lose unsaved edits. From the home page, where no tab is
+    /// in front, it gets a tab of its own, or the one it has.
     pub(crate) fn navigate_active_tab_to(&mut self, path: &Path) {
         if self.front().is_none() {
             self.open_in_new_tab(path.to_path_buf());
             return;
         }
-
-        // A file that cannot be read leaves the document in front, and
-        // says so as one opened in a tab of its own does.
-        let shown = path
-            .canonicalize()
-            .and_then(|target| self.navigate_active(|tab| tab.navigate_to_path(&target)));
-        if let Err(error) = shown {
-            self.report_unopened(path, &error);
-        }
+        self.request_route(Route::File(path.to_path_buf()));
     }
 
     /// Say in the error bar that the file at `path` was asked for and
@@ -189,8 +181,9 @@ impl MarkdownApp {
         self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
     }
 
-    /// Step the tab in front through its history. From the home page
-    /// over open tabs, back is the way to the tab that was in front.
+    /// Step the tab in front through its history, asking first if that
+    /// would lose unsaved edits. From the home page over open tabs, back
+    /// is the way to the tab that was in front.
     pub(crate) fn navigate_active_history(&mut self, go_back: bool) {
         if self.home_shows {
             if go_back {
@@ -198,61 +191,61 @@ impl MarkdownApp {
             }
             return;
         }
-        let stepped = self.navigate_active(|tab| {
-            if go_back {
-                tab.navigate_back()
-            } else {
-                tab.navigate_forward()
-            }
-        });
-        if let Err(error) = stepped {
-            self.error_message = Some(format!("Unable to navigate history: {error}"));
-        }
+        let step = if go_back { Route::Back } else { Route::Forward };
+        self.request_route(step);
     }
 
     /// Follow a link the reader clicked in the active document: a plain
-    /// click shows its target in place, and `in_new_tab` gives the target
-    /// a tab of its own.
+    /// click shows its target in place, asking first if that would lose
+    /// unsaved edits, and `in_new_tab` gives the target a tab of its own.
     pub(crate) fn follow_link(&mut self, link: &str, in_new_tab: bool) {
-        let followed = if in_new_tab {
-            let active = self.front_tab();
-            active.map_or(Ok(None), |tab| tab.link_target(link))
-        } else {
-            let shown = self.navigate_active(|tab| tab.navigate_to_link(link));
-            shown.map(|()| None)
-        };
-        match followed {
-            Ok(Some((path, fragment))) => {
+        if !in_new_tab {
+            self.request_route(Route::Link(link.to_owned()));
+            return;
+        }
+        let target = self.front_tab().map(|tab| tab.link_target(link));
+        match target {
+            Some(Ok(Some((path, fragment)))) => {
                 self.open_in_new_tab_with_fragment(path, fragment.as_deref());
             }
-            Ok(None) => {}
-            Err(error) => self.error_message = Some(format!("Unable to open {link}: {error}")),
+            Some(Ok(None)) | None => {}
+            Some(Err(error)) => {
+                self.error_message = Some(format!("Unable to open {link}: {error}"));
+            }
         }
     }
 
-    /// Let `go` take the active tab to another document, and bring what
-    /// follows the tabs along when it did. What `go` reports of itself is
-    /// not asked: a link to a heading of the same document reports success
-    /// and moves no tab.
-    fn navigate_active(&mut self, go: impl FnOnce(&mut Tab) -> io::Result<bool>) -> io::Result<()> {
-        let Some(tab) = self.front_tab_mut() else {
-            return Ok(());
+    /// Take the tab at `index` where `route` leads now, with whatever it
+    /// holds unsaved, and bring what follows the tabs along when the tab
+    /// shows another document for it. What the reader asks for goes
+    /// through `request_route`, which asks about unsaved edits first.
+    ///
+    /// What the tab reports of the step is not asked: a link to a heading
+    /// of the same document reports success and moves no tab.
+    pub(crate) fn take_route(&mut self, index: usize, route: &Route) {
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return;
         };
         let from = tab.path.clone();
-        let outcome = go(tab);
+        let outcome = tab.take(route);
         if tab.path != from {
-            self.active_tab_navigated();
+            // The document the tab moved to is the most recent one.
+            let shown = tab.path.clone();
+            self.record_recent(&shown);
+            self.tab_documents_changed();
         }
-        outcome.map(drop)
-    }
-
-    /// The active tab moved to another document: it is the most recent
-    /// one, and what mirrors the tabs follows.
-    fn active_tab_navigated(&mut self) {
-        if let Some(path) = self.front_tab().map(|tab| tab.path.clone()) {
-            self.record_recent(&path);
+        // A file that cannot be read leaves the document in front, and
+        // says so as one opened in a tab of its own does.
+        match (outcome, route) {
+            (Ok(_), _) => {}
+            (Err(error), Route::Link(link)) => {
+                self.error_message = Some(format!("Unable to open {link}: {error}"));
+            }
+            (Err(error), Route::File(path)) => self.report_unopened(path, &error),
+            (Err(error), Route::Back | Route::Forward) => {
+                self.error_message = Some(format!("Unable to navigate history: {error}"));
+            }
         }
-        self.tab_documents_changed();
     }
 
     /// Bring everything that mirrors which document each tab holds back in
