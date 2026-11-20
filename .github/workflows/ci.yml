@@ -57,12 +57,12 @@ jobs:
       # under-count by one, and a nested fn's body scores inside its
       # enclosing function at nesting 0. The tool is pinned --locked and its
       # self-updater is dormant: the analysis path never touches the network.
-      # Scope is src/: arborist has no exclude switch, and vendor/ holds
+      # Scope is src/ and crates/: arborist has no exclude switch, and vendor/ holds
       # upstream forks this repository does not restructure.
       - name: Cognitive-complexity gate (arborist-cli 0.2.1 --locked, threshold 15)
         run: |
           cargo install --locked --version 0.2.1 arborist-cli
-          arborist --threshold 15 --exceeds-only --gitignore --languages rust src
+          arborist --threshold 15 --exceeds-only --gitignore --languages rust src crates
       - name: Effective-lines gate (max 1000, from effective-lines-gate.sh)
         run: ./effective-lines-gate.sh
       # Free for public repositories, no account and no secret: the action
