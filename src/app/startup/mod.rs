@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, FontId, TextStyle};
 
+use crate::app::close_prompt::CloseState;
 use crate::app::content::look::DocumentLook;
 use crate::app::frame::WindowTitle;
 use crate::app::lightbox::Lightbox;
@@ -272,6 +273,7 @@ impl MarkdownApp {
             window_title: WindowTitle::unset(),
             open_tab_paths: HashSet::new(),
             lightbox: Lightbox::default(),
+            closing: CloseState::default(),
             search: SearchState::default(),
             recent_files: persisted.recent_files.unwrap_or_default(),
             welcome_show_all: false,

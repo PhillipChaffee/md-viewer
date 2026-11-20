@@ -60,6 +60,9 @@ impl Chord {
 /// What the keyboard is talking to this frame.
 #[derive(Clone, Copy, Debug)]
 enum Focus {
+    /// The prompt about unsaved edits is asking; it suppresses every
+    /// binding, and its own keys are its buttons'.
+    Prompt,
     /// The lightbox is open; it suppresses everything but its own zoom keys.
     Lightbox,
     /// A menu or popover is open; it takes the keys the find bar and the
@@ -209,10 +212,11 @@ fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction
     }
 
     // Ctrl + scroll wheel / pinch to zoom (multiplicative, like browsers).
-    // The lightbox captures wheel input itself in raw_input_hook, so this
-    // only runs for the document.
+    // The lightbox captures wheel input itself in raw_input_hook, and
+    // nothing zooms under the prompt, so this only runs for the document.
     let wheel_zoom_factor = input.zoom_delta();
-    if !matches!(focus, Focus::Lightbox) && (wheel_zoom_factor - 1.0).abs() > f32::EPSILON {
+    let zooms_document = !matches!(focus, Focus::Lightbox | Focus::Prompt);
+    if zooms_document && (wheel_zoom_factor - 1.0).abs() > f32::EPSILON {
         actions.push(AppAction::ZoomBy(wheel_zoom_factor));
     }
     actions
@@ -221,7 +225,9 @@ fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let focus = if self.lightbox.open.is_some() {
+        let focus = if self.closing.is_asking() {
+            Focus::Prompt
+        } else if self.lightbox.open.is_some() {
             Focus::Lightbox
         } else if egui::Popup::is_any_open(ctx) {
             Focus::Popup

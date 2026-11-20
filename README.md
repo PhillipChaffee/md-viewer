@@ -107,6 +107,10 @@ folder, reading time and opening lines.
 - An edit mode (`Ctrl+E`) that shows the source and saves with `Ctrl+S`.
   An emoji drawn as one picture is one character to the arrow keys,
   Backspace and Delete.
+- Closing a tab that has unsaved edits asks first: **Save**, **Discard**
+  or **Cancel** (also `Esc`). **Close Others** and quitting ask about each
+  unsaved document in turn and close nothing until the last answer, so
+  **Cancel** at any question leaves every tab open with its edits.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install

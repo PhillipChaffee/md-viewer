@@ -54,6 +54,7 @@ impl eframe::App for MarkdownApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.begin_frame(ctx);
+        self.answer_close_request(ctx);
         self.handle_keyboard_shortcuts(ctx);
         let files_hover = self.handle_dropped_files(ctx);
 
@@ -208,7 +209,7 @@ impl MarkdownApp {
 
         // Close tab if requested
         if let Some(idx) = self.render_tab_bar(ctx) {
-            self.close_tab(idx);
+            self.request_close_tab(idx);
         }
     }
 
@@ -232,8 +233,8 @@ impl MarkdownApp {
         }
     }
 
-    /// The lightbox, the settings dialogs, and the hint that shows while
-    /// files hover over the window.
+    /// The lightbox, the settings dialogs, the prompt about unsaved edits,
+    /// and the hint that shows while files hover over the window.
     fn render_overlays(&mut self, ctx: &egui::Context, files_hover: bool) {
         self.open_clicked_picture();
         self.render_lightbox(ctx);
@@ -242,6 +243,9 @@ impl MarkdownApp {
         self.render_color_settings(ctx);
         // Document font picker window
         self.render_font_settings(ctx);
+        if let Some(answer) = self.render_close_prompt(ctx) {
+            self.apply_action(ctx, answer);
+        }
 
         if files_hover {
             drop::paint_hint(ctx);

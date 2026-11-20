@@ -9,7 +9,7 @@ use super::{wait_for, Home};
 
 /// What the real-window tests run: a virtual display, a way to press keys
 /// on it, a way to photograph it, and a pseudo-terminal.
-const TOOLS: [&str; 5] = ["Xvfb", "xdotool", "import", "convert", "script"];
+const TOOLS: [&str; 6] = ["Xvfb", "xdotool", "import", "convert", "script", "timeout"];
 
 /// Set to run the suite on a machine without `TOOLS`.
 const SKIP: &str = "MD_VIEWER_SKIP_WINDOW_TESTS";
@@ -189,6 +189,24 @@ impl Window<'_> {
         happened
     }
 
+    /// Click the spot `x` right and `y` down from the window's top left
+    /// corner.
+    pub(crate) fn click(&self, x: u32, y: u32) {
+        let (x, y) = (x.to_string(), y.to_string());
+        self.screen
+            .xdotool(&["mousemove", "--window", &self.id, &x, &y, "click", "1"]);
+    }
+
+    /// Type `text` into whatever has the keyboard.
+    pub(crate) fn type_text(&self, text: &str) {
+        self.screen.xdotool(&["type", text]);
+    }
+
+    /// Press and release `key` with no modifier held.
+    pub(crate) fn press(&self, key: &str) {
+        self.screen.xdotool(&["key", key]);
+    }
+
     /// The color of the pixel `x` right and `y` down from the window's top
     /// left corner, as `RRGGBB`, read from a screenshot saved in `scratch`.
     #[track_caller]
@@ -196,8 +214,10 @@ impl Window<'_> {
         let shot = scratch.join(format!("window-{}.png", self.id));
         // A window can be titled a moment before it can be photographed.
         let taken = wait_for(|| {
-            let mut import = self.screen.tool("import");
-            import.args(["-window", &self.id]).arg(&shot);
+            // `import` waits without end for a window that has gone, so
+            // it is given a few seconds and then stopped.
+            let mut import = self.screen.tool("timeout");
+            import.args(["5", "import", "-window", &self.id]).arg(&shot);
             let taken = import.stderr(Stdio::null()).status();
             taken.is_ok_and(|status| status.success()).then_some(())
         });

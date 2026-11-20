@@ -220,6 +220,28 @@ fn ctrl_e_edits_the_document_and_shift_makes_it_the_explorer_toggle() {
 }
 
 #[test]
+fn the_prompt_about_unsaved_edits_takes_every_key_and_the_wheel() {
+    for &(chord, key, _, _) in BINDINGS {
+        let modifiers = match chord {
+            Chord::Any | Chord::Unmodified | Chord::NoShift => Modifiers::NONE,
+            Chord::Shift => Modifiers::SHIFT,
+            Chord::Ctrl | Chord::CtrlNoShift => Modifiers::CTRL,
+            Chord::CtrlShift => CTRL_SHIFT,
+            Chord::CtrlAlt => Modifiers::CTRL | Modifiers::ALT,
+            Chord::AltNoCtrl => Modifiers::ALT,
+        };
+        let asked = actions_for(modifiers, &[key], Focus::Prompt);
+        assert!(asked.is_empty(), "{chord:?} + {key:?}");
+    }
+
+    let mut harness = Harness::with_three_docs();
+    harness.app.tabs[0].content.push_str(" edited");
+    harness.app.close_active_tab();
+    frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
+    assert_close(harness.app.zoom_level, 1.0);
+}
+
+#[test]
 fn a_menu_takes_the_keys_the_find_bar_and_the_document_would() {
     let escape = actions_for(Modifiers::NONE, &[Key::Escape], Focus::Popup);
     assert!(escape.is_empty(), "Escape only closes the menu");

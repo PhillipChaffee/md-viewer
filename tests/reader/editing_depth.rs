@@ -465,17 +465,6 @@ fn after_a_save_the_page_and_the_contents_show_the_new_heading() {
 }
 
 #[test]
-fn closing_a_tab_with_unsaved_edits_does_not_touch_the_file() {
-    let mut reader = editing(SOURCE);
-    append(&mut reader, " Never saved.");
-
-    reader.press("Ctrl+W");
-
-    assert_eq!(reader.read_file("draft.md"), SOURCE);
-    assert_eq!(reader.files_in(""), ["draft.md"]);
-}
-
-#[test]
 fn unsaved_edits_are_not_written_or_restored_by_a_restart() {
     let mut reader = editing(SOURCE);
     append(&mut reader, " Never saved.");

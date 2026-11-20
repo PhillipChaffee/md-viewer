@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use crate::app::close_prompt::CloseAnswer;
 use crate::app::MarkdownApp;
 use crate::layout::{zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth};
 use crate::system_fonts::TextSizeClass;
@@ -19,8 +20,10 @@ pub(crate) enum AppAction {
     OpenFile,
     /// Pick the folder the file explorer shows.
     OpenFolder,
-    /// Close the active tab.
+    /// Close the active tab, asking first if it has unsaved edits.
     CloseTab,
+    /// What the reader answered when asked about unsaved edits.
+    AnswerClosePrompt(CloseAnswer),
     NextTab,
     PreviousTab,
     /// Switch to the tab at this zero-based position, if there is one.
@@ -67,6 +70,8 @@ pub(crate) enum AppAction {
     SetFormulaScale(f32),
     /// Scroll the active document by one keyboard step.
     Scroll(KeyboardScrollAction),
+    /// Ask the window to close. With unsaved edits open the app refuses
+    /// the request when it comes back and asks about them first.
     Quit,
 }
 
@@ -77,6 +82,7 @@ impl MarkdownApp {
             AppAction::OpenFile => self.open_file_dialog(),
             AppAction::OpenFolder => self.open_folder_dialog(),
             AppAction::CloseTab => self.close_active_tab(),
+            AppAction::AnswerClosePrompt(answer) => self.answer_close_prompt(ctx, answer),
             AppAction::NextTab => self.next_tab(),
             AppAction::PreviousTab => self.prev_tab(),
             AppAction::FocusTab(index) => self.focus_tab(index),
@@ -160,11 +166,18 @@ impl MarkdownApp {
     /// unsaved it does nothing; the flash label beside the mode toggle
     /// reports the outcome.
     fn save_active_tab(&mut self) {
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
-            return;
+        self.save_tab(self.active_tab);
+    }
+
+    /// Write the unsaved edits of the tab at `index` to its file, and say
+    /// in the error bar why where that failed. Returns whether the tab is
+    /// left with nothing unsaved.
+    pub(crate) fn save_tab(&mut self, index: usize) -> bool {
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return true;
         };
         if !tab.is_dirty() {
-            return;
+            return true;
         }
         match tab.save() {
             Ok(()) => log::info!("Saved tab edits: {}", tab.path.display()),
@@ -172,8 +185,10 @@ impl MarkdownApp {
                 log::error!("Failed to save {}: {error}", tab.path.display());
                 self.error_message =
                     Some(format!("Unable to save {}: {error}", tab.path.display()));
+                return false;
             }
         }
+        true
     }
 
     /// Queue a keyboard scroll step through the pending-scroll pipeline the

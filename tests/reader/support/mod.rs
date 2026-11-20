@@ -208,6 +208,7 @@ impl Launch {
             session,
             window,
             title: None,
+            closing: false,
             quit_asked: false,
             pixels: Pixels::default(),
             opened: Vec::new(),
@@ -236,6 +237,10 @@ pub(crate) struct Reader {
     window: (f32, f32),
     /// The last title the app gave its window.
     title: Option<String>,
+    /// The window was asked to close, by the app or by its close button,
+    /// and the next frame brings the app that request, as eframe does.
+    closing: bool,
+    /// A request to close went by without the app refusing it.
     quit_asked: bool,
     /// The pictures the app has handed to the screen.
     pixels: Pixels,
@@ -393,16 +398,23 @@ impl Reader {
         input.max_texture_side = Some(MAX_PICTURE_SIDE);
         input.modifiers = modifiers;
         input.events = events;
+        let asked_to_close = std::mem::take(&mut self.closing);
+        if asked_to_close {
+            let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();
+            window.events.push(egui::ViewportEvent::Close);
+        }
         let ctx = self.kit.ctx.clone();
         self.kit.state_mut().app.raw_input_hook(&ctx, &mut input);
         *self.kit.input_mut() = input;
         self.kit.step();
-        self.note_window_requests();
+        self.note_window_requests(asked_to_close);
     }
 
     /// Remember what the last frame asked of the window and the desktop.
-    fn note_window_requests(&mut self) {
+    /// A frame that was `asked_to_close` and did not refuse has quit.
+    fn note_window_requests(&mut self, asked_to_close: bool) {
         let output = self.kit.output();
+        let mut refused = false;
         self.pixels.note(&output.textures_delta);
         for command in &output.platform_output.commands {
             match command {
@@ -415,11 +427,13 @@ impl Reader {
             for command in &viewport.commands {
                 match command {
                     egui::ViewportCommand::Title(title) => self.title = Some(title.clone()),
-                    egui::ViewportCommand::Close => self.quit_asked = true,
+                    egui::ViewportCommand::Close => self.closing = true,
+                    egui::ViewportCommand::CancelClose => refused = true,
                     _ => {}
                 }
             }
         }
+        self.quit_asked |= asked_to_close && !refused;
     }
 
     /// Run frames until the app stops asking for an immediate repaint.
