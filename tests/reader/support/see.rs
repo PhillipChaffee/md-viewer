@@ -369,7 +369,8 @@ impl Reader {
         title.unwrap_or_else(|| panic!("the app never titled its window"))
     }
 
-    /// Whether the app has asked its window to close.
+    /// Whether the app has quit: its window was asked to close, by the app
+    /// itself or by the window's close button, and the app let it.
     pub(crate) const fn has_quit(&self) -> bool {
         self.quit_asked
     }

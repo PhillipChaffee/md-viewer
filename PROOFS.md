@@ -1,6 +1,6 @@
 # Proofs
 
-Part of md-viewer is machine-checked: 67 proof harnesses in 21 modules,
+Part of md-viewer is machine-checked: 68 proof harnesses in 21 modules,
 verified by the [Kani](https://github.com/model-checking/kani) model
 checker. This file says what each one proves, under which bounds, and what
 is **not** proven.
@@ -46,7 +46,7 @@ cargo kani setup
 
 `cargo kani setup` downloads Kani's own nightly toolchain and CBMC. The
 first run compiles every dependency under Kani (about 4 minutes on 4
-cores, 1.3 GB in `target/kani`). After that the 67 harnesses take about
+cores, 1.3 GB in `target/kani`). After that the 68 harnesses take about
 22 minutes one at a time (`PROOF_JOBS=1`): 1,305 s on the last full run,
 on a shared 4-core machine, of which 1,164 s is solver time. Two
 harnesses take 458 s of that (`the_title_keeps_clear_of_the_buttons`,
@@ -172,8 +172,9 @@ tested only.
 
 | Harness | Property | Inputs | Status |
 | --- | --- | --- | --- |
-| `shortcuts::no_key_press_fires_two_bindings` | No two rows of the binding table share a key and are live together. | Every pair of rows × 4 focus states × 32 modifier sets | Proven |
+| `shortcuts::no_key_press_fires_two_bindings` | No two rows of the binding table share a key and are live together. | Every pair of rows × 5 focus states × 32 modifier sets | Proven |
 | `shortcuts::the_lightbox_takes_the_keyboard` | With the lightbox open only its bindings are live; closed, none of them is. | Every row × focus × modifiers | Proven |
+| `shortcuts::the_prompt_takes_every_key` | While the prompt about unsaved edits asks, no binding is live. | Same | Proven |
 | `shortcuts::a_popup_takes_the_find_bar_and_reading_keys` | Under an open menu no find-bar or reading binding is live, Escape included. | Same | Proven |
 | `shortcuts::every_binding_can_fire` | Every row has a focus and modifiers under which it is live. | Every row | Proven |
 | `cli::only_a_terminal_launch_detaches_and_only_once` | The process detaches only from a terminal, without `--foreground`, and never when it is the detached copy. | All 16 cases | Proven |
@@ -186,7 +187,7 @@ The shortcut harnesses read the real `BINDINGS` table. They do not run
 `shortcut_actions`, which reads and consumes egui's input, nor the code that decides
 which focus the app is in. Both are tested only.
 
-**Counts: 67 harnesses. 54 proven, 13 bounded.**
+**Counts: 68 harnesses. 55 proven, 13 bounded.**
 
 ## Every assumption
 
@@ -281,7 +282,7 @@ this code.
 - **Moving a function** means moving its `proofs.rs` with it and keeping
   the `#[cfg(kani)] mod proofs;` line. `run-proofs.sh` counts harnesses,
   but it cannot notice a deleted `proofs.rs`: the count drops on both
-  sides. Check the "Complete - 67" line.
+  sides. Check the "Complete - 68" line.
 - **Keep the proven functions pure.** They take numbers and return
   numbers. Give one an `egui::Context`, a `Tab` or a `HashSet` and Kani
   can no longer run it.

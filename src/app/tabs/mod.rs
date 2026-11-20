@@ -229,6 +229,9 @@ impl MarkdownApp {
         self.home_list = None;
     }
 
+    /// Close the tab at `idx` now, with whatever it holds unsaved. What
+    /// the reader asks for goes through `request_close_tab`, which asks
+    /// about unsaved edits first.
     pub(crate) fn close_tab(&mut self, idx: usize) {
         if idx >= self.tabs.len() {
             return;
@@ -242,7 +245,9 @@ impl MarkdownApp {
         self.tab_documents_changed();
     }
 
-    /// Close every tab but the one at `keep`, which comes to the front.
+    /// Close every tab but the one at `keep`, which comes to the front,
+    /// now and with whatever they hold unsaved. The reader's request goes
+    /// through `request_close_other_tabs`.
     pub(crate) fn close_other_tabs(&mut self, keep: usize) {
         let kept = self.tabs.remove(keep);
         let closed = std::mem::replace(&mut self.tabs, vec![kept]);
@@ -263,8 +268,9 @@ impl MarkdownApp {
         }
     }
 
+    /// Close the tab in front, asking first if it has unsaved edits.
     pub(crate) fn close_active_tab(&mut self) {
-        self.close_tab(self.active_tab);
+        self.request_close_tab(self.active_tab);
     }
 
     pub(crate) const fn next_tab(&mut self) {

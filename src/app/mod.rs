@@ -22,6 +22,7 @@ use crate::theme::{ColorOverrides, ThemeId};
 mod action;
 mod appearance;
 mod chrome;
+mod close_prompt;
 mod content;
 mod drop;
 mod edit_controls;
@@ -135,6 +136,9 @@ pub(crate) struct MarkdownApp {
     open_tab_paths: HashSet<PathBuf>,
     /// The overlay that shows a clicked diagram or image enlarged.
     lightbox: Lightbox,
+    /// A close that waits for the reader to say what becomes of unsaved
+    /// edits, and the quit that follows their last answer.
+    closing: close_prompt::CloseState,
     // Find-bar state (current-document search)
     search: SearchState,
     // Recently opened files (most-recent first), shown on the home page

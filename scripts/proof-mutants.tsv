@@ -56,6 +56,7 @@ src/app/content/mod.rs	a_visible_match_is_left_alone	if visible.contains(&match_
 src/app/shortcuts/mod.rs	no_key_press_fires_two_bindings	CtrlNoShift + O in Document => AppAction::OpenFile,	Ctrl + O in Document => AppAction::OpenFile,
 src/app/shortcuts/mod.rs	the_lightbox_takes_the_keyboard	(Self::Lightbox, Focus::Lightbox)	(Self::Lightbox | Self::Document, Focus::Lightbox)
 src/app/shortcuts/mod.rs	a_popup_takes_the_find_bar_and_reading_keys	| (Self::Document, Focus::Popup)	| (Self::Document | Self::FindBar, Focus::Popup)
+src/app/shortcuts/mod.rs	the_prompt_takes_every_key	| (Self::Document, Focus::Popup)	| (Self::Document, Focus::Popup | Focus::Prompt)
 src/app/shortcuts/mod.rs	every_binding_can_fire	Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,	Self::AltNoCtrl => modifiers.alt && !modifiers.alt,
 src/app/mod.rs	zoom_percent_is_total_and_close	(zoom * 100.0).round() as i32	(zoom * 100.0).floor() as i32
 src/app/lightbox/mod.rs	lightbox_zoom_stays_in_range	(self.zoom * factor).clamp(0.1, 10.0)	(self.zoom * factor).clamp(0.1, 100.0)

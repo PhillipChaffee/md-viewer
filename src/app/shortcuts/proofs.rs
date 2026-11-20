@@ -12,10 +12,11 @@ use eframe::egui;
 use super::{Chord, Focus, Scope, BINDINGS};
 
 fn any_focus() -> Focus {
-    match kani::any::<u8>() % 4 {
-        0 => Focus::Lightbox,
-        1 => Focus::Popup,
-        2 => Focus::FindBar,
+    match kani::any::<u8>() % 5 {
+        0 => Focus::Prompt,
+        1 => Focus::Lightbox,
+        2 => Focus::Popup,
+        3 => Focus::FindBar,
         _ => Focus::Reading,
     }
 }
@@ -74,6 +75,21 @@ fn the_lightbox_takes_the_keyboard() {
 
     kani::cover!(is_live(row, focus, modifiers) && for_lightbox);
     kani::cover!(is_live(row, focus, modifiers) && !for_lightbox);
+}
+
+/// While the prompt about unsaved edits asks, no binding is live: a key
+/// answers the prompt or does nothing.
+#[kani::proof]
+fn the_prompt_takes_every_key() {
+    let row = any_binding();
+    let (focus, modifiers) = (any_focus(), any_modifiers());
+
+    if matches!(focus, Focus::Prompt) {
+        assert!(!is_live(row, focus, modifiers));
+    }
+
+    kani::cover!(matches!(focus, Focus::Prompt));
+    kani::cover!(is_live(row, focus, modifiers));
 }
 
 /// An open menu or popover takes the keys the find bar and the reading

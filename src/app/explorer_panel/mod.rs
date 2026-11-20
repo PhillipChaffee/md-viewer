@@ -91,7 +91,7 @@ impl MarkdownApp {
         // Close tab from explorer (middle-click on open file)
         if let Some(path) = action.file_to_close {
             if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-                self.close_tab(idx);
+                self.request_close_tab(idx);
             }
         }
     }

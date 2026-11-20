@@ -140,7 +140,7 @@ impl MarkdownApp {
             self.focus_tab(index);
         }
         if let Some(keep) = actions.close_others {
-            self.close_other_tabs(keep);
+            self.request_close_other_tabs(keep);
             return None;
         }
         actions.close

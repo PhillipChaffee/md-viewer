@@ -256,6 +256,12 @@ impl Reader {
         self.settle();
     }
 
+    /// Click the close button in the window's frame.
+    pub(crate) fn close_window(&mut self) {
+        self.closing = true;
+        self.settle();
+    }
+
     /// Give the window a new size in pixels.
     pub(crate) fn resize_window(&mut self, width: f32, height: f32) {
         self.window = (width, height);
