@@ -24,10 +24,7 @@ fn a_lone_document_has_a_tab_and_the_new_tab_button_after_it() {
 
     assert_eq!(reader.tabs(), ["Alpha"]);
     assert_eq!(active_tab(&reader), "Alpha");
-    let (tab, new_tab) = (
-        reader.area_of("tab:Alpha"),
-        reader.area_of("Open file in new tab"),
-    );
+    let (tab, new_tab) = (reader.area_of("tab:Alpha"), reader.area_of("New tab"));
     assert!(tab.left >= reader.area_of("Go forward").right(), "{tab:?}");
     assert!(new_tab.left >= tab.right(), "{new_tab:?} after {tab:?}");
     assert!(new_tab.left - tab.right() < 8.0, "right after it");
@@ -45,7 +42,7 @@ fn the_top_row_reads_buttons_tabs_new_tab_switch_buttons() {
         "tab:Alpha",
         "tab:Beta",
         "tab:Gamma",
-        "Open file in new tab",
+        "New tab",
         "Preview",
         "Edit",
         "Appearance",

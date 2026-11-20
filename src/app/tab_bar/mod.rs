@@ -71,8 +71,8 @@ impl MarkdownApp {
         new_tab_span(room, 0.0)?;
         // A tab that came to the front is scrolled into view once. After
         // that the tabs are the reader's to scroll.
-        let front = self.tabs.get(self.active_tab);
-        let front = front.map(|tab| (self.active_tab, tab.id));
+        let front = self.front();
+        let front = front.and_then(|front| Some((front, self.tabs.get(front)?.id)));
         let reveal = self.revealed_tab != front;
         self.revealed_tab = front;
 
@@ -112,7 +112,7 @@ impl MarkdownApp {
                         index,
                         title: tab.name(),
                         path: &tab.path,
-                        is_active: index == self.active_tab,
+                        is_active: self.front() == Some(index),
                         live,
                     };
                     let shown = tab_label(ui, &label, palette, picks);
@@ -125,13 +125,12 @@ impl MarkdownApp {
         scrolled.content_size.x.min(scrolled.inner_rect.width())
     }
 
-    /// Opening a file is what creates a new tab; there is no empty-tab
-    /// state.
+    /// A new tab starts on the home page, which lists what to open in
+    /// it. There is no empty tab: the tab is there once a document is.
     fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let open =
-            QuietButton::icon(Icon::Plus, "Open file in new tab").show(ui, self.theme.palette());
-        let open = self.hints.tooltip(open, "Open File…", AppAction::OpenFile);
-        pick(&open, AppAction::OpenFile, picked);
+        let new_tab = QuietButton::icon(Icon::Plus, "New tab").show(ui, self.theme.palette());
+        let new_tab = self.hints.tooltip(new_tab, "New Tab", AppAction::NewTab);
+        pick(&new_tab, AppAction::NewTab, picked);
     }
 
     /// Carry out what the tabs were asked this frame: a tab comes to the

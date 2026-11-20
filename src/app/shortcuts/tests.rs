@@ -156,12 +156,30 @@ fn a_frame_without_keys_asks_for_nothing() {
 }
 
 #[test]
-fn both_open_file_shortcuts_in_one_frame_open_one_dialog() {
-    let together = actions_for(Modifiers::CTRL, &[Key::O, Key::T], Focus::Reading);
-    assert!(matches!(together[..], [AppAction::OpenFile]));
+fn ctrl_o_opens_a_file_and_ctrl_t_a_new_tab() {
+    let ctrl_o = actions_for(Modifiers::CTRL, &[Key::O], Focus::Reading);
+    assert!(matches!(ctrl_o[..], [AppAction::OpenFile]));
 
     let ctrl_t = actions_for(Modifiers::CTRL, &[Key::T], Focus::Reading);
-    assert!(matches!(ctrl_t[..], [AppAction::OpenFile]));
+    assert!(matches!(ctrl_t[..], [AppAction::NewTab]));
+}
+
+#[test]
+fn ctrl_shift_h_goes_home_and_plain_ctrl_h_does_nothing() {
+    let home = actions_for(
+        Modifiers::CTRL | Modifiers::SHIFT,
+        &[Key::H],
+        Focus::Reading,
+    );
+    assert!(matches!(home[..], [AppAction::GoHome]));
+
+    assert!(actions_for(Modifiers::CTRL, &[Key::H], Focus::Reading).is_empty());
+    let under_a_picture = actions_for(
+        Modifiers::CTRL | Modifiers::SHIFT,
+        &[Key::H],
+        Focus::Lightbox,
+    );
+    assert!(under_a_picture.is_empty());
 }
 
 #[test]
@@ -335,7 +353,7 @@ fn every_binding_fires_with_the_keys_its_platform_holds_it_with() {
 fn a_command_is_held_with_cmd_on_a_mac_and_with_ctrl_elsewhere() {
     let commands = [
         (Key::W, AppAction::CloseTab),
-        (Key::T, AppAction::OpenFile),
+        (Key::T, AppAction::NewTab),
         (Key::O, AppAction::OpenFile),
         (Key::F, AppAction::OpenSearch),
         (Key::S, AppAction::Save),

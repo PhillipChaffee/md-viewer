@@ -18,6 +18,10 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Tabs in the top row.** The tabs, **+** and the Preview|Edit switch share the top row with the buttons; there is no second row and no title in the middle. The row is the same with no document, one or thirty, so the page does not move when a second document opens (it used to jump 34 px). A tab is named by its document's first heading, or by its file name without one, and pointing at it shows where the file is and whether it reloads. A tab is 64 to 200 px wide and a longer name ends in an ellipsis. Tabs that do not fit scroll inside their own part of the row, with the tab in front brought into view, and **+** stays at the end of that part. In a window narrower than about 570 px the switch leaves the row; **⋯ > Edit Document** and `Ctrl+E` still switch.
 
+- **A home page you can go to without closing anything.** A Home button in the top row, **⋯ > Home Page** and `Ctrl+Shift+H` show the home page over the open tabs, which stay open with none marked as in front. The Home button again, Back (`Alt+←`), `Ctrl+Tab` or a click on the tab leads back to the document that was in front; another tab or `Ctrl+1`..`9` shows that one. While the home page shows, the window is called Markdown Viewer, there are no contents and no edit switch, find finds nothing, and `Ctrl+W`, `Ctrl+S` and `Ctrl+E` do nothing: no document is on screen to close, save or edit. Open tabs go on following their files. A restart shows the document that was in front.
+
+- **+ and `Ctrl+T` open a new tab on the home page.** They used to open the file chooser, under a label that said `Ctrl+T` where the README said `Ctrl+O`. Now **+** and `Ctrl+T` show the home page, and a document picked there (a recent one, **Open File…**, a file in the sidebar, a dropped file) opens in a new tab, or comes to the front if it already has one. `Ctrl+O` and **⋯ > Open File…** go straight to the file chooser.
+
 - **Diagrams and formulas follow the page.** Mermaid diagrams are redrawn in the theme's colors on a transparent ground, and LaTeX formulas are transparent ink, so neither sits in a white or page-colored box. A diagram wider than the column may use the room beside it instead of shrinking until its labels cannot be read.
 
 - **Typeset blocks.** Tables have no box and no grid, only hairlines between rows, and honor the column alignment the markdown asks for. Task items show one drawn box, lists hang their markers in the margin, tight lists stay tight, and paragraphs, headings, quotes and display math have their own spacing.
@@ -28,6 +32,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 ### Fixes
 
+- **`Ctrl+Tab` and `Ctrl+Shift+Tab` also moved the keyboard focus,** as a plain Tab does, so the next Enter or Space could press a button the reader never went to.
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
 - **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
 - **Emoji in bold text and headings were black outlines** where the same emoji in plain text was in color. Every weight now draws an emoji from the same font.
