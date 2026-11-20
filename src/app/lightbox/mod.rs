@@ -333,7 +333,7 @@ impl MarkdownApp {
     /// this frame. Its texture is already on the GPU, so the click costs
     /// nothing. A picture that plays goes on playing.
     pub(crate) fn open_clicked_picture(&mut self) {
-        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+        if let Some(tab) = self.front_tab_mut() {
             let mermaid = tab.cache.take_clicked_mermaid();
             let image = tab.cache.take_clicked_image();
             if let Some((texture, base_size)) = mermaid {

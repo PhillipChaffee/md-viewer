@@ -31,6 +31,8 @@ enum Mark {
 pub(crate) enum Icon {
     /// A window with a side panel: the file explorer.
     Sidebar,
+    /// A house: the home page.
+    Home,
     Back,
     Forward,
     Search,
@@ -51,8 +53,9 @@ pub(crate) enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 14] = [
+    pub(crate) const ALL: [Self; 15] = [
         Self::Sidebar,
+        Self::Home,
         Self::Back,
         Self::Forward,
         Self::Search,
@@ -73,6 +76,11 @@ impl Icon {
             Self::Sidebar => &[
                 Mark::Frame([1.5, 2.5], [14.5, 13.5], 2.5),
                 Mark::Path(&[[6.0, 2.5], [6.0, 13.5]]),
+            ],
+            Self::Home => &[
+                Mark::Path(&[[1.75, 8.25], [8.0, 2.5], [14.25, 8.25]]),
+                Mark::Path(&[[3.75, 6.5], [3.75, 13.5], [12.25, 13.5], [12.25, 6.5]]),
+                Mark::Path(&[[6.75, 13.5], [6.75, 9.75], [9.25, 9.75], [9.25, 13.5]]),
             ],
             Self::Back => &[
                 Mark::Path(&[[13.0, 8.0], [3.0, 8.0]]),

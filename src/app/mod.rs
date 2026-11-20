@@ -66,7 +66,13 @@ fn zoom_percent(zoom: f32) -> i32 {
 )]
 pub(crate) struct MarkdownApp {
     tabs: Vec<Tab>,
+    /// The tab in front, or the one to come back to while the home page
+    /// shows over the tabs.
     active_tab: usize,
+    /// Whether the home page shows in place of the tab in front, with the
+    /// tabs left open. Only ever set while there are tabs: with none, the
+    /// home page is all there is to show.
+    home_shows: bool,
     /// The active tab the strip last scrolled into view, so that it does
     /// so once for each tab that comes to the front and not every frame.
     /// Its place in the strip alone does not say which tab it is: a tab

@@ -456,3 +456,174 @@ fn closing_a_tab_gives_back_the_pictures_of_a_document_it_had_left() {
     assert_eq!(textures_of(&harness, "own.gif"), 0);
     assert_eq!(textures_of(&harness, "shared.gif"), 0);
 }
+
+/// Three tabs with `b.md` in front and the home page showing over them.
+fn home_over_three_tabs() -> Harness {
+    let mut harness = three_tabs();
+    harness.app.focus_tab(1);
+    harness.app.show_home();
+    harness
+}
+
+#[test]
+fn the_home_page_shows_over_the_tabs_and_leaves_them_open() {
+    let harness = home_over_three_tabs();
+
+    assert_eq!(harness.app.front(), None);
+    assert!(harness.app.front_tab().is_none());
+    assert_eq!(tab_names(&harness.app), ["a.md", "b.md", "c.md"]);
+    assert_eq!(harness.app.history_availability(), (true, false));
+}
+
+#[test]
+fn home_again_back_and_the_tab_keys_all_lead_to_the_tab_that_was_in_front() {
+    type Way = fn(&mut MarkdownApp);
+    let ways: [(&str, Way); 4] = [
+        ("home again", MarkdownApp::toggle_home),
+        ("back", |app| app.navigate_active_history(true)),
+        ("the next tab", MarkdownApp::next_tab),
+        ("the previous tab", MarkdownApp::prev_tab),
+    ];
+    for (way, go) in ways {
+        let mut harness = home_over_three_tabs();
+
+        go(&mut harness.app);
+
+        assert_eq!(harness.app.front(), Some(1), "{way}");
+        assert_eq!(harness.active_path(), harness.path("b.md"), "{way}");
+    }
+}
+
+#[test]
+fn forward_does_nothing_on_the_home_page_and_back_leaves_history_alone() {
+    let mut harness = home_over_three_tabs();
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+    harness.app.toggle_home();
+    harness.app.navigate_active_tab_to(&a);
+    harness.app.show_home();
+
+    harness.app.navigate_active_history(false);
+    assert_eq!(harness.app.front(), None);
+
+    harness.app.navigate_active_history(true);
+    assert_eq!(harness.app.front(), Some(1));
+    assert_eq!(harness.active_path(), a, "one step: off the home page");
+    harness.app.navigate_active_history(true);
+    assert_eq!(harness.active_path(), b, "the next one steps the history");
+}
+
+#[test]
+fn a_tab_picked_by_its_place_takes_the_place_of_the_home_page() {
+    let mut harness = home_over_three_tabs();
+
+    harness.app.focus_tab(2);
+
+    assert_eq!(harness.app.front(), Some(2));
+    assert_eq!(harness.active_path(), harness.path("c.md"));
+}
+
+#[test]
+fn closing_from_the_home_page_closes_nothing() {
+    let mut harness = home_over_three_tabs();
+
+    harness.app.close_active_tab();
+
+    assert_eq!(tab_names(&harness.app), ["a.md", "b.md", "c.md"]);
+    assert_eq!(harness.app.front(), None);
+}
+
+#[test]
+fn a_tab_closed_under_the_home_page_leaves_the_home_page_showing() {
+    let mut harness = home_over_three_tabs();
+
+    harness.app.close_tab(1);
+    assert_eq!(harness.app.front(), None);
+    assert_eq!(tab_names(&harness.app), ["a.md", "c.md"]);
+
+    harness.app.close_tab(0);
+    harness.app.close_tab(0);
+    assert!(harness.app.tabs.is_empty());
+    assert!(!harness.app.home_shows, "with no tab the flag has no say");
+
+    harness.app.open_in_new_tab(harness.path("a.md"));
+    assert_eq!(harness.app.front(), Some(0));
+}
+
+#[test]
+fn close_others_from_the_home_page_brings_the_kept_tab_forward() {
+    let mut harness = home_over_three_tabs();
+
+    harness.app.close_other_tabs(2);
+
+    assert_eq!(tab_names(&harness.app), ["c.md"]);
+    assert_eq!(harness.app.front(), Some(0));
+}
+
+#[test]
+fn a_document_opened_from_the_home_page_gets_a_new_tab_or_the_one_it_has() {
+    let mut harness = Harness::with_three_docs();
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+    harness.app.show_home();
+
+    harness.app.navigate_active_tab_to(&b);
+    assert_eq!(
+        tab_names(&harness.app),
+        ["a.md", "b.md"],
+        "not in place of a.md"
+    );
+    assert_eq!(harness.app.front(), Some(1));
+
+    harness.app.show_home();
+    harness.app.navigate_active_tab_to(&a);
+    assert_eq!(
+        tab_names(&harness.app),
+        ["a.md", "b.md"],
+        "its own tab again"
+    );
+    assert_eq!(harness.app.front(), Some(0));
+}
+
+#[test]
+fn the_file_dialog_opens_a_new_tab_from_the_home_page_beside_the_last_document() {
+    let mut harness = home_over_three_tabs();
+    let other = harness.dir.join("d.md");
+    fs::write(&other, "# D").unwrap();
+    let (picker, started_in) = answer_with(Ok(Some(other.clone())));
+    harness.app.file_picker = picker;
+
+    harness.app.open_file_dialog();
+
+    assert_eq!(tab_names(&harness.app).len(), 4);
+    assert_eq!(harness.active_path(), other.canonicalize().unwrap());
+    assert_eq!(harness.app.front(), Some(3));
+    assert_eq!(
+        *started_in.borrow(),
+        Some(harness.dir.canonicalize().unwrap())
+    );
+}
+
+#[test]
+fn nothing_is_saved_edited_or_scrolled_from_the_home_page() {
+    let mut harness = home_over_three_tabs();
+    let ctx = harness.ctx.clone();
+    harness.app.tabs[1].content = "# B, edited".to_owned();
+
+    harness.app.apply_action(&ctx, AppAction::Save);
+    harness.app.apply_action(&ctx, AppAction::ToggleEditMode);
+
+    assert!(harness.app.tabs[1].is_dirty(), "the edit is not written");
+    assert_eq!(fs::read_to_string(harness.path("b.md")).unwrap(), "# B");
+    assert!(!harness.app.tabs[1].is_editing);
+}
+
+#[test]
+fn with_no_tab_open_there_is_no_home_page_to_show_over_anything() {
+    let mut harness = Harness::with_docs(&[]);
+
+    harness.app.show_home();
+    harness.app.toggle_home();
+
+    assert!(!harness.app.home_shows);
+    assert_eq!(harness.app.front(), None);
+    assert_eq!(harness.app.history_availability(), (false, false));
+}

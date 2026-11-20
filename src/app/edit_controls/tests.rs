@@ -131,7 +131,7 @@ fn the_edit_controls_stand_in_the_bar_before_the_buttons_at_its_end() {
 
     let bar_bottom = crate::app::chrome::BAR_HEIGHT;
     let appearance = harness.get_by_label("Appearance").rect();
-    let open = harness.get_by_label("Open file in new tab").rect();
+    let open = harness.get_by_label("New tab").rect();
     for control in ["Save failed", "Unsaved changes", "Preview", "Edit"] {
         let rect = harness.get_by_label(control).rect();
         assert!(rect.bottom() <= bar_bottom, "{control} at {rect:?}");

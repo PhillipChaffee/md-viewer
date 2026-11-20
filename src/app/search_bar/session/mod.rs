@@ -9,9 +9,7 @@ mod tests;
 
 impl MarkdownApp {
     pub(super) fn active_tab_match_count(&self) -> usize {
-        self.tabs
-            .get(self.active_tab)
-            .map_or(0, |tab| tab.search_matches.len())
+        self.front_tab().map_or(0, |tab| tab.search_matches.len())
     }
 
     /// Show the find bar, or refocus its input when it is already open.
@@ -39,7 +37,7 @@ impl MarkdownApp {
     /// leaving the view at wherever the user previously scrolled).
     fn scroll_to_active_match(&mut self) {
         let index = self.search.active_match_index;
-        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+        if let Some(tab) = self.front_tab_mut() {
             tab.jump_to_match(index);
         }
     }
@@ -50,7 +48,11 @@ impl MarkdownApp {
         if !self.search.is_open {
             return;
         }
-        let tab_idx = self.active_tab;
+        // The home page has nothing to find in: the matches of the tab it
+        // shows over are kept for the way back.
+        let Some(tab_idx) = self.front() else {
+            return;
+        };
         if self.search.is_built_for(tab_idx) {
             return;
         }

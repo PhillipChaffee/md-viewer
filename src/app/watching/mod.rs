@@ -266,10 +266,7 @@ impl MarkdownApp {
     /// Reloads every tab showing `path` from disk. Returns whether a reload
     /// replaced the document the active tab shows.
     fn reload_tabs_showing(&mut self, path: &Path) -> bool {
-        let active_shows_path = self
-            .tabs
-            .get(self.active_tab)
-            .is_some_and(|tab| tab.path == path);
+        let active_shows_path = self.front_tab().is_some_and(|tab| tab.path == path);
         let mut reloaded = false;
         for tab in self.tabs.iter_mut().filter(|tab| tab.path == path) {
             // Never clobber unsaved edits with a disk reload, whether the

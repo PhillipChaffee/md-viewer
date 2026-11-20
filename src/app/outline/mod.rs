@@ -98,7 +98,8 @@ impl MarkdownApp {
     /// Rendered at top level for proper layout space allocation.
     pub(crate) fn render_outline(&mut self, ctx: &egui::Context) {
         self.follow_room(ctx);
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+        let front = self.front();
+        let Some(tab) = front.and_then(|front| self.tabs.get_mut(front)) else {
             return;
         };
 

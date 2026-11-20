@@ -239,6 +239,7 @@ impl MarkdownApp {
         let mut app = Self {
             tabs,
             active_tab,
+            home_shows: false,
             revealed_tab: None,
             theme,
             zoom_level,

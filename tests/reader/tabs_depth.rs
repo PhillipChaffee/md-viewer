@@ -79,7 +79,7 @@ fn ctrl_shift_tab_visits_them_in_reverse() {
 fn with_more_tabs_than_fit_the_strips_buttons_stay_in_the_window() {
     let reader = many_tabs(30);
 
-    for control in ["Open file in new tab", "Preview", "Edit"] {
+    for control in ["New tab", "Preview", "Edit"] {
         let area = reader.area_of(control);
         assert!(
             area.left >= 0.0 && area.right() <= 1200.0,
@@ -92,7 +92,7 @@ fn with_more_tabs_than_fit_the_strips_buttons_stay_in_the_window() {
 fn with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch() {
     let reader = many_tabs(30);
 
-    let open = reader.area_of("Open file in new tab");
+    let open = reader.area_of("New tab");
     let switch = reader.area_of("Preview");
     assert!(
         open.right() <= switch.left,
@@ -105,7 +105,7 @@ fn the_tab_in_front_is_scrolled_into_view() {
     let reader = many_tabs(30);
 
     let front = reader.area_of("tab:Doc 30");
-    let strip_end = reader.area_of("Open file in new tab").left;
+    let strip_end = reader.area_of("New tab").left;
     assert!(
         front.left >= reader.area_of("Go forward").right() && front.right() <= strip_end,
         "the tab in front is not in view: {front:?}"
@@ -388,5 +388,23 @@ fn the_window_title_follows_the_tab_in_front_however_it_got_there() {
         reader.press(step);
 
         assert_eq!(reader.title(), title, "after {step}");
+    }
+}
+
+#[test]
+fn the_tab_keys_switch_tabs_and_leave_the_keyboard_where_it_was() {
+    // Both documents end in links, which the Tab key alone would walk to.
+    let mut reader = three_linked();
+    reader.drop_file("b.md");
+
+    for (key, front) in [
+        ("Ctrl+Shift+Tab", "Alpha"),
+        ("Ctrl+Tab", "Beta"),
+        ("Ctrl+Shift+Tab", "Alpha"),
+    ] {
+        reader.press(key);
+
+        assert_eq!(reader.tab_in_front().as_deref(), Some(front), "{key}");
+        assert_eq!(reader.focused(), None, "{key} moved the keyboard too");
     }
 }

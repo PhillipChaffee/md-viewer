@@ -117,6 +117,14 @@ impl Reader {
         found
     }
 
+    /// The name of what the keyboard is in, or `None` when it is in
+    /// nothing: a control reached with the Tab key, or a text field.
+    pub(crate) fn focused(&self) -> Option<String> {
+        let mut focused = self.elements();
+        focused.retain(|element| element.focused);
+        focused.pop().map(|element| element.name)
+    }
+
     /// The names of the tabs in the top row, from left to right.
     pub(crate) fn tabs(&self) -> Vec<String> {
         let mut tabs = self.elements();

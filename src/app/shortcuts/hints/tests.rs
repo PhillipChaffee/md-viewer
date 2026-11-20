@@ -119,11 +119,17 @@ fn every_way_to_ask_is_listed_in_table_order() {
         all(Notation::MacNames, AppAction::NextMatch),
         ["Return", "Down"]
     );
+    assert_eq!(all(Notation::Names, AppAction::OpenFile), ["Ctrl+O"]);
+    assert_eq!(all(Notation::MacSigns, AppAction::OpenFile), ["⌘O"]);
+}
+
+#[test]
+fn a_new_tab_and_the_home_page_have_hints_of_their_own() {
+    assert_eq!(hints_of(AppAction::NewTab), ["Ctrl+T", "⌘T", "Cmd+T"]);
     assert_eq!(
-        all(Notation::Names, AppAction::OpenFile),
-        ["Ctrl+O", "Ctrl+T"]
+        hints_of(AppAction::GoHome),
+        ["Ctrl+Shift+H", "⇧⌘H", "Shift+Cmd+H"]
     );
-    assert_eq!(all(Notation::MacSigns, AppAction::OpenFile), ["⌘O", "⌘T"]);
 }
 
 #[test]

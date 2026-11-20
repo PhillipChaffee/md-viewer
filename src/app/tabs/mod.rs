@@ -49,7 +49,48 @@ const fn previous_index(active: usize, len: usize) -> usize {
 pub(crate) type PathPicker = Box<dyn Fn(Option<&Path>) -> Result<Option<PathBuf>, String>>;
 
 impl MarkdownApp {
+    /// The place of the tab in front, or `None` while the home page
+    /// shows: with no tab open, or over the open ones.
+    pub(crate) const fn front(&self) -> Option<usize> {
+        if self.home_shows || self.active_tab >= self.tabs.len() {
+            None
+        } else {
+            Some(self.active_tab)
+        }
+    }
+
+    /// The tab in front, unless the home page shows.
+    pub(crate) fn front_tab(&self) -> Option<&Tab> {
+        self.tabs.get(self.front()?)
+    }
+
+    /// The tab in front, unless the home page shows.
+    pub(crate) fn front_tab_mut(&mut self) -> Option<&mut Tab> {
+        let front = self.front()?;
+        self.tabs.get_mut(front)
+    }
+
+    /// Show the home page over the open tabs, which stay open. With no
+    /// tab open the home page shows already.
+    pub(crate) const fn show_home(&mut self) {
+        if !self.tabs.is_empty() && !self.home_shows {
+            self.home_shows = true;
+            self.window_title.mark_stale();
+        }
+    }
+
+    /// Show the home page, or leave it for the tab that was in front.
+    pub(crate) const fn toggle_home(&mut self) {
+        if self.home_shows {
+            self.activate_tab(self.active_tab);
+        } else {
+            self.show_home();
+        }
+    }
+
     pub(crate) fn open_file_dialog(&mut self) {
+        // From the home page too, the dialog starts beside the document
+        // that was in front.
         let initial_dir = self
             .tabs
             .get(self.active_tab)
@@ -119,12 +160,15 @@ impl MarkdownApp {
         }
         self.tabs.push(tab);
         self.record_recent(&path);
-        self.active_tab = self.tabs.len() - 1;
+        self.activate_tab(self.tabs.len() - 1);
         self.tab_documents_changed();
     }
 
+    /// Show the document at `path` in the tab in front. From the home
+    /// page, where no tab is in front, it gets a tab of its own, or the
+    /// one it has.
     pub(crate) fn navigate_active_tab_to(&mut self, path: &Path) {
-        if self.tabs.is_empty() {
+        if self.front().is_none() {
             self.open_in_new_tab(path.to_path_buf());
             return;
         }
@@ -145,7 +189,15 @@ impl MarkdownApp {
         self.error_message = Some(format!("Unable to open {}: {error}", path.display()));
     }
 
+    /// Step the tab in front through its history. From the home page
+    /// over open tabs, back is the way to the tab that was in front.
     pub(crate) fn navigate_active_history(&mut self, go_back: bool) {
+        if self.home_shows {
+            if go_back {
+                self.toggle_home();
+            }
+            return;
+        }
         let stepped = self.navigate_active(|tab| {
             if go_back {
                 tab.navigate_back()
@@ -163,7 +215,7 @@ impl MarkdownApp {
     /// a tab of its own.
     pub(crate) fn follow_link(&mut self, link: &str, in_new_tab: bool) {
         let followed = if in_new_tab {
-            let active = self.tabs.get(self.active_tab);
+            let active = self.front_tab();
             active.map_or(Ok(None), |tab| tab.link_target(link))
         } else {
             let shown = self.navigate_active(|tab| tab.navigate_to_link(link));
@@ -183,7 +235,7 @@ impl MarkdownApp {
     /// not asked: a link to a heading of the same document reports success
     /// and moves no tab.
     fn navigate_active(&mut self, go: impl FnOnce(&mut Tab) -> io::Result<bool>) -> io::Result<()> {
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+        let Some(tab) = self.front_tab_mut() else {
             return Ok(());
         };
         let from = tab.path.clone();
@@ -197,7 +249,7 @@ impl MarkdownApp {
     /// The active tab moved to another document: it is the most recent
     /// one, and what mirrors the tabs follows.
     fn active_tab_navigated(&mut self) {
-        if let Some(path) = self.tabs.get(self.active_tab).map(|tab| tab.path.clone()) {
+        if let Some(path) = self.front_tab().map(|tab| tab.path.clone()) {
             self.record_recent(&path);
         }
         self.tab_documents_changed();
@@ -242,6 +294,9 @@ impl MarkdownApp {
         // Adjust active tab index. Closing the last tab leaves `tabs` empty,
         // which renders the welcome page (active_tab kept in range / at 0).
         self.active_tab = active_after_close(self.active_tab, idx, self.tabs.len());
+        // The home page stays over the tabs that are left, and needs no
+        // flag once none is.
+        self.home_shows &= !self.tabs.is_empty();
         self.tab_documents_changed();
     }
 
@@ -252,7 +307,7 @@ impl MarkdownApp {
         let kept = self.tabs.remove(keep);
         let closed = std::mem::replace(&mut self.tabs, vec![kept]);
         self.forget_pictures(&closed);
-        self.active_tab = 0;
+        self.activate_tab(0);
         self.tab_documents_changed();
     }
 
@@ -269,18 +324,30 @@ impl MarkdownApp {
     }
 
     /// Close the tab in front, asking first if it has unsaved edits.
+    /// Close the tab in front. The home page is no tab: from it, nothing
+    /// closes, least of all a document that is not on screen.
     pub(crate) fn close_active_tab(&mut self) {
-        self.request_close_tab(self.active_tab);
+        if let Some(front) = self.front() {
+            self.request_close_tab(front);
+        }
     }
 
+    /// Go to the tab after the one in front. From the home page the way
+    /// leads back to the tab that was in front first.
     pub(crate) const fn next_tab(&mut self) {
-        if self.tabs.len() > 1 {
+        if self.home_shows {
+            self.toggle_home();
+        } else if self.tabs.len() > 1 {
             self.activate_tab(next_index(self.active_tab, self.tabs.len()));
         }
     }
 
+    /// Go to the tab before the one in front, or from the home page back
+    /// to the tab that was in front.
     pub(crate) const fn prev_tab(&mut self) {
-        if self.tabs.len() > 1 {
+        if self.home_shows {
+            self.toggle_home();
+        } else if self.tabs.len() > 1 {
             self.activate_tab(previous_index(self.active_tab, self.tabs.len()));
         }
     }
@@ -291,10 +358,12 @@ impl MarkdownApp {
         }
     }
 
-    /// Bring the tab at `index` to the front. The window is named after
-    /// the document in front, so the title follows.
+    /// Bring the tab at `index` to the front, in place of the home page
+    /// when that shows. The window is named after the document in front,
+    /// so the title follows.
     const fn activate_tab(&mut self, index: usize) {
         self.active_tab = index;
+        self.home_shows = false;
         self.window_title.mark_stale();
     }
 

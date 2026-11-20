@@ -285,7 +285,7 @@ fn close_others_counts_the_matches_of_the_document_it_keeps() {
 fn every_tab_fills_the_height_of_the_bar() {
     let harness = three_tabs();
 
-    let open = harness.get_by_label("Open file in new tab").rect();
+    let open = harness.get_by_label("New tab").rect();
     for tab in ["a.md", "b.md", "c.md"] {
         let rect = harness.get_by_label(tab).rect();
         assert_close(rect.height(), BAR_HEIGHT);
@@ -359,24 +359,38 @@ fn a_tab_tells_assistive_technology_whether_it_is_the_one_shown() {
 }
 
 #[test]
-fn the_plus_button_opens_what_the_picker_returns_in_a_new_tab() {
+fn the_plus_button_shows_the_home_page_and_leaves_no_tab_in_front() {
     let mut harness = three_tabs();
-    let other = harness.dir.join("d.md");
-    std::fs::write(&other, "# D").unwrap();
-    let picked = other.clone();
-    harness.state_mut().file_picker = Box::new(move |_| Ok(Some(picked.clone())));
+    harness.state_mut().file_picker = Box::new(|_| panic!("no dialog is asked for"));
 
-    harness.click("Open file in new tab");
+    harness.click("New tab");
 
-    assert_eq!(open_paths(&harness).len(), 4);
-    assert_eq!(active_path(&harness), other);
+    assert_eq!(open_paths(&harness).len(), 3);
+    assert_eq!(harness.state().front(), None);
+    for tab in ["a.md", "b.md", "c.md"] {
+        let shown = harness.get_by_label(tab).accesskit_node().toggled();
+        assert_eq!(shown, Some(Toggled::False), "{tab}");
+    }
+    let accent = harness.state().theme.palette().accent;
+    let underlined = painted_shapes(harness.output())
+        .into_iter()
+        .any(|shape| matches!(shape, egui::Shape::Rect(rect) if rect.fill == accent));
+    assert!(!underlined, "no tab is underlined");
+    assert!(
+        harness.query_by_label("Preview").is_none(),
+        "no edit switch"
+    );
+
+    harness.click("b.md");
+    assert_eq!(active_path(&harness), harness.path("b.md"));
+    assert_eq!(harness.state().front(), Some(1));
 }
 
 #[test]
 fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
     let harness = many_tabs();
 
-    let open = harness.get_by_label("Open file in new tab").rect();
+    let open = harness.get_by_label("New tab").rect();
     let toggle = harness.get_by_label("Preview").rect();
 
     assert!(
@@ -389,7 +403,7 @@ fn with_more_tabs_than_fit_the_open_button_stops_short_of_the_mode_toggle() {
 /// button that ends the strip.
 fn in_strip(harness: &LabelHarness, name: &str) -> bool {
     let tab = harness.get_by_label(name).rect();
-    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    let strip_end = harness.get_by_label("New tab").rect().left();
     tab.left() >= 0.0 && tab.right() <= strip_end
 }
 
@@ -441,7 +455,7 @@ fn a_second_tab_on_the_same_document_is_scrolled_into_the_strip_too() {
     harness.state_mut().focus_tab(0);
     harness.frames(30);
 
-    let strip_end = harness.get_by_label("Open file in new tab").rect().left();
+    let strip_end = harness.get_by_label("New tab").rect().left();
     let tab = harness
         .query_all_by_label("doc-01.md")
         .next()
@@ -478,7 +492,7 @@ fn one_document_has_a_tab_and_the_new_tab_button_right_after_it() {
     let harness = one_tab("Body.");
 
     let tab = harness.get_by_label("a.md").rect();
-    let open = harness.get_by_label("Open file in new tab").rect();
+    let open = harness.get_by_label("New tab").rect();
     let forward = harness.get_by_label("Go forward").rect();
     assert!(forward.right() <= tab.left(), "{forward:?} then {tab:?}");
     assert_close(
@@ -494,7 +508,7 @@ fn with_no_document_the_new_tab_button_follows_the_history_arrows() {
     harness.frames(2);
 
     assert!(harness.query_by_label("a.md").is_none());
-    let open = harness.get_by_label("Open file in new tab").rect();
+    let open = harness.get_by_label("New tab").rect();
     let forward = harness.get_by_label("Go forward").rect();
     assert!(open.left() >= forward.right());
     assert!(open.left() - forward.right() < 10.0, "{open:?}");

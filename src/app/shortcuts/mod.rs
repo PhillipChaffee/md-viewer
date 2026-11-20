@@ -175,7 +175,8 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Cmd + Num0 in Document => AppAction::ResetZoom,
 
     CmdNoShift + O in Document => AppAction::OpenFile,
-    Cmd + T in Document => AppAction::OpenFile,
+    Cmd + T in Document => AppAction::NewTab,
+    CmdShift + H in Document => AppAction::GoHome,
     Any + F5 in Document => AppAction::ToggleWatch,
     Cmd + D in Document => AppAction::NextTheme,
     CmdShift + O in Document => AppAction::ToggleOutline,
@@ -282,6 +283,16 @@ fn shortcut_actions(
     actions
 }
 
+/// egui has read the frame's Tab presses already, as steps of the keyboard
+/// focus. One that switched tabs is the app's alone: the focus stays.
+fn keep_the_focus_through_a_tab_switch(ctx: &egui::Context, actions: &[AppAction]) {
+    let switches_tabs =
+        |action: &AppAction| matches!(action, AppAction::NextTab | AppAction::PreviousTab);
+    if actions.iter().any(switches_tabs) {
+        ctx.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
+    }
+}
+
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -298,6 +309,7 @@ impl MarkdownApp {
         };
         let platform = self.platform;
         let actions = ctx.input_mut(|input| shortcut_actions(input, focus, platform));
+        keep_the_focus_through_a_tab_switch(ctx, &actions);
         for action in actions {
             self.apply_action(ctx, action);
         }

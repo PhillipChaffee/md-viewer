@@ -18,8 +18,8 @@ mod tests;
 
 /// Space between two buttons of the bar.
 const BUTTON_GAP: f32 = 6.0;
-/// Buttons at the left end of the bar: files, back, forward.
-const LEADING_BUTTONS: f32 = 3.0;
+/// Buttons at the left end of the bar: files, home, back, forward.
+const LEADING_BUTTONS: f32 = 4.0;
 /// Buttons at the right end of the bar: appearance, find, contents, more.
 const TRAILING_BUTTONS: f32 = 4.0;
 /// Room the row keeps empty before its first button. A platform that draws
@@ -176,16 +176,16 @@ impl MarkdownApp {
         }
     }
 
-    /// Whether the active tab has history to step back and forward through.
+    /// Whether there is a way back and a way forward: through the
+    /// history of the tab in front, or from the home page back to the tab
+    /// it shows over.
     pub(crate) fn history_availability(&self) -> (bool, bool) {
-        self.tabs
-            .get(self.active_tab)
-            .map_or((false, false), |tab| {
-                (tab.can_go_back(), tab.can_go_forward())
-            })
+        self.front_tab().map_or((self.home_shows, false), |tab| {
+            (tab.can_go_back(), tab.can_go_forward())
+        })
     }
 
-    /// The file explorer toggle and the history arrows.
+    /// The file explorer toggle, home, and the history arrows.
     fn leading_buttons(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let palette = self.theme.palette();
         let (can_back, can_forward) = self.history_availability();
@@ -195,6 +195,12 @@ impl MarkdownApp {
             .hints
             .tooltip(files, "Files", AppAction::ToggleExplorer);
         pick(&files, AppAction::ToggleExplorer, picked);
+
+        let home = QuietButton::icon(Icon::Home, "Home")
+            .lit(self.front().is_none())
+            .show(ui, palette);
+        let home = self.hints.tooltip(home, "Home", AppAction::GoHome);
+        pick(&home, AppAction::GoHome, picked);
 
         let back = QuietButton::icon(Icon::Back, "Go back")
             .enabled(can_back)

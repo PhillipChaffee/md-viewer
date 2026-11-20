@@ -61,8 +61,11 @@ click and can be resized.
 
 ### A home page of what you read last
 
-With no document open, md-viewer lists recent documents with their title,
-folder, reading time and opening lines.
+The home page lists recent documents with their title, folder, reading
+time and opening lines. It shows with no document open, and over the open
+tabs when you press the Home button, **+** or `Ctrl+T`: the tabs stay, and
+a document picked there opens in a new tab, or comes to the front if it
+has one. The Home button again, Back, or a click on a tab leads back.
 
 ![The home page listing recently read documents](screenshots/reader/home.png)
 
@@ -98,7 +101,9 @@ folder, reading time and opening lines.
 
 **Getting around**
 
-- Tabs, with back and forward history in each tab.
+- Tabs in the top row, each named by its document's first heading, with
+  back and forward history in each tab. The row is the same with one
+  document or many, and tabs that do not fit scroll inside it.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
 - Drag a file onto the window to open it.
@@ -191,6 +196,8 @@ md-viewer notes.md
 | Linux and Windows | Mac | Action |
 | --- | --- | --- |
 | `Ctrl+O` | `⌘O` | Open a file |
+| `Ctrl+T` | `⌘T` | New tab: shows the home page |
+| `Ctrl+Shift+H` | `⇧⌘H` | Home page, and back to the document |
 | `Ctrl+W` | `⌘W` | Close the tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `⌃Tab` / `⌃⇧Tab` | Next / previous tab |
 | `Ctrl+1` to `Ctrl+9` | `⌘1` to `⌘9` | Go to a tab by its place |
