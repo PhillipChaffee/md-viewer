@@ -1,9 +1,9 @@
 //! Pictures far down a page: one is read only once the reader comes near
-//! it.
+//! it, and the page does not move under the reader when it arrives.
 
 use std::time::Duration;
 
-use super::pages::{each, illustrated, GREEN_GIF, NEAR, PULSE_GIF};
+use super::pages::{each, illustrated, BLUE_PNG, GREEN_GIF, NEAR, PULSE_GIF};
 use super::pictures::pulse_color;
 use super::support::{site, Launch, Reader};
 
@@ -123,4 +123,48 @@ fn a_heading_below_pictures_that_were_never_read_is_jumped_to_and_stays_put() {
     assert!(heading.top < landed && heading.top > 0.0, "{heading:?}");
     assert!((later - landed).abs() < NEAR, "it moved to {later}");
     assert!((again - landed).abs() < NEAR, "the second jump: {again}");
+}
+
+/// A turn of the wheel smaller than the place held for a picture whose
+/// size is not known, so that such a place meets the edge of the view
+/// before it is inside it.
+const A_STEP: f32 = 20.0;
+
+#[test]
+fn scrolling_back_up_to_pictures_from_the_web_does_not_move_the_page_under_the_reader() {
+    let web = site(&[("blue.png", BLUE_PNG)]);
+    // Six pictures to the app, which knows a picture by its address.
+    let pictures = [1, 2, 3, 4, 5, 6].map(|n| format!("![p]({}/{n}/blue.png)", web.address));
+    let mut reader = pictures_above_a_heading(&pictures);
+    reader.click("Target");
+    reader.wait_for("the target to scroll into view", |reader| {
+        reader.in_view("after 0")
+    });
+    while !reader.in_view("between 2") {
+        reader.scroll_up(A_STEP);
+    }
+    // The pictures are just above the view now, and are fetched. The size
+    // of a picture on the web is not known before that, so each takes its
+    // room only once it is here and the reader reaches it.
+    reader.wait_for("the pictures to be asked for", |_| {
+        web.times_asked_for("blue.png") == 6
+    });
+    reader.wait_for_pictures();
+    let line = reader.text_area("between 2").top;
+
+    let mut further = 0.0;
+    while reader.pictures().len() < 2 {
+        assert!(further < 1000.0, "the pictures never came into view");
+        reader.scroll_up(A_STEP);
+        further += A_STEP;
+        if reader.in_view("between 2") {
+            let now = reader.text_area("between 2").top;
+            assert!(
+                (now - (line + further)).abs() < NEAR,
+                "{further} further up, the line is at {now} and was at {line}"
+            );
+        }
+    }
+
+    assert!(further > A_STEP, "the pictures were above the view");
 }

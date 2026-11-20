@@ -472,6 +472,29 @@ impl Reader {
         self.settle();
     }
 
+    /// Keep the app running until it has read every picture it has asked
+    /// for, in view or not. Fails after twenty seconds.
+    ///
+    /// Between the bytes of a picture arriving and the app starting to
+    /// decode them lies one frame in which nothing is pending, so two
+    /// frames in a row have to find nothing.
+    #[track_caller]
+    pub(crate) fn wait_for_pictures(&mut self) {
+        let mut quiet = 0;
+        let read = (0..WAIT_FRAMES).any(|_| {
+            std::thread::sleep(WAIT_STEP);
+            self.frame(egui::Modifiers::NONE, Vec::new());
+            quiet = if self.kit.ctx.has_pending_images() {
+                0
+            } else {
+                quiet + 1
+            };
+            quiet >= 2
+        });
+        assert!(read, "the pictures were never read\n{}", self.describe());
+        self.settle();
+    }
+
     /// Keep the app running for `time`, for asserting that something does
     /// not happen.
     pub(crate) fn idle_for(&mut self, time: Duration) {
