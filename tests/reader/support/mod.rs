@@ -25,7 +25,7 @@ use self::folder::Folder;
 use self::paint::Pixels;
 pub(crate) use self::paint::Rgb;
 pub(crate) use self::see::Area;
-pub(crate) use self::web::serve;
+pub(crate) use self::web::{serve, site};
 
 /// The window every launch starts with, in pixels, unless the test asks
 /// for another.
@@ -469,6 +469,29 @@ impl Reader {
             false
         });
         assert!(arrived, "timed out waiting for {what}\n{}", self.describe());
+        self.settle();
+    }
+
+    /// Keep the app running until it has read every picture it has asked
+    /// for, in view or not. Fails after twenty seconds.
+    ///
+    /// Between the bytes of a picture arriving and the app starting to
+    /// decode them lies one frame in which nothing is pending, so two
+    /// frames in a row have to find nothing.
+    #[track_caller]
+    pub(crate) fn wait_for_pictures(&mut self) {
+        let mut quiet = 0;
+        let read = (0..WAIT_FRAMES).any(|_| {
+            std::thread::sleep(WAIT_STEP);
+            self.frame(egui::Modifiers::NONE, Vec::new());
+            quiet = if self.kit.ctx.has_pending_images() {
+                0
+            } else {
+                quiet + 1
+            };
+            quiet >= 2
+        });
+        assert!(read, "the pictures were never read\n{}", self.describe());
         self.settle();
     }
 

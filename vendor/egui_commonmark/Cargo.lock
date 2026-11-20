@@ -1144,6 +1144,7 @@ dependencies = [
  "data-url",
  "egui",
  "egui_extras",
+ "image",
  "merman",
  "mitex",
  "pulldown-cmark 0.13.0",
