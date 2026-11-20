@@ -321,14 +321,27 @@ impl MarkdownApp {
     }
 
     /// What a launch does once the state is built: note which documents
-    /// are open, remember the one named on the command line, and start
-    /// watching for changes.
+    /// are open, remember the ones that were read, and start watching for
+    /// changes.
     fn begin_session(&mut self, file: Option<PathBuf>, watch: bool) {
         self.refresh_open_tab_paths();
 
-        // Record a CLI-provided file as recent (an explicit open). Session-restored
-        // tabs are not treated as explicit opens, so they are not recorded here.
-        // A file that did not open left no tab, and was never read.
+        // A document that came back in a tab was read, whatever the list
+        // says: a session saved before the list was kept has none, and
+        // twenty later reads push a document off its end while its tab
+        // stays open. Those go in front, in the order of their tabs. A
+        // document the list knows keeps its place and its time: coming
+        // back in a tab is not reading it again.
+        let known = |path: &Path| self.recent_files.iter().any(|entry| entry.path == path);
+        let restored = self.tabs.iter().map(|tab| &tab.path);
+        let unlisted: Vec<PathBuf> = restored.filter(|path| !known(path)).cloned().collect();
+        for path in unlisted.iter().rev() {
+            self.record_recent(path);
+        }
+
+        // A file named on the command line is opened now, and is the most
+        // recent one. A file that did not open left no tab, and was never
+        // read.
         if let Some(file) = file.filter(|_| !self.tabs.is_empty()) {
             let file = file.canonicalize().unwrap_or(file);
             self.record_recent(&file);
