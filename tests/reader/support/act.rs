@@ -212,6 +212,12 @@ impl Reader {
         self.settle();
     }
 
+    /// Copy what is selected in whatever has the keyboard, as Ctrl+C does.
+    pub(crate) fn copy(&mut self) {
+        self.frame(Modifiers::NONE, vec![egui::Event::Copy]);
+        self.settle();
+    }
+
     /// Hold files over the window without letting go.
     pub(crate) fn drag_files_over(&mut self, names: &[&str]) {
         let files = names.iter().map(|name| egui::HoveredFile {

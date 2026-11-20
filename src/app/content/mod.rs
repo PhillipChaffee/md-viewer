@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use eframe::egui;
 use egui::scroll_area::ScrollAreaOutput;
-use egui::Widget;
 use egui_commonmark_extended::CommonMarkViewer;
 
 use crate::app::action::AppAction;
@@ -19,6 +18,7 @@ mod column;
 pub(crate) mod look;
 #[cfg(kani)]
 mod proofs;
+mod source;
 #[cfg(test)]
 pub(super) mod tests;
 
@@ -169,13 +169,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
                 ui.add_space(column.inset());
                 let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4_i8, 2_i8));
                 frame.show(ui, |ui| {
-                    edited = egui::TextEdit::multiline(&mut tab.content)
-                        .id_salt(ui.id().with("edit"))
-                        .desired_width(column.width - 8.0)
-                        .desired_rows(24)
-                        .frame(false)
-                        .ui(ui)
-                        .changed();
+                    edited = source::edit(ui, &mut tab.content, column.width - 8.0);
                 });
             });
         });
