@@ -1,20 +1,21 @@
-//! The prompt that asks before a close throws unsaved edits away: Save,
-//! Discard or Cancel, for one unsaved document at a time.
+//! The prompt that asks before unsaved edits are thrown away, by closing
+//! their document or by showing another in its tab: Save, Discard or
+//! Cancel, for one unsaved document at a time.
 //!
-//! A close that would lose nothing never comes here in any way the reader
-//! can see: it is carried out in the frame it was asked for. One that would
-//! waits in [`CloseState::Asking`] until every unsaved document it covers
-//! has an answer, and only then closes anything, through the same
-//! `close_tab` and `close_other_tabs` an unasked close uses. Cancel at any
-//! question therefore leaves every tab open with its edits; what a Save
-//! wrote before it stays written.
+//! A request that would lose nothing never comes here in any way the
+//! reader can see: it is carried out in the frame it was asked for. One
+//! that would waits in [`CloseState::Asking`] until every unsaved document
+//! it covers has an answer, and only then closes or replaces anything,
+//! through the same `close_tab`, `close_other_tabs` and `take_route` an
+//! unasked request uses. Cancel at any question therefore leaves every tab
+//! as it is, with its edits; what a Save wrote before it stays written.
 
 use eframe::egui;
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton};
 use crate::app::MarkdownApp;
-use crate::tab::Tab;
+use crate::tab::{Route, Tab};
 use crate::theme;
 
 #[cfg(test)]
@@ -26,36 +27,43 @@ const PADDING: i8 = 18;
 /// The least width of an answer, so the three read as a row of buttons.
 const ANSWER_WIDTH: f32 = 76.0;
 
-/// What the reader asked to close. Tabs are named by their place in the
-/// strip, which holds while the prompt asks: it is modal and the app's
-/// shortcuts wait, so no tab closes or moves under it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What the reader asked for that takes documents out of their tabs. Tabs
+/// are named by their place in the strip, which holds while the prompt
+/// asks: it is modal and the app's shortcuts wait, so no tab closes or
+/// moves under it.
+#[derive(Debug, PartialEq, Eq)]
 enum Goal {
-    /// The tab at this place.
+    /// Close the tab at this place.
     Tab(usize),
-    /// Every tab but the one at this place.
+    /// Close every tab but the one at this place.
     OtherTabs(usize),
-    /// The app.
+    /// Close the app.
     Quit,
+    /// Show another document in the tab at this place: the one the route
+    /// leads to.
+    Leave(usize, Route),
 }
 
 impl Goal {
-    /// Whether reaching the goal closes the tab at `index`.
-    const fn closes(self, index: usize) -> bool {
+    /// Whether reaching the goal takes its document out of `tab`, the one
+    /// at `index`: by closing the tab, or by showing another document
+    /// in it.
+    fn replaces(&self, index: usize, tab: &Tab) -> bool {
         match self {
-            Self::Tab(closed) => index == closed,
-            Self::OtherTabs(kept) => index != kept,
+            Self::Tab(closed) => index == *closed,
+            Self::OtherTabs(kept) => index != *kept,
             Self::Quit => true,
+            Self::Leave(left, route) => index == *left && tab.leads_away(route),
         }
     }
 }
 
-/// A close that waits on the reader's answers.
+/// A request that waits on the reader's answers.
 #[derive(Debug)]
 pub(super) struct PendingClose {
     goal: Goal,
     /// The unsaved tab the prompt asks about now. Those before it that
-    /// the goal closes have been answered for.
+    /// the goal replaces have been answered for.
     asked: usize,
     /// The question, written when the prompt turned to this tab.
     question: String,
@@ -98,16 +106,28 @@ fn question(tab: &Tab) -> String {
 impl MarkdownApp {
     /// Close the tab at `index`, asking first when it has unsaved edits.
     pub(crate) fn request_close_tab(&mut self, index: usize) {
-        if !self.ask_before(Goal::Tab(index)) {
-            self.close_tab(index);
-        }
+        self.request(Goal::Tab(index));
     }
 
     /// Close every tab but the one at `keep`, asking first about each of
     /// them that has unsaved edits.
     pub(crate) fn request_close_other_tabs(&mut self, keep: usize) {
-        if !self.ask_before(Goal::OtherTabs(keep)) {
-            self.close_other_tabs(keep);
+        self.request(Goal::OtherTabs(keep));
+    }
+
+    /// Take the tab in front where `route` leads, asking first when that
+    /// shows another document in place of one with unsaved edits.
+    pub(crate) fn request_route(&mut self, route: Route) {
+        if let Some(front) = self.front() {
+            self.request(Goal::Leave(front, route));
+        }
+    }
+
+    /// Reach `goal`: now if that loses no unsaved edits, and otherwise
+    /// once the reader has answered for them.
+    fn request(&mut self, goal: Goal) {
+        if let Err(goal) = self.ask_from(goal, 0) {
+            self.reach(goal);
         }
     }
 
@@ -119,24 +139,19 @@ impl MarkdownApp {
         if !requested || matches!(self.closing, CloseState::Quitting) {
             return;
         }
-        if self.ask_before(Goal::Quit) {
+        if self.ask_from(Goal::Quit, 0).is_ok() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
     }
 
-    /// Start asking about the unsaved tabs `goal` would close. Returns
-    /// whether there is any, and so whether the goal has to wait.
-    fn ask_before(&mut self, goal: Goal) -> bool {
-        self.ask_from(goal, 0)
-    }
-
     /// Turn the prompt to the first unsaved tab at or after the place
-    /// `from` that `goal` would close. Returns whether there is one.
-    fn ask_from(&mut self, goal: Goal, from: usize) -> bool {
+    /// `from` that `goal` would take its document out of. With no such
+    /// tab the goal comes back, for nothing stands in its way.
+    fn ask_from(&mut self, goal: Goal, from: usize) -> Result<(), Goal> {
         let mut tabs = self.tabs.iter().enumerate().skip(from);
-        let unsaved = tabs.find(|(index, tab)| goal.closes(*index) && tab.is_dirty());
+        let unsaved = tabs.find(|(index, tab)| tab.is_dirty() && goal.replaces(*index, tab));
         let Some((asked, tab)) = unsaved else {
-            return false;
+            return Err(goal);
         };
         let question = question(tab);
         // The prompt has to be seen, and the lightbox draws over it.
@@ -147,11 +162,11 @@ impl MarkdownApp {
             question,
             focus_due: true,
         });
-        true
+        Ok(())
     }
 
     /// Carry out the reader's answer to the prompt.
-    pub(crate) fn answer_close_prompt(&mut self, ctx: &egui::Context, answer: CloseAnswer) {
+    pub(crate) fn answer_close_prompt(&mut self, answer: CloseAnswer) {
         let CloseState::Asking(pending) = std::mem::take(&mut self.closing) else {
             return;
         };
@@ -160,20 +175,29 @@ impl MarkdownApp {
             CloseAnswer::Discard => true,
             CloseAnswer::Cancel => false,
         };
-        if !go_on || self.ask_from(pending.goal, pending.asked + 1) {
+        if !go_on {
             return;
         }
-        match pending.goal {
+        if let Err(goal) = self.ask_from(pending.goal, pending.asked + 1) {
+            self.reach(goal);
+        }
+    }
+
+    /// Carry `goal` out now, with whatever the tabs hold unsaved.
+    fn reach(&mut self, goal: Goal) {
+        match goal {
             Goal::Tab(index) => self.close_tab(index),
             Goal::OtherTabs(keep) => self.close_other_tabs(keep),
             Goal::Quit => {
                 self.closing = CloseState::Quitting;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                let window = egui::ViewportCommand::Close;
+                self.egui_ctx.send_viewport_cmd(window);
             }
+            Goal::Leave(index, route) => self.take_route(index, &route),
         }
     }
 
-    /// Draw the prompt while a close waits on an answer. Returns the answer
+    /// Draw the prompt while a request waits on an answer. Returns the answer
     /// the reader gave this frame.
     pub(crate) fn render_close_prompt(&mut self, ctx: &egui::Context) -> Option<AppAction> {
         let CloseState::Asking(pending) = &mut self.closing else {

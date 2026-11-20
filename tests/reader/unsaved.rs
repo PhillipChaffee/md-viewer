@@ -2,7 +2,7 @@
 //! each answer does, and the same when several documents or the whole app
 //! are closed.
 
-use super::docs::three_linked;
+use super::docs::{long_document, three_linked};
 use super::support::Reader;
 
 const SOURCE: &str = "# Draft\n\nFirst thoughts.";
@@ -517,4 +517,287 @@ fn nothing_under_the_prompt_takes_a_click_or_typing() {
 
     reader.click("Cancel");
     assert_eq!(reader.typed(), [EDITED]);
+}
+
+const ASKS_ALPHA: &str = "Save changes to a.md?";
+const ALPHA_EDITED: &str =
+    "# Alpha\n\nGo [to beta](b.md) or [to gamma](c.md) or [nowhere](missing.md). Edit A.";
+
+/// Type an edit into the document in front and leave it unsaved, shown
+/// as the reader reads it, where its links can be clicked.
+fn edit_and_read(reader: &mut Reader, text: &str) {
+    edit(reader, text);
+    reader.press("Ctrl+E");
+}
+
+/// `a.md` of the three linked documents with an edit that is not saved.
+fn unsaved_alpha() -> Reader {
+    let mut reader = three_linked();
+    edit_and_read(&mut reader, " Edit A.");
+    reader
+}
+
+/// List the folder in the files sidebar.
+fn show_files(reader: &mut Reader) {
+    reader.press("Ctrl+Shift+E");
+    reader.wait_for("the folder to be listed", |reader| reader.sees("c.md"));
+}
+
+/// A way to put another document in the tab in front, and the file that
+/// then shows.
+type Route = (&'static str, fn(&mut Reader), &'static str);
+
+/// Every way out of `a.md` that shows another document in its tab, each
+/// from `a.md` with an edit that is not saved.
+fn routes_out_of_alpha() -> Vec<(Reader, Route)> {
+    let onward: [Route; 2] = [
+        ("a link", |reader| reader.click("to beta"), "b.md"),
+        (
+            "a file in the sidebar",
+            |reader| {
+                show_files(reader);
+                reader.click("c.md");
+            },
+            "c.md",
+        ),
+    ];
+    let back: [Route; 3] = [
+        ("the Back button", |reader| reader.click("Go back"), "c.md"),
+        ("Alt+Left", |reader| reader.press("Alt+Left"), "c.md"),
+        (
+            "Back in the menu",
+            |reader| {
+                reader.click("More");
+                reader.click("Back");
+            },
+            "c.md",
+        ),
+    ];
+    let forward: [Route; 3] = [
+        (
+            "the Forward button",
+            |reader| reader.click("Go forward"),
+            "b.md",
+        ),
+        ("Alt+Right", |reader| reader.press("Alt+Right"), "b.md"),
+        (
+            "Forward in the menu",
+            |reader| {
+                reader.click("More");
+                reader.click("Forward");
+            },
+            "b.md",
+        ),
+    ];
+    let from_alpha = onward.map(|route| (unsaved_alpha(), route));
+    let came_from_gamma = back.map(|route| {
+        let mut reader = Reader::launch()
+            .doc("a.md", as_written("a.md"))
+            .doc("b.md", as_written("b.md"))
+            .doc("c.md", "# Gamma\n\nBack [to alpha](a.md).")
+            .args(&["c.md"])
+            .open();
+        reader.click("to alpha");
+        edit_and_read(&mut reader, " Edit A.");
+        (reader, route)
+    });
+    let went_back_from_beta = forward.map(|route| {
+        let mut reader = three_linked();
+        reader.click("to beta");
+        reader.click("Go back");
+        edit_and_read(&mut reader, " Edit A.");
+        (reader, route)
+    });
+    let mut routes = Vec::from(from_alpha);
+    routes.extend(came_from_gamma);
+    routes.extend(went_back_from_beta);
+    routes
+}
+
+#[test]
+fn every_way_to_another_document_in_the_tab_asks_and_touches_nothing() {
+    for (mut reader, (way, go, _)) in routes_out_of_alpha() {
+        go(&mut reader);
+
+        assert!(reader.sees(ASKS_ALPHA), "{way}");
+        assert_eq!(reader.title(), "a.md - Markdown Viewer", "{way}");
+        assert_eq!(reader.read_file("a.md"), as_written("a.md"), "{way}");
+        assert_eq!(reader.count("Unsaved changes"), 1, "{way}");
+    }
+}
+
+#[test]
+fn save_writes_the_edits_and_then_goes_to_the_other_document() {
+    for (mut reader, (way, go, shown)) in routes_out_of_alpha() {
+        go(&mut reader);
+
+        reader.click("Save");
+
+        assert_eq!(reader.read_file("a.md"), ALPHA_EDITED, "{way}");
+        assert_eq!(
+            reader.title(),
+            format!("{shown} - Markdown Viewer"),
+            "{way}"
+        );
+        assert!(!reader.sees("Save changes to"), "{way}");
+        assert_eq!(reader.count("Unsaved changes"), 0, "{way}");
+    }
+}
+
+#[test]
+fn discard_goes_to_the_other_document_and_leaves_the_file_as_it_was() {
+    for (mut reader, (way, go, shown)) in routes_out_of_alpha() {
+        go(&mut reader);
+
+        reader.click("Discard");
+
+        assert_eq!(reader.read_file("a.md"), as_written("a.md"), "{way}");
+        assert_eq!(
+            reader.title(),
+            format!("{shown} - Markdown Viewer"),
+            "{way}"
+        );
+        assert!(!reader.sees("Save changes to"), "{way}");
+        assert_eq!(reader.count("Unsaved changes"), 0, "{way}");
+    }
+}
+
+#[test]
+fn cancel_and_escape_stay_on_the_document_with_its_edits() {
+    type Answer = fn(&mut Reader);
+    let answers: [(&str, Answer); 2] = [
+        ("Cancel", |reader| reader.click("Cancel")),
+        ("Escape", |reader| reader.press("Escape")),
+    ];
+    for (answer, give) in answers {
+        for (mut reader, (way, go, _)) in routes_out_of_alpha() {
+            go(&mut reader);
+
+            give(&mut reader);
+
+            let case = format!("{answer} after {way}");
+            assert!(!reader.sees("Save changes to"), "{case}");
+            assert_eq!(reader.title(), "a.md - Markdown Viewer", "{case}");
+            assert_eq!(reader.count("Unsaved changes"), 1, "{case}");
+            assert_eq!(reader.read_file("a.md"), as_written("a.md"), "{case}");
+            reader.press("Ctrl+E");
+            assert_eq!(reader.typed(), [ALPHA_EDITED], "{case}");
+        }
+    }
+}
+
+#[test]
+fn the_edits_a_discard_gave_up_are_gone_when_the_reader_comes_back() {
+    let mut reader = unsaved_alpha();
+    reader.click("to beta");
+    reader.click("Discard");
+
+    reader.click("Go back");
+
+    assert_eq!(reader.title(), "a.md - Markdown Viewer");
+    reader.assert_hides("Save changes to");
+    assert_eq!(reader.count("Unsaved changes"), 0);
+    reader.press("Ctrl+E");
+    assert_eq!(reader.typed(), [as_written("a.md")]);
+}
+
+#[test]
+fn a_save_that_fails_stays_on_the_document_and_says_why() {
+    let mut reader = Reader::launch()
+        .doc("notes/a.md", "# Alpha\n\nGo [to beta](../b.md).")
+        .doc("b.md", "# Beta")
+        .args(&["notes/a.md"])
+        .open();
+    edit_and_read(&mut reader, " Mine.");
+    reader.click("to beta");
+    reader.assert_sees(ASKS_ALPHA);
+    reader.delete_folder("notes");
+
+    reader.click("Save");
+
+    reader.assert_hides("Save changes to");
+    reader.assert_sees("Unable to save");
+    assert_eq!(reader.title(), "a.md - Markdown Viewer");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+}
+
+#[test]
+fn a_document_with_nothing_unsaved_is_left_without_a_question() {
+    let mut reader = unsaved_alpha();
+    reader.press("Ctrl+S");
+
+    reader.click("to beta");
+
+    reader.assert_hides("Save changes to");
+    assert_eq!(reader.title(), "b.md - Markdown Viewer");
+}
+
+#[test]
+fn a_jump_within_the_document_does_not_ask() {
+    // Short enough for the whole source to be on screen and be clicked
+    // into, and too long for the page to show its last heading.
+    let text = format!("[Down](#section-12) the page.\n\n{}", long_document(12));
+    let mut reader = Reader::with_docs(&[("long.md", &text)]);
+    edit_and_read(&mut reader, " Mine.");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+    let last = "Paragraph 12 mentions the lighthouse once.";
+
+    reader.assert_sees("CONTENTS");
+    reader.click("Long read");
+    reader.wait_for("the top to scroll into view", |reader| {
+        reader.in_view("Down") && !reader.in_view(last)
+    });
+    reader.assert_hides("Save changes to");
+
+    reader.click("Down");
+    reader.wait_for("the heading to scroll into view", |reader| {
+        reader.in_view(last)
+    });
+    reader.assert_hides("Save changes to");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+}
+
+#[test]
+fn a_way_that_leads_nowhere_does_not_ask() {
+    let mut reader = unsaved_alpha();
+
+    reader.click("nowhere");
+
+    reader.assert_hides("Save changes to");
+    reader.assert_sees("Unable to open");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+
+    show_files(&mut reader);
+    reader.click("a.md");
+
+    reader.assert_hides("Save changes to");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+}
+
+#[test]
+fn another_document_in_a_tab_of_its_own_does_not_ask() {
+    let mut reader = unsaved_alpha();
+
+    reader.ctrl_click("to beta");
+
+    reader.assert_hides("Save changes to");
+    assert_eq!(tabs(&reader), ["a.md", "b.md"]);
+    reader.click("tab:Alpha");
+    assert_eq!(reader.count("Unsaved changes"), 1);
+}
+
+#[test]
+fn the_shortcuts_wait_while_the_prompt_asks_about_leaving() {
+    let mut reader = unsaved_alpha();
+    reader.click("to beta");
+
+    for shortcut in ["Alt+Left", "Ctrl+W", "Ctrl+E", "Ctrl+F"] {
+        reader.press(shortcut);
+
+        assert!(reader.sees(ASKS_ALPHA), "{shortcut}");
+    }
+    reader.click("Discard");
+
+    assert_eq!(reader.title(), "b.md - Markdown Viewer");
+    assert_eq!(tabs(&reader), ["b.md"]);
 }
