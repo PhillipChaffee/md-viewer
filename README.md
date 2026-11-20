@@ -117,7 +117,9 @@ has one. The Home button again, Back, or a click on a tab leads back.
 - Closing a tab that has unsaved edits asks first: **Save**, **Discard**
   or **Cancel** (also `Esc`). **Close Others** and quitting ask about each
   unsaved document in turn and close nothing until the last answer, so
-  **Cancel** at any question leaves every tab open with its edits.
+  **Cancel** at any question leaves every tab open with its edits. A
+  link, a file in the sidebar, Back or Forward asks the same before it
+  shows another document in a tab with unsaved edits.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install

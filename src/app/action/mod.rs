@@ -89,7 +89,7 @@ impl MarkdownApp {
             AppAction::OpenFile => self.open_file_dialog(),
             AppAction::OpenFolder => self.open_folder_dialog(),
             AppAction::CloseTab => self.close_active_tab(),
-            AppAction::AnswerClosePrompt(answer) => self.answer_close_prompt(ctx, answer),
+            AppAction::AnswerClosePrompt(answer) => self.answer_close_prompt(answer),
             AppAction::NextTab => self.next_tab(),
             AppAction::PreviousTab => self.prev_tab(),
             AppAction::FocusTab(index) => self.focus_tab(index),

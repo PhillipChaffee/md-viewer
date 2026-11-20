@@ -391,6 +391,64 @@ mod navigation {
         tab.path = PathBuf::from("/");
         assert_eq!(tab.resolve_link("other.md").unwrap(), None);
     }
+
+    #[test]
+    fn a_route_leads_away_only_when_it_ends_at_another_document() {
+        let docs = [("notes.md", "# Notes"), ("other.md", "# Other")];
+        let (dir, mut tab) = tab_on(&docs);
+        let folder = dir.dir("folder");
+        let link = |link: &str| Route::Link(link.to_owned());
+        let file = |name: &str| Route::File(dir.path().join(name));
+
+        for away in [link("other.md"), link("other.md#top"), file("other.md")] {
+            assert!(tab.leads_away(&away), "{away:?}");
+        }
+        let stays = [
+            link("#notes"),
+            link("notes.md"),
+            link("notes.md#notes"),
+            link("missing.md"),
+            link("bad%FF.md"),
+            link("https://example.com"),
+            link("folder"),
+            file("notes.md"),
+            file("missing.md"),
+            Route::File(folder),
+            Route::Back,
+            Route::Forward,
+        ];
+        for stay in stays {
+            assert!(!tab.leads_away(&stay), "{stay:?}");
+        }
+
+        assert!(tab.take(&file("other.md")).unwrap());
+        assert!(tab.leads_away(&Route::Back));
+        assert!(!tab.leads_away(&Route::Forward));
+        assert!(tab.take(&Route::Back).unwrap());
+        assert!(tab.leads_away(&Route::Forward));
+        assert!(!tab.leads_away(&Route::Back));
+    }
+
+    #[test]
+    fn each_route_is_taken_as_its_own_step_would_be() {
+        let docs = [("notes.md", "# Notes"), ("other.md", "# Other")];
+        let (dir, mut tab) = tab_on(&docs);
+        let (notes, other) = (tab.path.clone(), dir.path().join("other.md"));
+
+        assert!(tab.take(&Route::Link("other.md".to_owned())).unwrap());
+        assert_eq!(tab.path, other);
+        assert!(tab.take(&Route::Back).unwrap());
+        assert_eq!(tab.path, notes);
+        assert!(tab.take(&Route::Forward).unwrap());
+        assert_eq!(tab.path, other);
+        assert!(tab.take(&Route::File(notes.clone())).unwrap());
+        assert_eq!(tab.path, notes);
+        assert_eq!(tab.history_back, [notes.clone(), other]);
+
+        let missing = Route::File(dir.path().join("missing.md"));
+        assert!(tab.take(&missing).is_err(), "a file picked by name");
+        assert_eq!(tab.path, notes);
+    }
 }
 
 #[test]

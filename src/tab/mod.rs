@@ -80,6 +80,19 @@ pub(crate) enum SaveOutcome {
     Failed,
 }
 
+/// A way to show another document in a tab, in place of the one it shows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Route {
+    /// A link in the document, as it is written there.
+    Link(String),
+    /// A file the reader picked.
+    File(PathBuf),
+    /// A step back through the tab's history.
+    Back,
+    /// A step forward through the tab's history.
+    Forward,
+}
+
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
@@ -319,6 +332,45 @@ impl Tab {
         }
     }
 
+    /// Go where `route` leads. Returns whether the tab went anywhere, a
+    /// heading of its own document included.
+    pub(crate) fn take(&mut self, route: &Route) -> io::Result<bool> {
+        match route {
+            Route::Link(link) => self.navigate_to_link(link),
+            // A file that is not there is an error here, where the reader
+            // picked it by name.
+            Route::File(path) => self.navigate_to_path(&path.canonicalize()?),
+            Route::Back => self.navigate_back(),
+            Route::Forward => self.navigate_forward(),
+        }
+    }
+
+    /// Whether `route` leads to another document, which would take the
+    /// place of this one and of any edits to it that are not saved. A
+    /// heading of this document does not, nor does a way that leads
+    /// nowhere.
+    pub(crate) fn leads_away(&self, route: &Route) -> bool {
+        match route {
+            Route::Link(link) if link.starts_with('#') => false,
+            Route::Link(link) => {
+                let (destination, _) = split_link_fragment(link);
+                let target = self.resolve_link(destination);
+                target.is_ok_and(|target| target.is_some_and(|file| self.is_another_file(&file)))
+            }
+            Route::File(path) => {
+                let target = path.canonicalize();
+                target.is_ok_and(|file| self.is_another_file(&file))
+            }
+            Route::Back => self.can_go_back(),
+            Route::Forward => self.can_go_forward(),
+        }
+    }
+
+    /// Whether `target` is a file, and not the one this tab shows.
+    fn is_another_file(&self, target: &Path) -> bool {
+        target != self.path && target.is_file()
+    }
+
     pub(crate) fn navigate_to_link(&mut self, link: &str) -> io::Result<bool> {
         // A same-document fragment scrolls this tab — no path resolution, no
         // history entry, the same semantics as clicking the heading in the
@@ -362,7 +414,7 @@ impl Tab {
     /// one where Back goes. Returns whether that happened: it does not for
     /// the document already shown, nor for anything but a file.
     fn visit(&mut self, target: &Path) -> io::Result<bool> {
-        if target == self.path || !target.is_file() {
+        if !self.is_another_file(target) {
             return Ok(false);
         }
         let previous_path = self.path.clone();

@@ -48,12 +48,85 @@ fn answer(harness: &mut Harness, answer: CloseAnswer) {
 }
 
 #[test]
-fn a_goal_closes_the_tabs_it_names_and_no_other() {
-    let closed = |goal: Goal| [0, 1, 2].map(|index| goal.closes(index));
+fn a_goal_replaces_the_documents_of_the_tabs_it_names_and_no_other() {
+    let harness = three_tabs();
+    let replaced =
+        |goal: Goal| [0, 1, 2].map(|index| goal.replaces(index, &harness.app.tabs[index]));
+    let leave = |route: Route| Goal::Leave(1, route);
 
-    assert_eq!(closed(Goal::Tab(1)), [false, true, false]);
-    assert_eq!(closed(Goal::OtherTabs(1)), [true, false, true]);
-    assert_eq!(closed(Goal::Quit), [true, true, true]);
+    assert_eq!(replaced(Goal::Tab(1)), [false, true, false]);
+    assert_eq!(replaced(Goal::OtherTabs(1)), [true, false, true]);
+    assert_eq!(replaced(Goal::Quit), [true, true, true]);
+    assert_eq!(
+        replaced(leave(Route::File(harness.path("a.md")))),
+        [false, true, false]
+    );
+    assert_eq!(
+        replaced(leave(Route::File(harness.path("b.md")))),
+        [false; 3],
+        "the tab shows that file already"
+    );
+    assert_eq!(replaced(leave(Route::Back)), [false; 3], "no way back");
+}
+
+#[test]
+fn leaving_a_document_asks_only_when_edits_would_be_lost() {
+    let mut harness = three_tabs();
+    let to_a = Route::File(harness.path("a.md"));
+
+    edit(&mut harness, 0);
+    harness.app.request_route(to_a);
+    assert_eq!(asked(&harness), None, "the edits are in another tab");
+    assert_eq!(harness.active_path(), harness.path("a.md"));
+
+    edit(&mut harness, 2);
+    harness.app.request_route(Route::Forward);
+    harness.app.request_route(Route::Link("#c".to_owned()));
+    harness
+        .app
+        .request_route(Route::Link("missing.md".to_owned()));
+    assert_eq!(asked(&harness), None, "none of these leads away");
+    assert!(harness.app.tabs[2].is_dirty());
+
+    harness.app.request_route(Route::Back);
+    assert_eq!(asked(&harness), Some(2));
+    assert_eq!(harness.active_path(), harness.path("a.md"));
+    let CloseState::Asking(pending) = &harness.app.closing else {
+        panic!("the prompt is not asking");
+    };
+    assert_eq!(pending.goal, Goal::Leave(2, Route::Back));
+}
+
+#[test]
+fn each_answer_about_leaving_a_document_is_carried_out() {
+    let asked_to_leave = || {
+        let mut harness = three_tabs();
+        edit(&mut harness, 2);
+        harness.app.request_route(Route::File(harness.path("a.md")));
+        assert_eq!(asked(&harness), Some(2));
+        harness
+    };
+    let on_disk = |harness: &Harness| std::fs::read_to_string(harness.path("c.md")).unwrap();
+
+    let mut harness = asked_to_leave();
+    answer(&mut harness, CloseAnswer::Save);
+    assert_eq!(on_disk(&harness), "# C edited");
+    assert_eq!(harness.active_path(), harness.path("a.md"));
+    assert_eq!(harness.app.tabs[2].history_back, [harness.path("c.md")]);
+
+    let mut harness = asked_to_leave();
+    answer(&mut harness, CloseAnswer::Discard);
+    assert_eq!(on_disk(&harness), "# C");
+    assert_eq!(harness.active_path(), harness.path("a.md"));
+    assert!(!harness.app.tabs[2].is_dirty());
+
+    let mut harness = asked_to_leave();
+    answer(&mut harness, CloseAnswer::Cancel);
+    assert_eq!(on_disk(&harness), "# C");
+    assert_eq!(harness.active_path(), harness.path("c.md"));
+    assert!(harness.app.tabs[2].is_dirty());
+    assert_eq!(asked(&harness), None);
+    assert_eq!(harness.app.tabs.len(), 3);
 }
 
 #[test]
@@ -84,7 +157,7 @@ fn the_question_names_the_document_and_is_written_once() {
     let CloseState::Asking(pending) = &harness.app.closing else {
         panic!("the prompt is not asking");
     };
-    assert_eq!(pending.question, "Save changes to b.md?");
+    assert_eq!(pending.question, "Save changes to “B” (b.md)?");
     assert!(pending.focus_due);
     assert_eq!(harness.app.tabs.len(), 3);
 
@@ -93,6 +166,24 @@ fn the_question_names_the_document_and_is_written_once() {
         panic!("the prompt stopped asking");
     };
     assert!(!pending.focus_due, "Save takes the keyboard once");
+}
+
+#[test]
+fn a_long_name_is_cut_after_a_word_and_a_short_one_is_whole() {
+    let exactly = "x".repeat(NAME_CHARS);
+    assert_eq!(shortened("Alpha"), "Alpha");
+    assert_eq!(shortened(&exactly), exactly.as_str());
+
+    let words = "word ".repeat(13);
+    assert_eq!(shortened(&words), format!("{}…", "word ".repeat(12).trim()));
+    let unbroken = "é".repeat(NAME_CHARS + 1);
+    assert_eq!(shortened(&unbroken), format!("{}…", "é".repeat(NAME_CHARS)));
+    let late_break = format!(" {unbroken}");
+    assert_eq!(
+        shortened(&late_break).chars().count(),
+        NAME_CHARS + 1,
+        "a space that leads the name is no place to cut"
+    );
 }
 
 #[test]
