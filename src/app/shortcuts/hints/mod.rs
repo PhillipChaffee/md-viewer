@@ -5,10 +5,11 @@
 
 use eframe::egui::{self, Key};
 
-use super::{Chord, Platform, BINDINGS};
+use super::{Chord, BINDINGS};
 use crate::app::action::AppAction;
 use crate::app::chrome;
 use crate::app::MarkdownApp;
+use crate::platform::Platform;
 
 #[cfg(test)]
 mod tests;

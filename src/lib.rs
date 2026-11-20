@@ -24,6 +24,7 @@ mod icons;
 mod layout;
 mod links;
 mod persist;
+mod platform;
 mod recent;
 mod search;
 mod system_fonts;
