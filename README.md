@@ -188,20 +188,29 @@ md-viewer notes.md
 
 ## Keyboard shortcuts
 
-| Shortcut | Action |
-| --- | --- |
-| `Ctrl+O` | Open a file |
-| `Ctrl+W` | Close the tab |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
-| `Alt+←` / `Alt+→` | Back / forward |
-| `Ctrl+F` | Find in document |
-| `Ctrl+D` | Next theme |
-| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Narrow / widen the column |
-| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in / out / reset |
-| `Ctrl+Shift+E` | Files sidebar |
-| `Ctrl+Shift+O` | Contents sidebar |
-| `Ctrl+E` | Edit mode |
-| `Ctrl+Q` | Quit |
+| Linux and Windows | Mac | Action |
+| --- | --- | --- |
+| `Ctrl+O` | `⌘O` | Open a file |
+| `Ctrl+W` | `⌘W` | Close the tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | `⌃Tab` / `⌃⇧Tab` | Next / previous tab |
+| `Ctrl+1` to `Ctrl+9` | `⌘1` to `⌘9` | Go to a tab by its place |
+| `Alt+←` / `Alt+→` | `⌘[` / `⌘]` | Back / forward |
+| `Ctrl+F` | `⌘F` | Find in document |
+| `Ctrl+D` | `⌘D` | Next theme |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | `⌥⌘←` / `⌥⌘→` | Narrow / widen the column |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | `⌘+` / `⌘-` / `⌘0` | Zoom in / out / reset |
+| `Ctrl+Shift+E` | `⇧⌘E` | Files sidebar |
+| `Ctrl+Shift+O` | `⇧⌘O` | Contents sidebar |
+| `Ctrl+E` | `⌘E` | Edit mode |
+| `Ctrl+S` | `⌘S` | Save the edits |
+| `F5` | `F5` | Live reload on or off |
+| `Ctrl+Q` | `⌘Q` | Quit |
+
+On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘
+there: `⌘D`, `⌘F`, ⌘-click on a link. The one exception is the tab switch,
+which is the Control key on a Mac too, because ⌘ with Tab switches apps.
+The menus and tooltips show the Mac's own signs. Control with a letter and
+Option with an arrow are left to the text you are editing.
 
 ## How it is built
 
