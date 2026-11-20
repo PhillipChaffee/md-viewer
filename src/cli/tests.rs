@@ -295,7 +295,7 @@ mod window {
 
     #[test]
     fn window_fits_the_reading_column_and_both_sidebars() {
-        let viewport = native_options().viewport;
+        let viewport = native_options(Platform::Other).viewport;
         let width = CONTENT_OPTIMAL_WIDTH
             + EXPLORER_DEFAULT_WIDTH
             + OUTLINE_DEFAULT_WIDTH
@@ -307,6 +307,39 @@ mod window {
         assert_eq!(viewport.min_inner_size, Some(egui::vec2(400.0, 300.0)));
         assert_eq!(viewport.title.as_deref(), Some("Markdown Viewer"));
         assert_eq!(viewport.drag_and_drop, Some(true));
+    }
+
+    /// On a Mac the app's top row is the title bar: the content fills the
+    /// window, the system's bar is see-through and has no title, and the
+    /// window keeps its buttons.
+    #[test]
+    fn a_mac_window_has_no_title_strip_of_its_own_and_keeps_its_buttons() {
+        let viewport = native_options(Platform::Mac).viewport;
+
+        assert_eq!(viewport.fullsize_content_view, Some(true));
+        assert_eq!(viewport.titlebar_shown, Some(false));
+        assert_eq!(viewport.title_shown, Some(false));
+        assert_ne!(viewport.titlebar_buttons_shown, Some(false));
+        assert_ne!(viewport.decorations, Some(false));
+    }
+
+    /// Elsewhere the window is the one it was: it differs from a Mac's in
+    /// nothing but those three settings, which it leaves to the system.
+    #[test]
+    fn a_window_elsewhere_keeps_the_title_bar_its_system_gives_it() {
+        let viewport = native_options(Platform::Other).viewport;
+
+        assert_eq!(viewport.fullsize_content_view, None);
+        assert_eq!(viewport.titlebar_shown, None);
+        assert_eq!(viewport.title_shown, None);
+        let mac = native_options(Platform::Mac).viewport;
+        let like_elsewhere = egui::ViewportBuilder {
+            fullsize_content_view: None,
+            titlebar_shown: None,
+            title_shown: None,
+            ..mac
+        };
+        assert_eq!(like_elsewhere, viewport);
     }
 
     /// GNOME pairs a running window with its launcher icon only when the
@@ -321,7 +354,8 @@ mod window {
             .lines()
             .find_map(|line| line.strip_prefix("StartupWMClass="))
             .expect("launcher declares StartupWMClass");
-        assert_eq!(native_options().viewport.app_id.as_deref(), Some(class));
+        let options = native_options(Platform::Other);
+        assert_eq!(options.viewport.app_id.as_deref(), Some(class));
     }
 
     /// The boxed app `app_creator` hands eframe, as a type of its own for

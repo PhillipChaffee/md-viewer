@@ -13,6 +13,7 @@ use crate::cli::{
     app_creator, dead_wayland_variables, launch, launched_from_terminal, native_options,
     spawn_detached, Args, APP_ID,
 };
+use crate::platform::Platform;
 
 mod app;
 mod cli;
@@ -54,7 +55,7 @@ pub fn run() -> eframe::Result<()> {
         for name in dead_wayland_variables(&std::env::var_os) {
             std::env::remove_var(name);
         }
-        eframe::run_native(APP_ID, native_options(), app_creator(args))
+        eframe::run_native(APP_ID, native_options(Platform::HOST), app_creator(args))
     })
 }
 
