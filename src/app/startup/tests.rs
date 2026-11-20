@@ -122,14 +122,44 @@ fn the_last_session_tabs_return_without_the_ones_that_no_longer_open() {
 
     let app = relaunch(&persisted, None);
 
-    assert_eq!(tab_paths(&app), [a, c]);
+    assert_eq!(tab_paths(&app), [a.clone(), c.clone()]);
     assert_eq!(app.active_tab, 1, "the saved position is kept in range");
     assert!(app.error_message.is_none());
-    assert!(
-        recent_paths(&app).is_empty(),
-        "a restored tab is not a fresh open"
+    assert_eq!(
+        recent_paths(&app),
+        [a, c],
+        "what came back in a tab was read, and nothing else was"
     );
     assert_eq!(app.file_explorer.root(), Some(dir.path()));
+}
+
+#[test]
+fn a_restored_tab_the_recent_list_knows_keeps_its_place_and_time() {
+    let dir = ScratchDir::new();
+    let (a, b, c) = (
+        dir.file("a.md", "# A"),
+        dir.file("b.md", "# B"),
+        dir.file("c.md", "# C"),
+    );
+    let read = |path: &PathBuf, last_opened: u64| RecentEntry {
+        path: path.clone(),
+        last_opened,
+        title: Some("As it was read".to_owned()),
+        excerpt: None,
+        word_count: Some(2),
+    };
+    let persisted = PersistedState {
+        open_tabs: Some(vec![a.clone(), b.clone(), c.clone()]),
+        recent_files: Some(vec![read(&c, 200), read(&a, 100)]),
+        ..PersistedState::default()
+    };
+
+    let app = relaunch(&persisted, None);
+
+    assert_eq!(recent_paths(&app), [b, c.clone(), a.clone()]);
+    assert_eq!(app.recent_files[0].title.as_deref(), Some("B"));
+    assert!(app.recent_files[0].last_opened > 200, "read now");
+    assert_eq!(app.recent_files[1..], [read(&c, 200), read(&a, 100)]);
 }
 
 #[test]

@@ -4,7 +4,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::support::Reader;
+use super::support::{Launch, Reader};
 
 /// Read each `(name, content)` document once, in order, and go back to
 /// the home page.
@@ -272,6 +272,73 @@ fn a_document_read_in_the_future_by_a_wrong_clock_reads_as_just_now() {
         texts.iter().any(|text| text.ends_with("opened just now")),
         "{texts:?}"
     );
+}
+
+/// Three documents to bring back in tabs.
+fn three_to_restore() -> Launch {
+    Reader::launch()
+        .doc("a.md", "# Alpha\n\nThe first.")
+        .doc("b.md", "# Beta\n\nThe second.")
+        .doc("c.md", "# Gamma\n\nThe third.")
+}
+
+#[test]
+fn documents_that_come_back_in_tabs_count_as_read() {
+    // A session with tabs and no list of what was read: one saved before
+    // the list was kept.
+    let launch = three_to_restore();
+    let saved = format!(
+        "(open_tabs:Some([{:?},{:?}]),active_tab:Some(1))",
+        launch.path("a.md"),
+        launch.path("b.md")
+    );
+    let mut reader = launch.remembering(&saved).open();
+    assert_eq!(reader.tabs(), ["Alpha", "Beta"]);
+
+    reader.click("Home");
+
+    reader.assert_hides("Nothing read yet.");
+    assert_eq!(rows(&reader), ["Alpha", "Beta"], "in the order of the tabs");
+    let read = details(&reader);
+    assert!(
+        read.iter().all(|line| line.ends_with("opened just now")),
+        "{read:?}"
+    );
+}
+
+#[test]
+fn a_tab_that_comes_back_leaves_the_list_of_what_was_read_in_its_order() {
+    const DAY: u64 = 24 * 60 * 60;
+    let launch = three_to_restore();
+    let read = |name: &str, age: u64| {
+        let (path, at) = (launch.path(name), now() - age);
+        format!("(path:{path:?},last_opened:{at},word_count:Some(2))")
+    };
+    let saved = format!(
+        "(open_tabs:Some([{:?},{:?}]),recent_files:Some([{},{}]))",
+        launch.path("a.md"),
+        launch.path("b.md"),
+        read("c.md", DAY + 60),
+        read("a.md", 3 * DAY + 60)
+    );
+    let mut reader = launch.remembering(&saved).open();
+
+    reader.click("Home");
+
+    assert_eq!(rows(&reader), ["Beta", "c", "a"]);
+    let ages: Vec<String> = details(&reader)
+        .iter()
+        .map(|line| line.rsplit(" \u{b7} ").next().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        ages,
+        ["opened just now", "opened yesterday", "opened 3d ago"],
+        "a.md is in a tab, and was last opened when the list says"
+    );
+
+    let mut reader = reader.restart(&[]);
+    reader.click("Home");
+    assert_eq!(rows(&reader), ["Beta", "c", "a"], "the next launch too");
 }
 
 #[test]
