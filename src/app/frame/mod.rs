@@ -52,8 +52,9 @@ impl eframe::App for MarkdownApp {
         eframe::set_value(storage, APP_KEY, &self.persisted());
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.begin_frame(ctx);
+        self.center_window_buttons(ctx, frame);
         self.answer_close_request(ctx);
         self.handle_keyboard_shortcuts(ctx);
         let files_hover = self.handle_dropped_files(ctx);
