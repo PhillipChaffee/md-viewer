@@ -338,6 +338,59 @@ fn an_emoji_written_as_several_characters_is_one_picture() {
     }
 }
 
+/// The keycaps *️⃣ and #️⃣ start with a character Markdown has a use for.
+/// Where it is not markup the three characters are one picture, as the
+/// keycap of a digit is, and not the bare character with marks after it.
+#[test]
+fn a_keycap_of_a_character_markdown_uses_is_one_picture() {
+    let lines = each(['*', '#'], |key| {
+        format!("key {key}\u{fe0f}\u{20e3} end\n\nbare {key} end\n\n")
+    });
+    let reader = page(&format!("# Keys\n\n{lines}"));
+
+    for key in ['*', '#'] {
+        let line = format!("key {key}\u{fe0f}\u{20e3} end");
+        reader.assert_sees(&line);
+        let keycap = reader.drawing_of(&line, key);
+        assert!(!keycap.is_blank(), "{line}");
+        assert!(
+            keycap != reader.drawing_of(&format!("bare {key} end"), key),
+            "{line} is drawn as a bare {key}"
+        );
+        for mark in ['\u{fe0f}', '\u{20e3}'] {
+            assert!(reader.drawing_of(&line, mark).is_blank(), "{line}");
+        }
+    }
+}
+
+/// Characters Markdown has a use for, beside an emoji written as several,
+/// do not take it apart.
+#[test]
+fn an_emoji_beside_a_character_markdown_uses_is_one_picture() {
+    let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+    let line = format!("2*3 [{family}] *{family}_x");
+    let reader = page(&format!("# Signs\n\n{line}"));
+
+    reader.assert_sees(&line);
+    assert!(!reader.drawing_of(&line, '\u{1f468}').is_blank());
+    for later in ['\u{1f469}', '\u{1f467}'] {
+        assert!(reader.drawing_of(&line, later).is_blank(), "{later}");
+    }
+}
+
+/// A line of the source that ends inside an emoji written as several
+/// characters ends the emoji: what the next line starts with is drawn.
+#[test]
+fn an_emoji_cut_by_the_end_of_a_line_is_drawn_as_its_parts() {
+    let (man, girl) = ('\u{1f468}', '\u{1f467}');
+    let reader = page(&format!(
+        "# Signs\n\nfirst {man}\u{200d}\u{1f469}\u{200d}\n{girl} last"
+    ));
+
+    assert!(!reader.drawing_of("first", man).is_blank());
+    assert!(!reader.drawing_of("last", girl).is_blank());
+}
+
 /// The same people side by side with no joiner are three pictures.
 #[test]
 fn emoji_that_are_not_joined_are_drawn_apart() {
