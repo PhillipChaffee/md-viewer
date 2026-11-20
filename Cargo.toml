@@ -81,6 +81,10 @@ default = []
 # (github.com/PhillipChaffee/full-lint, rust/Cargo.toml.example). CI turns
 # every warn level into an error through -D warnings.
 [workspace]
+# `crates/mac-window` holds the AppKit calls the window needs on a Mac,
+# one of them unsafe: this crate forbids unsafe code, so that one cannot
+# live here. It is gated with this crate; GATES.md says where it differs.
+members = ["crates/mac-window"]
 # The vendored forks keep their own manifests and are not gated here: they
 # are upstream code this repository patches in, reviewed against upstream.
 exclude = ["vendor"]

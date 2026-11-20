@@ -26,7 +26,9 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | Where | What it narrows |
 | --- | --- |
 | `Cargo.toml` `[workspace] exclude` | `vendor/` is outside clippy, rustdoc, tests and coverage. See the caveat below. |
-| `run-gates.sh`, `ci.yml` | The cognitive gate reads `src` (arborist has no exclude switch). The TODO grep skips `vendor`. osv-scanner reads the root `Cargo.lock` only. |
+| `run-gates.sh`, `ci.yml` | The cognitive gate reads `src` and `crates` (arborist has no exclude switch). The TODO grep skips `vendor`. osv-scanner reads the root `Cargo.lock` only. |
+| `crates/mac-window/Cargo.toml` lint table | `unsafe_code` is `deny` where the workspace says `forbid`, for one function behind an `#[expect(unsafe_code, reason)]`. See the section below. |
+| `crates/mac-window/src/mac.rs` | Compiled for macOS only, so on Linux, where the gates run, clippy, the tests, the coverage gate and mutation testing never see it. See the section below. |
 | `clippy.toml` | `unwrap`, `expect` and `panic` are allowed inside tests. |
 | `Cargo.toml` lint table | `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed. The `unexpected_cfgs` entry declares one cfg, `cfg(kani)`, which the proof harnesses are compiled under. |
 | `src/**/proofs.rs` | The proof harnesses are compiled only by `cargo kani`, so clippy, rustdoc, the tests and the coverage gate never see them. rustfmt, the complexity cap and the file-length cap do. `./run-proofs.sh` and the `proofs` CI job are their gate; it is not part of `run-gates.sh`. See [PROOFS.md](PROOFS.md). |
@@ -48,6 +50,39 @@ and its own tests (267 pass) in CI, but not the complexity cap, the
 file-length cap or the coverage gate: `parsers/pulldown.rs` is over 6,000
 lines. Bringing the fork under the gates is the largest piece of retrofit
 work left, and it is not done.
+
+## The one unsafe function: the Mac's window buttons
+
+On a Mac the window has no title strip of its own: the close, minimize and
+zoom buttons sit in the app's top row, on its centre line. winit cannot
+move them, so the app asks AppKit itself, and two of the calls that takes
+are unsafe: reading the window's view out of the raw window handle eframe
+gives, and walking up from a button to the view that holds the title bar.
+
+The application crate still forbids unsafe code. The calls live in a
+second workspace crate, `crates/mac-window`, in one function,
+`mac::title_bar`, which has two unsafe blocks, each under a `SAFETY`
+comment. The owner accepted this one exception.
+
+| What keeps it small | How |
+| --- | --- |
+| No other unsafe code in the crate | Its `unsafe_code` is `deny`, and only `title_bar` carries the `#[expect]`. A second unsafe function fails the build. |
+| Each block says why it is sound | `clippy::undocumented_unsafe_blocks` is `deny` in the crate. |
+| The arithmetic is not in it | `placement` and `is_off` are safe, compiled on every system and unit-tested. |
+| No new dependency versions | It uses the `objc2` crates the window stack already resolves to on a Mac. |
+
+The crate's lint table is a copy of the workspace's, because a crate
+inherits that table whole or not at all. The copy differs in the two
+entries named above. A change to the workspace table has to be made in
+both.
+
+What no gate checks: everything in `mac.rs`. CI builds it with
+`cargo check` on `macos-latest` and runs none of it. `cargo clippy
+--target aarch64-apple-darwin -p mac-window -- -D warnings` lints it from
+Linux, and passed when the crate was written, but is not a CI step. Nobody
+has run this code on a Mac under a test: whether the buttons land where
+`placement` says is checked by eye. The nightly mutation run covers the
+root package only, so it does not see this crate either.
 
 ## The detach change is weaker than what it replaced
 
