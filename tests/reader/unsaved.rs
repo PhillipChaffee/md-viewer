@@ -7,7 +7,7 @@ use super::support::Reader;
 
 const SOURCE: &str = "# Draft\n\nFirst thoughts.";
 const EDITED: &str = "# Draft\n\nFirst thoughts. Mine.";
-const ASKS_DRAFT: &str = "Save changes to draft.md?";
+const ASKS_DRAFT: &str = "Save changes to “Draft” (draft.md)?";
 
 /// Put the document in front in edit mode and type `text` at its end.
 fn edit(reader: &mut Reader, text: &str) {
@@ -225,7 +225,7 @@ fn every_way_to_close_a_tab_asks() {
 
         close(&mut reader);
 
-        assert!(reader.sees("Save changes to a.md?"), "{way}");
+        assert!(reader.sees("Save changes to “Alpha” (a.md)?"), "{way}");
         assert_eq!(tabs(&reader), ["a.md", "b.md"], "{way}");
         assert_eq!(reader.read_file("a.md"), as_written("a.md"), "{way}");
     }
@@ -252,11 +252,91 @@ fn a_tab_behind_the_one_in_front_is_asked_about_by_name() {
 
     reader.middle_click("tab:Beta");
 
-    reader.assert_sees("Save changes to b.md?");
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
     reader.click("Discard");
     assert_eq!(tabs(&reader), ["a.md", "c.md"]);
     assert_eq!(reader.title(), "c.md - Markdown Viewer");
     assert_eq!(reader.read_file("b.md"), as_written("b.md"));
+}
+
+/// What the prompt asks, word for word.
+fn question(reader: &Reader) -> String {
+    let mut asked = reader.names();
+    asked.retain(|name| name.starts_with("Save changes to"));
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    asked.remove(0)
+}
+
+#[test]
+fn the_prompt_names_the_document_as_its_tab_does_and_by_its_file() {
+    let mut reader = Reader::with_docs(&[
+        ("titled.md", "# A Tale of Two Tabs\n\nIt was."),
+        ("plain.md", "No heading in here."),
+        ("named.md", "# named.md\n\nNamed as its file is."),
+    ]);
+    reader.drop_files(&["plain.md", "named.md"]);
+    let cases = [
+        (
+            "A Tale of Two Tabs",
+            "Save changes to “A Tale of Two Tabs” (titled.md)?",
+        ),
+        ("plain.md", "Save changes to plain.md?"),
+        ("named.md", "Save changes to named.md?"),
+    ];
+
+    for (tab, asks) in cases {
+        reader.click(&format!("tab:{tab}"));
+        edit(&mut reader, " More.");
+
+        reader.press("Ctrl+W");
+
+        assert_eq!(question(&reader), asks);
+        reader.click("Cancel");
+    }
+}
+
+#[test]
+fn the_prompt_follows_a_heading_that_was_just_typed() {
+    let mut reader = Reader::with_docs(&[("plain.md", "No heading in here.")]);
+    reader.press("Ctrl+E");
+    reader.click_text_field(0);
+    reader.press("Ctrl+Home");
+    reader.type_text("# Fresh\n\n");
+    assert_eq!(reader.tabs(), ["Fresh"]);
+
+    reader.press("Ctrl+W");
+
+    assert_eq!(question(&reader), "Save changes to “Fresh” (plain.md)?");
+}
+
+#[test]
+fn a_long_heading_and_a_long_file_name_fit_in_the_prompt() {
+    let heading = "Unabridged ".repeat(40);
+    let file = format!("{}.md", "a-very-long-file-name-".repeat(8));
+    let mut reader = Reader::with_docs(&[(&file, &format!("# {heading}\n\nText."))]);
+    edit(&mut reader, " More.");
+
+    reader.press("Ctrl+W");
+
+    let asked = question(&reader);
+    assert!(asked.starts_with("Save changes to “Unabridged Unabridged "));
+    assert!(asked.ends_with(&format!("…” ({file})?")), "{asked}");
+    let (sheet, window) = (reader.text_area(&asked), (1200.0, 800.0));
+    assert!(sheet.width <= 340.0, "{sheet:?}");
+    assert!(sheet.height <= 200.0, "a few lines at most: {sheet:?}");
+    for answer in ["Save", "Discard", "Cancel"] {
+        let button = reader.area_of(answer);
+        assert!(
+            button.top > sheet.bottom(),
+            "{answer} is under the question"
+        );
+        assert!(button.left >= sheet.left && button.right() <= sheet.right());
+        assert!(button.bottom() < window.1 && button.right() < window.0);
+    }
+    for word in ["Unabridged", "a-very-long-file-name-"] {
+        let painted = reader.all_text().join("\n");
+        assert!(painted.contains(word), "{word} is painted");
+    }
 }
 
 #[test]
@@ -265,10 +345,10 @@ fn close_others_asks_about_each_unsaved_document_in_turn() {
     reader.right_click("tab:Gamma");
     reader.click("Close Others");
 
-    reader.assert_sees("Save changes to a.md?");
+    reader.assert_sees("Save changes to “Alpha” (a.md)?");
     reader.click("Save");
 
-    reader.assert_sees("Save changes to b.md?");
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
     assert_eq!(
         tabs(&reader),
         ["a.md", "b.md", "c.md"],
@@ -435,10 +515,10 @@ fn quitting_asks_about_each_unsaved_document_and_keeps_the_tabs_for_next_time() 
     let mut reader = two_unsaved_of_three();
     reader.press("Ctrl+Q");
 
-    reader.assert_sees("Save changes to a.md?");
+    reader.assert_sees("Save changes to “Alpha” (a.md)?");
     reader.click("Save");
     assert!(!reader.has_quit(), "b.md is still to be answered for");
-    reader.assert_sees("Save changes to b.md?");
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
     reader.click("Discard");
 
     assert!(reader.has_quit());
@@ -519,7 +599,7 @@ fn nothing_under_the_prompt_takes_a_click_or_typing() {
     assert_eq!(reader.typed(), [EDITED]);
 }
 
-const ASKS_ALPHA: &str = "Save changes to a.md?";
+const ASKS_ALPHA: &str = "Save changes to “Alpha” (a.md)?";
 const ALPHA_EDITED: &str =
     "# Alpha\n\nGo [to beta](b.md) or [to gamma](c.md) or [nowhere](missing.md). Edit A.";
 
