@@ -58,8 +58,15 @@ impl Tab {
 
     /// The offset the pane is to scroll to, asked for since the pane last
     /// took one.
-    pub(crate) const fn take_pending_scroll(&mut self) -> Option<f32> {
-        self.pending_scroll_offset.take()
+    ///
+    /// With nothing asked for, the pane scrolls on by as much as the
+    /// document is about to grow above the view, which it does when a
+    /// picture up there has been read whose size nothing told before.
+    /// What the reader is looking at then stays where it is.
+    pub(crate) fn take_pending_scroll(&mut self) -> Option<f32> {
+        let grown = self.cache.take_growth_above_the_view();
+        let asked_for = self.pending_scroll_offset.take();
+        asked_for.or_else(|| grown.map(|grown| self.scroll_offset + grown))
     }
 
     /// Scroll one keyboard `step` from where the document is.

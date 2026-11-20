@@ -27,6 +27,30 @@ fn heading_y(tab: &Tab) -> HeaderY {
 }
 
 #[test]
+fn the_view_scrolls_on_by_what_the_document_grows_above_it() {
+    let (_dir, mut tab) = tab();
+    tab.scroll_offset = 700.0;
+
+    let nothing_grew = tab.take_pending_scroll();
+    tab.cache.grow_above_the_view_for_test(36.0);
+    let grew = tab.take_pending_scroll();
+    let once = tab.take_pending_scroll();
+
+    assert_eq!((nothing_grew, grew, once), (None, Some(736.0), None));
+}
+
+#[test]
+fn a_scroll_that_was_asked_for_wins_over_keeping_the_view_in_place() {
+    let (_dir, mut tab) = tab();
+    tab.scroll_offset = 700.0;
+    tab.cache.grow_above_the_view_for_test(36.0);
+    tab.scroll_to(120.0);
+
+    assert_eq!(tab.take_pending_scroll(), Some(120.0));
+    assert_eq!(tab.take_pending_scroll(), None, "the growth is spent");
+}
+
+#[test]
 fn a_measured_heading_is_where_the_renderer_painted_it() {
     let (_dir, mut tab) = tab();
     tab.last_content_height = 4000.0;
