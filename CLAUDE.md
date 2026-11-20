@@ -25,6 +25,8 @@ the app; `GATES.md` lists every quality gate and each exception to one.
 | `src/tab/`, `src/links/`, `src/headers/`, `src/search/` | One document |
 | `src/explorer/`, `src/watcher/` | The file tree and live reload |
 | `src/system_fonts/` | Font discovery and the bundled faces |
+| `src/platform/` | Which kind of machine this is, as a value |
+| `crates/mac-window/` | The AppKit calls a Mac window needs; the one place with unsafe code |
 | `vendor/` | Forked upstream crates, outside the app crate's gates |
 
 ## Rules
