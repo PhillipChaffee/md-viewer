@@ -53,11 +53,14 @@ src/app/content/mod.rs	wheel_scroll_never_stores_an_end_of_the_document	let woul
 src/app/content/mod.rs	corrections_never_scroll_above_the_top	let target = (header_y - HEADER_SCROLL_MARGIN).max(0.0);	let target = header_y - HEADER_SCROLL_MARGIN;
 src/app/content/mod.rs	corrections_never_scroll_above_the_top	((target - current_scroll).abs() > 2.0).then_some(target)	((target - current_scroll).abs() > 1.0).then_some(target)
 src/app/content/mod.rs	a_visible_match_is_left_alone	if visible.contains(&match_y) || viewport_height <= 0.0 {	if viewport_height <= 0.0 {
-src/app/shortcuts/mod.rs	no_key_press_fires_two_bindings	CtrlNoShift + O in Document => AppAction::OpenFile,	Ctrl + O in Document => AppAction::OpenFile,
+src/app/shortcuts/mod.rs	no_key_press_fires_two_bindings	CmdNoShift + O in Document => AppAction::OpenFile,	Cmd + O in Document => AppAction::OpenFile,
+src/app/shortcuts/mod.rs	no_key_press_fires_two_bindings	Self::AltNoCtrl => !mac && modifiers.alt && !modifiers.ctrl,	Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,
+src/app/shortcuts/mod.rs	the_command_key_is_cmd_on_a_mac_and_ctrl_elsewhere	Self::Mac => modifiers.mac_cmd,	Self::Mac => modifiers.ctrl,
 src/app/shortcuts/mod.rs	the_lightbox_takes_the_keyboard	(Self::Lightbox, Focus::Lightbox)	(Self::Lightbox | Self::Document, Focus::Lightbox)
 src/app/shortcuts/mod.rs	a_popup_takes_the_find_bar_and_reading_keys	| (Self::Document, Focus::Popup)	| (Self::Document | Self::FindBar, Focus::Popup)
 src/app/shortcuts/mod.rs	the_prompt_takes_every_key	| (Self::Document, Focus::Popup)	| (Self::Document, Focus::Popup | Focus::Prompt)
-src/app/shortcuts/mod.rs	every_binding_can_fire	Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,	Self::AltNoCtrl => modifiers.alt && !modifiers.alt,
+src/app/shortcuts/mod.rs	every_binding_can_fire	Self::AltNoCtrl => !mac && modifiers.alt && !modifiers.ctrl,	Self::AltNoCtrl => !mac && modifiers.alt && !modifiers.alt,
+src/app/shortcuts/mod.rs	every_binding_can_fire	(Self::AltNoCtrl, Platform::Mac) | (Self::MacCmd, Platform::Other)	(Self::AltNoCtrl, Platform::Mac)
 src/app/mod.rs	zoom_percent_is_total_and_close	(zoom * 100.0).round() as i32	(zoom * 100.0).floor() as i32
 src/app/lightbox/mod.rs	lightbox_zoom_stays_in_range	(self.zoom * factor).clamp(0.1, 10.0)	(self.zoom * factor).clamp(0.1, 100.0)
 src/app/lightbox/mod.rs	zoom_to_cursor_never_panics_or_goes_negative	new_offset.clamp(egui::Vec2::ZERO, max_offset)	new_offset.min(max_offset)

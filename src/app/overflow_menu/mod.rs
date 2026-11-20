@@ -64,7 +64,7 @@ impl MarkdownApp {
                 chrome::hairline(ui, palette);
                 self.item(
                     ui,
-                    MenuRow::new("Quit").shortcut("Ctrl+Q"),
+                    MenuRow::new("Quit").shortcut(self.hints.of(AppAction::Quit)),
                     AppAction::Quit,
                     picked,
                 );
@@ -97,7 +97,7 @@ impl MarkdownApp {
     }
 
     fn file_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let open = MenuRow::new("Open File…").shortcut("Ctrl+T");
+        let open = MenuRow::new("Open File…").shortcut(self.hints.of(AppAction::OpenFile));
         self.item(ui, open, AppAction::OpenFile, picked);
         self.item(
             ui,
@@ -106,7 +106,7 @@ impl MarkdownApp {
             picked,
         );
         let close = MenuRow::new("Close Tab")
-            .shortcut("Ctrl+W")
+            .shortcut(self.hints.of(AppAction::CloseTab))
             .enabled(!self.tabs.is_empty());
         self.item(ui, close, AppAction::CloseTab, picked);
     }
@@ -114,26 +114,28 @@ impl MarkdownApp {
     /// What can be done with the open document: find in it, edit it, and
     /// keep it in step with the file.
     fn document_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let find = MenuRow::new("Find…").shortcut("Ctrl+F");
+        let find = MenuRow::new("Find…").shortcut(self.hints.of(AppAction::OpenSearch));
         self.item(ui, find, AppAction::OpenSearch, picked);
         let active = self.tabs.get(self.active_tab);
         let edit = MenuRow::new("Edit Document")
             .checked(active.is_some_and(|tab| tab.is_editing))
-            .shortcut("Ctrl+E")
+            .shortcut(self.hints.of(AppAction::ToggleEditMode))
             .enabled(active.is_some());
         self.item(ui, edit, AppAction::ToggleEditMode, picked);
         let live = MenuRow::new("Live Reload")
             .checked(self.live_reload.is_enabled())
-            .shortcut("F5");
+            .shortcut(self.hints.of(AppAction::ToggleWatch));
         self.item(ui, live, AppAction::ToggleWatch, picked);
     }
 
     fn history_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let (can_back, can_forward) = self.history_availability();
-        let back = MenuRow::new("Back").shortcut("Alt+Left").enabled(can_back);
+        let back = MenuRow::new("Back")
+            .shortcut(self.hints.of(AppAction::NavigateBack))
+            .enabled(can_back);
         self.item(ui, back, AppAction::NavigateBack, picked);
         let forward = MenuRow::new("Forward")
-            .shortcut("Alt+Right")
+            .shortcut(self.hints.of(AppAction::NavigateForward))
             .enabled(can_forward);
         self.item(ui, forward, AppAction::NavigateForward, picked);
     }
@@ -142,11 +144,11 @@ impl MarkdownApp {
     fn view_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let explorer = MenuRow::new("Show Explorer")
             .checked(self.show_explorer)
-            .shortcut("Ctrl+Shift+E");
+            .shortcut(self.hints.of(AppAction::ToggleExplorer));
         self.item(ui, explorer, AppAction::ToggleExplorer, picked);
         let outline = MenuRow::new("Show Outline")
             .checked(self.show_outline)
-            .shortcut("Ctrl+Shift+O");
+            .shortcut(self.hints.of(AppAction::ToggleOutline));
         self.item(ui, outline, AppAction::ToggleOutline, picked);
         let full_width = MenuRow::new("Full Width").checked(self.reading_width.fits_window());
         self.item(ui, full_width, AppAction::ToggleFullWidth, picked);
@@ -161,9 +163,10 @@ impl MarkdownApp {
         self.submenu(ui, "Formula Size", |ui| self.formula_size_rows(ui, picked));
     }
 
-    /// The reading themes, and the step through them that Ctrl+D takes.
+    /// The reading themes, and the step through them that the shortcut
+    /// takes.
     fn theme_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let next = MenuRow::new("Next Theme").shortcut("Ctrl+D");
+        let next = MenuRow::new("Next Theme").shortcut(self.hints.of(AppAction::NextTheme));
         self.item(ui, next, AppAction::NextTheme, picked);
         chrome::hairline(ui, self.theme.palette());
         for theme in ThemeId::ALL {
@@ -199,27 +202,27 @@ impl MarkdownApp {
             let controls = 2.0_f32.mul_add(BUTTON_SIDE, ZOOM_READOUT_WIDTH);
             ui.add_space((ui.available_width() - controls).max(0.0));
 
-            let out = QuietButton::icon(Icon::Minus, "Zoom Out")
-                .show(ui, palette)
-                .on_hover_text("Zoom out (Ctrl+-)");
-            if out.clicked() {
-                *picked = Some(AppAction::ZoomBy(1.0 / ZOOM_STEP));
+            let zoom_out = AppAction::ZoomBy(1.0 / ZOOM_STEP);
+            let out = QuietButton::icon(Icon::Minus, "Zoom Out").show(ui, palette);
+            if self.hints.tooltip(out, "Zoom out", zoom_out).clicked() {
+                *picked = Some(zoom_out);
             }
 
             let reset = QuietButton::text(&percent)
                 .labelled(&reset_label)
                 .min_width(ZOOM_READOUT_WIDTH)
-                .show(ui, palette)
-                .on_hover_text("Reset zoom (Ctrl+0)");
+                .show(ui, palette);
+            let reset = self
+                .hints
+                .tooltip(reset, "Reset zoom", AppAction::ResetZoom);
             if reset.clicked() {
                 *picked = Some(AppAction::ResetZoom);
             }
 
-            let zoom_in = QuietButton::icon(Icon::Plus, "Zoom In")
-                .show(ui, palette)
-                .on_hover_text("Zoom in (Ctrl++)");
-            if zoom_in.clicked() {
-                *picked = Some(AppAction::ZoomBy(ZOOM_STEP));
+            let zoom_in = AppAction::ZoomBy(ZOOM_STEP);
+            let plus = QuietButton::icon(Icon::Plus, "Zoom In").show(ui, palette);
+            if self.hints.tooltip(plus, "Zoom in", zoom_in).clicked() {
+                *picked = Some(zoom_in);
             }
         });
     }

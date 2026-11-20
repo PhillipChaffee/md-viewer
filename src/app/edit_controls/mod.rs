@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::action::AppAction;
 use crate::app::chrome;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
 use crate::app::MarkdownApp;
@@ -30,15 +31,19 @@ impl MarkdownApp {
         part: egui::UiBuilder,
     ) -> Option<f32> {
         let palette = self.theme.palette();
+        let save_hint = self.hints.of(AppAction::Save);
         let tab = self.tabs.get_mut(self.active_tab)?;
-        let controls = ui.scope_builder(part, |ui| edit_mode_controls(ui, tab, palette));
+        let controls = ui.scope_builder(part, |ui| {
+            edit_mode_controls(ui, tab, palette, save_hint);
+        });
         Some(controls.response.rect.left())
     }
 }
 
 /// The Preview|Edit toggle, the unsaved-changes marker, and the outcome of
-/// the last save. The caller lays these out right to left.
-fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
+/// the last save. The caller lays these out right to left. `save_hint` is
+/// the shortcut that saves, as the marker's tooltip names it.
+fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette, save_hint: &str) {
     ui.spacing_mut().item_spacing.x = 8.0;
     let modes = [(false, "Preview"), (true, "Edit")];
     if let Some(to_edit) = chrome::segmented(ui, palette, &modes, tab.is_editing, false) {
@@ -52,7 +57,10 @@ fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
         });
         ui.painter()
             .circle_filled(dot.center(), UNSAVED_DOT / 2.0, palette.warning);
-        response.on_hover_text("Unsaved changes: press Ctrl+S to save");
+        response.on_hover_ui(|ui| {
+            ui.set_max_width(ui.spacing().tooltip_width);
+            ui.label(format!("Unsaved changes: press {save_hint} to save"));
+        });
     }
     save_flash_label(ui, tab, palette);
 }

@@ -73,6 +73,8 @@ struct HomeStyle<'a> {
     body_size: f32,
     /// The text column the reader set for documents; the page keeps to it.
     column: ReadingWidth,
+    /// The shortcut that opens a file, as the empty page names it.
+    open_hint: &'a str,
 }
 
 impl MarkdownApp {
@@ -93,6 +95,7 @@ impl MarkdownApp {
             display: heading.family,
             body_size: body.size,
             column: self.reading_width,
+            open_hint: self.hints.of(AppAction::OpenFile),
         };
 
         // Deferred actions (run after the borrow on the list is released).
@@ -295,8 +298,9 @@ fn empty_state(ui: &mut egui::Ui, style: &HomeStyle<'_>) {
     body.wrap = wrapped(width, 6);
     text_block(ui, body);
     ui.add_space(ROW_PADDING);
+    let open = style.open_hint;
     let mut hint = sans(
-        "Ctrl+O opens a file. You can also drop one anywhere on this window.",
+        &format!("{open} opens a file. You can also drop one anywhere on this window."),
         META_SIZE,
         palette.muted,
     );

@@ -11,6 +11,7 @@ use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::settings::FontPicker;
+use super::shortcuts::Platform;
 use super::tests::Harness;
 use super::MarkdownApp;
 use crate::test_support::ScratchDir;
@@ -140,6 +141,10 @@ impl UiHarness {
             .build_eframe(|creation| MarkdownApp::new(creation, file, false));
         let app = ui.state_mut();
         app.font_picker = FontPicker::default();
+        // The tests press Ctrl and read "Ctrl" whatever machine runs them.
+        // A test of the Mac's keys sets the platform itself.
+        app.platform = Platform::Other;
+        app.hints_stale = true;
         Self {
             ui,
             dir,

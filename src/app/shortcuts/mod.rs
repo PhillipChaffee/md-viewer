@@ -8,14 +8,44 @@ use crate::app::action::AppAction;
 use crate::app::MarkdownApp;
 use crate::layout::{KeyboardScrollAction, ReadingWidth, ZOOM_STEP};
 
+pub(crate) mod hints;
 #[cfg(kani)]
 mod proofs;
 #[cfg(test)]
 mod tests;
 
+/// The kind of machine the app runs on, as far as its keys go. It is a
+/// value the shortcut code is handed, so both kinds are tested on either.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Platform {
+    /// macOS, where ⌘ makes a command of a key.
+    Mac,
+    /// Linux and Windows, where Ctrl does.
+    Other,
+}
+
+impl Platform {
+    /// The machine this build is for: the one place the app asks.
+    pub(crate) const HOST: Self = if cfg!(target_os = "macos") {
+        Self::Mac
+    } else {
+        Self::Other
+    };
+
+    /// Whether the command key is among `modifiers`: ⌘ on a Mac, where
+    /// Control is another key, and Ctrl elsewhere.
+    const fn command_held(self, modifiers: egui::Modifiers) -> bool {
+        match self {
+            Self::Mac => modifiers.mac_cmd,
+            Self::Other => modifiers.ctrl,
+        }
+    }
+}
+
 /// The modifier keys a binding asks for. Each variant constrains only the
-/// modifiers it names and ignores the rest.
-#[derive(Clone, Copy, Debug)]
+/// modifiers it names and ignores the rest. `Cmd` is the command key: ⌘ on
+/// a Mac and Ctrl elsewhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Chord {
     Any,
     /// No Ctrl, Alt, or Command, so the key cannot belong to another
@@ -23,36 +53,56 @@ enum Chord {
     Unmodified,
     Shift,
     NoShift,
-    Ctrl,
+    Cmd,
+    CmdNoShift,
+    CmdShift,
+    CmdAlt,
+    /// The Control key itself, on a Mac too: there it and not ⌘ switches
+    /// tabs, since ⌘ with Tab switches apps.
     CtrlNoShift,
     CtrlShift,
-    CtrlAlt,
-    /// Alt without Ctrl, which with Alt is a chord of its own.
+    /// Alt without Ctrl, which with Alt is a chord of its own. Not on a
+    /// Mac, where Option with an arrow moves a text cursor by a word.
     AltNoCtrl,
+    /// ⌘, for a shortcut only a Mac has.
+    MacCmd,
 }
 
 impl Chord {
-    const fn is_held(self, modifiers: egui::Modifiers) -> bool {
+    const fn is_held(self, modifiers: egui::Modifiers, platform: Platform) -> bool {
+        let command = platform.command_held(modifiers);
+        let mac = matches!(platform, Platform::Mac);
         match self {
             Self::Any => true,
             Self::Unmodified => !modifiers.ctrl && !modifiers.alt && !modifiers.command,
             Self::Shift => modifiers.shift,
             Self::NoShift => !modifiers.shift,
-            Self::Ctrl => modifiers.ctrl,
+            Self::Cmd => command,
+            Self::CmdNoShift => command && !modifiers.shift,
+            Self::CmdShift => command && modifiers.shift,
+            Self::CmdAlt => command && modifiers.alt,
             Self::CtrlNoShift => modifiers.ctrl && !modifiers.shift,
             Self::CtrlShift => modifiers.ctrl && modifiers.shift,
-            Self::CtrlAlt => modifiers.ctrl && modifiers.alt,
-            Self::AltNoCtrl => modifiers.alt && !modifiers.ctrl,
+            Self::AltNoCtrl => !mac && modifiers.alt && !modifiers.ctrl,
+            Self::MacCmd => mac && modifiers.mac_cmd,
         }
     }
 
-    /// Whether the chord is a command: a key pressed with Ctrl or Alt. A
-    /// command is the app's alone. A plain key, such as Enter or an arrow,
-    /// is shared with whatever the keyboard is in.
+    /// Whether a keyboard on `platform` can hold the chord at all.
+    const fn exists_on(self, platform: Platform) -> bool {
+        !matches!(
+            (self, platform),
+            (Self::AltNoCtrl, Platform::Mac) | (Self::MacCmd, Platform::Other)
+        )
+    }
+
+    /// Whether the chord is a command: a key pressed with ⌘, Ctrl or Alt.
+    /// A command is the app's alone. A plain key, such as Enter or an
+    /// arrow, is shared with whatever the keyboard is in.
     const fn is_command(self) -> bool {
-        matches!(
+        !matches!(
             self,
-            Self::Ctrl | Self::CtrlNoShift | Self::CtrlShift | Self::CtrlAlt | Self::AltNoCtrl
+            Self::Any | Self::Unmodified | Self::Shift | Self::NoShift
         )
     }
 }
@@ -111,49 +161,52 @@ macro_rules! bindings {
 /// Every keyboard shortcut. Rows sit in the order their actions run when
 /// several fire in one frame.
 const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
-    // The lightbox takes over the zoom keys. Its Ctrl+0 resets the lightbox
+    // The lightbox takes over the zoom keys. Its Cmd+0 resets the lightbox
     // zoom only; the document has its own reset.
-    Ctrl + Num0 in Lightbox => AppAction::ResetLightboxZoom,
-    Ctrl + Plus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
-    Ctrl + Equals in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
-    Ctrl + Minus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_OUT),
+    Cmd + Num0 in Lightbox => AppAction::ResetLightboxZoom,
+    Cmd + Plus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
+    Cmd + Equals in Lightbox => AppAction::ZoomLightboxBy(ZOOM_IN),
+    Cmd + Minus in Lightbox => AppAction::ZoomLightboxBy(ZOOM_OUT),
 
     // Zoom steps are multiplicative (×1.25) like browsers and the lightbox.
-    Ctrl + Plus in Document => AppAction::ZoomBy(ZOOM_IN),
-    Ctrl + Equals in Document => AppAction::ZoomBy(ZOOM_IN),
-    Ctrl + Minus in Document => AppAction::ZoomBy(ZOOM_OUT),
-    Ctrl + Num0 in Document => AppAction::ResetZoom,
+    Cmd + Plus in Document => AppAction::ZoomBy(ZOOM_IN),
+    Cmd + Equals in Document => AppAction::ZoomBy(ZOOM_IN),
+    Cmd + Minus in Document => AppAction::ZoomBy(ZOOM_OUT),
+    Cmd + Num0 in Document => AppAction::ResetZoom,
 
-    CtrlNoShift + O in Document => AppAction::OpenFile,
-    Ctrl + T in Document => AppAction::OpenFile,
+    CmdNoShift + O in Document => AppAction::OpenFile,
+    Cmd + T in Document => AppAction::OpenFile,
     Any + F5 in Document => AppAction::ToggleWatch,
-    Ctrl + D in Document => AppAction::NextTheme,
-    CtrlShift + O in Document => AppAction::ToggleOutline,
-    CtrlShift + E in Document => AppAction::ToggleExplorer,
-    Ctrl + Q in Document => AppAction::Quit,
-    CtrlNoShift + S in Document => AppAction::Save,
-    CtrlNoShift + E in Document => AppAction::ToggleEditMode,
+    Cmd + D in Document => AppAction::NextTheme,
+    CmdShift + O in Document => AppAction::ToggleOutline,
+    CmdShift + E in Document => AppAction::ToggleExplorer,
+    Cmd + Q in Document => AppAction::Quit,
+    CmdNoShift + S in Document => AppAction::Save,
+    CmdNoShift + E in Document => AppAction::ToggleEditMode,
 
-    Ctrl + W in Document => AppAction::CloseTab,
+    Cmd + W in Document => AppAction::CloseTab,
     CtrlNoShift + Tab in Document => AppAction::NextTab,
     CtrlShift + Tab in Document => AppAction::PreviousTab,
-    Ctrl + Num1 in Document => AppAction::FocusTab(0),
-    Ctrl + Num2 in Document => AppAction::FocusTab(1),
-    Ctrl + Num3 in Document => AppAction::FocusTab(2),
-    Ctrl + Num4 in Document => AppAction::FocusTab(3),
-    Ctrl + Num5 in Document => AppAction::FocusTab(4),
-    Ctrl + Num6 in Document => AppAction::FocusTab(5),
-    Ctrl + Num7 in Document => AppAction::FocusTab(6),
-    Ctrl + Num8 in Document => AppAction::FocusTab(7),
-    Ctrl + Num9 in Document => AppAction::FocusTab(8),
+    Cmd + Num1 in Document => AppAction::FocusTab(0),
+    Cmd + Num2 in Document => AppAction::FocusTab(1),
+    Cmd + Num3 in Document => AppAction::FocusTab(2),
+    Cmd + Num4 in Document => AppAction::FocusTab(3),
+    Cmd + Num5 in Document => AppAction::FocusTab(4),
+    Cmd + Num6 in Document => AppAction::FocusTab(5),
+    Cmd + Num7 in Document => AppAction::FocusTab(6),
+    Cmd + Num8 in Document => AppAction::FocusTab(7),
+    Cmd + Num9 in Document => AppAction::FocusTab(8),
     AltNoCtrl + ArrowLeft in Document => AppAction::NavigateBack,
     AltNoCtrl + ArrowRight in Document => AppAction::NavigateForward,
+    // A Mac goes through history with the browsers' keys.
+    MacCmd + OpenBracket in Document => AppAction::NavigateBack,
+    MacCmd + CloseBracket in Document => AppAction::NavigateForward,
     // The text column, one step per press.
-    CtrlAlt + ArrowLeft in Document => AppAction::StepReadingWidth(-ReadingWidth::STEP),
-    CtrlAlt + ArrowRight in Document => AppAction::StepReadingWidth(ReadingWidth::STEP),
+    CmdAlt + ArrowLeft in Document => AppAction::StepReadingWidth(-ReadingWidth::STEP),
+    CmdAlt + ArrowRight in Document => AppAction::StepReadingWidth(ReadingWidth::STEP),
 
     // Opens the find bar, or refocuses it if already open.
-    CtrlNoShift + F in Document => AppAction::OpenSearch,
+    CmdNoShift + F in Document => AppAction::OpenSearch,
     // While the find bar is open it takes Enter / Shift+Enter / ↑↓ / Esc.
     // Up/Down are safe to bind even when the singleline TextEdit has focus
     // because it doesn't use vertical arrows for cursor movement.
@@ -171,15 +224,15 @@ const BINDINGS: &[(Chord, Key, Scope, AppAction)] = bindings![
     Unmodified + PageDown in Document => AppAction::Scroll(KeyboardScrollAction::PageDown),
 ];
 
-/// Whether `event` is `key` going down while `chord` is held. The chord is
-/// read off the key press itself and not off the modifiers held when the
-/// frame ends: a quick tap lets go of Ctrl inside the frame the key went
-/// down in.
-fn is_press(event: &egui::Event, chord: Chord, key: Key) -> bool {
+/// Whether `event` is `key` going down while `chord` is held on
+/// `platform`. The chord is read off the key press itself and not off the
+/// modifiers held when the frame ends: a quick tap lets go of Ctrl inside
+/// the frame the key went down in.
+fn is_press(event: &egui::Event, chord: Chord, key: Key, platform: Platform) -> bool {
     matches!(
         event,
         egui::Event::Key { key: went_down, pressed: true, modifiers, .. }
-            if *went_down == key && chord.is_held(*modifiers)
+            if *went_down == key && chord.is_held(*modifiers, platform)
     )
 }
 
@@ -190,11 +243,16 @@ fn is_press(event: &egui::Event, chord: Chord, key: Key) -> bool {
 /// The key press of a command that fired is taken out of `input`, so no
 /// widget drawn later in the frame acts on it a second time: Ctrl+W closes
 /// the tab and does not also delete a word in the text field the keyboard
-/// is in.
-fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction> {
+/// is in. A key press that fired nothing stays: on a Mac, Control with a
+/// letter is the text field's, and so is Option with an arrow.
+fn shortcut_actions(
+    input: &mut egui::InputState,
+    focus: Focus,
+    platform: Platform,
+) -> Vec<AppAction> {
     let mut actions: Vec<AppAction> = Vec::new();
     for &(chord, key, scope, action) in BINDINGS {
-        let pressed = |event: &egui::Event| is_press(event, chord, key);
+        let pressed = |event: &egui::Event| is_press(event, chord, key, platform);
         if !scope.covers(focus) || !input.events.iter().any(pressed) {
             continue;
         }
@@ -211,7 +269,9 @@ fn shortcut_actions(input: &mut egui::InputState, focus: Focus) -> Vec<AppAction
         }
     }
 
-    // Ctrl + scroll wheel / pinch to zoom (multiplicative, like browsers).
+    // The wheel with the command key held, or a pinch, zooms
+    // (multiplicative, like browsers). egui decides which key that is and
+    // takes ⌘ and Ctrl alike, so on a Mac Control with the wheel zooms too.
     // The lightbox captures wheel input itself in raw_input_hook, and
     // nothing zooms under the prompt, so this only runs for the document.
     let wheel_zoom_factor = input.zoom_delta();
@@ -236,7 +296,8 @@ impl MarkdownApp {
         } else {
             Focus::Reading
         };
-        let actions = ctx.input_mut(|input| shortcut_actions(input, focus));
+        let platform = self.platform;
+        let actions = ctx.input_mut(|input| shortcut_actions(input, focus, platform));
         for action in actions {
             self.apply_action(ctx, action);
         }
