@@ -1,5 +1,4 @@
-//! The edit controls, clicked through by label, in the strip and in the
-//! top bar of a lone document.
+//! The edit controls, clicked through by label, in the top row.
 
 use std::time::Instant;
 
@@ -8,7 +7,7 @@ use eframe::egui::{self, Key, Modifiers};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use crate::app::content::tests::label_harness::LabelHarness;
-use crate::app::tab_bar::tests::{one_tab, shows_strip, strip_text, three_tabs};
+use crate::app::tab_bar::tests::{one_tab, strip_text, three_tabs};
 use crate::tab::SaveOutcome;
 use crate::test_support::{assert_close, painted_shapes};
 
@@ -59,26 +58,6 @@ fn editing_a_lone_document_leaves_the_page_where_it_is() {
 }
 
 #[test]
-fn a_lone_document_has_its_edit_controls_in_the_top_bar() {
-    let mut harness = one_tab("# A");
-    assert!(harness.query_by_label("Preview").is_none());
-
-    harness.state_mut().tabs[0].set_edit_mode(true);
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.state_mut().tabs[0].save_flash = Some((SaveOutcome::Failed, Instant::now()));
-    harness.frames(2);
-
-    assert!(!shows_strip(&harness));
-    let bar_bottom = crate::app::chrome::BAR_HEIGHT;
-    let appearance = harness.get_by_label("Appearance").rect();
-    for control in ["Save failed", "Unsaved changes", "Preview", "Edit"] {
-        let rect = harness.get_by_label(control).rect();
-        assert!(rect.bottom() <= bar_bottom, "{control} at {rect:?}");
-        assert!(rect.right() < appearance.left(), "{control} at {rect:?}");
-    }
-}
-
-#[test]
 fn unsaved_edits_are_marked_beside_the_mode_toggle() {
     let mut harness = one_tab("# A");
     harness.state_mut().tabs[0].set_edit_mode(true);
@@ -98,17 +77,6 @@ fn unsaved_edits_are_marked_beside_the_mode_toggle() {
         .filter(|shape| matches!(shape, egui::Shape::Circle(dot) if dot.fill == warning))
         .count();
     assert_eq!(dots, 1);
-}
-
-#[test]
-fn unsaved_edits_of_a_lone_document_stay_marked_after_leaving_edit_mode() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
-    harness.frames(2);
-
-    assert!(!shows_strip(&harness));
-    assert!(harness.query_by_label("Unsaved changes").is_some());
-    assert!(harness.query_by_label("Preview").is_some());
 }
 
 #[test]
@@ -149,5 +117,53 @@ fn a_save_outcome_disappears_after_a_moment() {
 
     assert!(harness.query_by_label("Saved").is_none());
     assert_eq!(harness.state().tabs[0].save_flash, None);
-    assert!(!shows_strip(&harness), "nothing is left to report");
+}
+
+#[test]
+fn the_edit_controls_stand_in_the_bar_before_the_buttons_at_its_end() {
+    let mut harness = one_tab("# A");
+    assert!(harness.query_by_label("Preview").is_some(), "at rest too");
+
+    harness.state_mut().tabs[0].set_edit_mode(true);
+    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
+    harness.state_mut().tabs[0].save_flash = Some((SaveOutcome::Failed, Instant::now()));
+    harness.frames(2);
+
+    let bar_bottom = crate::app::chrome::BAR_HEIGHT;
+    let appearance = harness.get_by_label("Appearance").rect();
+    let open = harness.get_by_label("Open file in new tab").rect();
+    for control in ["Save failed", "Unsaved changes", "Preview", "Edit"] {
+        let rect = harness.get_by_label(control).rect();
+        assert!(rect.bottom() <= bar_bottom, "{control} at {rect:?}");
+        assert!(rect.right() < appearance.left(), "{control} at {rect:?}");
+        assert!(rect.left() > open.right(), "{control} at {rect:?}");
+    }
+}
+
+#[test]
+fn the_widest_edit_controls_leave_room_for_a_tab_and_the_new_tab_button() {
+    let mut harness = one_tab("# A");
+    harness.state_mut().tabs[0].content = "# A, edited".to_owned();
+    harness.state_mut().tabs[0].save_flash = Some((SaveOutcome::Failed, Instant::now()));
+    harness.frames(2);
+
+    let left = harness.get_by_label("Save failed").rect().left();
+    let right = harness.get_by_label("Edit").rect().right();
+    let least_tab = 64.0;
+    let room = crate::app::top_bar::EDIT_CONTROLS_ROOM;
+    assert!(
+        right - left + least_tab + crate::app::chrome::BUTTON_SIDE <= room,
+        "{} px of controls in {room}",
+        right - left
+    );
+}
+
+#[test]
+fn there_are_no_edit_controls_without_a_document() {
+    let mut harness = one_tab("# A");
+    harness.state_mut().close_tab(0);
+    harness.frames(2);
+
+    assert!(harness.query_by_label("Preview").is_none());
+    assert!(harness.query_by_label("Edit").is_none());
 }

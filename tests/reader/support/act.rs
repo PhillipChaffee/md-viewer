@@ -69,14 +69,6 @@ impl Reader {
         self.click_at(at, PointerButton::Primary, chord("Ctrl+A").0);
     }
 
-    /// Click the `nth` of the controls labelled `label` with the right
-    /// mouse button.
-    #[track_caller]
-    pub(crate) fn right_click_nth(&mut self, label: &str, nth: usize) {
-        let at = self.nth_spot(label, nth);
-        self.click_at(at, PointerButton::Secondary, Modifiers::NONE);
-    }
-
     /// Click the `nth` of the controls labelled `label` with the middle
     /// mouse button.
     #[track_caller]

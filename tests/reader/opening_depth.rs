@@ -194,7 +194,7 @@ fn every_kind_of_document_can_be_dropped() {
         reader.drop_file(name);
 
         reader.assert_sees(heading);
-        assert!(reader.is_on(name), "{name} has the tab in front");
+        assert_eq!(reader.tab_in_front().as_deref(), Some(heading), "{name}");
         assert_eq!(reader.title(), format!("{name} - Markdown Viewer"));
     }
     reader.assert_hides("Unsupported file type");
@@ -210,7 +210,7 @@ fn what_is_not_a_document_is_refused_when_dropped() {
         reader.assert_sees("Unsupported file type");
         reader.assert_sees(".md, .markdown, .txt");
         reader.assert_sees("Alpha");
-        assert_eq!(reader.count("a.md"), 0, "{name} got no tab");
+        assert_eq!(reader.tabs(), ["Alpha"], "{name} got no tab");
     }
 }
 
@@ -220,10 +220,7 @@ fn of_several_files_dropped_together_the_documents_open_and_the_rest_is_refused(
 
     reader.drop_files(&["b.md", "photo.png", "d.txt"]);
 
-    for tab in ["a.md", "b.md", "d.txt"] {
-        assert_eq!(reader.count(tab), 1, "{tab}");
-    }
-    assert_eq!(reader.count("photo.png"), 0);
+    assert_eq!(reader.tabs(), ["Alpha", "Beta", "Delta"]);
     reader.assert_sees("Unsupported file type");
     reader.assert_sees("Delta");
 }
@@ -235,7 +232,7 @@ fn dropping_the_document_in_front_changes_nothing() {
     reader.drop_file("a.md");
 
     reader.assert_sees("Alpha");
-    assert_eq!(reader.count("a.md"), 0, "still one document, no tab strip");
+    assert_eq!(reader.tabs(), ["Alpha"], "still one document");
     reader.assert_hides("Unable to open");
 }
 
@@ -284,7 +281,7 @@ fn a_dropped_document_from_another_folder_opens_beside_the_first() {
     reader.drop_file("folder/inner.md");
 
     reader.assert_sees("Inner");
-    assert!(reader.is_on("inner.md"));
-    reader.click("a.md");
+    assert!(reader.is_on("tab:Inner"));
+    reader.click("tab:Alpha");
     reader.assert_sees("First.");
 }

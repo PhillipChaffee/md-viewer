@@ -1,12 +1,15 @@
-//! The tab strip: a row of flat text tabs, shown only while there is
-//! something to choose between. A lone document's edit controls go in the
-//! top bar instead, so starting an edit does not move the page.
+//! The tabs of the top row: one flat text tab for each open document,
+//! named by the document's first heading, else by its file. They scroll
+//! sideways where they do not all fit, and the new-tab button comes after
+//! the last of them.
 
-use eframe::egui;
+use std::path::Path;
+
+use eframe::egui::{self, Rangef};
 
 use crate::app::action::AppAction;
-use crate::app::chrome::{self, MenuRow, QuietButton, STRIP_HEIGHT};
-use crate::app::edit_controls::edit_mode_controls;
+use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT};
+use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 use crate::theme::Palette;
@@ -21,136 +24,139 @@ const TAB_PADDING: f32 = 10.0;
 const CLOSE_SIDE: f32 = 18.0;
 /// Thickness of the line under the active tab.
 const UNDERLINE: f32 = 2.0;
-/// Width the strip keeps for the open-file button after the tabs.
-const OPEN_BUTTON_ROOM: f32 = 40.0;
+/// The least and the most a tab's name is given. A shorter name is
+/// padded, so no tab is too small to hit; a longer one is cut short with
+/// an ellipsis, so one document cannot take the row.
+const NAME_WIDTH: Rangef = Rangef {
+    min: 26.0,
+    max: 162.0,
+};
+/// Diameter of the dot that stands for live reload in a tab's hover text.
+const LIVE_DOT: f32 = 6.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
 
-/// What the user asked of the tab strip during one frame.
+/// What the user asked of the tabs during one frame.
 ///
 /// The fields are independent because a primary click (activate) and a
 /// middle click (close) can land in the same frame.
 #[derive(Default)]
-struct TabStripActions {
-    open_file: bool,
+pub(crate) struct TabPicks {
     activate: Option<usize>,
     close: Option<usize>,
     close_others: Option<usize>,
 }
 
-/// One tab as the strip draws it.
+/// One tab as the row draws it.
 struct TabLabel<'a> {
     index: usize,
     title: &'a str,
+    path: &'a Path,
     is_active: bool,
+    /// Whether the document is reloaded when its file changes.
+    live: bool,
 }
 
 impl MarkdownApp {
-    /// Whether the strip earns its row: with one document open there is
-    /// nothing to choose.
-    const fn shows_tab_bar(&self) -> bool {
-        self.tabs.len() > 1
-    }
-
-    /// Render the tab strip when it has something to show. Returns the
-    /// index of a tab to close.
-    pub(crate) fn render_tab_bar(&mut self, ctx: &egui::Context) -> Option<usize> {
-        if !self.shows_tab_bar() {
-            return None;
-        }
-        let palette = self.theme.palette();
-        let mut actions = TabStripActions::default();
-        // A tab that came to the front is scrolled into the strip once.
-        // After that the strip is the reader's to scroll.
+    /// The tabs, scrolled inside `room`, and the new-tab button after
+    /// them. Returns how far right the two reach, or `None` where the
+    /// room is too small for the button: it then holds no tab either.
+    pub(crate) fn tabs_in_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        bar: egui::Rect,
+        room: Rangef,
+        picked: &mut Option<AppAction>,
+        picks: &mut TabPicks,
+    ) -> Option<f32> {
+        new_tab_span(room, 0.0)?;
+        // A tab that came to the front is scrolled into view once. After
+        // that the tabs are the reader's to scroll.
         let front = self.tabs.get(self.active_tab);
         let front = front.map(|tab| (self.active_tab, tab.id));
         let reveal = self.revealed_tab != front;
         self.revealed_tab = front;
-        egui::TopBottomPanel::top("tab_bar")
-            .exact_height(STRIP_HEIGHT)
-            .frame(chrome::bar_frame(palette))
-            .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
-                            edit_mode_controls(ui, tab, palette);
-                        }
-                        // The tabs and the open-file button take what the
-                        // edit controls leave, and so stop short of them
-                        // however many tabs there are.
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            self.tab_strip(ui, &mut actions, reveal);
-                            self.open_file_button(ui, &mut actions);
-                        });
-                    });
-                });
-            });
 
-        self.apply_tab_strip_actions(ctx, &actions)
+        let from_left = egui::Layout::left_to_right(egui::Align::Center);
+        let tabs = Rangef::new(room.min, room.min + tabs_width(room));
+        let shown = ui
+            .scope_builder(part(bar, tabs, from_left), |ui| {
+                self.tab_strip(ui, picks, reveal)
+            })
+            .inner;
+        let button = new_tab_span(room, shown)?;
+        ui.scope_builder(part(bar, button, from_left), |ui| {
+            self.new_tab_button(ui, picked);
+        });
+        Some(button.max)
     }
 
     /// The horizontally scrollable row of tabs, scrolled to the active one
-    /// when `reveal` is set.
-    fn tab_strip(&self, ui: &mut egui::Ui, actions: &mut TabStripActions, reveal: bool) {
+    /// when `reveal` is set. Returns the width the tabs show in.
+    fn tab_strip(&self, ui: &mut egui::Ui, picks: &mut TabPicks, reveal: bool) -> f32 {
+        if self.tabs.is_empty() {
+            return 0.0;
+        }
         let palette = self.theme.palette();
+        let live = self.live_reload.is_live();
+        ui.spacing_mut().item_spacing.x = 0.0;
 
-        egui::ScrollArea::horizontal()
-            .max_width(ui.available_width() - OPEN_BUTTON_ROOM)
+        let scrolled = egui::ScrollArea::horizontal()
+            .max_width(ui.available_width())
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, |ui| {
                 // The tabs go straight into the scrolled row: a row of
                 // their own inside it would be centered at its starting
-                // height and then grow downward, off the strip.
+                // height and then grow downward, off the bar.
                 for (index, tab) in self.tabs.iter().enumerate() {
                     let label = TabLabel {
                         index,
-                        title: tab.title(),
+                        title: tab.name(),
+                        path: &tab.path,
                         is_active: index == self.active_tab,
+                        live,
                     };
-                    let shown = tab_label(ui, &label, palette, actions);
+                    let shown = tab_label(ui, &label, palette, picks);
                     if reveal && label.is_active {
                         scroll_into_strip(ui, shown.rect);
                     }
                 }
                 ui.add_space(pixel(ui));
             });
+        scrolled.content_size.x.min(scrolled.inner_rect.width())
     }
 
     /// Opening a file is what creates a new tab; there is no empty-tab
     /// state.
-    fn open_file_button(&self, ui: &mut egui::Ui, actions: &mut TabStripActions) {
+    fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let open = QuietButton::icon(Icon::Plus, "Open file in new tab")
             .show(ui, self.theme.palette())
             .on_hover_text("Open File… (Ctrl+T)");
-        actions.open_file = open.clicked();
+        pick(&open, AppAction::OpenFile, picked);
     }
 
-    /// Applies the frame's tab strip actions: a file is opened first, then
-    /// a tab comes to the front, then tabs close. Returns the tab the caller
-    /// should close; "Close Others" is completed here, so it returns `None`.
-    fn apply_tab_strip_actions(
-        &mut self,
-        ctx: &egui::Context,
-        actions: &TabStripActions,
-    ) -> Option<usize> {
-        if actions.open_file {
-            self.apply_action(ctx, AppAction::OpenFile);
-        }
-        if let Some(index) = actions.activate {
+    /// Carry out what the tabs were asked this frame: a tab comes to the
+    /// front, then tabs close. Returns whether anything was asked.
+    pub(crate) fn apply_tab_picks(&mut self, picks: &TabPicks) -> bool {
+        if let Some(index) = picks.activate {
             self.focus_tab(index);
         }
-        if let Some(keep) = actions.close_others {
+        if let Some(keep) = picks.close_others {
             self.request_close_other_tabs(keep);
-            return None;
+        } else if let Some(index) = picks.close {
+            self.request_close_tab(index);
         }
-        actions.close
+        picks
+            .activate
+            .or(picks.close)
+            .or(picks.close_others)
+            .is_some()
     }
 }
 
 /// One screen pixel, in points. egui sets the scrolled row on whole pixels,
-/// so a tab scrolled to an end of the strip can land up to half a pixel
+/// so a tab scrolled to an end of the row can land up to half a pixel
 /// past it. A pixel to spare, after the last tab and around a tab that is
-/// scrolled to, keeps the tab wholly in the strip.
+/// scrolled to, keeps the tab wholly in view.
 fn pixel(ui: &egui::Ui) -> f32 {
     ui.pixels_per_point().recip()
 }
@@ -158,28 +164,53 @@ fn pixel(ui: &egui::Ui) -> f32 {
 /// Scroll the strip the least way that brings the tab at `tab` wholly into
 /// it. egui takes a widget for in view once it is in the clip rect, which
 /// reaches past each end of the strip by the clip margin.
+///
+/// A tab that is in view already is left alone: asking egui to scroll to
+/// where it is would still start an animation, and frames to run it.
 fn scroll_into_strip(ui: &egui::Ui, tab: egui::Rect) {
-    let margin = ui.visuals().clip_rect_margin + pixel(ui);
-    ui.scroll_to_rect(tab.expand2(egui::vec2(margin, 0.0)), None);
+    let margin = ui.visuals().clip_rect_margin;
+    let shown = ui.clip_rect().x_range().shrink(margin);
+    if tab.left() < shown.min || tab.right() > shown.max {
+        ui.scroll_to_rect(tab.expand2(egui::vec2(margin + pixel(ui), 0.0)), None);
+    }
 }
 
-/// Draws one tab: its title, the line under it while it is the active one,
-/// the close button while the pointer is over it, and its context menu.
-/// Returns the tab's response.
+/// The hover text of a tab: where its document is, and whether it is
+/// reloaded when the file changes.
+fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
+    ui.style_mut().override_font_id = Some(chrome::label_font());
+    ui.label(label.path.display().to_string());
+    if label.live {
+        ui.horizontal(|ui| {
+            let (dot, _) =
+                ui.allocate_exact_size(egui::Vec2::splat(LIVE_DOT), egui::Sense::hover());
+            ui.painter()
+                .circle_filled(dot.center(), LIVE_DOT / 2.0, palette.muted);
+            chrome::small_label(ui, palette, "Live: reloads when the file changes");
+        });
+    }
+}
+
+/// Draws one tab: its name, the line under it while it is the active one,
+/// the close button while the pointer is over it, its hover text and its
+/// context menu. Returns the tab's response.
 fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
     palette: &'static Palette,
-    actions: &mut TabStripActions,
+    actions: &mut TabPicks,
 ) -> egui::Response {
-    let galley = ui.painter().layout_no_wrap(
+    let mut job = egui::text::LayoutJob::simple_singleline(
         label.title.to_owned(),
         chrome::label_font(),
         egui::Color32::PLACEHOLDER,
     );
-    let width = 2.0_f32.mul_add(TAB_PADDING, galley.size().x) + CLOSE_SIDE;
+    job.wrap = egui::text::TextWrapping::truncate_at_width(NAME_WIDTH.max);
+    let galley = ui.painter().layout_job(job);
+    let name_width = galley.size().x.max(NAME_WIDTH.min);
+    let width = 2.0_f32.mul_add(TAB_PADDING, name_width) + CLOSE_SIDE;
     let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(width, STRIP_HEIGHT), egui::Sense::click());
+        ui.allocate_exact_size(egui::vec2(width, BAR_HEIGHT), egui::Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
@@ -187,6 +218,11 @@ fn tab_label(
             label.is_active,
             label.title,
         )
+    });
+    // egui has no tab among its widget types: a tab is told apart from a
+    // heading or a sidebar row of the same words by its role.
+    ui.ctx().accesskit_node_builder(response.id, |node| {
+        node.set_role(egui::accesskit::Role::Tab);
     });
 
     // The pointer counts as over the tab while it is over the close button
@@ -220,7 +256,7 @@ fn tab_label(
     egui::Popup::context_menu(&response)
         .style(chrome::popup_style(palette))
         .show(|ui| tab_context_menu(ui, label, palette, actions));
-    response
+    response.on_hover_ui(|ui| tab_hover(ui, label, palette))
 }
 
 /// The close button in the square a tab keeps free at its right end.
@@ -229,7 +265,7 @@ fn tab_close_button(
     tab: &egui::Response,
     label: &TabLabel<'_>,
     palette: &Palette,
-    actions: &mut TabStripActions,
+    actions: &mut TabPicks,
 ) {
     let square = egui::Rect::from_center_size(
         egui::pos2(
@@ -252,7 +288,7 @@ fn tab_context_menu(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
     palette: &Palette,
-    actions: &mut TabStripActions,
+    actions: &mut TabPicks,
 ) {
     ui.set_width(CONTEXT_MENU_WIDTH);
     if MenuRow::new("Close").flush().show(ui, palette).clicked() {

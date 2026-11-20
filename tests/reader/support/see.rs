@@ -9,6 +9,9 @@ use egui_kittest::kittest::{By, NodeT as _, Queryable as _};
 use super::paint::{color_at, painted_text, pictures, Painted, Rgb};
 use super::Reader;
 
+/// What a label starts with to name a tab of the top row.
+const TAB: &str = "tab:";
+
 /// Where something is in the window, in pixels from its top left corner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Area {
@@ -101,11 +104,37 @@ impl Reader {
             .collect()
     }
 
-    /// Every element named exactly `label`, in reading order.
+    /// Every element named exactly `label`, in reading order. A tab of
+    /// the top row is named `tab:` and then its words, and by nothing
+    /// else: a tab carries its document's first heading, which the page
+    /// and the contents sidebar show too.
     pub(super) fn all(&self, label: &str) -> Vec<Element> {
         let mut found = self.elements();
-        found.retain(|element| element.name == label);
+        let (name, is_tab) = label
+            .strip_prefix(TAB)
+            .map_or((label, false), |name| (name, true));
+        found.retain(|element| element.name == name && (element.role == Role::Tab) == is_tab);
         found
+    }
+
+    /// The names of the tabs in the top row, from left to right.
+    pub(crate) fn tabs(&self) -> Vec<String> {
+        let mut tabs = self.elements();
+        tabs.retain(|element| element.role == Role::Tab);
+        tabs.into_iter().map(|tab| tab.name).collect()
+    }
+
+    /// The name of the tab in front, or `None` when no tab is.
+    #[track_caller]
+    pub(crate) fn tab_in_front(&self) -> Option<String> {
+        let mut front = self.elements();
+        front.retain(|element| element.role == Role::Tab && element.on);
+        assert!(
+            front.len() <= 1,
+            "more than one tab is in front\n{}",
+            self.describe()
+        );
+        front.pop().map(|tab| tab.name)
     }
 
     /// The one element named exactly `label`. Where a button and a text
@@ -162,7 +191,7 @@ impl Reader {
         let scale = self.scale();
         let painted = self.painted().into_iter();
         let mut lines = painted
-            .filter(|painted| painted.text == label)
+            .filter(|painted| painted.text == label.strip_prefix(TAB).unwrap_or(label))
             .map(|painted| (painted.first_line.to_vec2() * scale).to_pos2());
         let spot = lines
             .find(|line| within(*line))

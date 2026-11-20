@@ -49,7 +49,7 @@ fn a_document_in_another_tab_is_reloaded_as_well() {
     reader.assert_sees("Something else.");
 
     reader.write_file("notes.md", "# Notes\n\nThe second draft.");
-    reader.click("notes.md");
+    reader.click("tab:Notes");
     reader.wait_for("the tab to show the new text", |reader| {
         reader.sees("The second draft.")
     });

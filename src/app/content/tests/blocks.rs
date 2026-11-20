@@ -7,6 +7,7 @@ use std::time::Duration;
 use eframe::egui::{self, Shape};
 
 use super::{column_left, reader, PANE_LEFT, PANE_RIGHT};
+use crate::app::chrome::BAR_HEIGHT;
 use crate::app::tests::Harness;
 use crate::layout::READING_COLUMN_MARGIN;
 use crate::test_support::{painted_shapes, painted_text_starting, wait_until};
@@ -143,7 +144,7 @@ fn a_table_is_ruled_between_its_rows_in_the_themes_hairline_and_aligned() {
 fn document_shapes(output: &egui::FullOutput) -> Vec<Shape> {
     painted_shapes(output)
         .into_iter()
-        .filter(|shape| shape.visual_bounding_rect().top() >= crate::app::chrome::BAR_HEIGHT)
+        .filter(|shape| shape.visual_bounding_rect().top() >= BAR_HEIGHT)
         .collect()
 }
 
@@ -202,7 +203,7 @@ fn inline_code_sits_on_a_rounded_chip_in_the_raised_color() {
     let chip = painted_shapes(&output)
         .into_iter()
         .find_map(|shape| match shape {
-            Shape::Rect(rect) if rect.fill == raised => Some(rect),
+            Shape::Rect(rect) if rect.fill == raised && rect.rect.top() > BAR_HEIGHT => Some(rect),
             _ => None,
         })
         .expect("a chip behind the code");

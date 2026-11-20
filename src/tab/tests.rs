@@ -79,6 +79,22 @@ mod document {
     }
 
     #[test]
+    fn tab_is_named_by_the_first_heading_else_by_the_file_and_follows_an_edit() {
+        let (dir, mut tab) = tab_on(&[("notes.md", "# Field Notes"), ("plain.md", "No heading.")]);
+        assert_eq!(tab.name(), "Field Notes");
+
+        tab.content = "# Renamed\n".to_owned();
+        tab.content_edited();
+        assert_eq!(tab.name(), "Renamed");
+        tab.content = "No heading any more.".to_owned();
+        tab.content_edited();
+        assert_eq!(tab.name(), "notes.md");
+
+        assert!(tab.navigate_to_path(&dir.path().join("plain.md")).unwrap());
+        assert_eq!(tab.name(), "plain.md");
+    }
+
+    #[test]
     fn images_and_links_resolve_against_the_folder_of_the_document() {
         let (dir, tab) = tab_on(&[("notes.md", "# Notes")]);
         assert_eq!(tab.base_uri, format!("file://{}/", dir.path().display()));

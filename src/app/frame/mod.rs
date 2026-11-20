@@ -195,21 +195,16 @@ impl MarkdownApp {
         }
     }
 
-    /// The error bar, the find bar, and the tab strip.
+    /// The error bar and the find bar.
     fn render_strips(&mut self, ctx: &egui::Context) {
         self.render_error_bar(ctx);
 
-        // Find bar (conditional, between error bar and tab bar)
+        // Find bar (conditional, under the error bar)
         let find_actions = self.render_search_bar(ctx);
         // Rebuild matches if query or tab changed (TextEdit may have mutated the query)
         self.maybe_rebuild_search();
         for action in find_actions {
             self.apply_action(ctx, action);
-        }
-
-        // Close tab if requested
-        if let Some(idx) = self.render_tab_bar(ctx) {
-            self.request_close_tab(idx);
         }
     }
 

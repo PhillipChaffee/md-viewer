@@ -270,10 +270,11 @@ fn the_word_saved_goes_away_by_itself() {
 }
 
 #[test]
-fn a_lone_document_keeps_its_place_when_editing_starts_and_ends() {
+fn a_lone_document_has_the_switch_and_keeps_its_place_when_editing_starts_and_ends() {
     let mut reader = Reader::with_docs(&[("draft.md", SOURCE)]);
     let reading = reader.column();
-    assert_eq!(reader.count("Edit"), 0, "no switch until it is needed");
+    assert!(reader.is_on("Preview"), "the switch is there at rest");
+    let switch = reader.area_of("Edit");
 
     reader.press("Ctrl+E");
     assert_eq!(reader.column(), reading);
@@ -281,7 +282,8 @@ fn a_lone_document_keeps_its_place_when_editing_starts_and_ends() {
 
     reader.press("Ctrl+E");
     assert_eq!(reader.column(), reading);
-    assert_eq!(reader.count("Edit"), 0);
+    assert!(reader.is_on("Preview"));
+    assert_eq!(reader.area_of("Edit"), switch);
 }
 
 #[test]
@@ -415,7 +417,7 @@ fn unsaved_edits_in_a_tab_behind_are_kept_when_its_file_changes() {
 
     reader.write_file("draft.md", "# Draft\n\nTheirs.");
     reader.idle_for(NO_RELOAD);
-    reader.click("draft.md");
+    reader.click("tab:Draft");
 
     assert_eq!(reader.typed(), [format!("{SOURCE} Mine.")]);
 }
@@ -432,7 +434,7 @@ fn a_save_writes_only_the_document_in_front() {
 
     assert_eq!(reader.read_file("draft.md"), SOURCE);
     assert_eq!(reader.read_file("other.md"), "# Other");
-    reader.click("draft.md");
+    reader.click("tab:Draft");
     assert_eq!(reader.count("Unsaved changes"), 1);
 }
 

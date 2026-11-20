@@ -258,6 +258,7 @@ fn the_top_bar_keeps_its_buttons_inside_the_smallest_window() {
         "Files sidebar",
         "Go back",
         "Go forward",
+        "Open file in new tab",
         "Appearance",
         "More",
     ]
@@ -266,32 +267,63 @@ fn the_top_bar_keeps_its_buttons_inside_the_smallest_window() {
     for pair in buttons.windows(2) {
         assert!(pair[0].right() <= pair[1].left, "{pair:?} overlap");
     }
-    assert!(buttons[0].left >= 0.0 && buttons[4].right() <= 360.0);
+    assert!(buttons[0].left >= 0.0 && buttons[5].right() <= 360.0);
+    assert_eq!(reader.count("Preview"), 0, "no room for the switch");
 }
 
 #[test]
-fn the_title_stays_between_the_buttons_of_a_narrow_window() {
+fn the_edit_switch_leaves_a_narrow_row_and_the_menu_still_switches() {
+    let mut reader = article().window(480.0, 400.0).open();
+    assert_eq!(reader.count("Edit"), 0);
+    assert_eq!(reader.tabs().len(), 1, "the tab stays");
+
+    reader.click("More");
+    reader.click("Edit Document");
+    assert_eq!(reader.typed().len(), 1, "the source is shown for editing");
+
+    reader.resize_window(900.0, 400.0);
+    assert!(reader.is_on("Edit"), "with room, the switch is back");
+}
+
+#[test]
+fn a_window_too_narrow_for_them_drops_the_tabs_and_keeps_the_buttons() {
+    let reader = article().window(280.0, 300.0).open();
+
+    assert!(reader.tabs().is_empty());
+    assert_eq!(reader.count("Open file in new tab"), 0);
+    for button in ["Files sidebar", "Go forward", "Appearance", "More"] {
+        assert_eq!(reader.count(button), 1, "{button}");
+    }
+}
+
+#[test]
+fn a_long_tab_name_is_cut_short_between_the_buttons_of_a_narrow_window() {
     let name = "a-file-name-much-too-long-to-fit-in-the-bar-of-a-narrow-window.md";
     let reader = Reader::launch()
         .doc(
             name,
-            "words under no heading, so the file name is the title",
+            "words under no heading, so the file name is on the tab",
         )
         .args(&[name])
         .window(480.0, 400.0)
         .open();
 
-    let title = reader.text_area(name);
+    let tab = reader.area_of(&format!("tab:{name}"));
+    let new_tab = reader.area_of("Open file in new tab");
 
+    assert!(tab.left > reader.area_of("Go forward").right(), "{tab:?}");
+    // The tabs scroll under the button's left edge by no more than the
+    // pixel their row keeps to spare.
     assert!(
-        title.left > reader.area_of("Go forward").right(),
-        "{title:?}"
+        tab.right() <= new_tab.left + NEAR,
+        "{tab:?} then {new_tab:?}"
     );
+    assert!(new_tab.right() < reader.area_of("Appearance").left);
+    assert!(tab.width > 40.0, "some of it is still shown: {tab:?}");
     assert!(
-        title.right() < reader.area_of("Appearance").left,
-        "{title:?}"
+        tab.width <= 200.0,
+        "and no more than a tab's share: {tab:?}"
     );
-    assert!(title.width > 40.0, "some of it is still shown: {title:?}");
 }
 
 #[test]

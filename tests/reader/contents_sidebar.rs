@@ -32,8 +32,13 @@ fn entries(reader: &Reader) -> Vec<String> {
 
 /// The entries painted unlike most of the others: the heading being read.
 fn marked_entries(reader: &Reader) -> Vec<String> {
-    // The sidebar is painted before the page, so an entry's ink comes first.
-    let ink = |entry: &String| reader.ink_of_each(entry).first().copied();
+    // The top row is painted first, then the sidebar, then the page: an
+    // entry's ink comes first unless a tab carries the same words.
+    let tabs = reader.tabs();
+    let ink = |entry: &String| {
+        let after_the_tab = usize::from(tabs.contains(entry));
+        reader.ink_of_each(entry).get(after_the_tab).copied()
+    };
     // An entry below the window's bottom edge is not painted at all.
     let mut listed = entries(reader);
     listed.retain(|entry| ink(entry).is_some());
@@ -218,7 +223,7 @@ fn the_entries_follow_the_tab_in_front() {
     reader.drop_file("other.md");
     assert_eq!(entries(&reader), ["Other", "Only section"]);
 
-    reader.click("handbook.md");
+    reader.click("tab:Handbook");
     assert_eq!(entries(&reader).len(), 8);
 }
 
@@ -228,7 +233,7 @@ fn a_fold_is_kept_while_another_tab_is_in_front() {
     reader.click("Collapse Setup");
 
     reader.drop_file("other.md");
-    reader.click("handbook.md");
+    reader.click("tab:Handbook");
 
     assert_eq!(reader.count("Expand Setup"), 1);
 }

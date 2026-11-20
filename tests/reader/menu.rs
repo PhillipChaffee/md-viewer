@@ -316,22 +316,22 @@ fn both_dialogs_can_be_open_at_once() {
 }
 
 #[test]
-fn the_title_says_where_the_document_is_and_that_it_is_live() {
+fn the_tab_says_where_the_document_is_and_that_it_is_live() {
     let mut reader = page("words with no heading");
     reader.assert_hides("Live:");
 
-    reader.hover("page.md");
+    reader.hover("tab:page.md");
 
     reader.assert_sees(&reader.path("page.md").display().to_string());
     reader.assert_sees("Live: reloads when the file changes");
 }
 
 #[test]
-fn the_title_stops_saying_live_once_live_reload_is_switched_off() {
+fn the_tab_stops_saying_live_once_live_reload_is_switched_off() {
     let mut reader = page("words with no heading");
 
     pick(&mut reader, None, "Live Reload");
-    reader.hover("page.md");
+    reader.hover("tab:page.md");
 
     reader.assert_sees(&reader.path("page.md").display().to_string());
     reader.assert_hides("Live:");
@@ -344,11 +344,11 @@ fn a_document_opened_without_watching_is_not_called_live() {
         .args(&["page.md", "--no-watch"])
         .open();
 
-    reader.hover("page.md");
+    reader.hover("tab:page.md");
     reader.assert_hides("Live:");
 
     reader.press("F5");
     reader.hover("Appearance");
-    reader.hover("page.md");
+    reader.hover("tab:page.md");
     reader.assert_sees("Live: reloads when the file changes");
 }

@@ -28,6 +28,10 @@ processes itself.
 
 - `reader/support/` has `Reader`: launch, click, press, type, drop a file,
   restart, and questions such as `sees`, `is_on`, `page_color`, `column`.
+  A tab of the top row is named `tab:` and then its words, as in
+  `reader.click("tab:Notes")`: a tab carries its document's first heading,
+  which the page and the contents sidebar show too. `tabs()` lists them
+  and `tab_in_front()` names the one in front.
   It also reads what a frame painted: the ink and coverage of a picture
   (`picture_ink`, `picture_cover`), the lines and boxes in an area
   (`marks_in`), and what the app asked of the desktop (`opened_in_browser`,

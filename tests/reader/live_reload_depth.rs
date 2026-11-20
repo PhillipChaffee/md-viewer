@@ -231,7 +231,7 @@ fn every_open_tab_follows_its_own_file() {
     reader.write_file("two.md", "# Two\n\nNew two.");
 
     follows(&mut reader, "New two.");
-    reader.click("one.md");
+    reader.click("tab:One");
     follows(&mut reader, "New one.");
     reader.assert_hides("Old one.");
 }

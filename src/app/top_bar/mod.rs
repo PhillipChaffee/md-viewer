@@ -1,66 +1,135 @@
-//! The top bar: a few line icons either side of the document's title.
+//! The top row: line icons at both ends, and between them the tabs of the
+//! open documents, the new-tab button and the edit controls. The row is
+//! there with any number of documents, so nothing under it moves when one
+//! opens or closes.
 
-use eframe::egui;
+use eframe::egui::{self, Rangef};
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton, BAR_HEIGHT, BUTTON_SIDE};
+use crate::app::tab_bar::TabPicks;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
-use crate::tab::Tab;
-use crate::theme::Palette;
 
 #[cfg(kani)]
 mod proofs;
 #[cfg(test)]
 mod tests;
 
-/// The least space kept between the title and the buttons beside it.
-const TITLE_GAP: f32 = 12.0;
 /// Space between two buttons of the bar.
 const BUTTON_GAP: f32 = 6.0;
+/// Buttons at the left end of the bar: files, back, forward.
+const LEADING_BUTTONS: f32 = 3.0;
 /// Buttons at the right end of the bar: appearance, find, contents, more.
 const TRAILING_BUTTONS: f32 = 4.0;
-/// Diameter of the dot that stands for live reload in the title's hover text.
-const LIVE_DOT: f32 = 6.0;
+/// Room the row keeps empty before its first button. A platform that draws
+/// the window's own buttons inside the row keeps their room here.
+const LEADING_INSET: f32 = 0.0;
+/// The least room between the buttons at both ends at which the edit
+/// controls join the row. In less, they would leave no room for a tab and
+/// the new-tab button; the menu and Ctrl+E still switch modes.
+pub(super) const EDIT_CONTROLS_ROOM: f32 = 300.0;
 
 /// Record `action` as the bar's pick for this frame when `button` was
 /// clicked.
-fn pick(button: &egui::Response, action: AppAction, picked: &mut Option<AppAction>) {
+pub(super) fn pick(button: &egui::Response, action: AppAction, picked: &mut Option<AppAction>) {
     if button.clicked() {
         *picked = Some(action);
     }
 }
 
-/// Where the middle of a title `width` px wide goes: the middle of the bar,
-/// unless the title would then run into the buttons at one end, in which
-/// case it moves just clear of them.
-fn title_center(bar_center: f32, free: egui::Rangef, width: f32) -> f32 {
-    let half = width / 2.0 + TITLE_GAP;
-    let (leftmost, rightmost) = (free.min + half, free.max - half);
-    if leftmost > rightmost {
-        return free.center();
+/// The width of `count` buttons side by side.
+fn buttons_width(count: f32) -> f32 {
+    count.mul_add(BUTTON_SIDE, (count - 1.0) * BUTTON_GAP)
+}
+
+/// Where the parts of the row go, from left to right.
+#[derive(Clone, Copy, Debug)]
+struct Row {
+    /// The room kept empty before the first button.
+    inset: Rangef,
+    leading: Rangef,
+    /// What the buttons at both ends leave: the tabs, the new-tab button,
+    /// empty room, and the edit controls. Empty in a window too narrow
+    /// for more than the buttons.
+    middle: Rangef,
+    trailing: Rangef,
+}
+
+impl Row {
+    /// The row of a bar that spans `bar`, with `inset` px kept empty at
+    /// its left end.
+    fn new(bar: Rangef, inset: f32) -> Self {
+        let first = bar.min + inset;
+        let leading = Rangef::new(first, first + buttons_width(LEADING_BUTTONS));
+        let trailing = Rangef::new(bar.max - buttons_width(TRAILING_BUTTONS), bar.max);
+        let left = leading.max + BUTTON_GAP;
+        Self {
+            inset: Rangef::new(bar.min, first),
+            leading,
+            middle: Rangef::new(left, (trailing.min - BUTTON_GAP).max(left)),
+            trailing,
+        }
     }
-    bar_center.clamp(leftmost, rightmost)
+
+    /// Whether the middle has room for the edit controls beside a tab.
+    fn fits_edit_controls(self) -> bool {
+        self.middle.span() >= EDIT_CONTROLS_ROOM
+    }
+
+    /// Where the tabs and the new-tab button go: the middle, up to the
+    /// edit controls where those start at `edit_left`.
+    fn tab_room(self, edit_left: Option<f32>) -> Rangef {
+        let right = edit_left.map_or(self.middle.max, |left| left - BUTTON_GAP);
+        Rangef::new(
+            self.middle.min,
+            right.clamp(self.middle.min, self.middle.max),
+        )
+    }
+
+    /// The parts of the row that hold nothing: the inset, and what the
+    /// tabs and the new-tab button, which reach to `used`, leave of
+    /// `room`.
+    fn background(self, room: Rangef, used: f32) -> [Rangef; 2] {
+        [
+            self.inset,
+            Rangef::new(used.clamp(room.min, room.max), room.max),
+        ]
+    }
 }
 
-/// What the bar calls a document: its first heading, else its file name.
-fn document_name(tab: &Tab) -> &str {
-    tab.document_title.as_deref().unwrap_or_else(|| tab.title())
+/// The width the tabs may show in: `room` less the new-tab button's place.
+pub(super) fn tabs_width(room: Rangef) -> f32 {
+    (room.span() - BUTTON_SIDE).max(0.0)
 }
 
-/// The hover text of the title: where the document is, and whether it is
-/// reloaded when the file changes.
-fn title_hover(ui: &mut egui::Ui, tab: &Tab, live: bool, palette: &Palette) {
-    ui.style_mut().override_font_id = Some(chrome::label_font());
-    ui.label(tab.path.display().to_string());
-    if live {
-        ui.horizontal(|ui| {
-            let (dot, _) =
-                ui.allocate_exact_size(egui::Vec2::splat(LIVE_DOT), egui::Sense::hover());
-            ui.painter()
-                .circle_filled(dot.center(), LIVE_DOT / 2.0, palette.muted);
-            chrome::small_label(ui, palette, "Live: reloads when the file changes");
-        });
+/// Where the new-tab button goes: right after tabs that show `shown` px
+/// wide, and inside `room` however wide they are. `None` where the room
+/// cannot hold a button.
+pub(super) fn new_tab_span(room: Rangef, shown: f32) -> Option<Rangef> {
+    if room.span() < BUTTON_SIDE {
+        return None;
+    }
+    let right = (room.min + shown.max(0.0) + BUTTON_SIDE).min(room.max);
+    Some(Rangef::new((right - BUTTON_SIDE).max(room.min), right))
+}
+
+/// A part of the bar: its full height over `span`, laid out by `layout`.
+pub(super) fn part(bar: egui::Rect, span: Rangef, layout: egui::Layout) -> egui::UiBuilder {
+    let rect = egui::Rect::from_x_y_ranges(span, bar.y_range());
+    egui::UiBuilder::new().max_rect(rect).layout(layout)
+}
+
+/// Take the row's empty parts for the bar itself, so nothing under the
+/// bar is pointed at through them.
+fn row_background(ui: &egui::Ui, bar: egui::Rect, empty: [Rangef; 2]) {
+    for (index, span) in empty.into_iter().enumerate() {
+        let rect = egui::Rect::from_x_y_ranges(span, bar.y_range());
+        ui.interact(
+            rect,
+            ui.id().with(("background", index)),
+            egui::Sense::hover(),
+        );
     }
 }
 
@@ -69,42 +138,40 @@ impl MarkdownApp {
     pub(crate) fn render_top_bar(&mut self, ctx: &egui::Context) {
         let palette = self.theme.palette();
         let mut picked = None;
+        let mut tab_picks = TabPicks::default();
         egui::TopBottomPanel::top("top_bar")
             .exact_height(BAR_HEIGHT)
             .frame(chrome::bar_frame(palette))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.x = BUTTON_GAP;
                 let bar = ui.max_rect();
-                let leading = ui
-                    .scope_builder(
-                        egui::UiBuilder::new()
-                            .max_rect(bar)
-                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
-                        |ui| self.leading_buttons(ui, &mut picked),
-                    )
-                    .response
-                    .rect;
-                // Laid out left to right from a known left edge, so the Tab
-                // key walks the buttons in reading order.
-                let trailing_width =
-                    TRAILING_BUTTONS.mul_add(BUTTON_SIDE, (TRAILING_BUTTONS - 1.0) * BUTTON_GAP);
-                let trailing = bar.with_min_x(bar.right() - trailing_width);
-                let beside_trailing = bar.with_max_x(trailing.left() - BUTTON_GAP);
-                let edit_left = self.lone_document_edit_controls(ui, beside_trailing);
-                ui.scope_builder(
-                    egui::UiBuilder::new()
-                        .max_rect(trailing)
-                        .layout(egui::Layout::left_to_right(egui::Align::Center)),
-                    |ui| self.trailing_buttons(ui, &mut picked),
-                );
-                let free = egui::Rangef::new(leading.right(), edit_left.unwrap_or(trailing.min.x));
-                self.document_title(ui, bar, free);
+                let row = Row::new(bar.x_range(), LEADING_INSET);
+                let from_left = egui::Layout::left_to_right(egui::Align::Center);
+                let from_right = egui::Layout::right_to_left(egui::Align::Center);
+                ui.scope_builder(part(bar, row.leading, from_left), |ui| {
+                    self.leading_buttons(ui, &mut picked);
+                });
+                ui.scope_builder(part(bar, row.trailing, from_left), |ui| {
+                    self.trailing_buttons(ui, &mut picked);
+                });
+                // The edit controls are as wide as what they have to say,
+                // so they are laid out before the tabs, which take the rest.
+                let edit_left = if row.fits_edit_controls() {
+                    self.edit_controls(ui, part(bar, row.middle, from_right))
+                } else {
+                    None
+                };
+                let room = row.tab_room(edit_left);
+                let used = self.tabs_in_row(ui, bar, room, &mut picked, &mut tab_picks);
+                row_background(ui, bar, row.background(room, used.unwrap_or(room.min)));
             });
 
         // The pick runs after the bar is laid out, so the bar still shows
         // the state from before the action; repaint to catch up.
         if let Some(action) = picked {
             self.apply_action(ctx, action);
+        }
+        if self.apply_tab_picks(&tab_picks) || picked.is_some() {
             ctx.request_repaint();
         }
     }
@@ -167,35 +234,5 @@ impl MarkdownApp {
             .lit(chrome::next_widget_popup_is_open(ui))
             .show(ui, palette);
         self.overflow_menu(&more, picked);
-    }
-
-    /// The active document's name, in the middle of the bar where there is
-    /// room for it there, cut short where there is not.
-    fn document_title(&self, ui: &mut egui::Ui, bar: egui::Rect, free: egui::Rangef) {
-        let Some(tab) = self.tabs.get(self.active_tab) else {
-            return;
-        };
-        let palette = self.theme.palette();
-        let name = document_name(tab);
-        let mut job = egui::text::LayoutJob::simple_singleline(
-            name.to_owned(),
-            chrome::label_font(),
-            egui::Color32::PLACEHOLDER,
-        );
-        let room = 2.0_f32.mul_add(-TITLE_GAP, free.span()).max(0.0);
-        job.wrap = egui::text::TextWrapping::truncate_at_width(room);
-        let galley = ui.painter().layout_job(job);
-        let center = egui::pos2(
-            title_center(bar.center().x, free, galley.size().x),
-            bar.center().y,
-        );
-        let rect = egui::Rect::from_center_size(center, galley.size());
-
-        let response = ui.allocate_rect(rect, egui::Sense::hover());
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, name));
-        let color = chrome::ink(palette, true, response.hovered());
-        ui.painter().galley(rect.min, galley, color);
-        let live = self.live_reload.is_live();
-        response.on_hover_ui(|ui| title_hover(ui, tab, live, palette));
     }
 }

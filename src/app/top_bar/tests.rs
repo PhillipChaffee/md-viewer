@@ -1,6 +1,6 @@
 //! The top bar, clicked and pointed at in the running app.
 
-use eframe::egui::{self, Color32, Key, Modifiers, Rangef, Shape};
+use eframe::egui::{self, Color32, Rangef, Shape};
 use egui_kittest::kittest::Queryable as _;
 
 use super::*;
@@ -10,11 +10,6 @@ use crate::theme::ThemeId;
 
 /// Width of the window the harness lays the app out in.
 const WINDOW_WIDTH: f32 = 1200.0;
-
-/// One document whose heading is unlike its file name.
-fn field_notes() -> UiHarness {
-    UiHarness::with_docs(&[("notes.md", "# Field Notes\n\nBody.")])
-}
 
 /// What the last frame painted inside the bar.
 fn bar_shapes(harness: &UiHarness) -> Vec<Shape> {
@@ -53,17 +48,6 @@ fn icon_colors(harness: &UiHarness) -> Vec<Color32> {
     colors.sort_by_key(Color32::to_array);
     colors.dedup();
     colors
-}
-
-/// Where the bar's title, which reads `name`, is: the topmost widget of
-/// that name, above the document's own heading.
-#[track_caller]
-fn title_of(harness: &UiHarness, name: &str) -> egui::Pos2 {
-    let named = harness.labelled(name);
-    let topmost = named.iter().map(|(center, _)| *center);
-    topmost
-        .min_by(|a, b| a.y.total_cmp(&b.y))
-        .expect("no widget of that name")
 }
 
 #[test]
@@ -142,19 +126,7 @@ fn the_buttons_at_the_right_fill_the_room_the_bar_keeps_for_them() {
 }
 
 #[test]
-fn the_bar_names_the_document_by_its_first_heading_else_by_its_file() {
-    let harness = field_notes();
-    assert_eq!(
-        bar_text(&harness, "Field Notes").galley.text(),
-        "Field Notes"
-    );
-
-    let harness = UiHarness::with_docs(&[("plain.md", "No heading here.")]);
-    assert_eq!(bar_text(&harness, "plain.md").galley.text(), "plain.md");
-}
-
-#[test]
-fn the_bar_has_no_title_without_a_document() {
+fn the_bar_holds_only_its_buttons_without_a_document() {
     let harness = UiHarness::with_docs(&[]);
 
     let texts = bar_shapes(&harness)
@@ -165,97 +137,6 @@ fn the_bar_has_no_title_without_a_document() {
         })
         .collect::<Vec<_>>();
     assert_eq!(texts, ["Aa"], "only the appearance button is text");
-}
-
-#[test]
-fn the_title_is_small_and_stands_in_the_middle_of_the_bar() {
-    let harness = field_notes();
-
-    let title = bar_text(&harness, "Field Notes");
-    let size = title.galley.size();
-    assert_close(title.pos.x + size.x / 2.0, WINDOW_WIDTH / 2.0);
-    assert_close(title.pos.y + size.y / 2.0, BAR_HEIGHT / 2.0);
-    assert_eq!(
-        title.galley.job.sections[0].format.font_id,
-        chrome::label_font()
-    );
-}
-
-/// One document whose heading is far too long for the bar.
-fn long_heading() -> UiHarness {
-    let heading = "A heading that goes on and on ".repeat(12);
-    UiHarness::with_docs(&[("long.md", &format!("# {heading}\n\nBody."))])
-}
-
-/// The title the bar painted for [`long_heading`].
-fn long_title(harness: &UiHarness) -> egui::epaint::TextShape {
-    let mut texts = bar_shapes(harness).into_iter();
-    let title = texts.find_map(|shape| match shape {
-        Shape::Text(text) if text.galley.text().starts_with("A heading") => Some(text),
-        _ => None,
-    });
-    title.unwrap()
-}
-
-#[test]
-fn a_title_too_long_for_the_bar_is_cut_short_between_the_buttons() {
-    let harness = long_heading();
-
-    let title = long_title(&harness);
-    assert!(title.galley.elided, "it ends in an ellipsis");
-    let half_button = BUTTON_SIDE / 2.0;
-    let forward = harness.labelled("Go forward")[0].0.x + half_button;
-    let appearance = harness.labelled("Appearance")[0].0.x - half_button;
-    assert!(title.pos.x >= forward + TITLE_GAP - 0.5, "{}", title.pos.x);
-    let right = title.pos.x + title.galley.size().x;
-    assert!(right <= appearance - TITLE_GAP + 0.5, "{right}");
-}
-
-#[test]
-fn a_long_title_stops_short_of_the_edit_controls_of_a_lone_document() {
-    let mut harness = long_heading();
-    harness.press(Modifiers::CTRL, Key::E);
-
-    let title = long_title(&harness);
-    let toggle = harness.ui.get_by_label("Preview").rect();
-    let right = title.pos.x + title.galley.size().x;
-    assert!(right <= toggle.left() - TITLE_GAP + 0.5, "{right}");
-    assert!(toggle.right() < harness.labelled("Appearance")[0].0.x);
-}
-
-#[test]
-fn the_title_is_muted_until_it_is_pointed_at() {
-    let mut harness = field_notes();
-    let palette = ThemeId::Sepia.palette();
-    assert_eq!(
-        bar_text(&harness, "Field Notes").fallback_color,
-        palette.muted
-    );
-
-    harness.hover_at(title_of(&harness, "Field Notes"));
-
-    assert_eq!(
-        bar_text(&harness, "Field Notes").fallback_color,
-        palette.text
-    );
-}
-
-#[test]
-fn pointing_at_the_title_says_where_the_file_is_and_whether_it_is_live() {
-    let mut harness = field_notes();
-    let path = harness.path("notes.md").display().to_string();
-    assert!(!harness.shows(&path));
-
-    harness.hover_at(title_of(&harness, "Field Notes"));
-    harness.frames(8);
-    assert!(harness.shows(&path));
-    assert!(!harness.shows("Live"));
-
-    let ctx = harness.ui.ctx.clone();
-    harness.app_mut().apply_action(&ctx, AppAction::ToggleWatch);
-    harness.frames(8);
-    assert!(harness.shows(&path));
-    assert!(harness.shows("Live: reloads when the file changes"));
 }
 
 #[test]
@@ -295,25 +176,74 @@ fn the_button_whose_popup_is_open_stays_lit() {
 }
 
 #[test]
-fn a_title_with_room_is_centered_on_the_bar() {
-    let free = Rangef::new(100.0, 1000.0);
-    assert_close(title_center(600.0, free, 200.0), 600.0);
+fn the_row_starts_after_its_inset_and_ends_with_the_buttons_at_the_right() {
+    let row = Row::new(Rangef::new(10.0, 1190.0), 78.0);
+
+    assert_eq!(row.inset, Rangef::new(10.0, 88.0));
+    assert_close(row.leading.min, 88.0);
+    assert_close(row.leading.span(), buttons_width(LEADING_BUTTONS));
+    assert_close(row.trailing.max, 1190.0);
+    assert_close(row.trailing.span(), buttons_width(TRAILING_BUTTONS));
+    assert_close(row.middle.min, row.leading.max + BUTTON_GAP);
+    assert_close(row.middle.max, row.trailing.min - BUTTON_GAP);
+
+    let flush = Row::new(Rangef::new(10.0, 1190.0), 0.0);
+    assert_close(flush.inset.span(), 0.0);
+    assert_close(flush.middle.span(), row.middle.span() + 78.0);
 }
 
 #[test]
-fn a_title_that_would_reach_the_buttons_moves_just_clear_of_them() {
-    // The free span is off-center: the buttons at the right take more room.
-    let free = Rangef::new(100.0, 700.0);
-    let center = title_center(600.0, free, 300.0);
-    assert_close(center, 700.0 - 150.0 - TITLE_GAP);
+fn a_bar_too_narrow_for_its_buttons_has_an_empty_middle() {
+    let row = Row::new(Rangef::new(0.0, 200.0), 78.0);
 
-    let free = Rangef::new(500.0, 1100.0);
-    let center = title_center(600.0, free, 300.0);
-    assert_close(center, 500.0 + 150.0 + TITLE_GAP);
+    assert_close(row.middle.span(), 0.0);
+    assert!(!row.fits_edit_controls());
+    assert_eq!(new_tab_span(row.tab_room(None), 0.0), None);
 }
 
 #[test]
-fn a_title_wider_than_the_free_span_is_centered_in_it() {
-    let free = Rangef::new(100.0, 300.0);
-    assert_close(title_center(600.0, free, 400.0), 200.0);
+fn the_tabs_take_the_middle_up_to_the_edit_controls() {
+    let row = Row::new(Rangef::new(0.0, 1000.0), 0.0);
+
+    assert_eq!(row.tab_room(None), row.middle);
+    let room = row.tab_room(Some(700.0));
+    assert_close(room.min, row.middle.min);
+    assert_close(room.max, 700.0 - BUTTON_GAP);
+    // Controls that start before the middle leave the tabs no room.
+    assert_close(row.tab_room(Some(0.0)).span(), 0.0);
+    assert_close(tabs_width(room), room.span() - BUTTON_SIDE);
+}
+
+#[test]
+fn the_new_tab_button_follows_the_tabs_and_stays_in_their_room() {
+    let room = Rangef::new(100.0, 500.0);
+
+    assert_eq!(new_tab_span(room, 0.0), Some(Rangef::new(100.0, 128.0)));
+    assert_eq!(new_tab_span(room, 150.0), Some(Rangef::new(250.0, 278.0)));
+    let most = tabs_width(room);
+    assert_eq!(new_tab_span(room, most), Some(Rangef::new(472.0, 500.0)));
+    assert_eq!(new_tab_span(room, 9000.0), Some(Rangef::new(472.0, 500.0)));
+    assert_eq!(new_tab_span(Rangef::new(100.0, 120.0), 0.0), None);
+}
+
+#[test]
+fn the_background_is_the_inset_and_what_the_tabs_leave() {
+    let row = Row::new(Rangef::new(0.0, 1000.0), 78.0);
+    let room = row.tab_room(Some(700.0));
+
+    let [inset, spare] = row.background(room, 400.0);
+    assert_eq!(inset, Rangef::new(0.0, 78.0));
+    assert_eq!(spare, Rangef::new(400.0, room.max));
+    let [_, none] = row.background(room, 9000.0);
+    assert_close(none.span(), 0.0);
+}
+
+#[test]
+fn the_edit_controls_join_the_row_only_where_it_has_room_for_them() {
+    let buttons = buttons_width(LEADING_BUTTONS) + buttons_width(TRAILING_BUTTONS);
+    let edge = 2.0_f32.mul_add(BUTTON_GAP, buttons);
+
+    assert!(Row::new(Rangef::new(0.0, edge + EDIT_CONTROLS_ROOM), 0.0).fits_edit_controls());
+    assert!(!Row::new(Rangef::new(0.0, edge + EDIT_CONTROLS_ROOM - 1.0), 0.0).fits_edit_controls());
+    assert!(!Row::new(Rangef::new(0.0, edge + EDIT_CONTROLS_ROOM), 1.0).fits_edit_controls());
 }

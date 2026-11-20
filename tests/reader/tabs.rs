@@ -12,23 +12,105 @@ fn three_tabs() -> Reader {
     reader
 }
 
-/// Which of the three tabs is the active one.
+/// The name of the tab in front.
 #[track_caller]
-fn active_tab(reader: &Reader) -> &'static str {
-    let active: Vec<_> = ["a.md", "b.md", "c.md"]
-        .into_iter()
-        .filter(|tab| reader.count(tab) == 1 && reader.is_on(tab))
-        .collect();
-    assert_eq!(active.len(), 1, "one tab is active: {active:?}");
-    active[0]
+fn active_tab(reader: &Reader) -> String {
+    reader.tab_in_front().expect("no tab is in front")
 }
 
 #[test]
-fn a_lone_document_has_no_tab_strip() {
+fn a_lone_document_has_a_tab_and_the_new_tab_button_after_it() {
     let reader = three_linked();
 
-    assert_eq!(reader.count("a.md"), 0);
-    reader.assert_sees("Alpha");
+    assert_eq!(reader.tabs(), ["Alpha"]);
+    assert_eq!(active_tab(&reader), "Alpha");
+    let (tab, new_tab) = (
+        reader.area_of("tab:Alpha"),
+        reader.area_of("Open file in new tab"),
+    );
+    assert!(tab.left >= reader.area_of("Go forward").right(), "{tab:?}");
+    assert!(new_tab.left >= tab.right(), "{new_tab:?} after {tab:?}");
+    assert!(new_tab.left - tab.right() < 8.0, "right after it");
+    assert!(new_tab.right() <= reader.area_of("Preview").left);
+}
+
+#[test]
+fn the_top_row_reads_buttons_tabs_new_tab_switch_buttons() {
+    let reader = three_tabs();
+
+    let row = [
+        "Files sidebar",
+        "Go back",
+        "Go forward",
+        "tab:Alpha",
+        "tab:Beta",
+        "tab:Gamma",
+        "Open file in new tab",
+        "Preview",
+        "Edit",
+        "Appearance",
+        "Find in document",
+        "Contents sidebar",
+        "More",
+    ]
+    .map(|control| reader.area_of(control));
+    for pair in row.windows(2) {
+        assert!(pair[0].right() <= pair[1].left, "{pair:?}");
+        assert!(pair[0].bottom() <= 40.0 && pair[1].bottom() <= 40.0);
+    }
+}
+
+#[test]
+fn a_tab_is_named_by_the_first_heading_of_its_document_else_by_its_file() {
+    let mut reader = Reader::with_docs(&[
+        ("notes.md", "Intro.\n\n# Field Notes\n\nBody."),
+        ("plain.md", "No heading here."),
+    ]);
+    reader.drop_file("plain.md");
+
+    assert_eq!(reader.tabs(), ["Field Notes", "plain.md"]);
+    assert_eq!(reader.title(), "plain.md - Markdown Viewer");
+    reader.click("tab:Field Notes");
+    assert_eq!(reader.title(), "notes.md - Markdown Viewer");
+    reader.assert_sees("notes.md · 1 min read");
+}
+
+#[test]
+fn a_tab_takes_the_new_heading_when_its_document_is_edited() {
+    let mut reader = Reader::with_docs(&[("notes.md", "# Draft")]);
+    reader.press("Ctrl+E");
+    reader.click_text_field(0);
+    reader.press("Ctrl+End");
+
+    reader.type_text("ed twice");
+
+    assert_eq!(reader.tabs(), ["Drafted twice"]);
+}
+
+#[test]
+fn pointing_at_a_tab_shows_where_its_file_is() {
+    let mut reader = three_tabs();
+    let path = reader.path("a.md").display().to_string();
+    reader.assert_hides(&path);
+
+    reader.hover("tab:Alpha");
+
+    reader.wait_for("the hover text", |reader| reader.sees(&path));
+    reader.assert_sees("Live: reloads when the file changes");
+}
+
+#[test]
+fn nothing_under_the_row_moves_when_a_second_document_opens() {
+    let mut reader = three_linked();
+    let (column, heading) = (reader.column(), reader.text_area("Alpha"));
+
+    reader.drop_file("b.md");
+    let moved = reader.text_area("Beta").top - heading.top;
+    assert!(moved.abs() < 0.5, "the page moved {moved} px");
+
+    reader.click("tab:Alpha");
+    assert_eq!(reader.column(), column);
+    assert_eq!(reader.text_area("Alpha"), heading);
 }
 
 #[test]
@@ -38,8 +120,8 @@ fn ctrl_clicking_a_link_opens_it_in_a_new_tab() {
     reader.ctrl_click("to beta");
 
     reader.assert_sees("Beta");
-    assert_eq!(active_tab(&reader), "b.md");
-    assert_eq!(reader.count("a.md"), 1, "the first document keeps its tab");
+    assert_eq!(active_tab(&reader), "Beta");
+    assert_eq!(reader.tabs(), ["Alpha", "Beta"], "the first keeps its tab");
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
 }
 
@@ -48,11 +130,11 @@ fn clicking_a_tab_shows_its_document() {
     let mut reader = three_tabs();
     reader.assert_sees("Gamma");
 
-    reader.click("a.md");
+    reader.click("tab:Alpha");
 
     reader.assert_sees("Alpha");
     reader.assert_hides("The end of the line.");
-    assert_eq!(active_tab(&reader), "a.md");
+    assert_eq!(active_tab(&reader), "Alpha");
     assert_eq!(reader.title(), "a.md - Markdown Viewer");
 }
 
@@ -61,10 +143,10 @@ fn ctrl_tab_goes_to_the_next_tab_and_wraps() {
     let mut reader = three_tabs();
 
     reader.press("Ctrl+Tab");
-    assert_eq!(active_tab(&reader), "a.md");
+    assert_eq!(active_tab(&reader), "Alpha");
 
     reader.press("Ctrl+Tab");
-    assert_eq!(active_tab(&reader), "b.md");
+    assert_eq!(active_tab(&reader), "Beta");
     reader.assert_sees("Beta");
 }
 
@@ -73,11 +155,11 @@ fn ctrl_shift_tab_goes_to_the_previous_tab_and_wraps() {
     let mut reader = three_tabs();
 
     reader.press("Ctrl+Shift+Tab");
-    assert_eq!(active_tab(&reader), "b.md");
+    assert_eq!(active_tab(&reader), "Beta");
 
     reader.press("Ctrl+Shift+Tab");
     reader.press("Ctrl+Shift+Tab");
-    assert_eq!(active_tab(&reader), "c.md");
+    assert_eq!(active_tab(&reader), "Gamma");
 }
 
 #[test]
@@ -85,13 +167,13 @@ fn ctrl_and_a_digit_goes_to_that_tab() {
     let mut reader = three_tabs();
 
     reader.press("Ctrl+1");
-    assert_eq!(active_tab(&reader), "a.md");
+    assert_eq!(active_tab(&reader), "Alpha");
 
     reader.press("Ctrl+2");
-    assert_eq!(active_tab(&reader), "b.md");
+    assert_eq!(active_tab(&reader), "Beta");
 
     reader.press("Ctrl+9");
-    assert_eq!(active_tab(&reader), "b.md", "there is no ninth tab");
+    assert_eq!(active_tab(&reader), "Beta", "there is no ninth tab");
 }
 
 #[test]
@@ -100,8 +182,8 @@ fn ctrl_w_closes_the_tab_in_front() {
 
     reader.press("Ctrl+W");
 
-    assert_eq!(reader.count("c.md"), 0);
-    assert_eq!(active_tab(&reader), "b.md");
+    assert_eq!(reader.count("tab:Gamma"), 0);
+    assert_eq!(active_tab(&reader), "Beta");
     reader.assert_sees("Beta");
 }
 
@@ -123,18 +205,18 @@ fn close_tab_in_the_menu_closes_the_tab_in_front() {
     reader.click("More");
     reader.click("Close Tab");
 
-    assert_eq!(reader.count("c.md"), 0);
-    assert_eq!(active_tab(&reader), "b.md");
+    assert_eq!(reader.count("tab:Gamma"), 0);
+    assert_eq!(active_tab(&reader), "Beta");
 }
 
 #[test]
 fn middle_clicking_a_tab_closes_it() {
     let mut reader = three_tabs();
 
-    reader.middle_click("a.md");
+    reader.middle_click("tab:Alpha");
 
-    assert_eq!(reader.count("a.md"), 0);
-    assert_eq!(active_tab(&reader), "c.md");
+    assert_eq!(reader.count("tab:Alpha"), 0);
+    assert_eq!(active_tab(&reader), "Gamma");
     reader.assert_sees("Gamma");
 }
 
@@ -143,24 +225,24 @@ fn a_tab_under_the_pointer_has_a_close_button() {
     let mut reader = three_tabs();
     assert_eq!(reader.count("Close tab"), 0);
 
-    reader.hover("b.md");
+    reader.hover("tab:Beta");
     reader.click("Close tab");
 
-    assert_eq!(reader.count("b.md"), 0);
-    assert_eq!(reader.count("a.md"), 1);
-    assert_eq!(reader.count("c.md"), 1);
+    assert_eq!(reader.count("tab:Beta"), 0);
+    assert_eq!(reader.count("tab:Alpha"), 1);
+    assert_eq!(reader.count("tab:Gamma"), 1);
 }
 
 #[test]
 fn a_tabs_menu_closes_the_others() {
     let mut reader = three_tabs();
 
-    reader.right_click("b.md");
+    reader.right_click("tab:Beta");
     reader.click("Close Others");
 
     reader.assert_sees("Beta");
-    assert_eq!(reader.count("a.md"), 0);
-    assert_eq!(reader.count("c.md"), 0);
+    assert_eq!(reader.count("tab:Alpha"), 0);
+    assert_eq!(reader.count("tab:Gamma"), 0);
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
 }
 
@@ -170,8 +252,8 @@ fn opening_a_document_that_has_a_tab_goes_to_that_tab() {
 
     reader.drop_file("a.md");
 
-    assert_eq!(reader.count("a.md"), 1);
-    assert_eq!(active_tab(&reader), "a.md");
+    assert_eq!(reader.count("tab:Alpha"), 1);
+    assert_eq!(active_tab(&reader), "Alpha");
 }
 
 #[test]
@@ -181,10 +263,10 @@ fn each_tab_keeps_its_own_place_in_history() {
     reader.drop_file("c.md");
     assert!(!reader.is_enabled("Go back"), "the new tab has no history");
 
-    reader.click("b.md");
+    reader.click("tab:Beta");
 
     assert!(reader.is_enabled("Go back"));
     reader.press("Alt+Left");
     reader.assert_sees("Alpha");
-    assert_eq!(reader.count("c.md"), 1);
+    assert_eq!(reader.count("tab:Gamma"), 1);
 }

@@ -6,6 +6,7 @@ use egui_kittest::kittest::Queryable as _;
 
 use self::label_harness::LabelHarness;
 use super::*;
+use crate::app::chrome::BAR_HEIGHT;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{frame_on, painted_text};
 use crate::layout::{centered_column_left, LineSpacing, ReadingWidth, READING_COLUMN_MARGIN};
@@ -20,7 +21,7 @@ pub(crate) mod label_harness;
 /// document's title, and is passed over.
 #[track_caller]
 fn pane_text_starting(output: &egui::FullOutput, prefix: &str) -> egui::epaint::TextShape {
-    painted_text_starting_below(output, prefix, crate::app::chrome::BAR_HEIGHT)
+    painted_text_starting_below(output, prefix, BAR_HEIGHT)
 }
 
 /// One document that links to `b.md` and to a file that does not exist.
@@ -536,7 +537,9 @@ fn code_box(output: &egui::FullOutput, fill: egui::Color32) -> egui::epaint::Rec
         .into_iter()
         .filter_map(|shape| match shape {
             egui::Shape::Rect(rect)
-                if rect.fill == fill && rect.corner_radius == egui::CornerRadius::same(8) =>
+                if rect.fill == fill
+                    && rect.corner_radius == egui::CornerRadius::same(8)
+                    && rect.rect.top() > BAR_HEIGHT =>
             {
                 Some(rect)
             }
