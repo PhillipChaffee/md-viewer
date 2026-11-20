@@ -54,6 +54,7 @@ fn pictures(one_picture: u64, all_pictures: u64) -> Pictures {
         budget: FrameBudget {
             one_picture,
             all_pictures,
+            ..FrameBudget::default()
         },
         ..Default::default()
     }
@@ -72,16 +73,6 @@ fn a_picture_within_the_budget_keeps_every_frame() {
     assert_eq!(let_go, []);
     assert_eq!(kept(&pictures, "a"), Kept::Every);
     assert_eq!(pictures.known["a"].kept_bytes(), 1200);
-}
-
-#[test]
-fn a_picture_too_large_to_play_keeps_its_first_frame() {
-    let mut pictures = pictures(1199, 10_000);
-
-    pictures.admit("a", SIDE, 3, 0.0);
-
-    assert_eq!(kept(&pictures, "a"), Kept::First);
-    assert_eq!(pictures.known["a"].kept_bytes(), 400);
 }
 
 #[test]
@@ -117,20 +108,56 @@ fn a_picture_seen_a_moment_ago_is_not_let_go() {
 }
 
 #[test]
-fn room_is_made_for_a_picture_before_it_is_read_again() {
+fn room_is_made_for_a_picture_that_was_let_go_when_it_starts_to_be_read_again() {
     let mut pictures = pictures(1200, 2000);
     pictures.admit("back", SIDE, 3, 0.0);
     pictures.admit("small", SIDE, 1, 4.0);
     pictures.admit("large", SIDE, 3, 5.0);
     assert_eq!(kept(&pictures, "back"), Kept::Nothing);
 
-    let made = pictures.make_room_for("back", 10.0);
-    let again = pictures.make_room_for("back", 10.0);
+    let made = pictures.expect("back", 10.0);
+    let again = pictures.expect("back", 10.0);
 
     assert_eq!(made, [("small".to_owned(), 1), ("large".to_owned(), 3)]);
     assert_eq!(again, [], "the room is there");
-    assert_eq!(pictures.make_room_for("unknown", 10.0), []);
     assert_eq!(pictures.admit("back", SIDE, 3, 10.1), []);
+}
+
+#[test]
+fn a_picture_never_read_before_is_given_the_room_of_the_largest_one_picture_may_be() {
+    let mut pictures = pictures(1200, 2400);
+    pictures.admit("old", SIDE, 2, 0.0);
+    pictures.admit("older", SIDE, 1, 0.0);
+    pictures.known.get_mut("old").unwrap().last_shown = 5.0;
+    pictures.known.get_mut("older").unwrap().last_shown = 4.0;
+
+    let first = pictures.expect("new", 10.0);
+    let second = pictures.expect("newer", 10.0);
+
+    assert_eq!(first, [], "1200 kept and room for 1200 are within 2400");
+    assert_eq!(
+        second,
+        [("older".to_owned(), 1), ("old".to_owned(), 2)],
+        "two that are read at once do not pass the budget together"
+    );
+}
+
+#[test]
+fn the_room_kept_for_a_picture_is_given_up_when_it_has_arrived() {
+    let mut pictures = pictures(1200, 2400);
+    pictures.admit("old", SIDE, 3, 0.0);
+    pictures.expect("new", 10.0);
+
+    let arrived = pictures.admit("new", SIDE, 1, 10.0);
+    let next = pictures.expect("next", 10.0);
+
+    assert_eq!(arrived, []);
+    assert_eq!(
+        next,
+        [("old".to_owned(), 3)],
+        "1200 and 400 and room for 1200"
+    );
+    assert!(!pictures.coming.contains_key("new"));
 }
 
 #[test]

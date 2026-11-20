@@ -5,6 +5,8 @@
 #[doc(hidden)]
 pub mod alerts;
 pub mod animation;
+#[cfg(feature = "animated-images")]
+mod decode;
 #[doc(hidden)]
 pub mod elements;
 #[doc(hidden)]
@@ -12,6 +14,7 @@ pub mod html_table;
 mod mermaid_theme;
 #[doc(hidden)]
 pub mod misc;
+mod picture;
 #[doc(hidden)]
 pub mod pulldown;
 pub mod typography;

@@ -790,86 +790,16 @@ impl Image {
             .sense(egui::Sense::click())
     }
 
-    /// Hold the place of a moving picture whose frames, of `size`, were let
-    /// go, and have it read again once that place is in view. Out of view
-    /// it is left alone: asking egui for it would read it at once.
-    fn hold_place(&self, ui: &mut Ui, options: &CommonMarkOptions, size: egui::Vec2) {
+    /// The picture could not be read: egui draws a warning in its place,
+    /// as it does for any picture it fails to load.
+    fn show_unreadable(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
         let by_address = egui::ImageSource::Uri(self.uri.as_str().into());
-        let place = Self::on_the_page(by_address, ui, options)
-            .calc_size(ui.available_size(), Some(size));
-        let (rect, _) = ui.allocate_exact_size(place, egui::Sense::hover());
-        if ui.is_rect_visible(rect) {
-            crate::animation::bring_back(ui.ctx(), &self.uri);
-        }
+        let response = ui.add(Self::on_the_page(by_address, ui, options));
+        cache.observe_image_size(&self.uri, response.rect.size());
+        self.show_alt_text(response, options);
     }
 
-    pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
-        use crate::animation::Drawn;
-        // A moving picture is drawn from the frame that is due. Every
-        // frame has the size of the whole picture, so its place on the
-        // page never changes.
-        let (frame, plays) = match crate::animation::to_draw(ui.ctx(), &self.uri) {
-            Drawn::Frame { texture, plays } => (Some(texture), plays),
-            Drawn::ByAddress => (None, false),
-            Drawn::LetGo(size) => return self.hold_place(ui, options, size),
-        };
-        let source = match frame {
-            Some(frame) => egui::ImageSource::Texture(frame),
-            None => egui::ImageSource::Uri(self.uri.as_str().into()),
-        };
-        let image = Self::on_the_page(source, ui, options);
-        // egui's loaders keep a failure for as long as the app runs. A
-        // cache that has not shown this picture yet belongs to a page just
-        // loaded or reloaded: a failure it finds is left from before, and
-        // is forgotten so the picture is asked for again. A load that
-        // starts now is pending here, so it is never asked for twice.
-        if cache.observed_image_size(&self.uri).is_none()
-            && image.load_for_size(ui.ctx(), ui.available_size()).is_err()
-        {
-            ui.ctx().forget_image(&self.uri);
-        }
-        let response = ui.add(image);
-        cache.observe_image_size(&self.uri, response.rect.size());
-        if frame.is_none() {
-            // A moving picture that egui has read in this frame.
-            crate::animation::taken_in(ui.ctx(), &self.uri);
-        }
-        // Only a picture in view keeps the window drawing.
-        if ui.is_rect_visible(response.rect) {
-            crate::animation::in_view(ui.ctx(), &self.uri);
-        }
-
-        if response.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-
-        if response.clicked() {
-            // The enlarged view of a moving picture starts from the frame
-            // that was clicked.
-            let texture = frame.or_else(|| {
-                // Any other picture is asked for the way egui's `Image`
-                // asked for it, which for a GIF or WebP of one frame is
-                // not under the address the document gives.
-                let shown = egui::Image::from_uri(&self.uri);
-                let load = shown.source(ui.ctx()).load(
-                    ui.ctx(),
-                    egui::TextureOptions::default(),
-                    egui::load::SizeHint::default(),
-                );
-                match load {
-                    Ok(egui::load::TexturePoll::Ready { texture }) => Some(texture),
-                    Ok(egui::load::TexturePoll::Pending { .. }) | Err(_) => None,
-                }
-            });
-            if let Some(texture) = texture {
-                cache.clicked_image = Some(ClickedImage {
-                    texture: texture.id,
-                    size: texture.size,
-                    moving: plays.then(|| self.uri.clone()),
-                });
-            }
-        }
-
+    fn show_alt_text(self, response: egui::Response, options: &CommonMarkOptions) {
         if !self.alt_text.is_empty() && options.show_alt_text_on_hover {
             response.on_hover_ui_at_pointer(|ui| {
                 for alt in self.alt_text {
@@ -877,6 +807,131 @@ impl Image {
                 }
             });
         }
+    }
+
+    /// A picture is asked for only once its place is near the view (see
+    /// [`crate::picture`]). Its place is held from the start at the size it
+    /// will have, wherever that size can be told without reading it, so
+    /// that the page does not move when the picture arrives.
+    pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache, options: &CommonMarkOptions) {
+        use crate::animation::Drawn;
+        use egui::load::TexturePoll;
+
+        let ctx = ui.ctx().clone();
+        let uri = self.uri.as_str();
+        if cache.pictures.is_unreadable(&ctx, uri) {
+            return self.show_unreadable(ui, cache, options);
+        }
+
+        let was_laid_out = cache.observed_image_size(uri).is_some();
+        let told = cache.pictures.size(&ctx, uri);
+        let drawn = crate::animation::to_draw(&ctx, uri);
+        // A picture that does not move and was asked for is looked at
+        // again in every frame, which costs a lookup once it is read.
+        let mut loaded = (matches!(drawn, Drawn::Still) && cache.pictures.was_asked_for(uri))
+            .then(|| cache.pictures.read(&ctx, uri));
+        let read = match (&drawn, &loaded) {
+            (Drawn::Frame { texture, .. }, _) => Some(texture.size),
+            (Drawn::Away(size), _) => *size,
+            (Drawn::Still, Some(Ok(still))) => still.size(),
+            (Drawn::Still, _) => None,
+        };
+        // The size of a picture the page laid out without knowing it is
+        // known now. This frame keeps the place the page was measured
+        // with, and the next lays the page out afresh.
+        let settles = was_laid_out && told.is_none() && read.is_some();
+        if let (None, Some(size)) = (told, read) {
+            cache.pictures.learn_size(uri, size);
+        }
+        let size = if settles { None } else { read.or(told) };
+
+        let by_address = egui::ImageSource::Uri(uri.into());
+        let page = Self::on_the_page(by_address, ui, options);
+        let place = page.calc_size(ui.available_size(), size);
+        let (rect, response) = ui.allocate_exact_size(place, egui::Sense::click());
+        response.widget_info(|| egui::WidgetInfo::new(egui::WidgetType::Image));
+        cache.observe_image_size(uri, rect.size());
+        let is_near = cache.pictures.placed(ui, uri, rect);
+        let is_visible = ui.is_rect_visible(rect);
+
+        if settles {
+            // A place above the view grows upward as far as the reader is
+            // concerned: what is in view stays where it is.
+            let grows = page.calc_size(ui.available_size(), read).y - rect.height();
+            if rect.top() < ui.clip_rect().top() {
+                cache.grew_above_the_view += grows;
+            }
+            cache.mark_layout_changed();
+            ctx.request_repaint();
+        }
+
+        let shown = match drawn {
+            Drawn::Frame { texture, plays } => Some((texture, plays)),
+            Drawn::Away(_) => {
+                if is_near {
+                    loaded = Some(cache.pictures.read(&ctx, uri));
+                }
+                if let Some(Ok(TexturePoll::Ready { .. })) = loaded {
+                    // It is decoded as of now: the next frame is the first
+                    // that can draw it.
+                    ctx.request_repaint();
+                }
+                None
+            }
+            Drawn::Still => {
+                if loaded.is_none() && is_near {
+                    loaded = Some(cache.pictures.read(&ctx, uri));
+                }
+                match &loaded {
+                    Some(Ok(TexturePoll::Ready { texture })) => Some((*texture, false)),
+                    _ => None,
+                }
+            }
+        };
+        if is_near {
+            crate::animation::near_view(&ctx, uri);
+        }
+        let shown = shown.filter(|_| !settles);
+        if let (Some((texture, _)), true) = (shown, is_visible) {
+            egui::Image::from_texture(texture).paint_at(ui, rect);
+            // Only a picture in view keeps the window drawing.
+            crate::animation::in_view(&ctx, uri);
+        }
+        let response = match loaded {
+            // A picture that is awaited in view shows egui's spinner, in
+            // the middle of its place. The spinner turns, so the window is
+            // drawn again and again until the picture is there. Out of view
+            // nothing is drawn, and the thread that reads the picture asks
+            // for the one repaint that takes it in.
+            Some(Ok(TexturePoll::Pending { .. })) => {
+                if is_visible && ui.visuals().image_loading_spinners {
+                    let side = egui::Vec2::splat(ui.spacing().interact_size.y);
+                    let middle = egui::Rect::from_center_size(rect.center(), side);
+                    egui::Spinner::new().paint_at(ui, middle.intersect(rect));
+                }
+                response.on_hover_text(format!("Loading {uri}…"))
+            }
+            Some(Err(_)) => {
+                cache.pictures.could_not_be_read(uri);
+                ctx.request_repaint();
+                response
+            }
+            _ => response,
+        };
+
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if let (true, Some((texture, plays))) = (response.clicked(), shown) {
+            // The enlarged view of a moving picture starts from the frame
+            // that was clicked.
+            cache.clicked_image = Some(ClickedImage {
+                texture: texture.id,
+                size: texture.size,
+                moving: plays.then(|| uri.to_owned()),
+            });
+        }
+        self.show_alt_text(response, options);
     }
 }
 
@@ -2565,6 +2620,13 @@ pub struct CommonMarkCache {
     /// replace a placeholder with a differently sized image.
     image_sizes: HashMap<String, egui::Vec2>,
 
+    /// What the page knows of its pictures before they are read.
+    pictures: crate::picture::PagePictures,
+
+    /// How much higher the page is about to be above the view: see
+    /// [`CommonMarkCache::take_growth_above_the_view`].
+    grew_above_the_view: f32,
+
     /// Hash of the diagram that currently has an active background thread.
     /// Only one diagram renders at a time so they appear top-to-bottom.
     #[cfg(feature = "mermaid")]
@@ -2651,6 +2713,8 @@ impl Default for CommonMarkCache {
             clicked_mermaid: None,
             clicked_image: None,
             image_sizes: HashMap::new(),
+            pictures: crate::picture::PagePictures::default(),
+            grew_above_the_view: 0.0,
             #[cfg(feature = "mermaid")]
             mermaid_rendering: None,
             #[cfg(feature = "math")]
@@ -2719,6 +2783,26 @@ impl CommonMarkCache {
     /// Take the clicked image (if any). Returns `Some` once per click.
     pub fn take_clicked_image(&mut self) -> Option<ClickedImage> {
         self.clicked_image.take()
+    }
+
+    /// How much higher the next frame lays the page out above the view than
+    /// this one did, if at all. That is so once a picture above the view
+    /// has been read whose size nothing told before, as with a picture on
+    /// the web: its place was a small one until now.
+    ///
+    /// Scroll that much further down in the next frame, with
+    /// `pending_scroll_offset`, and what is in view stays where it is.
+    /// Each growth is reported once.
+    pub fn take_growth_above_the_view(&mut self) -> Option<f32> {
+        let grew = std::mem::take(&mut self.grew_above_the_view);
+        (grew != 0.0).then_some(grew)
+    }
+
+    /// Have the page grow by `grown` above the view without painting.
+    /// Test-only: see [`Self::take_growth_above_the_view`].
+    #[doc(hidden)]
+    pub fn grow_above_the_view_for_test(&mut self, grown: f32) {
+        self.grew_above_the_view += grown;
     }
 
     /// The addresses of the pictures this cache has shown.
@@ -2810,6 +2894,12 @@ impl CommonMarkCache {
     /// This is used to calculate content-relative header positions.
     pub fn set_scroll_offset(&mut self, offset: f32) {
         self.current_scroll_offset = offset;
+        // A pass over the part of the page in view is given where the view
+        // is. A pass that lays the whole page out, which is what measures
+        // it, is given where it was asked to scroll to, or nothing.
+        let is_measured = self.scroll.values().all(|page| page.page_size.is_some());
+        let knows_the_view = !self.scroll.is_empty() && is_measured;
+        self.pictures.view_is_at(knows_the_view.then_some(offset));
     }
 
     /// Record the y-position of a header for scroll navigation.
@@ -2921,6 +3011,17 @@ impl CommonMarkCache {
         self.table_fit_epoch
     }
 
+    /// Have the pictures near the view read, so that one is ready when it
+    /// comes into view, and take in those that were being read and are
+    /// decoded now. A picture near the view is not let go either.
+    fn read_pictures_near_the_view(&mut self, ctx: &egui::Context) {
+        crate::animation::take_in_decoded(ctx);
+        for uri in self.pictures.near_the_view(ctx) {
+            let _ = self.pictures.read(ctx, &uri);
+            crate::animation::near_view(ctx, &uri);
+        }
+    }
+
     fn observe_image_size(&mut self, uri: &str, size: egui::Vec2) {
         match self.image_sizes.insert(uri.to_owned(), size) {
             // A later size change invalidates measurements taken against the
@@ -3003,8 +3104,12 @@ pub fn prepare_show(cache: &mut CommonMarkCache, ctx: &egui::Context) {
         crate::data_url_loader::install_loader(ctx);
 
         egui_extras::install_image_loaders(ctx);
+        // After egui's own loaders: the one added last is asked first.
+        #[cfg(feature = "animated-images")]
+        crate::decode::install(ctx);
         cache.has_installed_loaders = true;
     }
 
     cache.deactivate_link_hooks();
+    cache.read_pictures_near_the_view(ctx);
 }

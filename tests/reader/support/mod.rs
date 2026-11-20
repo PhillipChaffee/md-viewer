@@ -25,7 +25,7 @@ use self::folder::Folder;
 use self::paint::Pixels;
 pub(crate) use self::paint::Rgb;
 pub(crate) use self::see::Area;
-pub(crate) use self::web::serve;
+pub(crate) use self::web::{serve, site};
 
 /// The window every launch starts with, in pixels, unless the test asks
 /// for another.

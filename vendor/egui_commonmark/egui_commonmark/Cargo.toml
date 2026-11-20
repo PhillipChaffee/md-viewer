@@ -59,7 +59,12 @@ better_syntax_highlighting = [
 load-images = ["egui_extras/image", "egui_extras/file"]
 
 ## Play animated GIF and WebP images instead of showing their first frame.
-animated-images = ["load-images", "egui_extras/gif", "egui_extras/webp"]
+animated-images = [
+    "load-images",
+    "egui_extras/gif",
+    "egui_extras/webp",
+    "egui_commonmark_backend_extended/animated-images",
+]
 
 ## Support loading svg images
 svg = ["egui_extras/svg", "dep:resvg"]

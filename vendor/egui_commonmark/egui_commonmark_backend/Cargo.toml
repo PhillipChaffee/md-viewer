@@ -19,6 +19,9 @@ include = ["**/*.rs", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 pulldown-cmark = { workspace = true }
 egui_extras = { workspace = true }
 egui = { workspace = true }
+# Tells the size of a picture from the head of its file, and decodes the
+# frames of a moving one. The formats are opted in to by the app.
+image = { version = "0.25", default-features = false }
 
 data-url = {  version = "0.3.1", optional = true }
 syntect = { version = "5.0.0", optional = true, default-features = false, features = [
@@ -34,6 +37,7 @@ typst = { version = "0.14", optional = true }
 typst-kit = { version = "0.14", optional = true, default-features = false, features = ["fonts", "embed-fonts"] }
 
 [features]
+animated-images = ["image/gif", "image/webp"]
 better_syntax_highlighting = ["dep:syntect"]
 embedded_image = ["dep:data-url"]
 mermaid = ["dep:merman", "dep:resvg"]
