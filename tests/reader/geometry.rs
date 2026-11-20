@@ -305,7 +305,7 @@ fn a_long_tab_name_is_cut_short_between_the_buttons_of_a_narrow_window() {
             "words under no heading, so the file name is on the tab",
         )
         .args(&[name])
-        .window(480.0, 400.0)
+        .window(490.0, 400.0)
         .open();
 
     let tab = reader.area_of(&format!("tab:{name}"));
