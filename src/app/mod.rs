@@ -9,6 +9,8 @@ use eframe::egui;
 
 use crate::app::content::look::DocumentLook;
 use crate::app::lightbox::Lightbox;
+use crate::app::shortcuts::hints::Hints;
+use crate::app::shortcuts::Platform;
 use crate::app::tabs::PathPicker;
 use crate::app::watching::LiveReload;
 use crate::explorer::FileExplorer;
@@ -136,6 +138,13 @@ pub(crate) struct MarkdownApp {
     open_tab_paths: HashSet<PathBuf>,
     /// The overlay that shows a clicked diagram or image enlarged.
     lightbox: Lightbox,
+    /// Which keyboard the shortcuts are for.
+    platform: Platform,
+    /// What each shortcut reads as in a menu or a tooltip, written when
+    /// the fonts change and not while painting.
+    hints: Hints,
+    /// Whether the fonts changed since `hints` were written.
+    hints_stale: bool,
     /// A close that waits for the reader to say what becomes of unsaved
     /// edits, and the quit that follows their last answer.
     closing: close_prompt::CloseState,
