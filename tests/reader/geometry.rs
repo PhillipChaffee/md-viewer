@@ -258,7 +258,7 @@ fn the_top_bar_keeps_its_buttons_inside_the_smallest_window() {
         "Files sidebar",
         "Go back",
         "Go forward",
-        "Open file in new tab",
+        "New tab",
         "Appearance",
         "More",
     ]
@@ -290,7 +290,7 @@ fn a_window_too_narrow_for_them_drops_the_tabs_and_keeps_the_buttons() {
     let reader = article().window(280.0, 300.0).open();
 
     assert!(reader.tabs().is_empty());
-    assert_eq!(reader.count("Open file in new tab"), 0);
+    assert_eq!(reader.count("New tab"), 0);
     for button in ["Files sidebar", "Go forward", "Appearance", "More"] {
         assert_eq!(reader.count(button), 1, "{button}");
     }
@@ -305,11 +305,11 @@ fn a_long_tab_name_is_cut_short_between_the_buttons_of_a_narrow_window() {
             "words under no heading, so the file name is on the tab",
         )
         .args(&[name])
-        .window(480.0, 400.0)
+        .window(520.0, 400.0)
         .open();
 
     let tab = reader.area_of(&format!("tab:{name}"));
-    let new_tab = reader.area_of("Open file in new tab");
+    let new_tab = reader.area_of("New tab");
 
     assert!(tab.left > reader.area_of("Go forward").right(), "{tab:?}");
     // The tabs scroll under the button's left edge by no more than the

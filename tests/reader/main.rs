@@ -40,6 +40,8 @@ mod home;
 #[cfg(test)]
 mod home_depth;
 #[cfg(test)]
+mod home_view;
+#[cfg(test)]
 mod keyboard;
 #[cfg(test)]
 mod lightbox;

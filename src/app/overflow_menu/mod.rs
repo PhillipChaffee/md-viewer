@@ -107,7 +107,7 @@ impl MarkdownApp {
         );
         let close = MenuRow::new("Close Tab")
             .shortcut(self.hints.of(AppAction::CloseTab))
-            .enabled(!self.tabs.is_empty());
+            .enabled(self.front().is_some());
         self.item(ui, close, AppAction::CloseTab, picked);
     }
 
@@ -116,7 +116,7 @@ impl MarkdownApp {
     fn document_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let find = MenuRow::new("Find…").shortcut(self.hints.of(AppAction::OpenSearch));
         self.item(ui, find, AppAction::OpenSearch, picked);
-        let active = self.tabs.get(self.active_tab);
+        let active = self.front_tab();
         let edit = MenuRow::new("Edit Document")
             .checked(active.is_some_and(|tab| tab.is_editing))
             .shortcut(self.hints.of(AppAction::ToggleEditMode))
@@ -130,6 +130,10 @@ impl MarkdownApp {
 
     fn history_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let (can_back, can_forward) = self.history_availability();
+        let home = MenuRow::new("Home Page")
+            .checked(self.front().is_none())
+            .shortcut(self.hints.of(AppAction::GoHome));
+        self.item(ui, home, AppAction::GoHome, picked);
         let back = MenuRow::new("Back")
             .shortcut(self.hints.of(AppAction::NavigateBack))
             .enabled(can_back);

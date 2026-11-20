@@ -16,6 +16,11 @@ mod tests;
 /// carries a request out, so every way of asking does the same thing.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum AppAction {
+    /// Show the home page, where a new tab starts: over the open tabs,
+    /// which stay open.
+    NewTab,
+    /// Show the home page, or leave it for the tab that was in front.
+    GoHome,
     /// Pick a file and open it in a new tab.
     OpenFile,
     /// Pick the folder the file explorer shows.
@@ -79,6 +84,8 @@ impl MarkdownApp {
     /// Carry out one user request.
     pub(crate) fn apply_action(&mut self, ctx: &egui::Context, action: AppAction) {
         match action {
+            AppAction::NewTab => self.show_home(),
+            AppAction::GoHome => self.toggle_home(),
             AppAction::OpenFile => self.open_file_dialog(),
             AppAction::OpenFolder => self.open_folder_dialog(),
             AppAction::CloseTab => self.close_active_tab(),
@@ -94,7 +101,7 @@ impl MarkdownApp {
             AppAction::CloseSearch => self.close_search(),
             AppAction::Save => self.save_active_tab(),
             AppAction::ToggleEditMode => {
-                if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+                if let Some(tab) = self.front_tab_mut() {
                     tab.set_edit_mode(!tab.is_editing);
                 }
             }
@@ -166,7 +173,9 @@ impl MarkdownApp {
     /// unsaved it does nothing; the flash label beside the mode toggle
     /// reports the outcome.
     fn save_active_tab(&mut self) {
-        self.save_tab(self.active_tab);
+        if let Some(front) = self.front() {
+            self.save_tab(front);
+        }
     }
 
     /// Write the unsaved edits of the tab at `index` to its file, and say
@@ -194,7 +203,7 @@ impl MarkdownApp {
     /// Queue a keyboard scroll step through the pending-scroll pipeline the
     /// outline and search jumps use.
     fn scroll_active_tab(&mut self, step: KeyboardScrollAction) {
-        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+        if let Some(tab) = self.front_tab_mut() {
             tab.scroll_by_key(step);
         }
     }

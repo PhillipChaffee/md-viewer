@@ -130,7 +130,7 @@ impl MarkdownApp {
     /// The scrollable file tree. Applies a directory toggle itself and
     /// returns any file click.
     fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette) -> ExplorerAction {
-        let active_tab = self.tabs.get(self.active_tab);
+        let active_tab = self.front_tab();
         let listing = Listing {
             palette,
             open_paths: &self.open_tab_paths,

@@ -192,7 +192,7 @@ impl MarkdownApp {
         if !std::mem::take(&mut self.window_title.stale) {
             return;
         }
-        let title = self.tabs.get(self.active_tab).map_or_else(
+        let title = self.front_tab().map_or_else(
             || "Markdown Viewer".to_string(),
             |tab| format!("{} - Markdown Viewer", tab.title()),
         );

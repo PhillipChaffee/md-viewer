@@ -53,8 +53,9 @@ impl MarkdownApp {
         let search_is_open = self.search.is_open;
         let active_idx = self.search.active_match_index;
 
-        // No document open → render the welcome / idle page instead.
-        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+        // No document in front → render the home page instead.
+        let front = self.front();
+        let Some(tab) = front.and_then(|front| self.tabs.get_mut(front)) else {
             self.render_welcome(ui);
             return None;
         };

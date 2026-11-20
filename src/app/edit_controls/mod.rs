@@ -24,7 +24,7 @@ const UNSAVED_DOT: f32 = 7.0;
 impl MarkdownApp {
     /// The edit controls of the document in front, laid out from the
     /// right in the part of the bar `part` is. Returns their left edge, or
-    /// `None` without a document.
+    /// `None` with no document in front.
     pub(crate) fn edit_controls(
         &mut self,
         ui: &mut egui::Ui,
@@ -32,7 +32,8 @@ impl MarkdownApp {
     ) -> Option<f32> {
         let palette = self.theme.palette();
         let save_hint = self.hints.of(AppAction::Save);
-        let tab = self.tabs.get_mut(self.active_tab)?;
+        let front = self.front()?;
+        let tab = self.tabs.get_mut(front)?;
         let controls = ui.scope_builder(part, |ui| {
             edit_mode_controls(ui, tab, palette, save_hint);
         });
