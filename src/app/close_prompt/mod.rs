@@ -10,6 +10,8 @@
 //! unasked request uses. Cancel at any question therefore leaves every tab
 //! as it is, with its edits; what a Save wrote before it stays written.
 
+use std::borrow::Cow;
+
 use eframe::egui;
 
 use crate::app::action::AppAction;
@@ -26,6 +28,9 @@ const WIDTH: f32 = 340.0;
 const PADDING: i8 = 18;
 /// The least width of an answer, so the three read as a row of buttons.
 const ANSWER_WIDTH: f32 = 76.0;
+/// The most characters of a document's heading the question quotes: two
+/// lines of the sheet. The tab shortens the same name to its own width.
+const NAME_CHARS: usize = 60;
 
 /// What the reader asked for that takes documents out of their tabs. Tabs
 /// are named by their place in the strip, which holds while the prompt
@@ -99,8 +104,28 @@ pub(crate) enum CloseAnswer {
     Cancel,
 }
 
+/// What the prompt asks about `tab`. It names the document as its tab
+/// does, by its first heading, and by its file, which tells two documents
+/// with one heading apart. A tab named by its file is named once.
 fn question(tab: &Tab) -> String {
-    format!("Save changes to {}?", tab.title())
+    let (name, file) = (tab.name(), tab.title());
+    if name == file {
+        format!("Save changes to {file}?")
+    } else {
+        format!("Save changes to “{}” ({file})?", shortened(name))
+    }
+}
+
+/// `name` as the question quotes it: whole, or cut after a word and
+/// closed with an ellipsis when it is longer than `NAME_CHARS`.
+fn shortened(name: &str) -> Cow<'_, str> {
+    let Some((end, _)) = name.char_indices().nth(NAME_CHARS) else {
+        return Cow::Borrowed(name);
+    };
+    let kept = &name[..end];
+    let words = kept.rfind(char::is_whitespace).filter(|space| *space > 0);
+    let kept = words.map_or(kept, |space| &kept[..space]);
+    Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
 impl MarkdownApp {

@@ -157,7 +157,7 @@ fn the_question_names_the_document_and_is_written_once() {
     let CloseState::Asking(pending) = &harness.app.closing else {
         panic!("the prompt is not asking");
     };
-    assert_eq!(pending.question, "Save changes to b.md?");
+    assert_eq!(pending.question, "Save changes to “B” (b.md)?");
     assert!(pending.focus_due);
     assert_eq!(harness.app.tabs.len(), 3);
 
@@ -166,6 +166,24 @@ fn the_question_names_the_document_and_is_written_once() {
         panic!("the prompt stopped asking");
     };
     assert!(!pending.focus_due, "Save takes the keyboard once");
+}
+
+#[test]
+fn a_long_name_is_cut_after_a_word_and_a_short_one_is_whole() {
+    let exactly = "x".repeat(NAME_CHARS);
+    assert_eq!(shortened("Alpha"), "Alpha");
+    assert_eq!(shortened(&exactly), exactly.as_str());
+
+    let words = "word ".repeat(13);
+    assert_eq!(shortened(&words), format!("{}…", "word ".repeat(12).trim()));
+    let unbroken = "é".repeat(NAME_CHARS + 1);
+    assert_eq!(shortened(&unbroken), format!("{}…", "é".repeat(NAME_CHARS)));
+    let late_break = format!(" {unbroken}");
+    assert_eq!(
+        shortened(&late_break).chars().count(),
+        NAME_CHARS + 1,
+        "a space that leads the name is no place to cut"
+    );
 }
 
 #[test]
