@@ -83,7 +83,7 @@ folder, reading time and opening lines.
   emoji shortcodes such as `:pushpin:`. An emoji looks the same in bold
   text and headings as in the text around them. An emoji written as
   several characters is one picture: a family (👨‍👩‍👧), a flag (🇯🇵), a skin
-  tone (👍🏽), a keycap (1️⃣). A variation selector picks the look of the
+  tone (👍🏽), a keycap (1️⃣, #️⃣, \*️⃣). A variation selector picks the look of the
   sign before it: ❤️ is the color emoji and ❤︎ the sign in the ink of the
   text.
 - LaTeX math, inline `$…$` and display `$$…$$`.
@@ -105,6 +105,8 @@ folder, reading time and opening lines.
 - Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
   is checked while the setting is on, also with nothing open to follow.
 - An edit mode (`Ctrl+E`) that shows the source and saves with `Ctrl+S`.
+  An emoji drawn as one picture is one character to the arrow keys,
+  Backspace and Delete.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
@@ -278,10 +280,12 @@ Two things to know before you rely on those gates:
 - Emoji are in color where Noto Color Emoji is installed, and in the ink of
   the text elsewhere. An emoji written as several characters is drawn as
   its parts where no installed emoji font has one picture for it, as with
-  an emoji newer than the font. The keycap *️⃣ is drawn as its parts,
-  because Markdown reads its `*` apart from the characters after it.
-- In edit mode the arrow keys and Backspace move through an emoji written
-  as several characters one character at a time.
+  an emoji newer than the font. In edit mode the arrow keys, Backspace and
+  Delete then go through it part by part, as it is drawn.
+- A `*` that Markdown reads as the start or the end of emphasis is not part
+  of a keycap: `a*️⃣b*️⃣c` sets the `b` in italics. Write `\*️⃣` there.
+- While the find bar marks part of an emoji written as several characters,
+  such as the `1` of 1️⃣, that emoji is drawn as its parts.
 - An animated GIF or WebP is decoded whole when it is first shown, which
   takes a moment and four bytes of memory for each pixel of each frame. One
   whose frames need more than 256 MiB (139 frames of 800 × 600) then shows

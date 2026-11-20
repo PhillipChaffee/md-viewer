@@ -109,6 +109,97 @@ fn pasted_text_goes_into_the_source() {
     );
 }
 
+/// 👨‍👩‍👧 is five characters drawn as one picture.
+const FAMILY: &str = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+
+/// What is in the file once the source is saved.
+fn saved(reader: &mut Reader) -> String {
+    reader.press("Ctrl+S");
+    reader.read_file("draft.md")
+}
+
+#[test]
+fn the_arrow_keys_step_over_an_emoji_written_as_several_characters() {
+    let mut reader = editing(SOURCE);
+    append(&mut reader, &format!(" {FAMILY}!"));
+
+    reader.press("Left");
+    reader.press("Left");
+    reader.type_text("<");
+    reader.press("Right");
+    reader.type_text(">");
+
+    assert_eq!(saved(&mut reader), format!("{SOURCE} <{FAMILY}>!"));
+}
+
+#[test]
+fn backspace_and_delete_remove_all_of_an_emoji_written_as_several_characters() {
+    let mut reader = editing(SOURCE);
+    append(&mut reader, &format!(" {FAMILY}{FAMILY}!"));
+
+    reader.press("Left");
+    reader.press("Backspace");
+    assert_eq!(saved(&mut reader), format!("{SOURCE} {FAMILY}!"));
+
+    reader.press("Left");
+    reader.press("Del");
+    assert_eq!(saved(&mut reader), format!("{SOURCE} !"));
+}
+
+#[test]
+fn shift_and_an_arrow_select_all_of_an_emoji_to_copy_or_type_over() {
+    let mut reader = editing(SOURCE);
+    append(&mut reader, &format!(" {FAMILY}!"));
+
+    reader.press("Left");
+    reader.press("Shift+Left");
+    reader.copy();
+    assert_eq!(reader.clipboard(), Some(FAMILY));
+
+    reader.type_text("family");
+    assert_eq!(saved(&mut reader), format!("{SOURCE} family!"));
+}
+
+#[test]
+fn ctrl_z_brings_back_all_of_an_emoji_backspace_removed() {
+    let mut reader = editing(&format!("{SOURCE} {FAMILY}"));
+    reader.press("Ctrl+End");
+
+    reader.press("Backspace");
+    assert_eq!(reader.typed(), [format!("{SOURCE} ")]);
+
+    reader.press("Ctrl+Z");
+    assert_eq!(saved(&mut reader), format!("{SOURCE} {FAMILY}"));
+}
+
+/// The same emoji, pasted, is stepped over and removed whole as well.
+#[test]
+fn a_pasted_emoji_is_one_character_to_the_keyboard_too() {
+    let mut reader = editing(SOURCE);
+    reader.press("Ctrl+End");
+    reader.paste(&format!(" 1\u{fe0f}\u{20e3}\u{1f1ef}\u{1f1f5}{FAMILY}"));
+
+    reader.press("Backspace");
+    reader.press("Left");
+    reader.type_text("-");
+    reader.press("Left");
+    reader.press("Backspace");
+
+    assert_eq!(saved(&mut reader), format!("{SOURCE} -\u{1f1ef}\u{1f1f5}"));
+}
+
+#[test]
+fn removing_the_last_character_of_a_line_keeps_its_windows_line_ending() {
+    let mut reader = editing("ab\r\ncd\r\n");
+
+    reader.press("Ctrl+Home");
+    reader.press("Right");
+    reader.press("Del");
+    reader.press("Ctrl+S");
+
+    assert_eq!(reader.read_bytes("draft.md"), b"a\r\ncd\r\n");
+}
+
 #[test]
 fn a_save_leaves_no_other_file_beside_the_document() {
     let mut reader = editing(SOURCE);

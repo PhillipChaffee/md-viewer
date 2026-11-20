@@ -1106,21 +1106,52 @@ impl Galley {
 
 /// ## Cursor positions
 impl Galley {
-    #[expect(clippy::unused_self)]
+    /// md-viewer patch: the characters drawn as one with the character at
+    /// `index`, as a range of character indices. A character that takes no
+    /// room in its row (a selector, a joiner, the rest of an emoji drawn as
+    /// one glyph) belongs to the character before it, as it does for a click
+    /// (see [`Row::char_at`]). A line break is on its own, with the carriage
+    /// return of a Windows line ending, and so is each part of a sequence no
+    /// face joins. Empty past the end of the text.
+    pub fn cluster_at(&self, index: usize) -> std::ops::Range<usize> {
+        let takes_no_room = |glyph: &&Glyph| glyph.advance_width == 0.0 && glyph.chr != '\r';
+        let mut row_start = 0;
+        for row in &self.rows {
+            let glyphs = &row.glyphs;
+            if let Some(column) = index.checked_sub(row_start)
+                && column < glyphs.len()
+            {
+                let before = glyphs[..=column].iter().rev();
+                let before = before.take_while(takes_no_room).count().min(column);
+                let after = glyphs[column + 1..].iter();
+                let after = after.take_while(takes_no_room).count();
+                return index - before..index + 1 + after;
+            }
+            row_start += row.char_count_including_newline();
+            if index < row_start {
+                return index..index + 1;
+            }
+        }
+        let end = self.end().index;
+        end..end
+    }
+
+    /// md-viewer patch: moves past all the characters drawn as one.
     pub fn cursor_left_one_character(&self, cursor: &CCursor) -> CCursor {
         if cursor.index == 0 {
             Default::default()
         } else {
             CCursor {
-                index: cursor.index - 1,
+                index: self.cluster_at(cursor.index - 1).start,
                 prefer_next_row: true, // default to this when navigating. It is more often useful to put cursor at the beginning of a row than at the end.
             }
         }
     }
 
+    /// md-viewer patch: moves past all the characters drawn as one.
     pub fn cursor_right_one_character(&self, cursor: &CCursor) -> CCursor {
         CCursor {
-            index: (cursor.index + 1).min(self.end().index),
+            index: self.cluster_at(cursor.index).end,
             prefer_next_row: true, // default to this when navigating. It is more often useful to put cursor at the beginning of a row than at the end.
         }
     }

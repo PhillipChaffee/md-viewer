@@ -65,7 +65,19 @@ impl OffsetMap {
 /// `\(...\)` / `\[...\]` delimiters to `$...$` / `$$...$$` on an in-memory
 /// copy when paired occurrences exist in prose. Returned event ranges always
 /// refer to `text`, the original source.
+///
+/// Text the parser cut into pieces is joined again (see [`join_cut_text`]).
 pub fn parse_events(
+    text: &str,
+    math_enabled: bool,
+    frontmatter_enabled: bool,
+) -> Vec<(Event<'static>, Range<usize>)> {
+    join_cut_text(text, parse_located(text, math_enabled, frontmatter_enabled))
+}
+
+/// The events of `text`, each with its range in `text`, as the parser cut
+/// them.
+fn parse_located(
     text: &str,
     math_enabled: bool,
     frontmatter_enabled: bool,
@@ -83,6 +95,48 @@ pub fn parse_events(
         map.map_range(range);
     }
     events
+}
+
+/// Joins text events that follow one another in the source into one.
+///
+/// The parser ends a text event at each character that might have been
+/// markup (`*`, `_`, `[`, `]`, `~`), and when it turns out to be none, the
+/// text on either side of it stays cut there. Each piece is then laid out
+/// on its own, so what must be shaped together is not: the keycap `*` +
+/// U+FE0F + U+20E3 is drawn as its parts.
+///
+/// Only pieces spelled in the source as they are drawn are joined, and only
+/// where one starts at the byte the other ends on. So the joined text is
+/// still the bytes of its range, which search highlights and emoji
+/// shortcodes rely on, and an escape, an entity, markup or a line break
+/// between two pieces keeps them apart as before.
+fn join_cut_text(
+    source: &str,
+    events: Vec<(Event<'static>, Range<usize>)>,
+) -> Vec<(Event<'static>, Range<usize>)> {
+    let as_in_source = |event: &Event<'_>, range: &Range<usize>| {
+        matches!(event, Event::Text(text) if source.get(range.clone()) == Some(&**text))
+    };
+    let mut joined = Vec::with_capacity(events.len());
+    let mut events = events.into_iter().peekable();
+    while let Some((event, mut range)) = events.next() {
+        if !as_in_source(&event, &range) {
+            joined.push((event, range));
+            continue;
+        }
+        let cut_at = range.end;
+        while let Some((_, next)) =
+            events.next_if(|(next, at)| at.start == range.end && as_in_source(next, at))
+        {
+            range.end = next.end;
+        }
+        if range.end == cut_at {
+            joined.push((event, range));
+        } else {
+            joined.push((Event::Text(source[range.clone()].to_owned().into()), range));
+        }
+    }
+    joined
 }
 
 fn parse_owned(
@@ -505,6 +559,78 @@ mod tests {
             .find(|(e, _)| matches!(e, Event::End(TagEnd::Paragraph)))
             .unwrap();
         assert_eq!(end_tag.1, 0..text.len());
+    }
+
+    /// The text of each `Event::Text`, with the source it was read from.
+    fn text_pieces(text: &str) -> Vec<(String, String)> {
+        parse_events(text, true, false)
+            .into_iter()
+            .filter_map(|(event, range)| match event {
+                Event::Text(piece) => Some((piece.to_string(), text[range].to_string())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The parser ends a piece of text at each character that might have
+    /// been markup. The keycap `*` + U+FE0F + U+20E3 is cut after its `*`,
+    /// and reaches layout whole only when the pieces are joined again.
+    #[test]
+    fn text_the_parser_cut_at_possible_markup_is_one_piece() {
+        for line in [
+            "a *\u{fe0f}\u{20e3} b",
+            "a #\u{fe0f}\u{20e3} 1\u{fe0f}\u{20e3} b",
+            "2*3 [x] ~a \u{1f468}\u{200d}\u{1f469}_x *\u{1f468}\u{200d}\u{1f469}",
+            "a [not a link] and ]( too",
+        ] {
+            assert_eq!(text_pieces(line), [(line.to_owned(), line.to_owned())]);
+        }
+    }
+
+    #[test]
+    fn text_is_not_joined_across_markup_or_a_line_break() {
+        let pieces = |text: &str| -> Vec<String> {
+            text_pieces(text).into_iter().map(|(piece, _)| piece).collect()
+        };
+        // The joiner at the end of a line does not reach the next line.
+        assert_eq!(
+            pieces("one \u{1f468}\u{200d}\n\u{1f469} two"),
+            ["one \u{1f468}\u{200d}", "\u{1f469} two"]
+        );
+        assert_eq!(pieces("a *b* c"), ["a ", "b", " c"]);
+        assert_eq!(pieces("a `b` c $x$ d"), ["a ", " c ", " d"]);
+        assert_eq!(pieces("a <b>c</b> d"), ["a ", "c", " d"]);
+        assert_eq!(pieces("a  \nb"), ["a", "b"]);
+    }
+
+    /// An escape and an entity are not spelled in the source as they are
+    /// drawn, so each stays a piece of its own, with the source it came from.
+    #[test]
+    fn text_that_differs_from_its_source_is_left_as_the_parser_cut_it() {
+        assert_eq!(
+            text_pieces("a\\*b"),
+            [("a".to_owned(), "a".to_owned()), ("*b".to_owned(), "*b".to_owned())]
+        );
+        assert_eq!(
+            text_pieces("a&amp;b*c"),
+            [
+                ("a".to_owned(), "a".to_owned()),
+                ("&".to_owned(), "&amp;".to_owned()),
+                ("b*c".to_owned(), "b*c".to_owned()),
+            ]
+        );
+    }
+
+    /// Every joined piece is still the bytes of the source its range names,
+    /// after a `\(...\)` rewrite moved the ranges too.
+    #[test]
+    fn joined_text_keeps_its_place_in_the_source() {
+        let text = "\\(x\\) costs 2*3 [or so]\n\n```\na*b\n```\n";
+        let pieces = text_pieces(text);
+        assert!(pieces.contains(&(" costs 2*3 [or so]".to_owned(), " costs 2*3 [or so]".to_owned())));
+        for (piece, source) in pieces {
+            assert_eq!(piece, source);
+        }
     }
 
     #[test]

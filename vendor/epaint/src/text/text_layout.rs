@@ -1414,4 +1414,76 @@ mod tests {
         assert_eq!(glyphs[1].advance_width, 0.0);
         assert_eq!(glyphs[2].uv_rect, apart.rows[0].glyphs[1].uv_rect);
     }
+
+    /// md-viewer patch: the arrow keys move past an emoji a face joins as
+    /// past one character, from either side and from inside it, and past
+    /// each part of a sequence no face joins.
+    #[test]
+    fn test_cursor_moves_past_an_emoji_sequence() {
+        use crate::text::cursor::CCursor;
+
+        let mut fonts = fonts_with_color_emoji();
+        let left = |galley: &Galley, index| galley.cursor_left_one_character(&CCursor::new(index));
+        let right =
+            |galley: &Galley, index| galley.cursor_right_one_character(&CCursor::new(index));
+
+        for sequence in [
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+            "\u{1F1EF}\u{1F1F5}",
+            "\u{1F44D}\u{1F3FD}",
+            "1\u{FE0F}\u{20E3}",
+            "\u{2764}\u{FE0F}",
+        ] {
+            let galley = lay_out(&mut fonts, &format!("a{sequence}b\n{sequence}"));
+            let chars = sequence.chars().count();
+            let second = chars + 3;
+
+            assert_eq!(galley.cluster_at(0), 0..1);
+            for inside in 1..=chars {
+                assert_eq!(galley.cluster_at(inside), 1..chars + 1, "{sequence}");
+            }
+            assert_eq!(galley.cluster_at(chars + 1), chars + 1..chars + 2);
+            assert_eq!(galley.cluster_at(chars + 2), chars + 2..second, "the break");
+            assert_eq!(galley.cluster_at(second), second..second + chars);
+            assert_eq!(
+                galley.cluster_at(second + chars),
+                second + chars..second + chars
+            );
+
+            assert_eq!(right(&galley, 0).index, 1);
+            assert_eq!(right(&galley, 1).index, chars + 1, "{sequence}");
+            assert_eq!(right(&galley, 2).index, chars + 1, "from inside");
+            assert_eq!(right(&galley, chars + 2).index, second);
+            assert_eq!(right(&galley, second).index, second + chars);
+            assert_eq!(right(&galley, second + chars).index, second + chars);
+
+            assert_eq!(left(&galley, second + chars).index, second, "{sequence}");
+            assert_eq!(left(&galley, second).index, chars + 2);
+            assert_eq!(left(&galley, chars + 1).index, 1, "{sequence}");
+            assert_eq!(left(&galley, chars).index, 1, "from inside");
+            assert_eq!(left(&galley, 1).index, 0);
+            assert_eq!(left(&galley, 0).index, 0);
+        }
+
+        // No face joins a man to a grinning face: the joiner takes no room
+        // and goes with the man, and the face is a character of its own.
+        let unjoined = lay_out(&mut fonts, "\u{1F468}\u{200D}\u{1F600}");
+        assert_eq!(right(&unjoined, 0).index, 2);
+        assert_eq!(right(&unjoined, 2).index, 3);
+        assert_eq!(left(&unjoined, 3).index, 2);
+        assert_eq!(left(&unjoined, 2).index, 0);
+
+        // A character with no room at the start of a row has none before
+        // it to belong to.
+        let alone = lay_out(&mut fonts, "a\n\u{FE0F}b");
+        assert_eq!(alone.cluster_at(2), 2..3);
+        assert_eq!(left(&alone, 3).index, 2);
+
+        // The carriage return of a Windows line ending takes no room, and
+        // is no part of the character before it.
+        let windows = lay_out(&mut fonts, "ab\r\nc");
+        assert_eq!(windows.cluster_at(1), 1..2);
+        assert_eq!(windows.cluster_at(2), 2..3);
+        assert_eq!(left(&windows, 3).index, 2);
+    }
 }
