@@ -44,10 +44,15 @@ fn as_written(name: &str) -> &'static str {
     }
 }
 
-/// Which of the three documents still have a tab.
+/// Which of the three documents still have a tab. A tab carries its
+/// document's heading.
 fn tabs(reader: &Reader) -> Vec<&'static str> {
-    let names = ["a.md", "b.md", "c.md"].into_iter();
-    names.filter(|name| reader.count(name) == 1).collect()
+    let open = reader.tabs();
+    let documents = [("a.md", "Alpha"), ("b.md", "Beta"), ("c.md", "Gamma")];
+    let with_a_tab = documents
+        .into_iter()
+        .filter(|(_, heading)| open.iter().any(|tab| tab == heading));
+    with_a_tab.map(|(file, _)| file).collect()
 }
 
 #[test]
@@ -200,14 +205,14 @@ fn every_way_to_close_a_tab_asks() {
             reader.click("Close Tab");
         }),
         ("the tab's close button", |reader| {
-            reader.hover("a.md");
+            reader.hover("tab:Alpha");
             reader.click("Close tab");
         }),
         ("a middle click on the tab", |reader| {
-            reader.middle_click("a.md");
+            reader.middle_click("tab:Alpha");
         }),
         ("the tab's menu", |reader| {
-            reader.right_click("a.md");
+            reader.right_click("tab:Alpha");
             reader.click("Close");
         }),
     ];
@@ -215,7 +220,7 @@ fn every_way_to_close_a_tab_asks() {
     for (way, close) in ways {
         let mut reader = three_linked();
         reader.drop_file("b.md");
-        reader.click("a.md");
+        reader.click("tab:Alpha");
         edit(&mut reader, " Edit A.");
 
         close(&mut reader);
@@ -245,7 +250,7 @@ fn a_middle_click_in_the_files_sidebar_asks_too() {
 fn a_tab_behind_the_one_in_front_is_asked_about_by_name() {
     let mut reader = two_unsaved_of_three();
 
-    reader.middle_click("b.md");
+    reader.middle_click("tab:Beta");
 
     reader.assert_sees("Save changes to b.md?");
     reader.click("Discard");
@@ -257,7 +262,7 @@ fn a_tab_behind_the_one_in_front_is_asked_about_by_name() {
 #[test]
 fn close_others_asks_about_each_unsaved_document_in_turn() {
     let mut reader = two_unsaved_of_three();
-    reader.right_click("c.md");
+    reader.right_click("tab:Gamma");
     reader.click("Close Others");
 
     reader.assert_sees("Save changes to a.md?");
@@ -272,7 +277,7 @@ fn close_others_asks_about_each_unsaved_document_in_turn() {
     reader.click("Discard");
 
     reader.assert_hides("Save changes to");
-    assert_eq!(reader.count("a.md") + reader.count("b.md"), 0);
+    assert_eq!(reader.count("tab:Alpha") + reader.count("tab:Beta"), 0);
     assert_eq!(reader.title(), "c.md - Markdown Viewer");
     reader.assert_sees("The end of the line.");
     assert_eq!(
@@ -285,7 +290,7 @@ fn close_others_asks_about_each_unsaved_document_in_turn() {
 #[test]
 fn cancel_stops_close_others_and_closes_nothing() {
     let mut reader = two_unsaved_of_three();
-    reader.right_click("c.md");
+    reader.right_click("tab:Gamma");
     reader.click("Close Others");
     reader.click("Discard");
 
@@ -293,7 +298,7 @@ fn cancel_stops_close_others_and_closes_nothing() {
 
     reader.assert_hides("Save changes to");
     assert_eq!(tabs(&reader), ["a.md", "b.md", "c.md"]);
-    reader.click("a.md");
+    reader.click("tab:Alpha");
     assert_eq!(
         reader.typed(),
         [format!("{} Edit A.", as_written("a.md"))],
@@ -305,7 +310,7 @@ fn cancel_stops_close_others_and_closes_nothing() {
 #[test]
 fn a_save_before_a_cancel_stays_saved() {
     let mut reader = two_unsaved_of_three();
-    reader.right_click("c.md");
+    reader.right_click("tab:Gamma");
     reader.click("Close Others");
     reader.click("Save");
 
@@ -325,7 +330,7 @@ fn cancel_at_the_first_question_of_close_others_closes_nothing() {
     edit(&mut reader, " Edit A.");
     reader.drop_file("b.md");
     reader.drop_file("c.md");
-    reader.right_click("c.md");
+    reader.right_click("tab:Gamma");
     reader.click("Close Others");
 
     reader.click("Cancel");
@@ -339,11 +344,11 @@ fn close_others_does_not_ask_about_the_tab_it_keeps() {
     reader.drop_file("b.md");
     edit(&mut reader, " Edit B.");
 
-    reader.right_click("b.md");
+    reader.right_click("tab:Beta");
     reader.click("Close Others");
 
     reader.assert_hides("Save changes to");
-    assert_eq!(reader.count("a.md"), 0);
+    assert_eq!(reader.count("tab:Alpha"), 0);
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
     assert_eq!(reader.count("Unsaved changes"), 1);
 }
@@ -456,7 +461,7 @@ fn cancel_while_quitting_keeps_the_app_and_every_tab() {
 
     assert!(!reader.has_quit());
     assert_eq!(tabs(&reader), ["a.md", "b.md", "c.md"]);
-    reader.click("a.md");
+    reader.click("tab:Alpha");
     assert_eq!(
         reader.typed(),
         [format!("{} Edit A.", as_written("a.md"))],

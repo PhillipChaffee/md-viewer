@@ -7,14 +7,12 @@ fn the_open_tabs_come_back_with_the_same_one_in_front() {
     let mut reader = three_linked();
     reader.drop_file("b.md");
     reader.drop_file("c.md");
-    reader.click("b.md");
+    reader.click("tab:Beta");
 
     let reader = reader.restart(&[]);
 
-    for tab in ["a.md", "b.md", "c.md"] {
-        assert_eq!(reader.count(tab), 1, "{tab}");
-    }
-    assert!(reader.is_on("b.md"));
+    assert_eq!(reader.tabs(), ["Alpha", "Beta", "Gamma"]);
+    assert!(reader.is_on("tab:Beta"));
     reader.assert_sees("Beta");
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
 }
@@ -27,7 +25,7 @@ fn a_file_on_the_command_line_replaces_the_last_session() {
     let reader = reader.restart(&["c.md"]);
 
     reader.assert_sees("Gamma");
-    assert_eq!(reader.count("a.md"), 0, "no tab strip: one document");
+    assert_eq!(reader.count("tab:Alpha"), 0, "no tab strip: one document");
     assert_eq!(reader.title(), "c.md - Markdown Viewer");
 }
 

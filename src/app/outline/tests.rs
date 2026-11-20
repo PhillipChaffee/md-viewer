@@ -4,6 +4,7 @@ use egui_commonmark_extended::header_position_key;
 use egui_kittest::kittest::Queryable as _;
 
 use super::*;
+use crate::app::chrome::BAR_HEIGHT;
 use crate::app::content::tests::label_harness::LabelHarness;
 use crate::app::ui_harness::MemoryStorage;
 use crate::persist::{PersistedState, APP_KEY};
@@ -318,7 +319,9 @@ fn the_row_under_the_pointer_is_washed_and_no_other() {
     let washed = |harness: &LabelHarness| {
         let shapes = painted_shapes(harness.output());
         let rects = shapes.iter().filter_map(|shape| match shape {
-            egui::Shape::Rect(rect) if rect.fill == raised => Some(rect.rect),
+            egui::Shape::Rect(rect) if rect.fill == raised && rect.rect.top() > BAR_HEIGHT => {
+                Some(rect.rect)
+            }
             _ => None,
         });
         rects.collect::<Vec<_>>()

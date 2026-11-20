@@ -114,7 +114,7 @@ fn unsaved_edits_survive_a_trip_to_another_tab() {
 
     reader.drop_file("other.md");
     reader.assert_sees("Other");
-    reader.click("draft.md");
+    reader.click("tab:Draft");
 
     assert_eq!(reader.typed(), [format!("{SOURCE} Kept.")]);
     assert_eq!(reader.count("Unsaved changes"), 1);

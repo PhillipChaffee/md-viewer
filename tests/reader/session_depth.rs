@@ -110,7 +110,7 @@ fn everything_comes_back_together() {
         .window(1600.0, 900.0)
         .open();
     reader.drop_files(&["guide.md", "extra.md"]);
-    reader.click("guide.md");
+    reader.click("tab:Guide");
     reader.press("Ctrl+D");
     reader.press("Ctrl+D");
     reader.press("Ctrl+Alt+Right");
@@ -125,8 +125,10 @@ fn everything_comes_back_together() {
 
     let mut reader = reader.restart(&[]);
 
-    for tab in ["sink.md", "guide.md", "extra.md"] {
-        assert_eq!(reader.count(tab), 2, "{tab}: a tab and a row in the files");
+    assert_eq!(reader.tabs().len(), 3, "{:?}", reader.tabs());
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Guide"));
+    for file in ["sink.md", "guide.md", "extra.md"] {
+        assert_eq!(reader.count(file), 1, "{file}: a row in the files");
     }
     assert_eq!(reader.title(), "guide.md - Markdown Viewer");
     assert_eq!(reader.page_color(), Rgb::hex("#000000"));
@@ -362,10 +364,7 @@ fn saved_tabs_that_are_gone_or_are_folders_are_left_out() {
     let reader = launch.remembering(&saved).open();
 
     reader.assert_hides("Unable to open");
-    assert_eq!(reader.count("a.md"), 1);
-    assert_eq!(reader.count("b.md"), 1);
-    assert_eq!(reader.count("folder.md"), 0);
-    assert_eq!(reader.count("missing.md"), 0);
+    assert_eq!(reader.tabs().len(), 2, "{:?}", reader.tabs());
 }
 
 #[test]
@@ -377,6 +376,6 @@ fn a_session_survives_two_restarts_in_a_row() {
     let reader = reader.restart(&[]).restart(&[]);
 
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
-    assert_eq!(reader.count("a.md"), 1);
+    assert_eq!(reader.count("tab:Alpha"), 1);
     assert_eq!(reader.page_color(), Rgb::hex("#2C2C2E"));
 }

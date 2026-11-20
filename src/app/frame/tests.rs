@@ -305,8 +305,8 @@ fn the_tab_close_button_closes_its_tab() {
     harness.app_mut().open_in_new_tab(b);
     harness.settle();
 
-    // Of everything that reads `b.md`, the tab is the topmost.
-    let named = harness.labelled("b.md");
+    // Of everything that reads `B`, the tab is the topmost.
+    let named = harness.labelled("B");
     let tab = named.iter().map(|(center, _)| *center);
     harness.hover_at(tab.min_by(|a, b| a.y.total_cmp(&b.y)).unwrap());
     harness.click_exact("Close tab");

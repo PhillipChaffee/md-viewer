@@ -285,6 +285,8 @@ fn the_mark_follows_the_tab_in_front() {
     let row_ink = |reader: &Reader, name: &str| reader.ink_of_each(name).last().copied();
     assert_ne!(row_ink(&reader, "changes.md"), quiet.last().copied());
 
+    // Off the row that was clicked: a row under the pointer is dark too.
+    reader.hover("More");
     reader.press("Ctrl+Tab");
 
     assert_eq!(row_ink(&reader, "changes.md"), quiet.last().copied());
@@ -316,13 +318,16 @@ fn a_documents_menu_is_there_while_the_document_has_a_tab() {
     let mut reader = shelf_with_files();
     reader.ctrl_click("changes.md");
 
-    // In reading order the tab comes before the row in the files.
-    reader.right_click_nth("changes.md", 1);
+    reader.right_click("changes.md");
     reader.click("Copy Path");
 
     let path = reader.path("changes.md").display().to_string();
     assert_eq!(reader.clipboard(), Some(path.as_str()));
-    assert_eq!(reader.count("changes.md"), 2, "the tab is still open");
+    assert_eq!(
+        reader.tabs(),
+        ["Read me", "Changes"],
+        "the tab is still open"
+    );
 }
 
 #[test]
@@ -338,10 +343,11 @@ fn a_folder_has_no_copy_menu() {
 fn middle_clicking_an_open_document_in_the_list_closes_its_tab() {
     let mut reader = shelf_with_files();
     reader.ctrl_click("changes.md");
-    assert_eq!(reader.count("changes.md"), 2, "a tab and a row");
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
 
-    reader.middle_click_nth("changes.md", 1);
+    reader.middle_click("changes.md");
 
+    assert_eq!(reader.tabs(), ["Read me"]);
     assert_eq!(reader.count("changes.md"), 1, "the row is left");
     reader.assert_sees("Start here.");
     assert_eq!(reader.title(), "readme.md - Markdown Viewer");

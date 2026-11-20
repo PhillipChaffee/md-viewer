@@ -1,5 +1,5 @@
-//! The tab strip, clicked through by label: a click goes in, the open tabs
-//! and the active document come out.
+//! The tabs of the top row, clicked through by label: a click goes in,
+//! the open tabs and the active document come out.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -8,14 +8,17 @@ use eframe::egui::accesskit::Toggled;
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
-use super::{STRIP_HEIGHT, UNDERLINE};
+use super::{CLOSE_SIDE, NAME_WIDTH, TAB_PADDING, UNDERLINE};
+use crate::app::chrome::BAR_HEIGHT;
 use crate::app::content::tests::label_harness::LabelHarness;
 use crate::test_support::{assert_close, painted_shapes};
 
-/// `a.md`, `b.md`, and `c.md`, each in its own tab with `c.md` active. The
-/// explorer is hidden so that a file name labels its tab and nothing else.
+/// `a.md`, `b.md`, and `c.md`, each in its own tab with `c.md` active. None
+/// has a heading, so each tab is named by its file, and the explorer is
+/// hidden, so a file name labels its tab and nothing else.
 pub(crate) fn three_tabs() -> LabelHarness {
-    let mut harness = LabelHarness::with_docs(&[("a.md", "# A"), ("b.md", "# B"), ("c.md", "# C")]);
+    let mut harness =
+        LabelHarness::with_docs(&[("a.md", "Alpha."), ("b.md", "Beta."), ("c.md", "Gamma.")]);
     let (b, c) = (harness.path("b.md"), harness.path("c.md"));
     let app = harness.state_mut();
     app.show_explorer = false;
@@ -37,7 +40,7 @@ pub(crate) fn one_tab(content: &str) -> LabelHarness {
 /// tabs than the window is wide.
 fn many_tabs() -> LabelHarness {
     let names: Vec<String> = (1..=40).map(|n| format!("doc-{n:02}.md")).collect();
-    let docs: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "# Doc")).collect();
+    let docs: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "Doc.")).collect();
     let mut harness = LabelHarness::with_docs(&docs);
     let rest: Vec<PathBuf> = names[1..].iter().map(|name| harness.path(name)).collect();
     let app = harness.state_mut();
@@ -202,9 +205,9 @@ fn close_others_stops_watching_the_closed_documents() {
 /// looked for once, `b.md` holds it twice and `c.md` not at all.
 fn finding_needle() -> LabelHarness {
     let mut harness = LabelHarness::with_docs(&[
-        ("a.md", "# A\n\nneedle"),
+        ("a.md", "needle"),
         ("b.md", "needle needle"),
-        ("c.md", "# C"),
+        ("c.md", "None here."),
     ]);
     let (b, c) = (harness.path("b.md"), harness.path("c.md"));
     let app = harness.state_mut();
@@ -245,7 +248,6 @@ fn the_find_bar_counts_again_in_the_frames_a_close_is_followed_by() {
     // One frame for each event of the click; the last one closes the tab.
     harness.step();
     assert_eq!(open_paths(&harness).len(), 2);
-    assert!(harness.query_by_label("1 / 1").is_some(), "not yet counted");
     run_the_frames_asked_for(&mut harness);
     assert!(harness.query_by_label("1 / 2").is_some(), "after a close");
 
@@ -279,57 +281,23 @@ fn close_others_counts_the_matches_of_the_document_it_keeps() {
     assert!(harness.query_by_label("1 / 2").is_some());
 }
 
-/// Whether the strip is on screen: its open-file button is.
-pub(crate) fn shows_strip(harness: &LabelHarness) -> bool {
-    harness.query_by_label("Open file in new tab").is_some()
-}
-
 #[test]
-fn one_document_has_no_strip_and_a_second_brings_it_in() {
-    let mut harness = one_tab("# A");
-    assert!(!shows_strip(&harness));
-    assert!(harness.query_by_label("a.md").is_none());
-
-    let other = harness.dir.join("b.md");
-    std::fs::write(&other, "# B").unwrap();
-    harness.state_mut().open_in_new_tab(other);
-    harness.frames(2);
-    assert!(shows_strip(&harness));
-    assert!(harness.query_by_label("a.md").is_some());
-
-    harness.get_by_label("b.md").hover();
-    harness.frames(2);
-    harness.click("Close tab");
-    assert!(!shows_strip(&harness));
-}
-
-#[test]
-fn no_document_has_no_strip_either() {
-    let mut harness = one_tab("# A");
-    harness.state_mut().close_tab(0);
-    harness.frames(2);
-
-    assert!(harness.state().tabs.is_empty());
-    assert!(!shows_strip(&harness));
-}
-
-#[test]
-fn the_strip_is_the_height_of_one_row_with_every_tab_filling_it() {
+fn every_tab_fills_the_height_of_the_bar() {
     let harness = three_tabs();
 
     let open = harness.get_by_label("Open file in new tab").rect();
     for tab in ["a.md", "b.md", "c.md"] {
         let rect = harness.get_by_label(tab).rect();
-        assert_close(rect.height(), STRIP_HEIGHT);
-        assert_close(rect.top(), crate::app::chrome::BAR_HEIGHT);
+        assert_close(rect.height(), BAR_HEIGHT);
+        assert_close(rect.top(), 0.0);
         assert_close(rect.center().y, open.center().y);
     }
 }
 
-/// The text the last frame painted that reads `text`, in the strip.
+/// The text the last frame painted that reads `text`, in the top row.
 #[track_caller]
 pub(crate) fn strip_text(harness: &LabelHarness, text: &str) -> egui::epaint::TextShape {
-    let strip = crate::app::chrome::BAR_HEIGHT..=crate::app::chrome::BAR_HEIGHT + STRIP_HEIGHT;
+    let strip = 0.0..=BAR_HEIGHT;
     let found = painted_shapes(harness.output())
         .into_iter()
         .find_map(|shape| match shape {
@@ -366,7 +334,7 @@ fn the_active_tab_is_dark_and_underlined_in_the_accent_and_the_rest_are_muted() 
     assert_close(line.height(), UNDERLINE);
     assert_close(line.left(), title.pos.x);
     assert_close(line.width(), title.galley.size().x);
-    assert_close(line.bottom(), crate::app::chrome::BAR_HEIGHT + STRIP_HEIGHT);
+    assert_close(line.bottom(), BAR_HEIGHT);
 }
 
 #[test]
@@ -402,27 +370,6 @@ fn the_plus_button_opens_what_the_picker_returns_in_a_new_tab() {
 
     assert_eq!(open_paths(&harness).len(), 4);
     assert_eq!(active_path(&harness), other);
-}
-
-#[test]
-fn a_frame_that_opens_a_file_and_picks_a_tab_opens_the_file_first() {
-    let mut harness = three_tabs();
-    let other = harness.dir.join("d.md");
-    std::fs::write(&other, "# D").unwrap();
-    harness.state_mut().file_picker = Box::new(move |_| Ok(Some(other.clone())));
-    let ctx = harness.ctx.clone();
-    let actions = super::TabStripActions {
-        open_file: true,
-        activate: Some(0),
-        close: Some(1),
-        close_others: None,
-    };
-
-    let to_close = harness.state_mut().apply_tab_strip_actions(&ctx, &actions);
-
-    assert_eq!(to_close, Some(1));
-    assert_eq!(open_paths(&harness).len(), 4);
-    assert_eq!(active_path(&harness), harness.path("a.md"));
 }
 
 #[test]
@@ -523,5 +470,138 @@ fn the_strip_stays_where_the_reader_scrolled_it() {
     assert!(
         !in_strip(&harness, "doc-40.md"),
         "the tab in front is not pulled back into view"
+    );
+}
+
+#[test]
+fn one_document_has_a_tab_and_the_new_tab_button_right_after_it() {
+    let harness = one_tab("Body.");
+
+    let tab = harness.get_by_label("a.md").rect();
+    let open = harness.get_by_label("Open file in new tab").rect();
+    let forward = harness.get_by_label("Go forward").rect();
+    assert!(forward.right() <= tab.left(), "{forward:?} then {tab:?}");
+    assert_close(
+        open.left(),
+        tab.right() + harness.ctx.pixels_per_point().recip(),
+    );
+}
+
+#[test]
+fn with_no_document_the_new_tab_button_follows_the_history_arrows() {
+    let mut harness = one_tab("Body.");
+    harness.state_mut().close_tab(0);
+    harness.frames(2);
+
+    assert!(harness.query_by_label("a.md").is_none());
+    let open = harness.get_by_label("Open file in new tab").rect();
+    let forward = harness.get_by_label("Go forward").rect();
+    assert!(open.left() >= forward.right());
+    assert!(open.left() - forward.right() < 10.0, "{open:?}");
+}
+
+#[test]
+fn a_second_document_moves_nothing_under_the_bar() {
+    let mut harness = one_tab("# A\n\n## B");
+    harness.state_mut().show_outline = true;
+    harness.frames(2);
+    let top = |harness: &LabelHarness| harness.get_by_label("CONTENTS").rect().top();
+    let at_rest = top(&harness);
+
+    let other = harness.dir.join("b.md");
+    std::fs::write(&other, "# Other\n\n## More").unwrap();
+    harness.state_mut().open_in_new_tab(other);
+    harness.frames(2);
+
+    assert_eq!(open_paths(&harness).len(), 2);
+    assert_close(top(&harness), at_rest);
+}
+
+#[test]
+fn a_short_name_gets_a_tab_wide_enough_to_hit_and_a_long_one_is_cut_short() {
+    let long = format!("{}.md", "a-very-long-file-name".repeat(6));
+    let mut harness = LabelHarness::with_docs(&[("i", "Body."), (&long, "Body.")]);
+    let other = harness.path(&long);
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    app.open_in_new_tab(other);
+    harness.frames(2);
+
+    let chrome = 2.0_f32.mul_add(TAB_PADDING, CLOSE_SIDE);
+    let short = harness.get_by_label("i").rect();
+    assert_close(short.width(), chrome + NAME_WIDTH.min);
+    let cut = harness.get_by_label(&long).rect();
+    assert!(cut.width() <= chrome + NAME_WIDTH.max, "{cut:?}");
+    let painted = painted_shapes(harness.output())
+        .into_iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(text) if text.galley.text().starts_with("a-very") => Some(text),
+            _ => None,
+        })
+        .unwrap();
+    assert!(painted.galley.elided, "it ends in an ellipsis");
+}
+
+#[test]
+fn pointing_at_a_tab_says_where_the_file_is_and_whether_it_is_live() {
+    let mut harness = three_tabs();
+    let path = harness.path("a.md").display().to_string();
+    assert!(harness.query_by_label(&path).is_none());
+
+    harness.get_by_label("a.md").hover();
+    harness.frames(8);
+    assert!(harness.query_by_label(&path).is_some());
+    assert!(harness.query_by_label_contains("Live").is_none());
+
+    harness.key_press(Key::F5);
+    harness.frames(8);
+    assert!(harness.query_by_label(&path).is_some());
+    assert!(harness
+        .query_by_label("Live: reloads when the file changes")
+        .is_some());
+}
+
+#[test]
+fn a_frame_that_picks_a_tab_and_closes_another_does_both() {
+    let mut harness = three_tabs();
+    let picks = super::TabPicks {
+        activate: Some(0),
+        close: Some(1),
+        close_others: None,
+    };
+
+    assert!(harness.state_mut().apply_tab_picks(&picks));
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("a.md"), harness.path("c.md")]
+    );
+    assert_eq!(active_path(&harness), harness.path("a.md"));
+    let nothing = super::TabPicks::default();
+    assert!(!harness.state_mut().apply_tab_picks(&nothing));
+    assert_eq!(open_paths(&harness).len(), 2);
+}
+
+#[test]
+fn a_tab_is_named_by_its_documents_first_heading_and_has_the_role_of_a_tab() {
+    let mut harness = LabelHarness::with_docs(&[
+        ("notes.md", "# Field Notes\n\nBody."),
+        ("plain.md", "No heading here."),
+    ]);
+    let plain = harness.path("plain.md");
+    let app = harness.state_mut();
+    app.show_explorer = false;
+    app.show_outline = false;
+    app.open_in_new_tab(plain);
+    harness.frames(2);
+
+    let tabs: Vec<String> = harness
+        .query_all_by_role(egui::accesskit::Role::Tab)
+        .filter_map(|tab| tab.accesskit_node().label())
+        .collect();
+    assert_eq!(tabs, ["Field Notes", "plain.md"]);
+    assert_eq!(
+        strip_text(&harness, "Field Notes").galley.text(),
+        "Field Notes"
     );
 }

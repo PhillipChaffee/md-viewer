@@ -61,7 +61,12 @@ src/app/shortcuts/mod.rs	every_binding_can_fire	Self::AltNoCtrl => modifiers.alt
 src/app/mod.rs	zoom_percent_is_total_and_close	(zoom * 100.0).round() as i32	(zoom * 100.0).floor() as i32
 src/app/lightbox/mod.rs	lightbox_zoom_stays_in_range	(self.zoom * factor).clamp(0.1, 10.0)	(self.zoom * factor).clamp(0.1, 100.0)
 src/app/lightbox/mod.rs	zoom_to_cursor_never_panics_or_goes_negative	new_offset.clamp(egui::Vec2::ZERO, max_offset)	new_offset.min(max_offset)
-src/app/top_bar/mod.rs	the_title_keeps_clear_of_the_buttons	if leftmost > rightmost {	if leftmost > rightmost + 1.0 {
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	middle: Rangef::new(left, (trailing.min - BUTTON_GAP).max(left)),	middle: Rangef::new(left, trailing.min - BUTTON_GAP),
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	let left = leading.max + BUTTON_GAP;	let left = leading.max - BUTTON_GAP;
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	right.clamp(self.middle.min, self.middle.max),	right.min(self.middle.max),
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	let right = (room.min + shown.max(0.0) + BUTTON_SIDE).min(room.max);	let right = room.min + shown.max(0.0) + BUTTON_SIDE;
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	let right = (room.min + shown.max(0.0) + BUTTON_SIDE).min(room.max);	let right = (room.min + shown + BUTTON_SIDE).min(room.max);
+src/app/top_bar/mod.rs	the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons	if room.span() < BUTTON_SIDE {	if room.span() < 0.0 {
 src/app/chrome/mod.rs	segments_share_the_width_they_are_given	count.max(1) as f32	count as f32
 src/app/appearance/mod.rs	the_width_slider_always_has_a_range	        .max(ReadingWidth::MIN + ReadingWidth::STEP)\n	        .max(ReadingWidth::MIN)\n
 src/app/explorer_panel/mod.rs	the_flash_fades_to_its_floor_and_ends	Some(alpha.max(60))	Some(alpha)

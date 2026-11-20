@@ -49,8 +49,9 @@ first run compiles every dependency under Kani (about 4 minutes on 4
 cores, 1.3 GB in `target/kani`). After that the 68 harnesses take about
 22 minutes one at a time (`PROOF_JOBS=1`): 1,305 s on the last full run,
 on a shared 4-core machine, of which 1,164 s is solver time. Two
-harnesses take 458 s of that (`the_title_keeps_clear_of_the_buttons`,
-`heading_in_view_is_the_last_one_reached`), and most take under a second. `./run-proofs.sh --harness layout::proofs` runs one module.
+harnesses took 458 s of that. One of them is gone with the title it was
+about, and the harness in its place takes 25 s; the other is
+`heading_in_view_is_the_last_one_reached`. Most take under a second. `./run-proofs.sh --harness layout::proofs` runs one module.
 
 `run-proofs.sh` fails when a harness does not verify, when a
 `kani::cover!` check is not reached, or when the number of harnesses
@@ -162,7 +163,7 @@ tested only.
 | `content::a_visible_match_is_left_alone` | A search match on screen causes no scroll. | Finite `f32` | Proven |
 | `lightbox::lightbox_zoom_stays_in_range` | Lightbox zoom stays in [0.1, 10]. | Zoom in range, factor not NaN | Proven |
 | `lightbox::zoom_to_cursor_never_panics_or_goes_negative` | Zoom-to-cursor gives a non-negative offset and never panics. | Sizes 1 to 10^6 px, zooms in range, pointer and offset within ±10^6 | Bounded |
-| `top_bar::the_title_keeps_clear_of_the_buttons` | The title keeps 12 px from the buttons when there is room, and is centered in the free span when there is not. | Finite `f32` | Proven |
+| `top_bar::the_tabs_and_the_new_tab_button_keep_clear_of_the_buttons` | In the top row the tabs and the new-tab button stay after the buttons at the left, before the buttons at the right and before the edit controls, whatever room is kept empty at the row's left end. The new-tab button lies inside the tabs' room however wide the tabs are, or is left out where the room cannot hold it. | Bar edges within ±10^30, inset from 0 to 10^30; finite edit-controls edge and tab width | Bounded |
 | `chrome::segments_share_the_width_they_are_given` | Segment width is finite and non-negative for any count, zero included; segments never exceed the width shared. | Finite width; sum check up to 64 segments | Bounded |
 | `appearance::the_width_slider_always_has_a_range` | The width slider's upper end is always at least one step above its lower end. | Any `f32` but ±∞ | Proven |
 | `app::zoom_percent_is_total_and_close` | The zoom readout never panics and is within half a percent. | Any `f32` | Proven |
@@ -187,7 +188,7 @@ The shortcut harnesses read the real `BINDINGS` table. They do not run
 `shortcut_actions`, which reads and consumes egui's input, nor the code that decides
 which focus the app is in. Both are tested only.
 
-**Counts: 68 harnesses. 55 proven, 13 bounded.**
+**Counts: 68 harnesses. 54 proven, 14 bounded.**
 
 ## Every assumption
 

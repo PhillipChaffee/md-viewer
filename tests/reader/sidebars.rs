@@ -204,8 +204,8 @@ fn ctrl_clicking_a_file_opens_it_in_a_new_tab() {
     reader.ctrl_click("changes.md");
 
     reader.assert_sees("What is new.");
-    assert_eq!(reader.count("changes.md"), 2, "one in the files, one tab");
-    assert_eq!(reader.count("readme.md"), 2);
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
+    assert_eq!(reader.count("changes.md"), 1, "and its row in the files");
 }
 
 #[test]
@@ -218,14 +218,14 @@ fn the_tabs_still_switch_documents_with_the_files_open_beside_them() {
     reader.ctrl_click("changes.md");
     reader.assert_sees("What is new.");
 
-    // In reading order the tab strip comes before the files.
-    reader.click_nth("readme.md", 0);
+    reader.click("tab:Read me");
     reader.assert_sees("Start here.");
     reader.assert_hides("What is new.");
 
-    reader.click_nth("changes.md", 0);
+    reader.click("tab:Changes");
     reader.assert_sees("What is new.");
-    assert_eq!(reader.count("changes.md"), 2, "one tab, one file entry");
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
+    assert_eq!(reader.count("changes.md"), 1, "one file entry");
 }
 
 #[test]

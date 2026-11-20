@@ -179,7 +179,7 @@ fn a_moving_picture_plays_again_after_its_document_was_closed_and_opened_again()
         .open();
     in_view(&mut reader);
     reader.ctrl_click("the other page");
-    reader.click("page.md");
+    reader.click("tab:page.md");
 
     reader.press("Ctrl+W");
     reader.idle_for(std::time::Duration::from_millis(100));
@@ -208,7 +208,7 @@ fn a_still_picture_is_shown_again_after_its_document_was_closed_and_opened_again
         .open();
     let before = in_view(&mut reader);
     reader.ctrl_click("the other page");
-    reader.click("page.md");
+    reader.click("tab:page.md");
 
     reader.press("Ctrl+W");
     reader.click("the first page");

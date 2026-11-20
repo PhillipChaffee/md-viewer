@@ -479,7 +479,8 @@ fn front_matter_is_not_part_of_the_title_or_the_contents() {
     let mut reader = page("---\ntitle: From the fields\n---\n\n# Real heading\n\n## Part");
     reader.press("Ctrl+Shift+O");
 
-    assert_eq!(reader.count("Real heading"), 2, "the bar and the page");
+    assert_eq!(reader.tabs(), ["Real heading"]);
+    assert_eq!(reader.count("Real heading"), 1, "and the page");
     assert_eq!(reader.count("From the fields"), 1, "only the field");
 }
 
@@ -615,8 +616,12 @@ fn a_heading_in_another_script_names_the_document() {
     reader.press("Ctrl+Shift+O");
 
     assert_eq!(
+        reader.tabs(),
+        ["\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{66f8}"]
+    );
+    assert_eq!(
         reader.count("\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{66f8}"),
-        2
+        1
     );
     reader.press("Ctrl+Shift+O");
     assert_eq!(

@@ -289,7 +289,7 @@ fn a_document_brought_back_by_the_session_keeps_its_place_in_the_list() {
     let mut reader = after_reading(&[("one.md", "# One"), ("two.md", "# Two")]);
     reader.click("One");
     reader.drop_file("two.md");
-    reader.click("one.md");
+    reader.click("tab:One");
 
     let mut reader = reader.restart(&[]);
     reader.press("Ctrl+W");

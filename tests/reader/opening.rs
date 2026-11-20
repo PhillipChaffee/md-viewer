@@ -134,10 +134,10 @@ fn dropping_a_markdown_file_opens_it_in_a_new_tab() {
 
     reader.assert_sees("Beta");
     assert!(
-        reader.is_on("b.md"),
+        reader.is_on("tab:Beta"),
         "the dropped file's tab is the active one"
     );
-    assert!(!reader.is_on("a.md"));
+    assert!(!reader.is_on("tab:Alpha"));
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
 }
 
