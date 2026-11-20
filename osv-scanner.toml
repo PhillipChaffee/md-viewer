@@ -69,3 +69,12 @@ name = "ar_archive_writer"
 ecosystem = "crates.io"
 license.override = ["Apache-2.0"]
 reason = "Apache-2.0 WITH LLVM-exception: the exception only adds permissions; osv-scanner cannot express a WITH clause in its allow-list."
+
+# mac-window is this repository's own crate (crates/mac-window, MIT in its
+# manifest) and is not published, so the registry osv-scanner asks has no
+# license for it and reports UNKNOWN.
+[[PackageOverrides]]
+name = "mac-window"
+ecosystem = "crates.io"
+license.override = ["MIT"]
+reason = "first-party workspace crate, MIT per crates/mac-window/Cargo.toml; unpublished, so the registry cannot answer for it."
