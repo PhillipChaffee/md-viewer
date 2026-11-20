@@ -164,10 +164,17 @@ pub(crate) fn native_options(platform: Platform) -> eframe::NativeOptions {
 
 /// The constructor eframe calls once the window exists: the app opens the
 /// file named on the command line and watches it unless told not to.
+///
+/// By then a Mac has its menu bar, whose Quit item takes ⌘Q and quits
+/// without the window being asked to close: unsaved edits would go
+/// unasked about. The key is handed to the app, which asks.
 pub(crate) fn app_creator(args: &Args) -> eframe::AppCreator<'static> {
     let file = args.file.clone();
     let watch = args.watch();
-    Box::new(move |cc| Ok(Box::new(MarkdownApp::new(cc, file, watch))))
+    Box::new(move |cc| {
+        mac_window::hand_quit_key_to_app();
+        Ok(Box::new(MarkdownApp::new(cc, file, watch)))
+    })
 }
 
 /// winit 0.30 selects exactly one windowing backend from the environment and
