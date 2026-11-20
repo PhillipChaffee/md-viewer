@@ -1,6 +1,6 @@
 //! The real window, on a private X display.
 
-use super::support::{Home, Running, Screen, Window};
+use super::support::{wait_for, Home, Running, Screen, Window};
 
 /// The paper of the two themes a first run meets: Sepia, then Dusk.
 const SEPIA: &str = "F8F1E3";
@@ -9,6 +9,10 @@ const DUSK: &str = "2C2C2E";
 /// A pixel in the page's left margin: right of the window's edge, left of
 /// the text column, halfway down.
 const MARGIN: (u32, u32) = (60, 400);
+
+/// A spot inside the dot the top row paints beside the edit switch while
+/// a document has unsaved edits, in a window of the size the app opens at.
+const UNSAVED_DOT: (u32, u32) = (911, 20);
 
 /// Start `md-viewer <args>` on `screen`, attached to the test.
 fn show(home: &Home, screen: &Screen, args: &[&str]) -> Running {
@@ -111,8 +115,15 @@ fn quit_with_an_unsaved_edit<'screen>(
     assert!(window.pixel_becomes(home.root(), x, y, SEPIA));
 
     assert!(window.press_ctrl("e", || true));
-    window.click(600, 300);
-    window.type_text("Mine. ");
+    // The source can take a moment to be there to type into: the edit is
+    // typed until the dot that marks unsaved edits is painted.
+    let (dot_x, dot_y) = UNSAVED_DOT;
+    let edited = wait_for(|| {
+        window.click(600, 300);
+        window.type_text("Mine. ");
+        (window.pixel(home.root(), dot_x, dot_y) != SEPIA).then_some(())
+    });
+    assert!(edited.is_some(), "the edit was never taken");
     let shaded = window.press_ctrl("q", || window.pixel(home.root(), x, y) != SEPIA);
 
     assert!(shaded, "no prompt came up");
