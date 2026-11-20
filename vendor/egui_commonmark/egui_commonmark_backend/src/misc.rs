@@ -74,6 +74,9 @@ pub struct CommonMarkOptions<'f> {
     /// block, and scrolled with the document. The callback is given a
     /// top-down ui as wide as the column.
     pub preamble: Option<&'f crate::PreambleFn<'f>>,
+    /// Empty space left below the last block of a scrolled document, so
+    /// its last line does not sit on the pane's bottom edge. md-viewer patch.
+    pub end_space: f32,
     /// Opt into parsing a leading `---` block as YAML frontmatter and rendering
     /// it as a key/value table. Off by default: enabling it changes how a
     /// document that starts with `---` is *parsed*, not just painted, so it
@@ -119,6 +122,7 @@ impl std::fmt::Debug for CommonMarkOptions<'_> {
             .field("use_strong_font_family", &self.use_strong_font_family)
             .field("block_style", &self.block_style)
             .field("preamble", &self.preamble.is_some())
+            .field("end_space", &self.end_space)
             .field("render_frontmatter", &self.render_frontmatter)
             .field("math_scale", &self.math_scale)
             .field("mermaid_colors", &self.mermaid_colors)
@@ -148,6 +152,7 @@ impl Default for CommonMarkOptions<'_> {
             use_strong_font_family: false,
             block_style: crate::typography::BlockStyle::default(),
             preamble: None,
+            end_space: 0.0,
             render_frontmatter: false,
             math_scale: 1.0,
             mermaid_colors: None,

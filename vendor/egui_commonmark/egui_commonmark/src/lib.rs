@@ -316,6 +316,13 @@ impl<'f> CommonMarkViewer<'f> {
         self
     }
 
+    /// Leave `space` empty below the last block of a document shown with
+    /// `show_scrollable`. It is part of what scrolls. md-viewer patch.
+    pub fn end_space(mut self, space: f32) -> Self {
+        self.options.end_space = space;
+        self
+    }
+
     /// Parse a leading `---` block as YAML frontmatter and render it as a
     /// key/value table instead of as document content.
     ///
