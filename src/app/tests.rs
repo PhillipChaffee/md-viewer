@@ -8,9 +8,9 @@ use eframe::App as _;
 
 use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
-use super::shortcuts::Platform;
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
+use crate::platform::Platform;
 use crate::tab::SaveOutcome;
 use crate::test_support::{assert_close, ScratchDir};
 use crate::theme::ThemeId;
