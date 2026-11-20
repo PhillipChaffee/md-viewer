@@ -87,13 +87,17 @@ impl MarkdownApp {
 
         let prev_btn = QuietButton::icon(Icon::ChevronUp, "Previous match")
             .enabled(total_matches > 0)
-            .show(ui, palette)
-            .on_hover_text("Previous match (Shift+Enter / Up)");
+            .show(ui, palette);
+        let prev_btn = self
+            .hints
+            .tooltip(prev_btn, "Previous match", AppAction::PreviousMatch);
 
         let next_btn = QuietButton::icon(Icon::ChevronDown, "Next match")
             .enabled(total_matches > 0)
-            .show(ui, palette)
-            .on_hover_text("Next match (Enter / Down)");
+            .show(ui, palette);
+        let next_btn = self
+            .hints
+            .tooltip(next_btn, "Next match", AppAction::NextMatch);
         actions.extend(next_btn.clicked().then_some(AppAction::NextMatch));
         actions.extend(prev_btn.clicked().then_some(AppAction::PreviousMatch));
     }

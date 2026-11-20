@@ -128,9 +128,9 @@ impl MarkdownApp {
     /// Opening a file is what creates a new tab; there is no empty-tab
     /// state.
     fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
-        let open = QuietButton::icon(Icon::Plus, "Open file in new tab")
-            .show(ui, self.theme.palette())
-            .on_hover_text("Open File… (Ctrl+T)");
+        let open =
+            QuietButton::icon(Icon::Plus, "Open file in new tab").show(ui, self.theme.palette());
+        let open = self.hints.tooltip(open, "Open File…", AppAction::OpenFile);
         pick(&open, AppAction::OpenFile, picked);
     }
 

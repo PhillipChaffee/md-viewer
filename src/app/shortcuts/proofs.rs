@@ -1,15 +1,16 @@
 //! Kani proofs for the shortcut table: which bindings are live under each
-//! focus and each set of modifier keys. `PROOFS.md` lists each harness
-//! with its bounds.
+//! focus and each set of modifier keys, on a Mac and off one. `PROOFS.md`
+//! lists each harness with its bounds.
 //!
 //! The harnesses read the real `BINDINGS` table, every row of it, under
-//! every focus and all 32 combinations of the five modifier flags. What
+//! every focus, all 32 combinations of the five modifier flags, and both
+//! platforms. What
 //! they do not run is `shortcut_actions`, which reads and consumes egui's input state:
 //! `tests.rs` covers it.
 
 use eframe::egui;
 
-use super::{Chord, Focus, Scope, BINDINGS};
+use super::{Chord, Focus, Platform, Scope, BINDINGS};
 
 fn any_focus() -> Focus {
     match kani::any::<u8>() % 5 {
@@ -31,6 +32,30 @@ fn any_modifiers() -> egui::Modifiers {
     }
 }
 
+fn any_platform() -> Platform {
+    if kani::any() {
+        Platform::Mac
+    } else {
+        Platform::Other
+    }
+}
+
+/// The keys held when a key goes down, and the machine they are held on.
+/// Every set of flags is tried on both platforms, the sets a real
+/// keyboard of that platform never reports among them.
+#[derive(Clone, Copy)]
+struct Held {
+    modifiers: egui::Modifiers,
+    platform: Platform,
+}
+
+fn any_held() -> Held {
+    Held {
+        modifiers: any_modifiers(),
+        platform: any_platform(),
+    }
+}
+
 /// Any row of the table.
 fn any_binding() -> usize {
     let row: usize = kani::any();
@@ -39,10 +64,10 @@ fn any_binding() -> usize {
 }
 
 /// Whether the binding in `row` fires for its key under `focus` with
-/// `modifiers` held: the test `shortcut_actions` applies to each row.
-fn is_live(row: usize, focus: Focus, modifiers: egui::Modifiers) -> bool {
+/// `held`: the test `shortcut_actions` applies to each row.
+fn is_live(row: usize, focus: Focus, held: Held) -> bool {
     let (chord, _, scope, _) = BINDINGS[row];
-    scope.covers(focus) && chord.is_held(modifiers)
+    scope.covers(focus) && chord.is_held(held.modifiers, held.platform)
 }
 
 /// One key press runs at most one binding: no two rows of the table share
@@ -51,13 +76,13 @@ fn is_live(row: usize, focus: Focus, modifiers: egui::Modifiers) -> bool {
 fn no_key_press_fires_two_bindings() {
     let (one, other) = (any_binding(), any_binding());
     kani::assume(one != other);
-    let (focus, modifiers) = (any_focus(), any_modifiers());
+    let (focus, held) = (any_focus(), any_held());
 
     if BINDINGS[one].1 == BINDINGS[other].1 {
-        assert!(!(is_live(one, focus, modifiers) && is_live(other, focus, modifiers)));
+        assert!(!(is_live(one, focus, held) && is_live(other, focus, held)));
     }
 
-    kani::cover!(BINDINGS[one].1 == BINDINGS[other].1 && is_live(one, focus, modifiers));
+    kani::cover!(BINDINGS[one].1 == BINDINGS[other].1 && is_live(one, focus, held));
     kani::cover!(one == BINDINGS.len() - 1 && other == 0);
 }
 
@@ -66,15 +91,15 @@ fn no_key_press_fires_two_bindings() {
 #[kani::proof]
 fn the_lightbox_takes_the_keyboard() {
     let row = any_binding();
-    let (focus, modifiers) = (any_focus(), any_modifiers());
+    let (focus, held) = (any_focus(), any_held());
     let for_lightbox = matches!(BINDINGS[row].2, Scope::Lightbox);
 
-    if is_live(row, focus, modifiers) {
+    if is_live(row, focus, held) {
         assert!(for_lightbox == matches!(focus, Focus::Lightbox));
     }
 
-    kani::cover!(is_live(row, focus, modifiers) && for_lightbox);
-    kani::cover!(is_live(row, focus, modifiers) && !for_lightbox);
+    kani::cover!(is_live(row, focus, held) && for_lightbox);
+    kani::cover!(is_live(row, focus, held) && !for_lightbox);
 }
 
 /// While the prompt about unsaved edits asks, no binding is live: a key
@@ -82,14 +107,14 @@ fn the_lightbox_takes_the_keyboard() {
 #[kani::proof]
 fn the_prompt_takes_every_key() {
     let row = any_binding();
-    let (focus, modifiers) = (any_focus(), any_modifiers());
+    let (focus, held) = (any_focus(), any_held());
 
     if matches!(focus, Focus::Prompt) {
-        assert!(!is_live(row, focus, modifiers));
+        assert!(!is_live(row, focus, held));
     }
 
     kani::cover!(matches!(focus, Focus::Prompt));
-    kani::cover!(is_live(row, focus, modifiers));
+    kani::cover!(is_live(row, focus, held));
 }
 
 /// An open menu or popover takes the keys the find bar and the reading
@@ -98,51 +123,103 @@ fn the_prompt_takes_every_key() {
 #[kani::proof]
 fn a_popup_takes_the_find_bar_and_reading_keys() {
     let row = any_binding();
-    let modifiers = any_modifiers();
+    let held = any_held();
 
-    if is_live(row, Focus::Popup, modifiers) {
+    if is_live(row, Focus::Popup, held) {
         assert!(matches!(BINDINGS[row].2, Scope::Document));
         assert!(BINDINGS[row].1 != egui::Key::Escape);
     }
     // The find bar's keys and the plain arrows do not overlap either: a
     // binding live with the find bar open is not a reading-only one.
-    if is_live(row, Focus::FindBar, modifiers) {
+    if is_live(row, Focus::FindBar, held) {
         assert!(!matches!(BINDINGS[row].2, Scope::Reading | Scope::Lightbox));
     }
 
-    kani::cover!(is_live(row, Focus::Popup, modifiers));
-    kani::cover!(is_live(row, Focus::FindBar, modifiers) && BINDINGS[row].1 == egui::Key::Escape);
+    kani::cover!(is_live(row, Focus::Popup, held));
+    kani::cover!(is_live(row, Focus::FindBar, held) && BINDINGS[row].1 == egui::Key::Escape);
 }
 
-/// Every binding can fire: for each row there is a focus and a set of
-/// modifiers under which it is live.
+/// The command key is ⌘ on a Mac and Ctrl elsewhere: a `Cmd` binding
+/// that is live has that key held, so Control with a letter is never a
+/// command on a Mac, nor ⌘ one off it.
+#[kani::proof]
+fn the_command_key_is_cmd_on_a_mac_and_ctrl_elsewhere() {
+    let row = any_binding();
+    let (focus, held) = (any_focus(), any_held());
+    let for_command = matches!(
+        BINDINGS[row].0,
+        Chord::Cmd | Chord::CmdNoShift | Chord::CmdShift | Chord::CmdAlt
+    );
+
+    if for_command && is_live(row, focus, held) {
+        match held.platform {
+            Platform::Mac => assert!(held.modifiers.mac_cmd),
+            Platform::Other => assert!(held.modifiers.ctrl),
+        }
+    }
+
+    kani::cover!(for_command && is_live(row, focus, held) && !held.modifiers.ctrl);
+    kani::cover!(for_command && is_live(row, focus, held) && !held.modifiers.mac_cmd);
+}
+
+/// Every binding can fire, on each platform whose keyboard can hold its
+/// chord: for each row there is a focus and a set of modifiers under which
+/// it is live there. On a platform that cannot hold the chord the row
+/// never fires, and no row is left without a platform.
 #[kani::proof]
 fn every_binding_can_fire() {
     let row = any_binding();
+    let platform = any_platform();
     let (chord, _, scope, _) = BINDINGS[row];
     let focus = match scope {
         Scope::Lightbox => Focus::Lightbox,
         Scope::FindBar => Focus::FindBar,
         Scope::Document | Scope::Reading => Focus::Reading,
     };
-    let held = |ctrl: bool, alt: bool, shift: bool| egui::Modifiers {
+    // What each platform's keyboard reports with the command key held.
+    let mac = matches!(platform, Platform::Mac);
+    let keys = |command: bool, ctrl: bool, alt: bool, shift: bool| egui::Modifiers {
         alt,
-        ctrl,
+        ctrl: ctrl || (command && !mac),
         shift,
-        mac_cmd: false,
-        command: ctrl,
+        mac_cmd: command && mac,
+        command,
     };
     let modifiers = match chord {
-        Chord::Any | Chord::Unmodified | Chord::NoShift => held(false, false, false),
-        Chord::Shift => held(false, false, true),
-        Chord::Ctrl | Chord::CtrlNoShift => held(true, false, false),
-        Chord::CtrlShift => held(true, false, true),
-        Chord::CtrlAlt => held(true, true, false),
-        Chord::AltNoCtrl => held(false, true, false),
+        Chord::Any | Chord::Unmodified | Chord::NoShift => keys(false, false, false, false),
+        Chord::Shift => keys(false, false, false, true),
+        Chord::Cmd | Chord::CmdNoShift | Chord::MacCmd => keys(true, false, false, false),
+        Chord::CmdShift => keys(true, false, false, true),
+        Chord::CmdAlt => keys(true, false, true, false),
+        Chord::CtrlNoShift => keys(false, true, false, false),
+        Chord::CtrlShift => keys(false, true, false, true),
+        Chord::AltNoCtrl => keys(false, false, true, false),
     };
 
-    assert!(is_live(row, focus, modifiers));
+    if chord.exists_on(platform) {
+        assert!(is_live(
+            row,
+            focus,
+            Held {
+                modifiers,
+                platform
+            }
+        ));
+    } else {
+        let modifiers = any_modifiers();
+        assert!(!is_live(
+            row,
+            focus,
+            Held {
+                modifiers,
+                platform
+            }
+        ));
+    }
+    assert!(chord.exists_on(Platform::Mac) || chord.exists_on(Platform::Other));
 
     kani::cover!(row == 0);
     kani::cover!(row == BINDINGS.len() - 1);
+    kani::cover!(!chord.exists_on(Platform::Mac));
+    kani::cover!(!chord.exists_on(Platform::Other));
 }

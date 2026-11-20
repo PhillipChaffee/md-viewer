@@ -14,7 +14,7 @@ mod tests;
 /// One thing the user asked for, whether through a shortcut, a menu item, or
 /// a toolbar button. [`MarkdownApp::apply_action`] is the only code that
 /// carries a request out, so every way of asking does the same thing.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum AppAction {
     /// Pick a file and open it in a new tab.
     OpenFile,

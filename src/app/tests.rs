@@ -8,6 +8,7 @@ use eframe::App as _;
 
 use super::action::AppAction;
 use super::lightbox::{LightboxState, LightboxTexture};
+use super::shortcuts::Platform;
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
 use crate::tab::SaveOutcome;
@@ -46,8 +47,12 @@ impl Harness {
 
         let ctx = egui::Context::default();
         let creation = eframe::CreationContext::_new_kittest(ctx.clone());
+        let mut app = MarkdownApp::new(&creation, first, false);
+        // The tests press Ctrl whatever machine runs them. A test of the
+        // Mac's keys sets the platform itself.
+        app.platform = Platform::Other;
         Self {
-            app: MarkdownApp::new(&creation, first, false),
+            app,
             ctx,
             frame: eframe::Frame::_new_kittest(),
             dir,

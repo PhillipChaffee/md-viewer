@@ -190,21 +190,24 @@ impl MarkdownApp {
         let palette = self.theme.palette();
         let (can_back, can_forward) = self.history_availability();
 
-        let files = QuietButton::icon(Icon::Sidebar, "Files sidebar")
-            .show(ui, palette)
-            .on_hover_text("Files (Ctrl+Shift+E)");
+        let files = QuietButton::icon(Icon::Sidebar, "Files sidebar").show(ui, palette);
+        let files = self
+            .hints
+            .tooltip(files, "Files", AppAction::ToggleExplorer);
         pick(&files, AppAction::ToggleExplorer, picked);
 
         let back = QuietButton::icon(Icon::Back, "Go back")
             .enabled(can_back)
-            .show(ui, palette)
-            .on_hover_text("Back (Alt+Left)");
+            .show(ui, palette);
+        let back = self.hints.tooltip(back, "Back", AppAction::NavigateBack);
         pick(&back, AppAction::NavigateBack, picked);
 
         let forward = QuietButton::icon(Icon::Forward, "Go forward")
             .enabled(can_forward)
-            .show(ui, palette)
-            .on_hover_text("Forward (Alt+Right)");
+            .show(ui, palette);
+        let forward = self
+            .hints
+            .tooltip(forward, "Forward", AppAction::NavigateForward);
         pick(&forward, AppAction::NavigateForward, picked);
     }
 
@@ -220,14 +223,14 @@ impl MarkdownApp {
         self.appearance_popover(&appearance, picked);
         appearance.on_hover_text("Theme, text size, width and spacing");
 
-        let find = QuietButton::icon(Icon::Search, "Find in document")
-            .show(ui, palette)
-            .on_hover_text("Find (Ctrl+F)");
+        let find = QuietButton::icon(Icon::Search, "Find in document").show(ui, palette);
+        let find = self.hints.tooltip(find, "Find", AppAction::OpenSearch);
         pick(&find, AppAction::OpenSearch, picked);
 
-        let contents = QuietButton::icon(Icon::Outline, "Contents sidebar")
-            .show(ui, palette)
-            .on_hover_text("Contents (Ctrl+Shift+O)");
+        let contents = QuietButton::icon(Icon::Outline, "Contents sidebar").show(ui, palette);
+        let contents = self
+            .hints
+            .tooltip(contents, "Contents", AppAction::ToggleOutline);
         pick(&contents, AppAction::ToggleOutline, picked);
 
         let more = QuietButton::icon(Icon::More, "More")

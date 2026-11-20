@@ -58,7 +58,8 @@ impl eframe::App for MarkdownApp {
         self.handle_keyboard_shortcuts(ctx);
         let files_hover = self.handle_dropped_files(ctx);
 
-        // Get ctrl state for link handling
+        // A click with Ctrl held opens what it lands on in a new tab. So
+        // does one with ⌘ on a Mac, which `command` is there.
         let ctrl_held = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
         self.render_top_bar(ctx);
@@ -83,7 +84,13 @@ impl MarkdownApp {
 
         let theme_changed = self.apply_theme(ctx);
         self.font_picker.poll(&self.egui_ctx);
+        // Fonts handed to egui are in force from the next frame, so the
+        // hints that depend on them are written one frame after a change.
+        if std::mem::take(&mut self.hints_stale) {
+            self.rewrite_hints(ctx);
+        }
         let fonts_changed = self.apply_fonts(ctx);
+        self.hints_stale = fonts_changed;
         if theme_changed || fonts_changed {
             self.rebuild_document_look(ctx);
         }

@@ -34,7 +34,7 @@ const KEYBOARD_LINE_SCROLL_STEP: f32 = 48.0;
 const KEYBOARD_PAGE_SCROLL_RATIO: f32 = 0.9;
 
 /// A step the keyboard scrolls the document by, which a shortcut names.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum KeyboardScrollAction {
     LineUp,
     LineDown,
