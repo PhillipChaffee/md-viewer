@@ -3398,6 +3398,7 @@ dependencies = [
  "fontique",
  "image",
  "log",
+ "mac-window",
  "mimalloc",
  "notify",
  "notify-debouncer-mini",

@@ -45,6 +45,7 @@ mod tab_bar;
 mod tabs;
 #[cfg(test)]
 mod tests;
+mod title_bar;
 mod top_bar;
 #[cfg(test)]
 mod ui_harness;
