@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
-pub(crate) use self::screen::{in_a_terminal, kill, Screen};
+pub(crate) use self::screen::{in_a_terminal, kill, Screen, Window};
 
 /// How long anything the binary does may take before a test gives up. A
 /// cold start on a loaded CI machine paints its first frame in seconds.

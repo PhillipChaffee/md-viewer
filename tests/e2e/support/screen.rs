@@ -189,6 +189,24 @@ impl Window<'_> {
         happened
     }
 
+    /// Click the spot `x` right and `y` down from the window's top left
+    /// corner.
+    pub(crate) fn click(&self, x: u32, y: u32) {
+        let (x, y) = (x.to_string(), y.to_string());
+        self.screen
+            .xdotool(&["mousemove", "--window", &self.id, &x, &y, "click", "1"]);
+    }
+
+    /// Type `text` into whatever has the keyboard.
+    pub(crate) fn type_text(&self, text: &str) {
+        self.screen.xdotool(&["type", text]);
+    }
+
+    /// Press and release `key` with no modifier held.
+    pub(crate) fn press(&self, key: &str) {
+        self.screen.xdotool(&["key", key]);
+    }
+
     /// The color of the pixel `x` right and `y` down from the window's top
     /// left corner, as `RRGGBB`, read from a screenshot saved in `scratch`.
     #[track_caller]
