@@ -75,6 +75,12 @@ pub(crate) enum AppAction {
     SetFormulaScale(f32),
     /// Scroll the active document by one keyboard step.
     Scroll(KeyboardScrollAction),
+    /// Start moving the window with the pointer, as a drag on a title bar
+    /// does.
+    MoveWindow,
+    /// Make the window as large as its screen lets it be, or the size it
+    /// was before.
+    ToggleMaximized,
     /// Ask the window to close. With unsaved edits open the app refuses
     /// the request when it comes back and asks about them first.
     Quit,
@@ -137,6 +143,11 @@ impl MarkdownApp {
             }
             AppAction::SetFormulaScale(scale) => self.math_scale = scale,
             AppAction::Scroll(step) => self.scroll_active_tab(step),
+            AppAction::MoveWindow => ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag),
+            AppAction::ToggleMaximized => {
+                let maximized = ctx.input(|input| input.viewport().maximized.unwrap_or(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+            }
             AppAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }

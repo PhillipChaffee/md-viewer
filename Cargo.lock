@@ -3354,6 +3354,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mac-window"
+version = "0.1.0"
+dependencies = [
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+]
+
+[[package]]
 name = "manatee"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3388,6 +3398,7 @@ dependencies = [
  "fontique",
  "image",
  "log",
+ "mac-window",
  "mimalloc",
  "notify",
  "notify-debouncer-mini",

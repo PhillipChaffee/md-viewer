@@ -10,7 +10,8 @@
 
 use eframe::egui;
 
-use super::{Chord, Focus, Platform, Scope, BINDINGS};
+use super::{Chord, Focus, Scope, BINDINGS};
+use crate::platform::Platform;
 
 fn any_focus() -> Focus {
     match kani::any::<u8>() % 5 {

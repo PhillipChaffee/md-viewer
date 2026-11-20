@@ -106,6 +106,12 @@ has one. The Home button again, Back, or a click on a tab leads back.
 - Tabs in the top row, each named by its document's first heading, with
   back and forward history in each tab. The row is the same with one
   document or many, and tabs that do not fit scroll inside it.
+- On a Mac that row is the window's title bar: the close, minimize and
+  zoom buttons sit in it, on its centre line, and the row starts after
+  them. Drag an empty part of the row to move the window; double-click
+  one to zoom it. In full screen, where macOS hides the three buttons,
+  the row starts at the window's edge. Linux and Windows keep the title
+  bar their desktop draws.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
 - Drag a file onto the window to open it.
@@ -120,6 +126,9 @@ has one. The Home button again, Back, or a click on a tab leads back.
   **Cancel** at any question leaves every tab open with its edits. A
   link, a file in the sidebar, Back or Forward asks the same before it
   shows another document in a tab with unsaved edits.
+  On a Mac quitting covers `⌘Q`, **⋯ > Quit** and the window's close
+  button. **Quit** picked with the mouse from the menu bar or from the
+  Dock is macOS's own and still quits without asking.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
@@ -173,7 +182,7 @@ tells you whether Tk is installed).
 | --- | --- |
 | Linux, X11 | Built and run for every change here |
 | Linux, Wayland | Supported by the windowing backend; not exercised in this repository's checks |
-| macOS, Windows | CI type-checks the code for both; the reader redesign has not been run on either |
+| macOS, Windows | CI type-checks the code for both; the reader redesign has not been run on either. That includes everything Mac-only: the window's buttons in the top row and `⌘Q` reaching the app have never been seen on a Mac |
 
 ### Packaged builds
 
@@ -245,6 +254,7 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
+| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, and `⌘Q` handed to the app. Does nothing elsewhere. Holds the one unsafe function ([GATES.md](GATES.md)) |
 
 ## Development
 

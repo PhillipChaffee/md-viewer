@@ -44,6 +44,9 @@ egui_commonmark_extended = { version = "0.28.3", features = [
 # Image format support
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 
+# The window's buttons and the quit key on a Mac; does nothing elsewhere
+mac-window = { path = "crates/mac-window", version = "0.1.0" }
+
 # File operations
 rfd = "0.17"
 notify = "6.1"
@@ -81,6 +84,10 @@ default = []
 # (github.com/PhillipChaffee/full-lint, rust/Cargo.toml.example). CI turns
 # every warn level into an error through -D warnings.
 [workspace]
+# `crates/mac-window` holds the AppKit calls the window needs on a Mac,
+# one of them unsafe: this crate forbids unsafe code, so that one cannot
+# live here. It is gated with this crate; GATES.md says where it differs.
+members = ["crates/mac-window"]
 # The vendored forks keep their own manifests and are not gated here: they
 # are upstream code this repository patches in, reviewed against upstream.
 exclude = ["vendor"]

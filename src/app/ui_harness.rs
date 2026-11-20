@@ -11,9 +11,9 @@ use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::settings::FontPicker;
-use super::shortcuts::Platform;
 use super::tests::Harness;
 use super::MarkdownApp;
+use crate::platform::Platform;
 use crate::test_support::ScratchDir;
 
 /// The frames an interaction gets to come to rest before the harness starts

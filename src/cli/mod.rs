@@ -15,6 +15,7 @@ use crate::layout::{
     CONTENT_OPTIMAL_WIDTH, EXPLORER_DEFAULT_WIDTH, OPTIMAL_WINDOW_HEIGHT, OUTLINE_DEFAULT_WIDTH,
     PANEL_SEPARATORS,
 };
+use crate::platform::Platform;
 
 #[cfg(kani)]
 mod proofs;
@@ -130,28 +131,50 @@ pub(crate) fn launch(
 /// the event loop cannot be created, winit forbids a second attempt
 /// (`RecreationAttempt`), which is why backend selection is settled up front
 /// instead of via retry.
-pub(crate) fn native_options() -> eframe::NativeOptions {
+///
+/// On a Mac the app's top row is the title bar. The content fills the
+/// window, and the system's own bar is left see-through and without a
+/// title over it, so all it still shows is the window's buttons. Hiding
+/// that bar outright (`with_decorations(false)`) would take the buttons
+/// with it.
+pub(crate) fn native_options(platform: Platform) -> eframe::NativeOptions {
     // Calculate optimal window width assuming both sidebars are shown (the default)
     let optimal_width =
         CONTENT_OPTIMAL_WIDTH + EXPLORER_DEFAULT_WIDTH + OUTLINE_DEFAULT_WIDTH + PANEL_SEPARATORS;
 
+    let viewport = egui::ViewportBuilder::default()
+        .with_inner_size([optimal_width, OPTIMAL_WINDOW_HEIGHT])
+        .with_min_inner_size([400.0, 300.0])
+        .with_title("Markdown Viewer")
+        .with_app_id(APP_ID)
+        .with_drag_and_drop(true);
+    let viewport = match platform {
+        Platform::Mac => viewport
+            .with_fullsize_content_view(true)
+            .with_titlebar_shown(false)
+            .with_title_shown(false),
+        Platform::Other => viewport,
+    };
+
     eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([optimal_width, OPTIMAL_WINDOW_HEIGHT])
-            .with_min_inner_size([400.0, 300.0])
-            .with_title("Markdown Viewer")
-            .with_app_id(APP_ID)
-            .with_drag_and_drop(true),
+        viewport,
         ..Default::default()
     }
 }
 
 /// The constructor eframe calls once the window exists: the app opens the
 /// file named on the command line and watches it unless told not to.
+///
+/// By then a Mac has its menu bar, whose Quit item takes ⌘Q and quits
+/// without the window being asked to close: unsaved edits would go
+/// unasked about. The key is handed to the app, which asks.
 pub(crate) fn app_creator(args: &Args) -> eframe::AppCreator<'static> {
     let file = args.file.clone();
     let watch = args.watch();
-    Box::new(move |cc| Ok(Box::new(MarkdownApp::new(cc, file, watch))))
+    Box::new(move |cc| {
+        mac_window::hand_quit_key_to_app();
+        Ok(Box::new(MarkdownApp::new(cc, file, watch)))
+    })
 }
 
 /// winit 0.30 selects exactly one windowing backend from the environment and

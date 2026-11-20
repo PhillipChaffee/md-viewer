@@ -8,6 +8,7 @@ use eframe::egui::{self, Rangef};
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton, BAR_HEIGHT, BUTTON_SIDE};
 use crate::app::tab_bar::TabPicks;
+use crate::app::title_bar::TitleBar;
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
 
@@ -22,9 +23,6 @@ const BUTTON_GAP: f32 = 6.0;
 const LEADING_BUTTONS: f32 = 4.0;
 /// Buttons at the right end of the bar: appearance, find, contents, more.
 const TRAILING_BUTTONS: f32 = 4.0;
-/// Room the row keeps empty before its first button. A platform that draws
-/// the window's own buttons inside the row keeps their room here.
-const LEADING_INSET: f32 = 0.0;
 /// The least room between the buttons at both ends at which the edit
 /// controls join the row. In less, they would leave no room for a tab and
 /// the new-tab button; the menu and Ctrl+E still switch modes.
@@ -121,15 +119,24 @@ pub(super) fn part(bar: egui::Rect, span: Rangef, layout: egui::Layout) -> egui:
 }
 
 /// Take the row's empty parts for the bar itself, so nothing under the
-/// bar is pointed at through them.
-fn row_background(ui: &egui::Ui, bar: egui::Rect, empty: [Rangef; 2]) {
+/// bar is pointed at through them. Where the row is the window's title
+/// bar they move and zoom the window: what the reader asked of it there
+/// is recorded as the bar's pick.
+fn row_background(
+    ui: &egui::Ui,
+    bar: egui::Rect,
+    empty: [Rangef; 2],
+    title_bar: TitleBar,
+    picked: &mut Option<AppAction>,
+) {
     for (index, span) in empty.into_iter().enumerate() {
         let rect = egui::Rect::from_x_y_ranges(span, bar.y_range());
-        ui.interact(
-            rect,
-            ui.id().with(("background", index)),
-            egui::Sense::hover(),
-        );
+        let id = ui.id().with(("background", index));
+        let room = ui.interact(rect, id, title_bar.sense());
+        let dragged = room.drag_started_by(egui::PointerButton::Primary);
+        if let Some(asked) = title_bar.pick(dragged, room.double_clicked()) {
+            *picked = Some(asked);
+        }
     }
 }
 
@@ -139,13 +146,14 @@ impl MarkdownApp {
         let palette = self.theme.palette();
         let mut picked = None;
         let mut tab_picks = TabPicks::default();
+        let title_bar = self.title_bar(ctx);
         egui::TopBottomPanel::top("top_bar")
             .exact_height(BAR_HEIGHT)
             .frame(chrome::bar_frame(palette))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.x = BUTTON_GAP;
                 let bar = ui.max_rect();
-                let row = Row::new(bar.x_range(), LEADING_INSET);
+                let row = Row::new(bar.x_range(), title_bar.inset(bar.left()));
                 let from_left = egui::Layout::left_to_right(egui::Align::Center);
                 let from_right = egui::Layout::right_to_left(egui::Align::Center);
                 ui.scope_builder(part(bar, row.leading, from_left), |ui| {
@@ -163,7 +171,8 @@ impl MarkdownApp {
                 };
                 let room = row.tab_room(edit_left);
                 let used = self.tabs_in_row(ui, bar, room, &mut picked, &mut tab_picks);
-                row_background(ui, bar, row.background(room, used.unwrap_or(room.min)));
+                let empty = row.background(room, used.unwrap_or(room.min));
+                row_background(ui, bar, empty, title_bar, &mut picked);
             });
 
         // The pick runs after the bar is laid out, so the bar still shows
