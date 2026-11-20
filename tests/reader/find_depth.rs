@@ -381,7 +381,7 @@ fn the_query_and_the_bar_stay_through_a_switch_of_tabs_and_back() {
     find(&mut reader, "tent");
     reader.assert_sees("1 / 1");
 
-    reader.click("one.md");
+    reader.click("tab:One");
     reader.assert_sees("1 / 3");
     assert_eq!(reader.marked().len(), 3);
     reader.press("Enter");
@@ -402,7 +402,7 @@ fn closing_the_tab_in_front_counts_the_one_behind_it() {
     find(&mut reader, "tent");
     reader.assert_sees("0 matches");
 
-    reader.middle_click("two.md");
+    reader.middle_click("tab:Two");
 
     reader.assert_sees("1 / 2");
     assert_eq!(reader.typed(), ["tent"]);

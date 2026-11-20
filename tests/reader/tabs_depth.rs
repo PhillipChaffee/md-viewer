@@ -25,20 +25,12 @@ fn three_tabs() -> Reader {
     reader
 }
 
-/// The tabs that are marked as the one in front, by name.
-fn tabs_in_front(reader: &Reader, tabs: &[&str]) -> Vec<String> {
-    let front = tabs
-        .iter()
-        .filter(|tab| reader.count(tab) == 1 && reader.is_on(tab));
-    front.map(|tab| (*tab).to_owned()).collect()
-}
-
-/// Two documents called `same.md` in two folders, each in a tab, the one
-/// from `two/` in front.
+/// Two documents called `same.md` in two folders, both headed `Notes`,
+/// each in a tab, the one from `two/` in front.
 fn two_of_one_name() -> Reader {
     let mut reader = Reader::with_docs(&[
-        ("one/same.md", "# From one\n\nFirst folder."),
-        ("two/same.md", "# From two\n\nSecond folder."),
+        ("one/same.md", "# Notes\n\nFirst folder."),
+        ("two/same.md", "# Notes\n\nSecond folder."),
     ]);
     reader.drop_file("two/same.md");
     reader
@@ -48,21 +40,10 @@ fn two_of_one_name() -> Reader {
 fn files_dropped_together_each_get_a_tab_in_the_order_dropped() {
     let reader = many_tabs(5);
 
-    let names = reader.names();
-    let is_tab = |name: &&String| name.starts_with("doc-") && !name.contains(char::is_whitespace);
-    let tabs: Vec<&String> = names.iter().filter(is_tab).collect();
+    assert_eq!(reader.tabs(), ["Doc 1", "Doc 2", "Doc 3", "Doc 4", "Doc 5"]);
     assert_eq!(
-        tabs,
-        [
-            "doc-01.md",
-            "doc-02.md",
-            "doc-03.md",
-            "doc-04.md",
-            "doc-05.md"
-        ]
-    );
-    assert!(
-        reader.is_on("doc-05.md"),
+        reader.tab_in_front().as_deref(),
+        Some("Doc 5"),
         "the last one dropped is in front"
     );
     reader.assert_sees("Body of 5.");
@@ -120,14 +101,14 @@ fn with_more_tabs_than_fit_the_open_button_keeps_clear_of_the_edit_switch() {
 }
 
 #[test]
-fn the_tab_in_front_is_scrolled_into_the_strip() {
+fn the_tab_in_front_is_scrolled_into_view() {
     let reader = many_tabs(30);
 
-    let front = reader.area_of("doc-30.md");
+    let front = reader.area_of("tab:Doc 30");
     let strip_end = reader.area_of("Open file in new tab").left;
     assert!(
-        front.left >= 0.0 && front.right() <= strip_end,
-        "the tab in front is not on screen"
+        front.left >= reader.area_of("Go forward").right() && front.right() <= strip_end,
+        "the tab in front is not in view: {front:?}"
     );
 }
 
@@ -145,10 +126,10 @@ fn ctrl_and_a_digit_reaches_the_first_nine_of_many() {
 #[test]
 fn two_documents_with_one_name_get_a_tab_each() {
     let mut reader = two_of_one_name();
-    assert_eq!(reader.count("same.md"), 2);
+    assert_eq!(reader.tabs(), ["Notes", "Notes"]);
     reader.assert_sees("Second folder.");
 
-    reader.click_nth("same.md", 0);
+    reader.click_nth("tab:Notes", 0);
 
     reader.assert_sees("First folder.");
     reader.assert_hides("Second folder.");
@@ -159,61 +140,58 @@ fn two_documents_with_one_name_get_a_tab_each() {
 fn closing_one_of_two_tabs_with_one_name_leaves_the_other() {
     let mut reader = two_of_one_name();
 
-    reader.middle_click_nth("same.md", 0);
+    reader.middle_click_nth("tab:Notes", 0);
 
     reader.assert_sees("Second folder.");
     reader.assert_hides("First folder.");
-    assert_eq!(reader.count("same.md"), 0, "one document: no tab strip");
+    assert_eq!(reader.tabs(), ["Notes"]);
 }
 
 #[test]
 fn a_tabs_menu_closes_that_tab_and_keeps_the_one_in_front() {
     let mut reader = three_tabs();
 
-    reader.right_click("a.md");
+    reader.right_click("tab:Alpha");
     reader.click("Close");
 
-    assert_eq!(reader.count("a.md"), 0);
-    assert_eq!(tabs_in_front(&reader, &["b.md", "c.md"]), ["c.md"]);
+    assert_eq!(reader.count("tab:Alpha"), 0);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Gamma"));
     reader.assert_sees("The end of the line.");
 }
 
 #[test]
 fn a_tabs_menu_goes_away_on_escape_and_closes_nothing() {
     let mut reader = three_tabs();
-    reader.right_click("b.md");
+    reader.right_click("tab:Beta");
     assert_eq!(reader.count("Close Others"), 1);
 
     reader.press("Escape");
 
     assert_eq!(reader.count("Close Others"), 0);
-    for tab in ["a.md", "b.md", "c.md"] {
-        assert_eq!(reader.count(tab), 1, "{tab}");
-    }
+    assert_eq!(reader.tabs(), ["Alpha", "Beta", "Gamma"]);
 }
 
 #[test]
 fn close_others_on_a_tab_behind_brings_it_forward_alone() {
     let mut reader = three_tabs();
 
-    reader.right_click("a.md");
+    reader.right_click("tab:Alpha");
     reader.click("Close Others");
 
     reader.assert_sees("Alpha");
     assert_eq!(reader.title(), "a.md - Markdown Viewer");
-    for tab in ["a.md", "b.md", "c.md"] {
-        assert_eq!(reader.count(tab), 0, "{tab}: one document has no strip");
-    }
+    assert_eq!(reader.tabs(), ["Alpha"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Alpha"));
 }
 
 #[test]
 fn closing_a_tab_behind_the_one_in_front_changes_nothing_on_the_page() {
     let mut reader = three_tabs();
-    reader.click("b.md");
+    reader.click("tab:Beta");
 
-    reader.middle_click("c.md");
+    reader.middle_click("tab:Gamma");
 
-    assert_eq!(tabs_in_front(&reader, &["a.md", "b.md"]), ["b.md"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Beta"));
     reader.assert_sees("Beta");
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
 }
@@ -221,15 +199,16 @@ fn closing_a_tab_behind_the_one_in_front_changes_nothing_on_the_page() {
 #[test]
 fn closing_the_middle_tab_in_front_shows_a_neighbor() {
     let mut reader = three_tabs();
-    reader.click("b.md");
+    reader.click("tab:Beta");
 
-    reader.hover("b.md");
+    reader.hover("tab:Beta");
     reader.click("Close tab");
 
-    assert_eq!(reader.count("b.md"), 0);
-    let front = tabs_in_front(&reader, &["a.md", "c.md"]);
-    assert_eq!(front.len(), 1, "{front:?}");
-    assert_eq!(reader.title(), format!("{} - Markdown Viewer", front[0]));
+    assert_eq!(reader.count("tab:Beta"), 0);
+    assert_eq!(reader.tabs(), ["Alpha", "Gamma"]);
+    let front = reader.tab_in_front().expect("a neighbor is in front");
+    let file = if front == "Alpha" { "a.md" } else { "c.md" };
+    assert_eq!(reader.title(), format!("{file} - Markdown Viewer"));
     reader.assert_hides("Beta");
 }
 
@@ -273,17 +252,22 @@ fn each_tab_keeps_its_own_place_on_the_page() {
         ("other.md", &long_document(40)),
     ]);
     reader.drop_file("other.md");
-    reader.click("long.md");
+    assert_eq!(
+        reader.tabs(),
+        ["Long read", "Long read"],
+        "one heading twice"
+    );
+    reader.click_nth("tab:Long read", 0);
     reader.scroll_down(3000.0);
     let place = reader.text_area("Section 30");
 
-    reader.click("other.md");
+    reader.click_nth("tab:Long read", 1);
     assert!(reader.in_view("Section 1"), "the other tab is at its start");
     reader.scroll_down(1000.0);
-    reader.click("long.md");
+    reader.click_nth("tab:Long read", 0);
 
     assert_eq!(reader.text_area("Section 30"), place);
-    reader.click("other.md");
+    reader.click_nth("tab:Long read", 1);
     assert!(!reader.in_view("Section 1"), "and it kept its own place");
 }
 
@@ -291,39 +275,39 @@ fn each_tab_keeps_its_own_place_on_the_page() {
 fn a_tab_is_renamed_when_a_link_is_followed_in_it() {
     let mut reader = three_linked();
     reader.drop_file("c.md");
-    reader.click("a.md");
+    reader.click("tab:Alpha");
 
     reader.click("to beta");
 
-    assert_eq!(reader.count("a.md"), 0);
-    assert_eq!(tabs_in_front(&reader, &["b.md", "c.md"]), ["b.md"]);
+    assert_eq!(reader.tabs(), ["Beta", "Gamma"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Beta"));
     reader.press("Alt+Left");
-    assert_eq!(tabs_in_front(&reader, &["a.md", "c.md"]), ["a.md"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Alpha"));
 }
 
 #[test]
 fn ctrl_clicking_a_link_to_an_open_document_goes_to_its_tab() {
     let mut reader = three_tabs();
-    reader.click("a.md");
+    reader.click("tab:Alpha");
 
     reader.ctrl_click("to gamma");
 
-    assert_eq!(reader.count("c.md"), 1, "no second tab for it");
-    assert_eq!(tabs_in_front(&reader, &["a.md", "b.md", "c.md"]), ["c.md"]);
+    assert_eq!(reader.tabs(), ["Alpha", "Beta", "Gamma"], "no second tab");
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Gamma"));
 }
 
 #[test]
 fn a_new_tab_goes_to_the_end_of_the_strip() {
     let mut reader = three_linked();
     reader.drop_file("c.md");
-    reader.click("a.md");
+    reader.click("tab:Alpha");
 
     reader.ctrl_click("to beta");
 
     let (a, c, b) = (
-        reader.area_of("a.md").left,
-        reader.area_of("c.md").left,
-        reader.area_of("b.md").left,
+        reader.area_of("tab:Alpha").left,
+        reader.area_of("tab:Gamma").left,
+        reader.area_of("tab:Beta").left,
     );
     assert!(a < c && c < b, "a at {a}, c at {c}, b at {b}");
 }
@@ -340,10 +324,7 @@ fn a_ctrl_clicked_link_to_a_heading_opens_the_new_tab_there() {
         reader.in_view("Section 60")
     });
 
-    assert_eq!(
-        tabs_in_front(&reader, &["index.md", "long.md"]),
-        ["long.md"]
-    );
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Long read"));
     assert!(!reader.is_enabled("Go back"), "a new tab has no history");
 }
 
@@ -355,7 +336,7 @@ fn ctrl_clicking_a_link_to_a_missing_document_opens_no_tab() {
 
     reader.assert_sees("Unable to open");
     reader.assert_sees("Alpha");
-    assert_eq!(reader.count("a.md"), 0, "still one document, no strip");
+    assert_eq!(reader.tabs(), ["Alpha"], "still one document");
 }
 
 #[test]
@@ -364,11 +345,11 @@ fn each_tab_is_in_edit_mode_or_not_on_its_own() {
     reader.press("Ctrl+E");
     assert!(reader.is_on("Edit"));
 
-    reader.click("a.md");
+    reader.click("tab:Alpha");
     assert!(reader.is_on("Preview"));
     assert!(reader.typed().is_empty());
 
-    reader.click("c.md");
+    reader.click("tab:Gamma");
     assert!(reader.is_on("Edit"));
     assert_eq!(reader.typed(), ["# Gamma\n\nThe end of the line."]);
 }

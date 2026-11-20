@@ -14,7 +14,9 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Reader typography.** Documents are set in bundled Source Serif 4 (regular, true italic, semibold, bold) at a 1.6 line height, with a small `file-name · N min read` line above the title. Line spacing has three steps. The other font presets still work.
 
-- **A quiet top bar.** The menu bar, path readout and LIVE badge are replaced by one hairline-ruled row: sidebar toggle, back and forward on the left, the document title in the middle, **Aa**, find, contents and **⋯** on the right. Everything the File, Navigate and View menus offered is in **⋯**. The tab strip appears only with two or more documents.
+- **A quiet top bar.** The menu bar, path readout and LIVE badge are replaced by one hairline-ruled row: sidebar toggle, back and forward on the left, **Aa**, find, contents and **⋯** on the right. Everything the File, Navigate and View menus offered is in **⋯**.
+
+- **Tabs in the top row.** The tabs, **+** and the Preview|Edit switch share the top row with the buttons; there is no second row and no title in the middle. The row is the same with no document, one or thirty, so the page does not move when a second document opens (it used to jump 34 px). A tab is named by its document's first heading, or by its file name without one, and pointing at it shows where the file is and whether it reloads. A tab is 64 to 200 px wide and a longer name ends in an ellipsis. Tabs that do not fit scroll inside their own part of the row, with the tab in front brought into view, and **+** stays at the end of that part. In a window narrower than about 570 px the switch leaves the row; **⋯ > Edit Document** and `Ctrl+E` still switch.
 
 - **Diagrams and formulas follow the page.** Mermaid diagrams are redrawn in the theme's colors on a transparent ground, and LaTeX formulas are transparent ink, so neither sits in a white or page-colored box. A diagram wider than the column may use the room beside it instead of shrinking until its labels cannot be read.
 

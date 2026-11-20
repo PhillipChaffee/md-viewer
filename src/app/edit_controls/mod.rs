@@ -1,6 +1,6 @@
 //! The edit controls of the document in front: the Preview|Edit toggle,
-//! the unsaved-changes marker and the outcome of the last save. The tab
-//! strip holds them; a lone document has no strip, so the top bar does.
+//! the unsaved-changes marker and the outcome of the last save. They
+//! stand in the top row, before the buttons at its right end.
 
 use std::time::Duration;
 
@@ -20,39 +20,25 @@ const SAVE_FLASH: Duration = Duration::from_millis(FLASH_DURATION_MS * 3);
 
 const UNSAVED_DOT: f32 = 7.0;
 
-/// Whether `tab` has something to show beside the mode toggle even when it
-/// is the only tab: an edit in progress, unsaved changes, or a save's
-/// outcome.
-fn has_edit_state(tab: &Tab) -> bool {
-    tab.is_editing || tab.is_dirty() || tab.save_flash.is_some()
-}
-
 impl MarkdownApp {
-    /// The edit controls of a lone document, which has no strip to hold
-    /// them, laid out in the top bar from the right end of `room`. Returns
-    /// their left edge when there are any.
-    pub(crate) fn lone_document_edit_controls(
+    /// The edit controls of the document in front, laid out from the
+    /// right in the part of the bar `part` is. Returns their left edge, or
+    /// `None` without a document.
+    pub(crate) fn edit_controls(
         &mut self,
         ui: &mut egui::Ui,
-        room: egui::Rect,
+        part: egui::UiBuilder,
     ) -> Option<f32> {
         let palette = self.theme.palette();
-        let [tab] = self.tabs.as_mut_slice() else {
-            return None;
-        };
-        if !has_edit_state(tab) {
-            return None;
-        }
-        let layout = egui::Layout::right_to_left(egui::Align::Center);
-        let builder = egui::UiBuilder::new().max_rect(room).layout(layout);
-        let controls = ui.scope_builder(builder, |ui| edit_mode_controls(ui, tab, palette));
+        let tab = self.tabs.get_mut(self.active_tab)?;
+        let controls = ui.scope_builder(part, |ui| edit_mode_controls(ui, tab, palette));
         Some(controls.response.rect.left())
     }
 }
 
 /// The Preview|Edit toggle, the unsaved-changes marker, and the outcome of
 /// the last save. The caller lays these out right to left.
-pub(super) fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
+fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
     ui.spacing_mut().item_spacing.x = 8.0;
     let modes = [(false, "Preview"), (true, "Edit")];
     if let Some(to_edit) = chrome::segmented(ui, palette, &modes, tab.is_editing, false) {
@@ -76,8 +62,8 @@ fn save_flash_label(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette) {
     let Some((outcome, at)) = tab.save_flash else {
         return;
     };
-    // The strip may be on screen only for this outcome, so it has to be
-    // drawn again once the outcome has had its time.
+    // The outcome leaves the row once it has had its time, which takes a
+    // frame nothing else may ask for.
     let left = SAVE_FLASH.saturating_sub(at.elapsed());
     ui.ctx().request_repaint_after(left);
     if left.is_zero() {

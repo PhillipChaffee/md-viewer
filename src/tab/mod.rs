@@ -213,6 +213,12 @@ impl Tab {
         &self.title
     }
 
+    /// What the tab is called: the document's first heading, else its file
+    /// name. Both are worked out when the text is loaded or edited.
+    pub(crate) fn name(&self) -> &str {
+        self.document_title.as_deref().unwrap_or(&self.title)
+    }
+
     pub(crate) fn reload(&mut self) -> io::Result<()> {
         let content = read_document(&self.path)?;
         self.apply_loaded_content(self.path.clone(), content);

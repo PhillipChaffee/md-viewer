@@ -315,7 +315,7 @@ fn ctrl_clicking_a_link_to_a_heading_opens_a_tab_at_that_heading() {
         reader.in_view("Section 50")
     });
 
-    assert_eq!(reader.count("index.md"), 1, "the first tab is still there");
+    assert_eq!(reader.count("tab:Index"), 1, "the first tab is still there");
     assert_eq!(reader.title(), "long.md - Markdown Viewer");
 }
 
@@ -326,7 +326,7 @@ fn ctrl_clicking_a_web_link_still_goes_to_the_browser() {
     reader.ctrl_click("the site");
 
     assert_eq!(reader.opened_in_browser(), ["https://example.com/docs"]);
-    assert_eq!(reader.count("index.md"), 0, "no tab strip: one document");
+    assert_eq!(reader.tabs().len(), 1, "no second tab");
 }
 
 #[test]
