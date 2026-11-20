@@ -28,6 +28,10 @@ const SEARCH_VISIBLE_MARGIN: f32 = 20.0;
 
 /// Space between the top of the page and the meta line above the document.
 const KICKER_TOP_SPACE: f32 = 40.0;
+/// Space between the last line of the document and the bottom of the page,
+/// and above the first line of its source in edit mode: what is above the
+/// meta line in the preview.
+const PAGE_END_SPACE: f32 = KICKER_TOP_SPACE;
 /// Space between the meta line and the document's first block.
 const KICKER_BOTTOM_SPACE: f32 = 6.0;
 /// The meta line is set in the chrome's sans at this size, whatever the
@@ -165,6 +169,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
         .auto_shrink(false)
         .max_width(column.pane.width())
         .show(ui, |ui| {
+            ui.add_space(PAGE_END_SPACE);
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.add_space(column.inset());
@@ -230,6 +235,7 @@ fn preview_pane(
         .table_max_width(Some(column_px))
         .block_style(blocks)
         .preamble(Some(&preamble))
+        .end_space(PAGE_END_SPACE)
         .indentation_spaces(2)
         .use_strong_font_family(true)
         // Frontmatter is metadata, not prose: show it as a

@@ -34,6 +34,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 ### Fixes
 
+- **The last line of a page sat on the window's bottom edge, and the first line of its source sat under the top row.** A page scrolled to its end now has the same room below it as it has above its first line, and the source in edit mode starts that far below the top row.
 - **`Ctrl+Tab` and `Ctrl+Shift+Tab` also moved the keyboard focus,** as a plain Tab does, so the next Enter or Space could press a button the reader never went to.
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
 - **Color emoji never loaded outside Arch Linux,** and the bundled emoji font was read from a build-machine path, so an installed binary could not find it.
