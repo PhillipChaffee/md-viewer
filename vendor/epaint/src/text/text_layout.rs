@@ -997,8 +997,12 @@ fn last_word_start(glyphs: &[Glyph]) -> usize {
 }
 
 /// md-viewer patch: whether a row prefers to break after `chr` when `next`
-/// follows it, as [`RowBreakCandidates::word_boundary`] has it: after a
-/// space, and around a CJK character.
+/// follows it: after a space, and around a CJK character. The one rule
+/// for it: [`RowBreakCandidates::add`] asks here.
+///
+/// Logograms (single character representing a whole word) and kana
+/// (Japanese hiragana and katakana) are good places to break, and so is
+/// anywhere before a CJK character.
 pub fn is_word_boundary(chr: char, next: Option<char>) -> bool {
     const NON_BREAKING_SPACE: char = '\u{A0}';
     if chr.is_whitespace() && chr != NON_BREAKING_SPACE {
@@ -1028,15 +1032,12 @@ pub fn first_word(text: &str) -> (&str, bool) {
 /// Will focus primarily on spaces, secondarily on things like `-`
 #[derive(Clone, Copy, Default)]
 struct RowBreakCandidates {
-    /// Breaking at ` ` or other whitespace
-    /// is always the primary candidate.
-    space: Option<usize>,
-
-    /// Logograms (single character representing a whole word) or kana (Japanese hiragana and katakana) are good candidates for line break.
-    cjk: Option<usize>,
-
-    /// Breaking anywhere before a CJK character is acceptable too.
-    pre_cjk: Option<usize>,
+    /// Breaking at ` ` or other whitespace, or around a CJK character,
+    /// is always the primary candidate. See [`is_word_boundary`].
+    ///
+    /// md-viewer patch: one field, where upstream keeps `space`, `cjk` and
+    /// `pre_cjk` and only ever reads the latest of the three.
+    word: Option<usize>,
 
     /// Breaking at a dash is a super-
     /// good idea.
@@ -1054,26 +1055,19 @@ struct RowBreakCandidates {
 impl RowBreakCandidates {
     fn add(&mut self, index: usize, glyphs: &[Glyph]) {
         let chr = glyphs[0].chr;
-        const NON_BREAKING_SPACE: char = '\u{A0}';
-        if chr.is_whitespace() && chr != NON_BREAKING_SPACE {
-            self.space = Some(index);
-        } else if is_cjk(chr) && (glyphs.len() == 1 || is_cjk_break_allowed(glyphs[1].chr)) {
-            self.cjk = Some(index);
+        let next = glyphs.get(1).map(|glyph| glyph.chr);
+        if is_word_boundary(chr, next) {
+            self.word = Some(index);
         } else if chr == '-' {
             self.dash = Some(index);
         } else if chr.is_ascii_punctuation() {
             self.punctuation = Some(index);
-        } else if glyphs.len() > 1 && is_cjk(glyphs[1].chr) {
-            self.pre_cjk = Some(index);
         }
         self.any = Some(index);
     }
 
     fn word_boundary(&self) -> Option<usize> {
-        [self.space, self.cjk, self.pre_cjk]
-            .into_iter()
-            .max()
-            .flatten()
+        self.word
     }
 
     fn has_good_candidate(&self, break_anywhere: bool) -> bool {
@@ -1097,21 +1091,13 @@ impl RowBreakCandidates {
 
     fn forget_before_idx(&mut self, index: usize) {
         let Self {
-            space,
-            cjk,
-            pre_cjk,
+            word,
             dash,
             punctuation,
             any,
         } = self;
-        if space.is_some_and(|s| s < index) {
-            *space = None;
-        }
-        if cjk.is_some_and(|s| s < index) {
-            *cjk = None;
-        }
-        if pre_cjk.is_some_and(|s| s < index) {
-            *pre_cjk = None;
+        if word.is_some_and(|s| s < index) {
+            *word = None;
         }
         if dash.is_some_and(|s| s < index) {
             *dash = None;
@@ -1645,53 +1631,6 @@ mod tests {
             rows_with_room_after("word", after_something, 40.0, after_something),
             ["word"]
         );
-    }
-
-    /// md-viewer patch: the one rule for where a word ends says what the
-    /// row breaker's own bookkeeping says.
-    #[test]
-    fn test_word_boundary_agrees_with_the_row_breaker() {
-        let glyph = |chr: char| Glyph {
-            chr,
-            pos: Pos2::ZERO,
-            advance_width: 0.0,
-            line_height: 0.0,
-            font_ascent: 0.0,
-            font_height: 0.0,
-            font_impl_ascent: 0.0,
-            font_impl_height: 0.0,
-            uv_rect: Default::default(),
-            section_index: 0,
-            first_vertex: 0,
-        };
-        let chars = [
-            'a',
-            ' ',
-            '\u{A0}',
-            '\t',
-            '-',
-            ')',
-            ',',
-            '.',
-            '\u{4E2D}',
-            '\u{3042}',
-            '\u{3083}',
-            '\u{3002}',
-            '\u{1F600}',
-        ];
-        for chr in chars {
-            for next in chars.map(Some).into_iter().chain([None]) {
-                let glyphs: Vec<Glyph> =
-                    [Some(chr), next].into_iter().flatten().map(glyph).collect();
-                let mut candidates = RowBreakCandidates::default();
-                candidates.add(0, &glyphs);
-                assert_eq!(
-                    is_word_boundary(chr, next),
-                    candidates.word_boundary().is_some(),
-                    "{chr:?} before {next:?}"
-                );
-            }
-        }
     }
 
     /// md-viewer patch: the first word of a text runs through the space
