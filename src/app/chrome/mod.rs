@@ -124,9 +124,22 @@ fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
         ui.painter()
             .rect_filled(response.rect, CONTROL_RADIUS, palette.raised);
     }
+    focus_ring(ui, palette, response, response.rect);
+}
+
+/// The ring that shows where the keyboard is: a line in the accent just
+/// inside `around`, drawn while `response` has the focus. A control laid
+/// out by hand draws this one too, so the focus looks the same on a
+/// button, a sidebar row and a tab.
+pub(super) fn focus_ring(
+    ui: &egui::Ui,
+    palette: &Palette,
+    response: &egui::Response,
+    around: egui::Rect,
+) {
     if response.has_focus() {
         ui.painter().rect_stroke(
-            response.rect,
+            around,
             CONTROL_RADIUS,
             egui::Stroke::new(1.0_f32, palette.accent),
             egui::StrokeKind::Inside,
