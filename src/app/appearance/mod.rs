@@ -103,32 +103,36 @@ impl MarkdownApp {
         picked: &mut Option<AppAction>,
     ) {
         let palette = self.theme.palette();
-        egui::Popup::from_toggle_button_response(button)
+        let popover = egui::Popup::from_toggle_button_response(button)
             .align(egui::RectAlign::BOTTOM_END)
             .gap(4.0)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .sense(chrome::POPUP_SENSE)
-            .style(chrome::popup_style(palette))
-            .show(|ui| {
-                ui.set_width(POPOVER_WIDTH);
-                egui::Frame::NONE
-                    .inner_margin(egui::Margin::same(POPOVER_PADDING))
-                    .show(ui, |ui| {
-                        self.theme_swatches(ui, picked);
-                        section_break(ui, palette);
-                        self.text_size_row(ui, picked);
-                        section_break(ui, palette);
-                        self.width_section(ui, picked);
-                        section_break(ui, palette);
-                        self.line_spacing_section(ui, picked);
-                    });
-                chrome::hairline(ui, palette);
-                let fonts = MenuRow::new("Fonts…").flush().show(ui, palette);
-                if fonts.clicked() {
-                    *picked = Some(AppAction::OpenFontSettings);
-                    ui.close();
-                }
+            .style(chrome::popup_style(palette));
+        chrome::show_popup(popover, |ui| self.sections(ui, picked));
+    }
+
+    /// Everything in the popover, top to bottom.
+    fn sections(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let palette = self.theme.palette();
+        ui.set_width(POPOVER_WIDTH);
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::same(POPOVER_PADDING))
+            .show(ui, |ui| {
+                self.theme_swatches(ui, picked);
+                section_break(ui, palette);
+                self.text_size_row(ui, picked);
+                section_break(ui, palette);
+                self.width_section(ui, picked);
+                section_break(ui, palette);
+                self.line_spacing_section(ui, picked);
             });
+        chrome::hairline(ui, palette);
+        let fonts = MenuRow::new("Fonts…").flush().show(ui, palette);
+        if fonts.clicked() {
+            *picked = Some(AppAction::OpenFontSettings);
+            ui.close();
+        }
     }
 
     fn theme_swatches(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {

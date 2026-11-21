@@ -62,6 +62,8 @@ mod math;
 #[cfg(test)]
 mod menu;
 #[cfg(test)]
+mod menu_room;
+#[cfg(test)]
 mod opening;
 #[cfg(test)]
 mod opening_depth;
