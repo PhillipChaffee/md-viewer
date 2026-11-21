@@ -440,6 +440,11 @@ pub struct TextWrapping {
     /// When the last word and this much more do not fit on its row, the
     /// word starts the next row, as it would had the two been one text.
     ///
+    /// Meant for left-aligned, unjustified text with no row limit. With
+    /// [`Self::max_rows`], a text that fits but whose room does not is
+    /// moved to a row that may be elided. With another alignment, or with
+    /// justified text, "after" has no one meaning.
+    ///
     /// Default value: `0.0`.
     pub room_after: f32,
 }
