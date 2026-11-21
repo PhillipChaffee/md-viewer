@@ -5,6 +5,8 @@
 //! size, so the controls that change the text do not move under the
 //! pointer while they are used.
 
+use std::fmt;
+
 use eframe::egui::{self, Color32};
 
 use crate::icons::Icon;
@@ -143,11 +145,17 @@ enum Face<'a> {
 
 /// A button with no outline and no fill: an icon or a word in the muted
 /// color, which turns to the text color under the pointer.
+///
+/// Its name is of any type `N` that can be written out, and is written
+/// only when something asks what the button is called: a screen reader, or
+/// egui's record of a click. Most names are words that are already there. A
+/// button that is one of many, each named after its row, hands in a name
+/// that writes itself, so that no frame builds a name nothing reads.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct QuietButton<'a> {
+pub(super) struct QuietButton<'a, N = &'a str> {
     face: Face<'a>,
     /// What a screen reader calls it.
-    label: &'a str,
+    label: N,
     enabled: bool,
     lit: bool,
     min_width: f32,
@@ -156,22 +164,6 @@ pub(super) struct QuietButton<'a> {
 }
 
 impl<'a> QuietButton<'a> {
-    pub(super) const fn icon(icon: Icon, label: &'a str) -> Self {
-        Self::icon_sized(icon, ICON_SIDE, label)
-    }
-
-    /// A button that shows `icon` in a square `side` px wide.
-    pub(super) const fn icon_sized(icon: Icon, side: f32, label: &'a str) -> Self {
-        Self {
-            face: Face::Icon(icon, side),
-            label,
-            enabled: true,
-            lit: false,
-            min_width: BUTTON_SIDE,
-            padding: BUTTON_PADDING,
-        }
-    }
-
     /// A button that reads `text` and is called that by a screen reader.
     pub(super) const fn text(text: &'a str) -> Self {
         Self::text_sized(text, LABEL_SIZE)
@@ -182,6 +174,24 @@ impl<'a> QuietButton<'a> {
         Self {
             face: Face::Text(text, size),
             label: text,
+            enabled: true,
+            lit: false,
+            min_width: BUTTON_SIDE,
+            padding: BUTTON_PADDING,
+        }
+    }
+}
+
+impl<N: fmt::Display + Copy> QuietButton<'_, N> {
+    pub(super) const fn icon(icon: Icon, label: N) -> Self {
+        Self::icon_sized(icon, ICON_SIDE, label)
+    }
+
+    /// A button that shows `icon` in a square `side` px wide.
+    pub(super) const fn icon_sized(icon: Icon, side: f32, label: N) -> Self {
+        Self {
+            face: Face::Icon(icon, side),
+            label,
             enabled: true,
             lit: false,
             min_width: BUTTON_SIDE,
@@ -204,7 +214,7 @@ impl<'a> QuietButton<'a> {
     }
 
     /// Call it `label` where the text on its face does not say what it does.
-    pub(super) const fn labelled(mut self, label: &'a str) -> Self {
+    pub(super) const fn labelled(mut self, label: N) -> Self {
         self.label = label;
         self
     }

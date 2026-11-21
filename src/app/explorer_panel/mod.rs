@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -198,7 +199,7 @@ impl MarkdownApp {
         listing: &Listing<'_>,
         clicks: &mut TreeClicks,
     ) {
-        let new_tab = new_tab_label(row.name);
+        let new_tab = NewTabName(row.name);
         let shown = Row {
             text: row.name,
             indent: row.indent(),
@@ -334,9 +335,15 @@ fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
 }
 
 /// What a screen reader calls the button at the end of the row of the file
-/// `name`: every file in view has one, so each says whose it is.
-fn new_tab_label(name: &str) -> String {
-    format!("Open {name} in new tab")
+/// named: every file in view has one, so each says whose it is. The words
+/// are put together when they are asked for, and a frame nothing listens to
+/// asks for none.
+struct NewTabName<'a>(&'a str);
+
+impl fmt::Display for NewTabName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Open {} in new tab", self.0)
+    }
 }
 
 /// Whether the button at the end of a file's row was clicked. Its tooltip

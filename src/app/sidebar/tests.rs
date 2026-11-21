@@ -582,7 +582,7 @@ fn row_with_button(text: &str, marked: bool) -> Row<'_> {
     Row {
         end: End::Button {
             icon: Icon::NewTab,
-            label: "Open in new tab",
+            label: &"Open in new tab",
             marked,
         },
         ..plain_row(text, false)

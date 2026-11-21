@@ -167,7 +167,7 @@ fn point_at(harness: &mut LabelHarness, name: &str) {
 /// Whether the button at the end of the explorer row `name` is drawn: its
 /// icon is stroked where the button is.
 fn button_shows(harness: &LabelHarness, name: &str) -> bool {
-    let button = harness.get_by_label(&new_tab_label(name)).rect();
+    let button = harness.get_by_label(&NewTabName(name).to_string()).rect();
     painted_shapes(harness.output()).iter().any(|shape| {
         matches!(shape, egui::Shape::Path(path)
             if button.contains_rect(path.visual_bounding_rect()))

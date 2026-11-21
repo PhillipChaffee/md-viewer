@@ -2,6 +2,8 @@
 //! hairline and its resize affordance, the section header, the rows, and the
 //! small painted controls.
 
+use std::fmt;
+
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
@@ -273,7 +275,7 @@ pub(super) enum Chevron {
 }
 
 /// What a row keeps its right end for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub(super) enum End<'a> {
     /// Nothing: the text runs to the row's edge.
     Nothing,
@@ -285,8 +287,10 @@ pub(super) enum End<'a> {
     Button {
         icon: Icon,
         /// What a screen reader calls the button. It is listed with the
-        /// button of every other row in view, so it says which row it is on.
-        label: &'a str,
+        /// button of every other row in view, so it says which row it is
+        /// on, and it is written out only when something asks for it: a
+        /// row drawn with no screen reader attached costs no name.
+        label: &'a dyn fmt::Display,
         marked: bool,
     },
 }
