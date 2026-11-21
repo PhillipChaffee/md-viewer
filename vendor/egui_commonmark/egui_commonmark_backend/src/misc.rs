@@ -259,6 +259,8 @@ impl Style {
             .get(&TextStyle::Body)
             .map_or(14.0, |d| d.size);
         let mut selected_font_size = base_font_size;
+        // Whether the text is bold: strong text, or a heading that is.
+        let mut bold = self.strong;
 
         if let Some(level) = self.heading {
             // Evidence-based heading scale using Major Third ratio (1.25×)
@@ -275,6 +277,7 @@ impl Style {
 
             rich_text = rich_text.size(size);
             selected_font_size = size;
+            bold |= is_bold;
             if is_bold {
                 rich_text = rich_text.strong();
             }
@@ -354,7 +357,22 @@ impl Style {
             let scale = block_style
                 .and_then(|style| style.inline_code_scale)
                 .unwrap_or(1.0);
-            rich_text = rich_text.code().size(selected_font_size * scale);
+            let size = selected_font_size * scale;
+            // md-viewer patch: code in an ink of its own is the code face
+            // without `code()`, which would lay the code background behind
+            // it. A link colors its text after this, so its color wins.
+            rich_text = match block_style.and_then(|style| style.inline_code_color) {
+                Some(ink) => rich_text.text_style(TextStyle::Monospace).size(size).color(ink),
+                None => rich_text.code().size(size),
+            };
+            // md-viewer patch: the bold code face, where the text around
+            // the code is bold.
+            let strong_family = block_style
+                .and_then(|style| style.strong_code_font_family.as_ref())
+                .filter(|_| bold);
+            if let Some(family) = strong_family {
+                rich_text = rich_text.family(family.clone());
+            }
         }
 
         rich_text

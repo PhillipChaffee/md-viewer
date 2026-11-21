@@ -107,6 +107,8 @@ impl DocumentLook {
                 // The pane decides this each frame: see `preview_pane`.
                 figure_max_width: None,
                 inline_code_radius: Some(INLINE_CODE_RADIUS),
+                inline_code_color: None,
+                strong_code_font_family: None,
             },
             syntax_theme: palette.syntax_theme,
             muted: palette.muted,

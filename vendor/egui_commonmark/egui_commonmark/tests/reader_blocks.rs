@@ -1130,3 +1130,77 @@ fn code_in_a_table_cell_gets_a_chip_and_a_found_match_keeps_its_highlight() {
     assert!(frame.rects.iter().all(|rect| rect.fill != fill));
     assert_ne!(frame.text("needle").background, Color32::TRANSPARENT);
 }
+
+// --- inline code in an ink of its own -------------------------------------
+
+const CODE_INK: Color32 = Color32::from_rgb(122, 74, 34);
+
+fn scaled() -> BlockStyle {
+    BlockStyle {
+        inline_code_scale: Some(0.5),
+        ..Default::default()
+    }
+}
+
+fn tinted() -> BlockStyle {
+    BlockStyle {
+        inline_code_color: Some(CODE_INK),
+        ..scaled()
+    }
+}
+
+#[test]
+fn inline_code_in_an_ink_of_its_own_has_nothing_painted_behind_it() {
+    let markdown = "Some text with `inline code` in the middle of a line.\n";
+    let ctx = context();
+    let fill = ctx.style().visuals.code_bg_color;
+    let plain = show_in(&ctx, markdown, &scaled());
+    let frame = show_in(&ctx, markdown, &tinted());
+
+    assert_eq!(plain.text("inline code").background, fill);
+    assert_ne!(plain.text("inline code").color, CODE_INK);
+    let code = frame.text("inline code");
+    assert_eq!(code.color, CODE_INK);
+    assert_eq!(code.background, Color32::TRANSPARENT);
+    assert!(frame.rects.iter().all(|rect| rect.fill != fill), "{:#?}", frame.rects);
+    // The ink is all that changes: every label is where it was.
+    assert_eq!(plain.texts.len(), frame.texts.len());
+    for (before, after) in plain.texts.iter().zip(&frame.texts) {
+        assert_eq!((before.text.as_str(), before.rect), (after.text.as_str(), after.rect));
+    }
+    assert_ne!(frame.text("Some text").color, CODE_INK);
+}
+
+#[test]
+fn a_found_match_in_tinted_code_keeps_the_codes_ink_and_size() {
+    let markdown = "Find `needle` here.\n";
+    let ctx = context();
+    let at_rest = show_in(&ctx, markdown, &tinted());
+    let mut cache = CommonMarkCache::default();
+    cache.set_search_ranges(vec![6..12]);
+    ctx.begin_pass(egui::RawInput::default());
+    egui::CentralPanel::default().show(&ctx, |ui| {
+        viewer(&tinted()).show(ui, &mut cache, markdown);
+    });
+    let mut frame = Frame::default();
+    for clipped in ctx.end_pass().shapes {
+        frame.collect(&clipped.shape, clipped.clip_rect);
+    }
+
+    let found = frame.text("needle");
+    assert_ne!(found.background, Color32::TRANSPARENT, "the match is marked");
+    assert_eq!(found.color, CODE_INK);
+    assert_close(
+        found.rect.width(),
+        at_rest.text("needle").rect.width(),
+        "the found code is the size it was",
+    );
+}
+
+#[test]
+fn tinted_code_in_a_link_is_in_the_links_color() {
+    let ctx = context();
+    let frame = show_in(&ctx, "See [`code`](https://example.com) there.\n", &tinted());
+
+    assert_eq!(frame.text("code").color, ctx.style().visuals.hyperlink_color);
+}

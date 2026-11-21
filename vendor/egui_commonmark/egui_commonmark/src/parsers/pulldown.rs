@@ -3598,7 +3598,11 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
     ) {
         let bg = hl.background_color(ui);
-        let mut rich_text = if bg.is_some() && self.text_style.code {
+        // md-viewer patch: code in an ink of its own has no background for
+        // the highlight to lose to, so it is styled as it is at rest.
+        let on_code_background =
+            self.text_style.code && options.block_style.inline_code_color.is_none();
+        let mut rich_text = if bg.is_some() && on_code_background {
             // egui's RichText renderer overrides `background_color` with the theme's
             // `code_bg_color` whenever `.code()` is set (widget_text.rs:421). To make
             // our search highlight visible inside inline code, build the RichText
