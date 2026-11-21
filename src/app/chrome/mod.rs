@@ -26,6 +26,9 @@ pub(super) const LABEL_SIZE: f32 = 13.0;
 pub(super) const SMALL_SIZE: f32 = 11.5;
 /// Side of the square a quiet button takes at least.
 pub(super) const BUTTON_SIDE: f32 = 28.0;
+/// Diameter of a dot in the warning color: the one beside the mode switch
+/// for unsaved edits, and the one on a tab whose file changed under them.
+pub(super) const WARNING_DOT: f32 = 7.0;
 /// Side of the square an icon is painted in.
 const ICON_SIDE: f32 = 16.0;
 /// Space between the text of a quiet button and its edge.

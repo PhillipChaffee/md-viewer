@@ -35,9 +35,6 @@ const NAME_WIDTH: Rangef = Rangef {
 };
 /// Diameter of the dot that stands for live reload in a tab's hover text.
 const LIVE_DOT: f32 = 6.0;
-/// Diameter of the dot on a tab whose file changed under unsaved edits:
-/// that of the unsaved dot beside the mode switch.
-const DISK_DOT: f32 = 7.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
 
 /// What the user asked of the tabs during one frame.
@@ -294,7 +291,7 @@ fn tab_disk_mark(ui: &egui::Ui, tab: &egui::Response, change: DiskChange, palett
         egui::WidgetInfo::labeled(egui::WidgetType::Label, true, disk_notice::mark(change))
     });
     ui.painter()
-        .circle_filled(square.center(), DISK_DOT / 2.0, palette.warning);
+        .circle_filled(square.center(), chrome::WARNING_DOT / 2.0, palette.warning);
 }
 
 /// The close button in the square a tab keeps free at its right end.
