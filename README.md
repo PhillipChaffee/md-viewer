@@ -35,7 +35,7 @@ sepia one.
 
 | Where | What shows the icon |
 | --- | --- |
-| Mac | The Dock and the app switcher, while the app runs. It is chosen when the app starts: after a change between a light theme and a dark one, the Dock shows the other icon from the next launch. Finder shows a plain program icon for the binary itself; an icon there takes an `.app` bundle, which this repository does not build |
+| Mac | The Dock and the app switcher, while the app runs. It changes as soon as the theme crosses between light and dark, and the next launch opens with the one for the theme you left on. Finder shows a plain program icon for the binary itself; an icon there takes an `.app` bundle, which this repository does not build |
 | Linux, X11 | The window, in the desktop's window list and task switcher. It changes as soon as the theme crosses between light and dark |
 | Linux, Wayland | A Wayland window has no icon of its own. The desktop shows the launcher's, which `make install` puts in place and which is always the sepia one |
 
@@ -327,7 +327,7 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
-| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, `⌘Q` handed to the app, and the app asked before macOS quits it. Does nothing elsewhere. Holds the two unsafe functions ([GATES.md](GATES.md)) |
+| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, `⌘Q` handed to the app, the app asked before macOS quits it, and the Dock's icon set to the theme's. Does nothing elsewhere. Holds the three unsafe functions ([GATES.md](GATES.md)) |
 
 ## Development
 
