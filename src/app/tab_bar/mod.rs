@@ -270,7 +270,11 @@ fn title_galleys(
     let (name, place) = title.parts();
     let place = (!place.is_empty()).then(|| cut_short(ui, place, NAME_WIDTH.max - NAME_KEPT));
     let taken = place.as_ref().map_or(0.0, |place| place.size().x);
-    (cut_short(ui, name, NAME_WIDTH.max - taken), place)
+    // A text is laid out for the nearest whole width, and a folder is
+    // seldom a whole number wide: what is left for the name is rounded
+    // down here, so that it is not rounded up there, past the tab's width.
+    let left = (NAME_WIDTH.max - taken).floor();
+    (cut_short(ui, name, left), place)
 }
 
 /// Draws one tab: its name, the line under it while it is the active one,

@@ -239,6 +239,33 @@ fn tabs_read(reader: &Reader) -> Vec<String> {
 }
 
 #[test]
+fn a_cut_name_keeps_its_tab_inside_the_width_whatever_its_folder_is_called() {
+    let heading = "# Minutes of the Quarterly Planning Committee Meeting\n\nAgreed.";
+    // Folders of many widths: the letters and figures a font sets wide,
+    // narrow and in between, from one letter to a few words.
+    let folders = [
+        "a", "il", "fig", "wave", "maple", "jqxz0", "1", "27", "1998", "mm", "www", "f-1", "t.j",
+        "r_y", "AV", "To", "LT", "WA", "Yo", "kv", "ox-9", "e3", "c", "ss", "zz", "harbour",
+        "board-4", "east", "west-7", "quay-11",
+    ];
+    let files = folders.map(|folder| format!("{folder}/minutes.md"));
+    let mut launch = Reader::launch();
+    for file in &files {
+        launch = launch.doc(file, heading);
+    }
+    let mut reader = launch.args(&[&files[0]]).open();
+    reader.drop_files(&files.each_ref().map(String::as_str)[1..]);
+
+    let reads = tabs_read(&reader);
+
+    assert_eq!(reads.len(), folders.len());
+    for (reads, folder) in reads.iter().zip(folders) {
+        assert!(reads.starts_with("Minutes of"), "{reads}");
+        assert!(reads.ends_with(&format!("… · {folder}")), "{reads}");
+    }
+}
+
+#[test]
 fn long_folders_that_differ_at_their_end_read_differently() {
     let folders = [
         "correspondence-with-the-harbour-board-1998",

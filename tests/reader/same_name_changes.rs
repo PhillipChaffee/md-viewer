@@ -179,8 +179,12 @@ fn a_marked_namesake_with_a_long_name_and_folder_keeps_its_parts_apart() {
         );
         assert!(square.right() <= tab.right(), "the square is in the tab");
         assert_eq!(places(&reader, &tabs), at_rest, "nothing moves");
+        // How much of the name is left depends on how wide the font sets
+        // the folder: some of it is, from its start, and the folder's end.
         let reads = reader.tab_reads(&label);
-        assert!(reads.starts_with("Minutes"), "{reads}");
-        assert!(reads.ends_with("board-1998"), "{reads}");
+        let (name, folder) = reads.split_once("… · ").expect("a name cut short");
+        assert!(!name.is_empty(), "{reads}");
+        assert!(heading[2..].starts_with(name), "{reads}");
+        assert!(folder.ends_with("board-1998"), "{reads}");
     }
 }
