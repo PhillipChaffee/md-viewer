@@ -41,7 +41,7 @@ Four things keep this from hiding a failure:
 - **`main` is never narrowed.** A push to `main` runs every job, whatever
   the pull request before it skipped.
 
-Three more facts about how the jobs are laid out:
+Four more facts about how the jobs are laid out:
 
 - **The tests run once.** `test` runs the suite under `cargo llvm-cov`,
   which is both the test run and the coverage gate. It builds the same five
@@ -53,6 +53,10 @@ Three more facts about how the jobs are laid out:
 - **The proofs run in three shares,** one runner each, and a job named
   `proofs` reports the three as one result. [PROOFS.md](PROOFS.md) says how
   the harnesses are dealt out and why none can be missed.
+- **Mutation testing runs at night, not on pull requests.** The
+  `mutation` workflow deals about 2,300 mutants out to 48 runners and
+  reports one check named `mutation`, with the floor at 85%. The README's
+  "Mutation testing" section says what runs and how to read it.
 
 ## Where the retrofit left the crate
 
@@ -86,6 +90,7 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/` and build output are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
 | `lychee.toml` | The two font license files, `assets/fonts/SourceSerif4-LICENSE.txt` and `assets/fonts/SourceCodePro-LICENSE.txt`, are skipped too. They are legal text kept verbatim, and their one URL (adobe.com) answers 403 to automated clients. |
 | `.gitleaks.toml` | `target/` is skipped in the working-tree scan. |
+| `.cargo/mutants.toml` | The nightly mutation run mutates neither `src/**/proofs.rs` (only `cargo kani` compiles them) nor `crates/mac-window/src/mac.rs` (only a Mac compiles it). Each mutant runs the unit tests and `tests/reader`, not `tests/e2e`, whose window tests run on every pull request instead. The score leaves out unviable mutants, which no test runs against. See the README's "Mutation testing" section. |
 
 ## Caveat: the renderer fork is first-party code outside the gates
 
@@ -186,8 +191,8 @@ What no gate checks: everything in `mac.rs`. CI builds it with
 Linux, and passed when the crate was written, but is not a CI step. Nobody
 has run this code on a Mac under a test: whether the buttons land where
 `placement` says is checked by eye, and so is whether macOS asks the method added to
-winit's delegate. The nightly mutation run covers the
-root package only, so it does not see this crate either.
+winit's delegate. The nightly mutation run mutates the crate's `lib.rs`
+and leaves `mac.rs` out, since Linux does not compile it.
 
 ## A cost paid every frame: whether anything is unsaved
 
