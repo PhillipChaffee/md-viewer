@@ -5,3 +5,7 @@
 
 # Coverage report written by the coverage gate
 /lcov.info
+
+# cargo-mutants output (README, "Mutation testing")
+/mutants.out/
+/mutants.out.old/

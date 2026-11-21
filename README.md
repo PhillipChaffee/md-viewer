@@ -382,6 +382,87 @@ Two things to know before you rely on those gates:
 - **Each exception is listed.** [GATES.md](GATES.md) names every ignored
   advisory, skipped duplicate and allowed lint, with the reason.
 
+## Mutation testing
+
+Mutation testing checks the tests themselves.
+[cargo-mutants](https://mutants.rs/) changes the code one small step at a
+time: a `-` becomes a `+`, a comparison flips, a function returns a default.
+It then runs the tests against each change, which is called a mutant. A
+mutant that makes a test fail is caught. A mutant that every test passes
+is missed, and it marks code whose behavior no test pins down.
+
+### What runs, and when
+
+The `mutation` workflow (`.github/workflows/mutation.yml`) runs every night
+at 04:23 UTC, and GitHub has started it up to nine hours late. To run it by
+hand, open **Actions > mutation > Run workflow** and pick `main`. It never
+runs on a pull request, because one run builds and tests the app once per
+mutant.
+
+| What | Which |
+| --- | --- |
+| Tool | cargo-mutants 27.1.0, the prebuilt release, checked against its sha256 in the workflow |
+| Mutated | All of `src/` and `crates/mac-window/src/lib.rs`: 2282 mutants |
+| Not mutated | `src/**/proofs.rs`, which only `cargo kani` compiles; `crates/mac-window/src/mac.rs`, which only a Mac compiles; `vendor/`, which is outside the workspace |
+| Tests run against each mutant | The unit tests of both crates and `tests/reader` |
+| Tests not run against each mutant | `tests/e2e`. Its window tests need a virtual display and run on every pull request in the `test` job |
+| Shards | 48 runners, each with `--shard k/48`. Mutant `i` goes to shard `i % 48`, so each shard gets part of every file |
+| Result | A last job named `mutation` merges the shards and applies the floor |
+
+The settings are in `.cargo/mutants.toml`, with a reason beside each one.
+A local run reads the same file.
+
+### The floor
+
+The score is the share of tested mutants that the tests catch. A mutant
+that does not compile is unviable: no test runs against it, so it is left
+out. A mutant that runs past its time limit counts as missed. The run
+fails when the score is below 85%.
+
+The floor is not 100% because some mutants are equivalent: the change
+alters nothing a test can see. For example, a boundary comparison inside
+a clamp returns the same bound either way. No test can catch such a
+mutant, so a floor of 100% would fail forever. 85% leaves room for those
+and still fails when a module's tests stop checking its results.
+
+The run also fails when any shard stops with an error, for example when
+the tests fail on the unchanged code. Then no score is given.
+
+### Run it for one file
+
+Install the same version, then name the file:
+
+```bash
+cargo install --locked cargo-mutants@27.1.0
+cargo mutants -f src/search/mod.rs
+```
+
+Add `--workspace` for a file in `crates/mac-window`. `cargo mutants --list`
+lists the mutants without running them. The first build and the baseline
+take several minutes. After that, each mutant takes from 5 seconds (it does
+not compile) to about 3 minutes (only `tests/reader` can catch it, or
+nothing does).
+
+### Read the results
+
+A local run writes `mutants.out/`:
+
+| File | What it holds |
+| --- | --- |
+| `missed.txt` | One line per missed mutant: file, line, column and the change, for example `src/layout/mod.rs:213:56: replace - with / in zoomed` |
+| `timeout.txt` | Mutants that ran past the time limit |
+| `caught.txt`, `unviable.txt` | The other two outcomes |
+| `diff/` | The exact change of each mutant |
+| `log/` | The build and test output of each mutant |
+| `outcomes.json` | The counts that the score is made from |
+
+In the workflow, the `mutation` job's log prints the score and every missed
+mutant. Each shard uploads its `mutants.out/` as the artifact
+`mutants-shard-k`, kept for 14 days. For a missed mutant, write a test that
+fails with the change applied and passes without it. If no test can tell
+the difference, the mutant is equivalent. Leave it, and the floor absorbs
+it.
+
 ## Website
 
 The project's page is a static site in [`docs/`](docs/): one page, a page

@@ -1,0 +1,22 @@
+# cargo-mutants configuration for the nightly `mutation` workflow and for
+# local runs. The README's "Mutation testing" section says what runs and why.
+
+# Mutants in these files can never be caught by `cargo test`, so they would
+# count as missed and say nothing about the tests:
+# - `proofs.rs` files are compiled only under `cargo kani` (`cfg(kani)`).
+#   `cargo test` never builds them, and the `proofs` job is their gate.
+# - `mac.rs` is compiled for macOS only, and the run is on Linux.
+exclude_globs = ["src/**/proofs.rs", "crates/mac-window/src/mac.rs"]
+
+# `--shard k/n` deals mutant i to shard i % n, so every shard gets a slice
+# of every file and the shards take about the same time.
+sharding = "round-robin"
+
+# Each mutant runs the in-process suites: the unit tests of both workspace
+# packages (`--workspace`) and tests/reader, which drives the whole app
+# without a window. tests/e2e is left out: its window tests need a virtual
+# display and take a real window per test, and they run on every pull
+# request in ci.yml's `test` job. `--workspace` here selects the tests;
+# the workflow's `--workspace` flag selects the mutants.
+test_workspace = true
+additional_cargo_test_args = ["--lib", "--bins", "--test", "reader"]
