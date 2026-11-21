@@ -43,6 +43,7 @@ add "shell-lint" 'for sh in $(git ls-files "*.sh"); do shellcheck "$sh"; done'
 add "shell-format" 'for sh in $(git ls-files "*.sh"); do shfmt -d "$sh"; done'
 add "workflow-yaml-lint" "yamllint ./.github/workflows/*.yml $(find . -mindepth 2 -maxdepth 2 \( -name 'ci.yml' -o -name 'mutation.yml' \) -not -path './.github/*' | tr '\n' ' ')"
 add "workflow-lint" "actionlint ./.github/workflows/*.yml $(find . -mindepth 2 -maxdepth 2 \( -name 'ci.yml' -o -name 'mutation.yml' \) -not -path './.github/*' | tr '\n' ' ')"
+add "site-facts" "bash scripts/check-site-facts.sh"
 for i in "${!names[@]}"; do
 	name="${names[$i]}"
 	cmd="${cmds[$i]}"

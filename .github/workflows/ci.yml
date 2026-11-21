@@ -356,6 +356,12 @@ jobs:
         run: yamllint ./.github/workflows/*.yml
       - name: Workflow lint (actionlint v1.7.12)
         run: actionlint ./.github/workflows/*.yml
+      # The website's facts against the code. Each fact on docs/index.html and
+      # docs/404.html carries a data-fact attribute, and the script reads the
+      # same fact from the file that decides it. Here because hygiene runs on
+      # every change, so a change to the code or to a page runs it.
+      - name: Site facts (scripts/check-site-facts.sh)
+        run: bash scripts/check-site-facts.sh
 
   renderer:
     needs: changes

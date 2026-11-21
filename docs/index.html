@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>md-viewer: a desktop reader for Markdown</title>
 <meta name="description" content="md-viewer is a desktop reader for Markdown, set in Source Serif 4, with four themes, LaTeX math, Mermaid diagrams and live reload.">
-<meta name="theme-color" content="#FDFDFB">
+<meta name="theme-color" content="#FDFDFB" data-fact="colour:Paper">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <!-- Social cards need whole addresses. These are the site's address on GitHub Pages. -->
@@ -173,8 +173,8 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
     <b>md-viewer</b>
     <span class="hide">A Markdown reader for the desktop</span>
     <span class="sp"></span>
-    <span>Version 0.3.0</span>
-    <span class="hide">MIT licence</span>
+    <span>Version <span data-fact="version">0.3.0</span></span>
+    <span class="hide"><span data-fact="licence">MIT</span> licence</span>
     <a href="https://github.com/PhillipChaffee/md-viewer">GitHub</a>
   </header>
 </div>
@@ -184,7 +184,7 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
       <h1>A desktop reader for Markdown</h1>
       <p>md-viewer opens a <code>.md</code> file and shows it the way a good read-later app shows an article.</p>
       <div class="acts">
-        <code class="cmd"><i aria-hidden="true">$</i> md-viewer notes.md</code>
+        <code class="cmd"><i aria-hidden="true">$</i> <span data-fact="binary">md-viewer</span> notes.md</code>
         <span class="brk"></span>
         <a href="#install">Install</a>
         <a href="https://github.com/PhillipChaffee/md-viewer">Source</a>
@@ -230,30 +230,30 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
         <p class="c-tabs" id="c-tabs">Tabs sit in the top row, each named by its document's first heading, with back and forward history in each.</p>
         <p class="c-aa" id="c-aa">The <b>Aa</b> button holds the theme swatches, the text size, a width slider and three line spacings.</p>
         <p class="c-home" id="c-home">The home page lists recent documents with their title, folder, reading time and opening lines.</p>
-        <p class="c-edit" id="c-edit"><code>Ctrl+E</code> shows the source as plain text and <code>Ctrl+S</code> saves; it is for the typo you just noticed.</p>
+        <p class="c-edit" id="c-edit"><code data-fact="shortcut:ToggleEditMode">Ctrl+E</code> shows the source as plain text and <code data-fact="shortcut:Save">Ctrl+S</code> saves; it is for the typo you just noticed.</p>
       </div>
     </div>
 
     <section class="sect" id="themes" aria-labelledby="themes-h">
       <div class="idea">
-        <span class="label">Ctrl+D steps through them</span>
+        <span class="label"><span data-fact="shortcut:NextTheme">Ctrl+D</span> steps through them</span>
         <h2 id="themes-h">Four themes</h2>
-        <p>Paper, Sepia, Dusk and Night. Each one is a single palette that every part of the window draws from, and body text keeps at least 7:1 contrast on all four.</p>
+        <p><span data-fact="theme-names">Paper, Sepia, Dusk and Night</span>. Each one is a single palette that every part of the window draws from, and body text keeps at least <span data-fact="body-contrast">7:1</span> contrast on all four.</p>
       </div>
       <div class="stack">
-        <a class="frame" href="img/night.webp" style="--bgc:#000000"><picture><source media="(max-width: 600px)" srcset="img/night-narrow-960.webp" width="960" height="1440"><img src="img/night-1280.webp" srcset="img/night-1280.webp 1280w, img/night.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Night theme: gray text on black."></picture></a>
-        <a class="frame" href="img/dusk.webp" style="--bgc:#2C2C2E"><picture><source media="(max-width: 600px)" srcset="img/dusk-narrow-960.webp" width="960" height="1440"><img src="img/dusk-1280.webp" srcset="img/dusk-1280.webp 1280w, img/dusk.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Dusk theme: light text on dark gray."></picture></a>
-        <a class="frame" href="img/paper.webp" style="--bgc:#FDFDFB"><picture><source media="(max-width: 600px)" srcset="img/paper-narrow-960.webp" width="960" height="1440"><img src="img/paper-1280.webp" srcset="img/paper-1280.webp 1280w, img/paper.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Paper theme: near-black ink on off-white."></picture></a>
-        <a class="frame" href="img/sepia.webp" style="--bgc:#F8F1E3"><picture><source media="(max-width: 600px)" srcset="img/sepia-narrow-960.webp 960w, img/sepia-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440"><img src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Sepia theme: dark brown ink on warm paper."></picture></a>
+        <a class="frame" href="img/night.webp" data-fact="colour:Night" style="--bgc:#000000"><picture><source media="(max-width: 600px)" srcset="img/night-narrow-960.webp" width="960" height="1440"><img src="img/night-1280.webp" srcset="img/night-1280.webp 1280w, img/night.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Night theme: gray text on black."></picture></a>
+        <a class="frame" href="img/dusk.webp" data-fact="colour:Dusk" style="--bgc:#2C2C2E"><picture><source media="(max-width: 600px)" srcset="img/dusk-narrow-960.webp" width="960" height="1440"><img src="img/dusk-1280.webp" srcset="img/dusk-1280.webp 1280w, img/dusk.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Dusk theme: light text on dark gray."></picture></a>
+        <a class="frame" href="img/paper.webp" data-fact="colour:Paper" style="--bgc:#FDFDFB"><picture><source media="(max-width: 600px)" srcset="img/paper-narrow-960.webp" width="960" height="1440"><img src="img/paper-1280.webp" srcset="img/paper-1280.webp 1280w, img/paper.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Paper theme: near-black ink on off-white."></picture></a>
+        <a class="frame" href="img/sepia.webp" data-fact="colour:Sepia" style="--bgc:#F8F1E3"><picture><source media="(max-width: 600px)" srcset="img/sepia-narrow-960.webp 960w, img/sepia-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440"><img src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Sepia theme: dark brown ink on warm paper."></picture></a>
       </div>
-      <ul class="names label" aria-label="The four themes"><li><i style="--p:#FDFDFB" aria-hidden="true"></i>Paper</li><li><i style="--p:#F8F1E3" aria-hidden="true"></i>Sepia</li><li><i style="--p:#2C2C2E" aria-hidden="true"></i>Dusk</li><li><i style="--p:#000000" aria-hidden="true"></i>Night</li></ul>
+      <ul class="names label" aria-label="The four themes" data-fact="theme-swatches"><li><i data-fact="colour:Paper" style="--p:#FDFDFB" aria-hidden="true"></i>Paper</li><li><i data-fact="colour:Sepia" style="--p:#F8F1E3" aria-hidden="true"></i>Sepia</li><li><i data-fact="colour:Dusk" style="--p:#2C2C2E" aria-hidden="true"></i>Dusk</li><li><i data-fact="colour:Night" style="--p:#000000" aria-hidden="true"></i>Night</li></ul>
     </section>
 
     <section class="block" id="questions" aria-labelledby="questions-h">
       <div class="label"><h2 id="questions-h">Questions</h2></div>
       <div class="faq">
-        <div><h3>Is it an editor?</h3><p>No. There is an edit mode (<code>Ctrl+E</code>) that shows the source as plain text and saves with <code>Ctrl+S</code>. It is for the typo you just noticed.</p></div>
-        <div><h3>Does it run on a Mac?</h3><p>CI type-checks the code for macOS and Windows. The reader has not been run on either. Linux on X11 is built and run for every change.</p></div>
+        <div><h3>Is it an editor?</h3><p>No. There is an edit mode (<code data-fact="shortcut:ToggleEditMode">Ctrl+E</code>) that shows the source as plain text and saves with <code data-fact="shortcut:Save">Ctrl+S</code>. It is for the typo you just noticed.</p></div>
+        <div><h3>Does it run on a Mac?</h3><p>CI type-checks the code for <span data-fact="type-checked-platforms">macOS and Windows</span>. The reader has not been run on either. Linux on X11 is built and run for every change.</p></div>
         <div><h3>Is there a package?</h3><p>Not of this reader. Build it from source. The md-viewer on crates.io, the Snap Store and the AUR is the upstream project.</p></div>
         <div><h3>Can I use my own font?</h3><p>Yes. Other presets and any installed font family are under <strong>Aa</strong>, then <strong>Fonts&hellip;</strong></p></div>
         <div><h3>Does it follow the file while I write?</h3><p>Yes. Live reload is on unless you turn it off.</p></div>
@@ -265,12 +265,12 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
       <div class="label"><h2 id="install-h">Install</h2><small>From source</small></div>
       <div class="install">
 <pre tabindex="0" role="group" aria-label="Install commands"><i aria-hidden="true">$ </i>git clone https://github.com/PhillipChaffee/md-viewer
-<i aria-hidden="true">$ </i>cd md-viewer
+<i aria-hidden="true">$ </i>cd <span data-fact="clone-dir">md-viewer</span>
 <i aria-hidden="true">$ </i>cargo build --release
-<i aria-hidden="true">$ </i>make install</pre>
+<i aria-hidden="true">$ </i><span data-fact="make-install">make install</span></pre>
         <div>
-          <p>You need a Rust toolchain. The version is pinned in <code>rust-toolchain.toml</code>, and <code>rustup</code> installs it on the first build. <code>make install</code> copies the binary to <code>~/.local/bin</code>.</p>
-          <p>The system packages for Debian, Ubuntu and Arch Linux are in the <a href="https://github.com/PhillipChaffee/md-viewer#system-packages">README</a>. The source is at <a href="https://github.com/PhillipChaffee/md-viewer">github.com/PhillipChaffee/md-viewer</a>, under the MIT licence.</p>
+          <p>You need a Rust toolchain. The version is pinned in <code data-fact="toolchain-file">rust-toolchain.toml</code>, and <code>rustup</code> installs it on the first build. <code data-fact="make-install">make install</code> copies the binary to <code data-fact="install-dir">~/.local/bin</code>.</p>
+          <p>The system packages for <span data-fact="package-systems">Debian, Ubuntu and Arch Linux</span> are in the <a href="https://github.com/PhillipChaffee/md-viewer#system-packages">README</a>. The source is at <a href="https://github.com/PhillipChaffee/md-viewer">github.com/PhillipChaffee/md-viewer</a>, under the <span data-fact="licence">MIT</span> licence.</p>
         </div>
       </div>
     </section>
@@ -278,7 +278,7 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
 </main>
 <div class="wrap">
   <footer class="colophon">
-    <span>Set in Source Serif 4 and Source Code Pro, the faces the app bundles. Both are by Adobe, under the SIL Open Font License.</span>
+    <span>Set in <span data-fact="bundled-faces">Source Serif 4 and Source Code Pro</span>, the faces the app bundles. Both are by Adobe, under the <span data-fact="font-licence">SIL Open Font License</span>.</span>
     <span class="sp"></span>
     <a href="https://github.com/PhillipChaffee/md-viewer">Source on GitHub</a>
   </footer>

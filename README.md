@@ -481,11 +481,15 @@ python3 -m http.server -d docs
 
 Then open `http://localhost:8000`.
 
-Three things in `docs/` follow the rest of the repository by hand:
+Three things in `docs/` are written by hand to follow the rest of the
+repository:
 
 - The version in the page's top strip, and the shortcuts, the contrast
-  and the theme colors it quotes, are written out. They were checked
-  against `Cargo.toml`, `src/theme/` and this file when the page was made.
+  and the theme colors it quotes, are written out. Each carries a
+  `data-fact` attribute, and `scripts/check-site-facts.sh`, a step of CI,
+  reads the same fact from `Cargo.toml`, `src/` and this file and fails
+  where the page disagrees. A fact added to the page needs the attribute
+  and a line in the script.
 - The screenshots in `docs/img/` were taken for the page, of the app in
   windows of three sizes on a screen of twice the usual density, and the
   page's width picks the size. Above 900 px it is 1280 by 800: a lossless
