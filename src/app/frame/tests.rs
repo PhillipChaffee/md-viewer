@@ -309,7 +309,7 @@ fn the_tab_close_button_closes_its_tab() {
     let named = harness.labelled("B");
     let tab = named.iter().map(|(center, _)| *center);
     harness.hover_at(tab.min_by(|a, b| a.y.total_cmp(&b.y)).unwrap());
-    harness.click_exact("Close tab");
+    harness.click_exact("Close B");
 
     assert_eq!(harness.app().tabs.len(), 1);
     assert_eq!(harness.active_path(), harness.path("a.md"));

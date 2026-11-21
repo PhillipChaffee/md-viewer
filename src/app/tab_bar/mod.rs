@@ -3,6 +3,7 @@
 //! sideways where they do not all fit, and the new-tab button comes after
 //! the last of them.
 
+use std::fmt;
 use std::path::Path;
 
 use eframe::egui::{self, Rangef};
@@ -22,6 +23,8 @@ const TAB_PADDING: f32 = 10.0;
 /// Side of the square a tab keeps free for its close button, so the tabs
 /// do not shift when the button appears.
 const CLOSE_SIDE: f32 = 18.0;
+/// Side of the cross in that square.
+const CLOSE_ICON: f32 = 12.0;
 /// Thickness of the line under the active tab.
 const UNDERLINE: f32 = 2.0;
 /// The least and the most a tab's name is given. A shorter name is
@@ -191,8 +194,9 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
 }
 
 /// Draws one tab: its name, the line under it while it is the active one,
-/// the close button while the pointer is over it, its hover text and its
-/// context menu. Returns the tab's response.
+/// the close button while the pointer is over the tab or the keyboard is
+/// on either, its hover text and its context menu. Returns the tab's
+/// response.
 fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
@@ -224,6 +228,12 @@ fn tab_label(
         node.set_role(egui::accesskit::Role::Tab);
     });
 
+    // The close button is there whether or not it is drawn, so the Tab key
+    // finds it right after its tab. A button made only once its tab had the
+    // focus would come too late: egui has moved on to the next tab by then.
+    let close = QuietButton::icon_sized(Icon::Close, CLOSE_ICON, CloseName(label.title));
+    let button = close.place(ui, close_square(rect), response.id.with("close"));
+
     // The pointer counts as over the tab while it is over the close button
     // too, which takes the hover for itself.
     let pointed = ui.rect_contains_pointer(rect) || response.has_focus();
@@ -240,16 +250,16 @@ fn tab_label(
         );
         ui.painter().rect_filled(line, 0.0, palette.accent);
     }
+    if pointed || button.has_focus() {
+        close.paint(ui, palette, &button);
+    }
 
     if response.clicked() {
         actions.activate = Some(label.index);
     }
-    // Middle-click to close
-    if response.middle_clicked() {
+    // A middle click on the tab closes it, as its close button does.
+    if response.middle_clicked() || button.clicked() {
         actions.close = Some(label.index);
-    }
-    if pointed {
-        tab_close_button(ui, &response, label, palette, actions);
     }
 
     egui::Popup::context_menu(&response)
@@ -258,28 +268,24 @@ fn tab_label(
     response.on_hover_ui(|ui| tab_hover(ui, label, palette))
 }
 
-/// The close button in the square a tab keeps free at its right end.
-fn tab_close_button(
-    ui: &egui::Ui,
-    tab: &egui::Response,
-    label: &TabLabel<'_>,
-    palette: &Palette,
-    actions: &mut TabPicks,
-) {
-    let square = egui::Rect::from_center_size(
-        egui::pos2(
-            tab.rect.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
-            tab.rect.center().y,
-        ),
-        egui::Vec2::splat(CLOSE_SIDE),
+/// The square a tab keeps free at its right end for its close button.
+fn close_square(tab: egui::Rect) -> egui::Rect {
+    let center = egui::pos2(
+        tab.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
+        tab.center().y,
     );
-    let close = ui.interact(square, tab.id.with("close"), egui::Sense::click());
-    close.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close tab"));
+    egui::Rect::from_center_size(center, egui::Vec2::splat(CLOSE_SIDE))
+}
 
-    let color = chrome::ink(palette, true, close.hovered());
-    Icon::Close.paint(ui.painter(), square.shrink(3.0), color);
-    if close.clicked() {
-        actions.close = Some(label.index);
+/// What a screen reader calls the close button of the tab named: every tab
+/// has one, so each says whose it is. The words are put together when they
+/// are asked for, and a frame nothing listens to asks for none.
+#[derive(Clone, Copy)]
+struct CloseName<'a>(&'a str);
+
+impl fmt::Display for CloseName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Close {}", self.0)
     }
 }
 
