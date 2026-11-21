@@ -287,6 +287,39 @@ pub(super) fn small_label(ui: &mut egui::Ui, palette: &Palette, text: &str) -> e
     )
 }
 
+/// A bar under the top bar that opens with the warning sign: `message` in
+/// `ink`, and at its right end what `buttons` adds, laid out from the
+/// right. `id` tells the bars apart.
+pub(super) fn warning_bar(
+    ctx: &egui::Context,
+    id: &'static str,
+    palette: &Palette,
+    (message, ink): (&str, Color32),
+    buttons: impl FnOnce(&mut egui::Ui),
+) {
+    let bar = egui::TopBottomPanel::top(id)
+        .exact_height(STRIP_HEIGHT)
+        .frame(bar_frame(palette));
+    bar.show(ctx, |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add_space(6.0);
+            let (sign, _) =
+                ui.allocate_exact_size(egui::Vec2::splat(ICON_SIDE), egui::Sense::hover());
+            Icon::Warning.paint(ui.painter(), sign, palette.warning);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                buttons(ui);
+                // The message takes what the buttons leave, and is cut
+                // short rather than pushing them out.
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    let message = egui::RichText::new(message).font(label_font()).color(ink);
+                    ui.add(egui::Label::new(message).truncate());
+                });
+            });
+        });
+    });
+}
+
 /// What stands at the right end of a menu row.
 #[derive(Clone, Copy, Debug)]
 enum Trailing<'a> {
