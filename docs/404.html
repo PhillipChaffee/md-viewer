@@ -7,35 +7,29 @@
 <meta name="description" content="There is no page at this address on the md-viewer site.">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#FDFDFB">
-<!-- GitHub Pages serves this file for a missing page at any depth, where a relative address
-     would point into the missing folder. So every address of the site's own in this file is
-     written whole, from /md-viewer/, and the page is right at any depth with no script. -->
-<link rel="icon" href="/md-viewer/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/md-viewer/apple-touch-icon.png">
-<style id="faces">
-@font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(/md-viewer/fonts/SourceSerif4-Roman.woff2) format("woff2"); }
-@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(/md-viewer/fonts/SourceCodePro.woff2) format("woff2"); }
-</style>
 <script>
-/* Only for a copy of the site that is not under /md-viewer/: a fork under another name, or a
-   domain of its own. There the site's root is the first folder on github.io, else "/", and the
-   addresses above and the links below are rewritten to start from it, before a font is fetched. */
+/* GitHub Pages serves this file for a missing page at any depth, where a
+   relative address would point into the missing folder. This anchors the
+   addresses below to the site's root: the first folder on github.io or of a
+   copy served under the project's name, else "/". Without JavaScript they are
+   right for a miss one level down; deeper, the fonts fall back to the system's
+   and the styles, being inline, still apply. */
 (function () {
-  var home = "/md-viewer/", path = location.pathname;
-  if (path.indexOf(home) === 0) return;
-  var root = /\.github\.io$/.test(location.hostname) ? "/" + path.split("/")[1] + "/" : "/";
-  var faces = document.getElementById("faces");
-  faces.textContent = faces.textContent.split(home).join(root);
-  function links() {
-    document.querySelectorAll('[href^="' + home + '"]').forEach(function (a) {
-      a.setAttribute("href", root + a.getAttribute("href").slice(home.length));
-    });
-  }
-  links();
-  document.addEventListener("DOMContentLoaded", links);
+  var first = location.pathname.split("/")[1];
+  var base = document.createElement("base");
+  base.href = /\.github\.io$/.test(location.hostname) || first === "md-viewer" ? "/" + first + "/" : "/";
+  document.head.appendChild(base);
+  /* With a base, "#main" would mean the home page's, so the skip link is given this page's address. */
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelector(".skip").setAttribute("href", location.pathname + location.search + "#main");
+  });
 })();
 </script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
+@font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceSerif4-Roman.woff2) format("woff2"); }
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceCodePro.woff2) format("woff2"); }
 /* The home page's bar, heading and footer, around one sentence. Ink on the app's Paper palette. */
 :root {
   --paper:#FDFDFB; --ink:#1F1F1F; --head:#111111; --soft:#4A4A47;
@@ -95,7 +89,7 @@ h1 { margin: 0; font: 600 clamp(30px, 3.4vw, 40px)/1.18 var(--serif); letter-spa
       <h1>This page does not exist</h1>
       <p>There is no page at this address.</p>
       <div class="acts">
-        <a href="/md-viewer/">Go to the home page</a>
+        <a href="./">Go to the home page</a>
         <a href="https://github.com/PhillipChaffee/md-viewer">Source</a>
       </div>
     </div>
