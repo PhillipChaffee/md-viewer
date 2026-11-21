@@ -53,16 +53,6 @@ pub(crate) struct TabPicks {
     close_others: Option<usize>,
 }
 
-/// Where the keyboard is put after the tab it was on has closed.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Landing {
-    /// On the tab in front: the reader sees where they are, and Enter
-    /// there closes nothing.
-    FrontTab,
-    /// On the new-tab button, with no tab in front to take it.
-    NewTabButton,
-}
-
 /// One tab as the row draws it.
 struct TabLabel<'a> {
     index: usize,
@@ -73,8 +63,6 @@ struct TabLabel<'a> {
     is_active: bool,
     /// Whether the document is reloaded when its file changes.
     live: bool,
-    /// Whether the keyboard is put on it this frame.
-    takes_keyboard: bool,
     /// What became of the file under the document's unsaved edits, while
     /// the notice of it waits for an answer.
     disk: Option<DiskChange>,
@@ -92,6 +80,7 @@ impl MarkdownApp {
         picked: &mut Option<AppAction>,
         picks: &mut TabPicks,
     ) -> Option<f32> {
+        let land = std::mem::take(&mut self.keyboard_to_front);
         new_tab_span(room, 0.0)?;
         // A tab that came to the front is scrolled into view once. After
         // that the tabs are the reader's to scroll.
@@ -99,46 +88,38 @@ impl MarkdownApp {
         let front = front.and_then(|front| Some((front, self.tabs.get(front)?.document_id)));
         let reveal = self.revealed_tab != front;
         self.revealed_tab = front;
-        let landing = self.keyboard_landing();
 
         let from_left = egui::Layout::left_to_right(egui::Align::Center);
         let tabs = Rangef::new(room.min, room.min + tabs_width(room));
         let shown = ui
             .scope_builder(part(bar, tabs, from_left), |ui| {
-                self.tab_strip(ui, picks, reveal, landing == Some(Landing::FrontTab))
+                self.tab_strip(ui, picks, reveal)
             })
             .inner;
         let button = new_tab_span(room, shown)?;
         ui.scope_builder(part(bar, button, from_left), |ui| {
-            self.new_tab_button(ui, picked, landing == Some(Landing::NewTabButton));
+            self.new_tab_button(ui, picked);
         });
+        if land {
+            self.put_keyboard_on_the_front(ui.ctx());
+        }
         Some(button.max)
     }
 
-    /// Where the keyboard goes this frame because the tab it was on has
-    /// closed: asked once, in the first frame without that tab. While the
-    /// prompt still asks about the tab nothing moves, and an answer that
-    /// keeps the tab open leaves the keyboard to the reader.
-    fn keyboard_landing(&mut self) -> Option<Landing> {
-        let serial = self.keyboard_closing?;
-        let still_open = self.tabs.iter().any(|tab| tab.serial == serial);
-        if still_open && self.closing.is_asking() {
-            return None;
-        }
-        self.keyboard_closing = None;
-        if still_open {
-            None
-        } else if self.front().is_some() {
-            Some(Landing::FrontTab)
-        } else {
-            Some(Landing::NewTabButton)
-        }
+    /// Put the keyboard on the tab in front, where the reader sees where
+    /// they are and Enter closes nothing, or on the new-tab button with no
+    /// tab in front to take it. Both have been drawn this frame, so the
+    /// ring that shows it comes with the next.
+    fn put_keyboard_on_the_front(&self, ctx: &egui::Context) {
+        let front = self.front().and_then(|front| self.tabs.get(front));
+        let id = front.map_or_else(new_tab_id, |tab| tab_id(tab.serial));
+        ctx.memory_mut(|memory| memory.request_focus(id));
+        ctx.request_repaint();
     }
 
     /// The horizontally scrollable row of tabs, scrolled to the active one
-    /// when `reveal` is set. With `land` the active one takes the keyboard.
-    /// Returns the width the tabs show in.
-    fn tab_strip(&self, ui: &mut egui::Ui, picks: &mut TabPicks, reveal: bool, land: bool) -> f32 {
+    /// when `reveal` is set. Returns the width the tabs show in.
+    fn tab_strip(&self, ui: &mut egui::Ui, picks: &mut TabPicks, reveal: bool) -> f32 {
         if self.tabs.is_empty() {
             return 0.0;
         }
@@ -154,15 +135,13 @@ impl MarkdownApp {
                 // their own inside it would be centered at its starting
                 // height and then grow downward, off the bar.
                 for (index, tab) in self.tabs.iter().enumerate() {
-                    let is_active = self.front() == Some(index);
                     let label = TabLabel {
                         index,
                         serial: tab.serial,
                         title: tab.name(),
                         path: &tab.path,
-                        is_active,
+                        is_active: self.front() == Some(index),
                         live,
-                        takes_keyboard: land && is_active,
                         disk: tab.disk_notice(),
                     };
                     let shown = tab_label(ui, &label, palette, picks);
@@ -177,13 +156,9 @@ impl MarkdownApp {
 
     /// A new tab starts on the home page, which lists what to open in
     /// it. There is no empty tab: the tab is there once a document is.
-    /// With `land` the button takes the keyboard.
-    fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>, land: bool) {
+    fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
         let new_tab = QuietButton::icon(Icon::Plus, "New tab");
         let new_tab = new_tab.show_as(ui, self.theme.palette(), new_tab_id());
-        if land {
-            new_tab.request_focus();
-        }
         let new_tab = self.hints.tooltip(new_tab, "New Tab", AppAction::NewTab);
         pick(&new_tab, AppAction::NewTab, picked);
     }
@@ -198,9 +173,10 @@ impl MarkdownApp {
             self.request_close_other_tabs(keep);
         } else if let Some(index) = picks.close {
             if picks.close_had_keyboard {
-                self.keyboard_closing = self.tabs.get(index).map(|tab| tab.serial);
+                self.request_close_tab_from_keyboard(index);
+            } else {
+                self.request_close_tab(index);
             }
-            self.request_close_tab(index);
         }
         picks
             .activate
@@ -283,9 +259,6 @@ fn tab_label(
     let width = 2.0_f32.mul_add(TAB_PADDING, name_width) + CLOSE_SIDE;
     let (_, rect) = ui.allocate_space(egui::vec2(width, BAR_HEIGHT));
     let response = ui.interact(rect, tab_id(label.serial), egui::Sense::click());
-    if label.takes_keyboard {
-        response.request_focus();
-    }
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,
