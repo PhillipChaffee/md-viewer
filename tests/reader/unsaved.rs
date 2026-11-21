@@ -600,6 +600,93 @@ fn nothing_under_the_prompt_takes_a_click_or_typing() {
     assert_eq!(reader.typed(), [EDITED]);
 }
 
+#[test]
+fn the_wheel_does_not_scroll_the_page_under_the_prompt() {
+    let mut reader = Reader::with_docs(&[("long.md", &long_document(14))]);
+    edit_and_read(&mut reader, " Mine.");
+    reader.wheel_up_at(600.0, 400.0, 100_000.0);
+    assert!(reader.in_view("Long read"));
+    reader.press("Ctrl+W");
+    reader.assert_sees("Save changes to “Long read” (long.md)?");
+
+    // Once with the pointer on the prompt, in the middle of the window,
+    // and once beside it.
+    reader.wheel_down_at(600.0, 400.0, 300.0);
+    reader.wheel_down_at(60.0, 700.0, 300.0);
+
+    reader.click("Cancel");
+    assert!(reader.in_view("Long read"), "the page moved");
+    reader.wheel_down_at(60.0, 700.0, 300.0);
+    assert!(
+        !reader.in_view("Long read"),
+        "the wheel moves the page again"
+    );
+}
+
+/// What the window shows while a file that can be dropped is held over it.
+const INVITES_A_DROP: &str = "Drop markdown file here";
+
+/// `draft.md` with an unsaved edit and the prompt asking about it, beside
+/// `other.md`, which has no tab.
+fn asked_about_draft_beside_another() -> Reader {
+    let mut reader = Reader::with_docs(&[("draft.md", SOURCE), ("other.md", "# Other")]);
+    edit(&mut reader, " Mine.");
+    reader.press("Ctrl+W");
+    reader.assert_sees(ASKS_DRAFT);
+    reader
+}
+
+#[test]
+fn a_file_dropped_while_the_prompt_asks_opens_nothing() {
+    let mut reader = asked_about_draft_beside_another();
+
+    reader.drop_file("other.md");
+
+    assert_eq!(reader.tabs(), ["Draft"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Draft"));
+    assert_eq!(reader.title(), "draft.md - Markdown Viewer");
+    reader.assert_sees(ASKS_DRAFT);
+}
+
+#[test]
+fn a_file_held_over_the_prompt_is_not_invited() {
+    let mut reader = asked_about_draft_beside_another();
+
+    reader.drag_files_over(&["other.md"]);
+
+    reader.assert_hides(INVITES_A_DROP);
+    reader.assert_sees(ASKS_DRAFT);
+}
+
+#[test]
+fn the_answer_after_a_drop_is_about_the_document_the_prompt_named() {
+    let mut reader = asked_about_draft_beside_another();
+    reader.drop_file("other.md");
+
+    reader.click("Save");
+
+    assert_eq!(reader.read_file("draft.md"), EDITED);
+    assert_eq!(reader.read_file("other.md"), "# Other");
+    assert!(reader.tabs().is_empty(), "the drop was not kept for later");
+    assert_eq!(reader.title(), "Markdown Viewer");
+}
+
+#[test]
+fn a_file_dropped_once_the_prompt_is_answered_opens() {
+    let mut reader = asked_about_draft_beside_another();
+    reader.drop_file("other.md");
+    reader.click("Cancel");
+    assert_eq!(reader.tabs(), ["Draft"]);
+
+    reader.drag_files_over(&["other.md"]);
+    reader.assert_sees(INVITES_A_DROP);
+    reader.drop_file("other.md");
+
+    assert_eq!(reader.tabs(), ["Draft", "Other"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Other"));
+    assert_eq!(reader.title(), "other.md - Markdown Viewer");
+}
+
 const ASKS_ALPHA: &str = "Save changes to “Alpha” (a.md)?";
 const ALPHA_EDITED: &str =
     "# Alpha\n\nGo [to beta](b.md) or [to gamma](c.md) or [nowhere](missing.md). Edit A.";
