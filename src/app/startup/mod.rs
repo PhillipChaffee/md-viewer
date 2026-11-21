@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, FontId, TextStyle};
 
+use crate::app::chrome;
 use crate::app::close_prompt::CloseState;
 use crate::app::content::look::DocumentLook;
 use crate::app::frame::WindowTitle;
@@ -74,12 +75,19 @@ fn configure_context(ctx: &egui::Context) {
         scroll.active_handle_opacity = 1.0;
         style.spacing.scroll.floating_width = style.spacing.scroll.bar_width;
         style.url_in_tooltip = true;
-        // Body, heading and code sizes belong to the text-size class, which
+        // Heading and code sizes belong to the text-size class, which
         // `setup_fonts` has already applied; setting them here would undo a
         // restored class until the user next changed it.
         style
             .text_styles
             .insert(TextStyle::Small, FontId::proportional(13.0));
+        // The body style of the context is the chrome's, not the
+        // document's: egui lays out every hover text in it, wherever the
+        // widget under the pointer stands, and a hover text belongs to the
+        // window. The document pane has its own (see `DocumentLook`).
+        style
+            .text_styles
+            .insert(TextStyle::Body, chrome::label_font());
 
         // Smoother scroll animation
         style.animation_time = 0.15;

@@ -314,13 +314,12 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
 }
 
 /// Apply the shared base text size class to the context styles: the sizes
-/// the chrome is set in.
+/// of its headings and its code. The body size is not among them: what the
+/// context sets in it is the window's own text, hover texts included, and
+/// that keeps the size of the chrome whatever the document is read at.
 fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     let base = size.px();
     ctx.style_mut(|style| {
-        style
-            .text_styles
-            .insert(TextStyle::Body, FontId::proportional(base));
         style
             .text_styles
             .insert(TextStyle::Heading, FontId::proportional(base * 2.0));

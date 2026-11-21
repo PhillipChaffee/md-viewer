@@ -86,6 +86,8 @@ mod tabs_depth;
 #[cfg(test)]
 mod themes;
 #[cfg(test)]
+mod tooltips;
+#[cfg(test)]
 mod unsaved;
 #[cfg(test)]
 mod width;

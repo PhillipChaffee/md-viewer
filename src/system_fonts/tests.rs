@@ -179,7 +179,12 @@ fn applying_fonts_installs_the_faces_and_derives_heading_and_code_sizes() {
     apply_fonts(&context, &mut Fonts::with_sans().collection, None, &config);
 
     let styles = context.style().text_styles.clone();
-    assert_eq!(styles[&TextStyle::Body], FontId::proportional(18.0));
+    let untouched = egui::Style::default().text_styles;
+    assert_eq!(
+        styles[&TextStyle::Body],
+        untouched[&TextStyle::Body],
+        "the body style is the chrome's, which no text size changes"
+    );
     assert_eq!(styles[&TextStyle::Heading], FontId::proportional(36.0));
     assert_eq!(styles[&TextStyle::Monospace], FontId::monospace(16.0));
     // Fonts take effect at the start of the next frame.

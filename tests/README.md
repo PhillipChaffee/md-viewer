@@ -34,7 +34,9 @@ processes itself.
   and `tab_in_front()` names the one in front.
   It also reads what a frame painted: the ink and coverage of a picture
   (`picture_ink`, `picture_cover`), the lines and boxes in an area
-  (`marks_in`), and what the app asked of the desktop (`opened_in_browser`,
+  (`marks_in`), how tall a letter of a painted text is drawn
+  (`letter_heights`, for telling whether two texts are set at one size
+  without naming the size), and what the app asked of the desktop (`opened_in_browser`,
   `clipboard`).
 - `e2e/support/` has `Home`, `Running`, `Screen` and `Window`.
 

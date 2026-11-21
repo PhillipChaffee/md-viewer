@@ -159,6 +159,13 @@ impl Painted {
             dots: dots.map(|dot| dot.to_array()).collect(),
         })
     }
+
+    /// How tall the first `character` on its first line is drawn, in
+    /// screen pixels. `None` when the line has no such character.
+    pub(crate) fn height_of(&self, character: char) -> Option<u16> {
+        let (_, [_, top, _, bottom]) = self.glyphs.iter().find(|(set, _)| *set == character)?;
+        Some(bottom - top)
+    }
 }
 
 /// The picture of one character, as the frame keeps it: before the ink of

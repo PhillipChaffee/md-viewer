@@ -193,7 +193,7 @@ fn a_preset_click_switches_the_preset() {
 fn a_text_size_click_resizes_the_body_text() {
     let mut harness = fonts_dialog(&[]);
     let body_size = |harness: &UiHarness| -> f32 {
-        let style = harness.ui.ctx.style();
+        let style = &harness.app().document_look.style;
         style.text_styles[&TextStyle::Body].size
     };
     assert_eq!(harness.app().fonts.size, TextSizeClass::Normal);

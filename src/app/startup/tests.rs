@@ -327,7 +327,7 @@ fn a_restored_text_size_is_in_force_from_the_first_frame() {
     let app = relaunch(&persisted, None);
 
     let style = app.egui_ctx.style();
-    assert_close(style.text_styles[&egui::TextStyle::Body].size, 18.0);
+    assert_close(style.text_styles[&egui::TextStyle::Body].size, 13.0);
     assert_close(style.text_styles[&egui::TextStyle::Heading].size, 36.0);
     assert_close(style.text_styles[&egui::TextStyle::Small].size, 13.0);
     let document = &app.document_look.style.text_styles;
