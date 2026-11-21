@@ -80,6 +80,26 @@ pub(crate) enum SaveOutcome {
     Failed,
 }
 
+/// What a save does about text another program wrote to the tab's file
+/// and the reader has not taken.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Theirs {
+    /// Leave it there and write nothing: the reader is asked first.
+    Ask,
+    /// Write over it: the reader said to.
+    Replace,
+}
+
+/// What a save that did not fail came to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Saved {
+    /// The file holds the tab's text.
+    Written,
+    /// Nothing was written, for it would replace what another program
+    /// wrote.
+    WouldOverwrite,
+}
+
 /// What another program did to a tab's file while the tab had unsaved
 /// edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -324,19 +344,6 @@ impl Tab {
         }
     }
 
-    /// Whether a save now would replace text another program wrote and the
-    /// reader has not taken. The file is read to find out, so a change no
-    /// watcher reported counts too. A file that is gone has no text to
-    /// replace.
-    pub(crate) fn save_would_overwrite(&mut self) -> bool {
-        if !self.is_dirty() {
-            return false;
-        }
-        self.look_at_disk();
-        let unfollowed = self.unfollowed.map(|unfollowed| unfollowed.change);
-        unfollowed == Some(DiskChange::Changed)
-    }
-
     pub(crate) fn title(&self) -> &str {
         &self.title
     }
@@ -353,9 +360,25 @@ impl Tab {
         Ok(())
     }
 
-    /// Write the text to the tab's file, and note how that went for the
-    /// edit toolbar to show.
-    pub(crate) fn save(&mut self) -> io::Result<()> {
+    /// Write the unsaved edits to the tab's file, and note how that went
+    /// for the edit toolbar to show. With nothing unsaved it does nothing.
+    ///
+    /// Under [`Theirs::Ask`] nothing is written over text another program
+    /// wrote and the reader has not taken. The file is read to find out,
+    /// so a change no watcher reported counts too. A file that is gone has
+    /// no text to replace.
+    pub(crate) fn save(&mut self, theirs: Theirs) -> io::Result<Saved> {
+        if theirs == Theirs::Ask && self.is_dirty() {
+            self.look_at_disk();
+            let unfollowed = self.unfollowed.map(|unfollowed| unfollowed.change);
+            if unfollowed == Some(DiskChange::Changed) {
+                return Ok(Saved::WouldOverwrite);
+            }
+        }
+        // Looking may have found the file holding just what was typed.
+        if !self.is_dirty() {
+            return Ok(Saved::Written);
+        }
         let result = self.save_to_disk();
         let outcome = if result.is_ok() {
             SaveOutcome::Saved
@@ -363,7 +386,7 @@ impl Tab {
             SaveOutcome::Failed
         };
         self.save_flash = Some((outcome, Instant::now()));
-        result
+        result.map(|()| Saved::Written)
     }
 
     /// Atomic save: write a temp file next to the target, then rename over

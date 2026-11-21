@@ -21,7 +21,7 @@ use eframe::egui;
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton};
 use crate::app::MarkdownApp;
-use crate::tab::{Route, Tab};
+use crate::tab::{Route, Saved, Tab, Theirs};
 use crate::theme;
 
 #[cfg(test)]
@@ -216,7 +216,7 @@ impl MarkdownApp {
     /// Save the tab at `index`, asking first when that would replace what
     /// another program wrote to its file.
     pub(crate) fn request_save(&mut self, index: usize) {
-        self.save_for(Goal::Save, index);
+        self.save_for(Goal::Save, index, Theirs::Ask);
     }
 
     /// Reach `goal`: now if that loses no unsaved edits, and otherwise
@@ -271,17 +271,29 @@ impl MarkdownApp {
         });
     }
 
-    /// Write the tab at `asked` on the way to `goal`, unless that would
-    /// replace what another program wrote to its file: the prompt then
-    /// asks about that, and nothing is written yet. Returns the goal once
-    /// the tab has nothing unsaved and the way to it is free.
-    fn save_for(&mut self, goal: Goal, asked: usize) -> Option<Goal> {
-        let tab = self.tabs.get_mut(asked);
-        if tab.is_some_and(Tab::save_would_overwrite) {
-            self.ask(goal, asked, Question::Overwrite);
-            return None;
+    /// Write the unsaved edits of the tab at `asked` on the way to `goal`.
+    /// Where `theirs` is to ask and the write would replace what another
+    /// program wrote to the file, the prompt asks about that and nothing
+    /// is written yet. Where the write fails, the error bar says why.
+    /// Returns the goal once the tab has nothing unsaved and the way to it
+    /// is free.
+    fn save_for(&mut self, goal: Goal, asked: usize, theirs: Theirs) -> Option<Goal> {
+        let Some(tab) = self.tabs.get_mut(asked) else {
+            return Some(goal);
+        };
+        match tab.save(theirs) {
+            Ok(Saved::Written) => Some(goal),
+            Ok(Saved::WouldOverwrite) => {
+                self.ask(goal, asked, Question::Overwrite);
+                None
+            }
+            Err(error) => {
+                log::error!("Failed to save {}: {error}", tab.path.display());
+                self.error_message =
+                    Some(format!("Unable to save {}: {error}", tab.path.display()));
+                None
+            }
         }
-        self.save_tab(asked).then_some(goal)
     }
 
     /// Carry out the reader's answer to the prompt.
@@ -291,8 +303,8 @@ impl MarkdownApp {
         };
         let PendingClose { goal, asked, .. } = pending;
         let free = match answer {
-            CloseAnswer::Save => self.save_for(goal, asked),
-            CloseAnswer::Overwrite => self.save_tab(asked).then_some(goal),
+            CloseAnswer::Save => self.save_for(goal, asked, Theirs::Ask),
+            CloseAnswer::Overwrite => self.save_for(goal, asked, Theirs::Replace),
             CloseAnswer::Discard => Some(goal),
             CloseAnswer::Cancel => None,
         };

@@ -203,30 +203,6 @@ impl MarkdownApp {
         }
     }
 
-    /// Write the unsaved edits of the tab at `index` to its file, whatever
-    /// the file holds now, and say in the error bar why where that failed.
-    /// Returns whether the tab is left with nothing unsaved. What the
-    /// reader asks for goes through `request_save`, which asks before it
-    /// replaces what another program wrote.
-    pub(crate) fn save_tab(&mut self, index: usize) -> bool {
-        let Some(tab) = self.tabs.get_mut(index) else {
-            return true;
-        };
-        if !tab.is_dirty() {
-            return true;
-        }
-        match tab.save() {
-            Ok(()) => log::info!("Saved tab edits: {}", tab.path.display()),
-            Err(error) => {
-                log::error!("Failed to save {}: {error}", tab.path.display());
-                self.error_message =
-                    Some(format!("Unable to save {}: {error}", tab.path.display()));
-                return false;
-            }
-        }
-        true
-    }
-
     /// Queue a keyboard scroll step through the pending-scroll pipeline the
     /// outline and search jumps use.
     fn scroll_active_tab(&mut self, step: KeyboardScrollAction) {

@@ -251,13 +251,13 @@ mod editing {
         let (dir, mut tab) = tab_with("# Notes");
         tab.content.push('!');
 
-        tab.save().unwrap();
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::Written);
         assert!(matches!(tab.save_flash, Some((SaveOutcome::Saved, _))));
         assert!(!tab.is_dirty());
 
         tab.content.push('!');
         fs::remove_dir_all(dir.path()).unwrap();
-        assert!(tab.save().is_err());
+        assert!(tab.save(Theirs::Ask).is_err());
         assert!(matches!(tab.save_flash, Some((SaveOutcome::Failed, _))));
         assert!(tab.is_dirty());
     }
@@ -390,7 +390,7 @@ mod disk {
         tab.follow_disk().unwrap();
         assert_eq!(tab.disk_notice(), None, "it was gone already");
 
-        tab.save().unwrap();
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::Written);
         tab.content.push('?');
         tab.follow_disk().unwrap();
         assert_eq!(tab.disk_notice(), None);
@@ -406,35 +406,59 @@ mod disk {
         fs::remove_file(&tab.path).unwrap();
         tab.follow_disk().unwrap();
         assert_eq!(tab.disk_notice(), Some(DiskChange::Gone));
-        assert!(!tab.save_would_overwrite(), "nothing is there to replace");
 
         dir.file("notes.md", "# Theirs");
         tab.follow_disk().unwrap();
         assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
-        assert!(tab.save_would_overwrite());
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::WouldOverwrite);
+        assert_eq!(fs::read_to_string(&tab.path).unwrap(), "# Theirs");
     }
 
     #[test]
-    fn a_save_would_overwrite_only_text_the_reader_has_not_taken() {
-        let (dir, mut tab) = tab_with("# Notes");
+    fn text_the_reader_has_not_taken_is_not_asked_about_once_its_file_is_gone() {
+        let (dir, mut tab) = edited_tab();
         dir.file("notes.md", "# Theirs");
-        assert!(!tab.save_would_overwrite(), "nothing is unsaved");
+        tab.follow_disk().unwrap();
+        tab.keep_mine();
+        fs::remove_file(&tab.path).unwrap();
+        tab.follow_disk().unwrap();
+
+        let asked = tab.save(Theirs::Ask).unwrap();
+
+        assert_eq!(asked, Saved::Written, "nothing is there to replace");
+        assert_eq!(fs::read_to_string(&tab.path).unwrap(), "# Notes!");
+    }
+
+    #[test]
+    fn a_save_that_asks_leaves_only_text_the_reader_has_not_taken() {
+        let (dir, mut tab) = tab_with("# Notes");
+        let on_disk = |tab: &Tab| fs::read_to_string(&tab.path).ok();
+        let theirs = Some("# Theirs".to_owned());
+        dir.file("notes.md", "# Theirs");
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "nothing is unsaved");
+        assert_eq!(on_disk(&tab), theirs, "and nothing is written");
 
         tab.content.push('!');
-        assert!(tab.save_would_overwrite(), "no watcher said so");
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::WouldOverwrite, "no watcher said so");
         assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
         tab.keep_mine();
-        assert!(tab.save_would_overwrite(), "kept is not saved over");
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::WouldOverwrite, "kept is not saved over");
+        assert_eq!(on_disk(&tab), theirs);
 
-        tab.save().unwrap();
+        assert_eq!(tab.save(Theirs::Replace).unwrap(), Saved::Written);
+        assert_eq!(on_disk(&tab), Some("# Notes!".to_owned()));
         tab.content.push('!');
-        assert!(!tab.save_would_overwrite(), "the file holds what was saved");
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "the file held what was saved");
 
+        tab.content.push('!');
         fs::remove_file(&tab.path).unwrap();
-        assert!(
-            !tab.save_would_overwrite(),
-            "a file that is gone has no text"
-        );
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "a file that is gone has no text");
+        assert_eq!(on_disk(&tab), Some("# Notes!!!".to_owned()));
     }
 }
 
