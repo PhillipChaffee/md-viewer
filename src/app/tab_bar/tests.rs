@@ -9,7 +9,7 @@ use eframe::egui::{self, Event, Key, Modifiers, PointerButton};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::{CLOSE_SIDE, NAME_WIDTH, TAB_PADDING, UNDERLINE};
-use crate::app::chrome::BAR_HEIGHT;
+use crate::app::chrome::{BAR_HEIGHT, BUTTON_SIDE};
 use crate::app::content::tests::label_harness::LabelHarness;
 use crate::test_support::{assert_close, painted_shapes};
 
@@ -93,19 +93,57 @@ fn middle_clicking_a_tab_closes_it() {
     );
 }
 
+/// Whether the close button of the tab named `tab` is drawn: something
+/// that is neither text nor a box is painted inside it.
+fn close_is_drawn(harness: &LabelHarness, tab: &str) -> bool {
+    let button = harness.get_by_label(&format!("Close {tab}")).rect();
+    let room = button.expand(0.5);
+    painted_shapes(harness.output()).iter().any(|shape| {
+        !matches!(shape, egui::Shape::Text(_) | egui::Shape::Rect(_))
+            && room.contains_rect(shape.visual_bounding_rect())
+    })
+}
+
 #[test]
 fn a_tab_under_the_pointer_shows_a_close_button_until_the_pointer_leaves() {
-    let close_buttons = |harness: &LabelHarness| harness.query_all_by_label("Close tab").count();
+    let drawn =
+        |harness: &LabelHarness| ["a.md", "b.md", "c.md"].map(|tab| close_is_drawn(harness, tab));
     let mut harness = three_tabs();
-    assert_eq!(close_buttons(&harness), 0);
+    assert_eq!(drawn(&harness), [false, false, false]);
 
     harness.get_by_label("a.md").hover();
     harness.frames(2);
-    assert_eq!(close_buttons(&harness), 1);
+    assert_eq!(drawn(&harness), [true, false, false]);
 
     harness.event(Event::PointerMoved(egui::pos2(600.0, 500.0)));
     harness.frames(2);
-    assert_eq!(close_buttons(&harness), 0);
+    assert_eq!(drawn(&harness), [false, false, false]);
+}
+
+#[test]
+fn the_close_button_takes_the_ink_of_the_text_under_the_pointer_and_is_muted_beside_it() {
+    let ink = |harness: &LabelHarness| {
+        let button = harness.get_by_label("Close a.md").rect().expand(0.5);
+        let strokes = painted_shapes(harness.output()).into_iter();
+        let mut inks = strokes.filter_map(|shape| match shape {
+            egui::Shape::Path(path) if button.contains_rect(path.visual_bounding_rect()) => {
+                Some(path.stroke.color)
+            }
+            _ => None,
+        });
+        inks.next().expect("the close button is drawn in strokes")
+    };
+    let mut harness = three_tabs();
+    let palette = harness.state().theme.palette();
+
+    harness.get_by_label("a.md").hover();
+    harness.frames(2);
+    let solid = egui::epaint::ColorMode::Solid;
+    assert_eq!(ink(&harness), solid(palette.muted), "the tab is pointed at");
+
+    harness.get_by_label("Close a.md").hover();
+    harness.frames(2);
+    assert_eq!(ink(&harness), solid(palette.text), "the button is");
 }
 
 #[test]
@@ -114,7 +152,7 @@ fn the_close_button_of_a_hovered_tab_closes_that_tab() {
     harness.get_by_label("a.md").hover();
     harness.frames(2);
 
-    harness.click("Close tab");
+    harness.click("Close a.md");
 
     assert_eq!(
         open_paths(&harness),
@@ -129,13 +167,98 @@ fn closing_the_active_tab_shows_the_one_before_it() {
     harness.get_by_label("c.md").hover();
     harness.frames(2);
 
-    harness.click("Close tab");
+    harness.click("Close c.md");
 
     assert_eq!(
         open_paths(&harness),
         [harness.path("a.md"), harness.path("b.md")]
     );
     assert_eq!(active_path(&harness), harness.path("b.md"));
+}
+
+/// Whether the keyboard is on what is labelled `label`.
+fn keyboard_is_on(harness: &LabelHarness, label: &str) -> bool {
+    harness.get_by_label(label).accesskit_node().is_focused()
+}
+
+/// Press the Tab key until the keyboard is on what is labelled `label`.
+#[track_caller]
+fn tab_to(harness: &mut LabelHarness, label: &str) {
+    for _ in 0..40 {
+        if keyboard_is_on(harness, label) {
+            return;
+        }
+        harness.key_press(Key::Tab);
+        harness.frames(2);
+    }
+    panic!("the Tab key never reached {label}");
+}
+
+#[test]
+fn the_tab_key_stops_on_a_tabs_close_button_right_after_the_tab() {
+    let mut harness = three_tabs();
+    tab_to(&mut harness, "a.md");
+    assert!(close_is_drawn(&harness, "a.md"), "shown for the keyboard");
+
+    harness.key_press(Key::Tab);
+    harness.frames(2);
+    assert!(keyboard_is_on(&harness, "Close a.md"));
+    assert!(close_is_drawn(&harness, "a.md"), "and while it is on it");
+    assert!(!close_is_drawn(&harness, "b.md"));
+
+    harness.key_press(Key::Tab);
+    harness.frames(2);
+    assert!(keyboard_is_on(&harness, "b.md"), "then the next tab");
+    assert!(!close_is_drawn(&harness, "a.md"));
+}
+
+#[test]
+fn enter_on_a_close_button_the_keyboard_is_on_closes_its_tab() {
+    let mut harness = three_tabs();
+    tab_to(&mut harness, "Close b.md");
+
+    harness.key_press(Key::Enter);
+    harness.frames(2);
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("a.md"), harness.path("c.md")]
+    );
+    assert_eq!(active_path(&harness), harness.path("c.md"));
+}
+
+#[test]
+fn the_ring_of_a_tab_the_keyboard_is_on_is_as_tall_as_a_button_and_clear_of_the_underline() {
+    let rings = |harness: &LabelHarness| -> Vec<egui::Rect> {
+        let accent = harness.state().theme.palette().accent;
+        let shapes = painted_shapes(harness.output()).into_iter();
+        let outlines = shapes.filter_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if rect.fill == egui::Color32::TRANSPARENT && rect.stroke.color == accent =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        });
+        outlines.collect()
+    };
+    let mut harness = three_tabs();
+    assert!(rings(&harness).is_empty(), "nothing has the keyboard");
+    harness.get_by_label("c.md").hover();
+    harness.frames(2);
+    assert!(rings(&harness).is_empty(), "the pointer draws no ring");
+
+    tab_to(&mut harness, "c.md");
+
+    let [ring] = rings(&harness)[..] else {
+        panic!("one ring: {:?}", rings(&harness));
+    };
+    let tab = harness.get_by_label("c.md").rect();
+    assert_close(ring.height(), BUTTON_SIDE);
+    assert_close(ring.center().y, tab.center().y);
+    assert_close(ring.left(), tab.left());
+    assert_close(ring.right(), tab.right());
+    assert!(ring.bottom() < tab.bottom() - UNDERLINE, "above the line");
 }
 
 #[test]
@@ -154,7 +277,7 @@ fn the_tabs_keep_their_places_when_a_close_button_appears() {
     assert_eq!(lefts(&harness), at_rest);
     let (tab, close) = (
         harness.get_by_label("a.md").rect(),
-        harness.get_by_label("Close tab").rect(),
+        harness.get_by_label("Close a.md").rect(),
     );
     assert!(tab.contains_rect(close), "{close:?} inside {tab:?}");
 }
@@ -581,7 +704,7 @@ fn a_frame_that_picks_a_tab_and_closes_another_does_both() {
     let picks = super::TabPicks {
         activate: Some(0),
         close: Some(1),
-        close_others: None,
+        ..super::TabPicks::default()
     };
 
     assert!(harness.state_mut().apply_tab_picks(&picks));

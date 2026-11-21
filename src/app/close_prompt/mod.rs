@@ -43,7 +43,13 @@ const NAME_CHARS: usize = 60;
 #[derive(Debug, PartialEq, Eq)]
 enum Goal {
     /// Close the tab at this place.
-    Tab(usize),
+    Tab {
+        index: usize,
+        /// Whether the keyboard was on the tab's close button when it
+        /// asked. That button goes with its tab, so the keyboard is put on
+        /// what is in front once the tab has closed.
+        keyboard_follows: bool,
+    },
     /// Close every tab but the one at this place.
     OtherTabs(usize),
     /// Close the app.
@@ -59,7 +65,7 @@ impl Goal {
     /// in it.
     fn replaces(&self, index: usize, tab: &Tab) -> bool {
         match self {
-            Self::Tab(closed) => index == *closed,
+            Self::Tab { index: closed, .. } => index == *closed,
             Self::OtherTabs(kept) => index != *kept,
             Self::Quit => true,
             Self::Leave(left, route) => index == *left && tab.leads_away(route),
@@ -202,6 +208,19 @@ fn shortened(name: &str) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
+/// Whether `event` is Enter or Space pressing again because it is held.
+const fn is_repeated_press(event: &egui::Event) -> bool {
+    matches!(
+        event,
+        egui::Event::Key {
+            key: egui::Key::Enter | egui::Key::Space,
+            pressed: true,
+            repeat: true,
+            ..
+        }
+    )
+}
+
 /// The answers to the question `about` as a row of buttons, with the
 /// keyboard put on the safe one where that is `focus_due`. Returns the
 /// answer the reader gave this frame.
@@ -229,7 +248,20 @@ fn answers(
 impl MarkdownApp {
     /// Close the tab at `index`, asking first when it has unsaved edits.
     pub(crate) fn request_close_tab(&mut self, index: usize) {
-        self.request(Goal::Tab(index));
+        self.request(Goal::Tab {
+            index,
+            keyboard_follows: false,
+        });
+    }
+
+    /// The same, asked with the keyboard on the tab's close button: once
+    /// the tab has closed the keyboard is on what is in front. An answer
+    /// that keeps the tab open leaves the keyboard to the reader.
+    pub(crate) fn request_close_tab_from_keyboard(&mut self, index: usize) {
+        self.request(Goal::Tab {
+            index,
+            keyboard_follows: true,
+        });
     }
 
     /// Close every tab but the one at `keep`, asking first about each of
@@ -360,7 +392,13 @@ impl MarkdownApp {
     /// Carry `goal` out now, with whatever the tabs hold unsaved.
     fn reach(&mut self, goal: Goal) {
         match goal {
-            Goal::Tab(index) => self.close_tab(index),
+            Goal::Tab {
+                index,
+                keyboard_follows,
+            } => {
+                self.close_tab(index);
+                self.keyboard_to_front |= keyboard_follows;
+            }
             Goal::OtherTabs(keep) => self.close_other_tabs(keep),
             Goal::Quit => {
                 self.closing = CloseState::Quitting;
@@ -380,6 +418,10 @@ impl MarkdownApp {
         let palette = self.theme.palette();
         let focus_due = std::mem::take(&mut pending.focus_due);
         let about = pending.about;
+        // A key held down repeats, and egui takes each repeat for a press.
+        // Enter or Space held on the button that asked to close would press
+        // the answer that has the keyboard before the question could be read.
+        ctx.input_mut(|input| input.events.retain(|event| !is_repeated_press(event)));
         let frame = egui::Frame::popup(&ctx.style())
             .fill(palette.surface)
             .stroke(egui::Stroke::new(1.0_f32, palette.rule))

@@ -82,6 +82,12 @@ pub(crate) struct MarkdownApp {
     /// Its place in the strip alone does not say which tab it is: a tab
     /// that closes hands its place to the next.
     revealed_tab: Option<(usize, egui::Id)>,
+    /// Whether the tab bar puts the keyboard on what is in front when it
+    /// is next drawn: a tab was closed with the keyboard on its close
+    /// button, which went with it. It waits for that frame because egui
+    /// takes the keyboard from whatever is under a prompt until the frame
+    /// after the prompt has gone.
+    keyboard_to_front: bool,
     /// The reading theme; its palette is every color the app paints.
     theme: ThemeId,
     zoom_level: f32,

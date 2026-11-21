@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use eframe::egui;
@@ -161,9 +162,19 @@ pub(crate) enum Route {
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
+/// The [`Tab::serial`] of the next tab to open.
+static NEXT_SERIAL: AtomicU64 = AtomicU64::new(0);
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
-    pub(crate) id: egui::Id,
+    /// The document this tab shows, by its path: egui keeps what it
+    /// remembers about the page under it.
+    pub(crate) document_id: egui::Id,
+    /// A number no other tab of this run has, the same from the tab's
+    /// opening to its closing. `document_id` is neither: it names the
+    /// document, which two tabs can show at once and which changes when
+    /// a tab follows a link.
+    pub(crate) serial: u64,
     pub(crate) path: PathBuf,
     /// The file name of `path`, worked out when the path is set.
     title: String,
@@ -232,7 +243,8 @@ impl Tab {
         let path = path.canonicalize().unwrap_or(path);
         let content = read_document(&path)?;
         let mut tab = Self {
-            id: egui::Id::new(&path),
+            document_id: egui::Id::new(&path),
+            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
             base_uri: Self::compute_base_uri(&path),
             title: file_title(&path),
             path,
@@ -456,7 +468,7 @@ impl Tab {
         self.unfollowed = None;
         self.path = path;
         self.title = file_title(&self.path);
-        self.id = egui::Id::new(&self.path);
+        self.document_id = egui::Id::new(&self.path);
         self.cache = CommonMarkCache::default();
         self.content_version = self.content_version.wrapping_add(1);
         self.base_uri = Self::compute_base_uri(&self.path);

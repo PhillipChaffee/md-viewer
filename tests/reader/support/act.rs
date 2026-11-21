@@ -153,6 +153,19 @@ impl Reader {
         self.settle();
     }
 
+    /// Press the Tab key until the keyboard is in the thing named `label`,
+    /// a tab where the name starts with `tab:`.
+    #[track_caller]
+    pub(crate) fn tab_to(&mut self, label: &str) {
+        for _ in 0..80 {
+            if self.keyboard_is_on(label) {
+                return;
+            }
+            self.press("Tab");
+        }
+        panic!("the Tab key never reached `{label}`\n{}", self.describe());
+    }
+
     /// Press and release a shortcut so fast that the whole of it, the
     /// modifiers going down and coming up included, lands in one frame, as
     /// a quick tap does while the app is busy drawing.

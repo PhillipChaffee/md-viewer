@@ -7,7 +7,7 @@ use std::fmt;
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
-use crate::app::chrome::QuietButton;
+use crate::app::chrome::{self, QuietButton};
 use crate::icons::Icon;
 use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::theme::Palette;
@@ -233,7 +233,7 @@ fn one_line(width: f32) -> TextWrapping {
 }
 
 /// The three dots at the right end of a header, which open the sidebar's
-/// menu.
+/// menu. The focus ring goes round them while the keyboard is on them.
 fn more_button(
     ui: &egui::Ui,
     palette: &Palette,
@@ -254,6 +254,7 @@ fn more_button(
         let dot = center + egui::vec2(step * 4.5, 0.0);
         ui.painter().circle_filled(dot, 1.25, ink);
     }
+    chrome::focus_ring(ui, palette, &response, rect);
     response
 }
 
@@ -320,7 +321,7 @@ pub(super) struct RowResponse {
 
 /// Lay one row across the sidebar and paint it. The current row is inked
 /// like body text and the others muted; the row under the pointer gets the
-/// raised wash.
+/// raised wash, and the row the keyboard is on the focus ring.
 pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowResponse {
     let size = egui::vec2(ui.available_width(), ROW_HEIGHT);
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -339,6 +340,7 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     if lit {
         ui.painter().rect_filled(rect, RADIUS, palette.raised);
     }
+    chrome::focus_ring(ui, palette, &response, rect);
     let (button, text_right) = end(ui, palette, &response, row.end);
     let ink = if lit || row.current {
         palette.text

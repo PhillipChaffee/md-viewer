@@ -492,6 +492,22 @@ pub(crate) fn dots(shapes: &[Shape]) -> Vec<(Rect, Rgb)> {
     found
 }
 
+/// Where the frame drew outlines: boxes with a line round them and nothing
+/// filled in, each with the color of its line.
+pub(crate) fn outlines(shapes: &[Shape]) -> Vec<(Rect, Rgb)> {
+    let mut found = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Vec(members) => found.extend(outlines(members)),
+            Shape::Rect(rect) if rect.fill == Color32::TRANSPARENT && !rect.stroke.is_empty() => {
+                found.push((rect.rect, Rgb::of(rect.stroke.color)));
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 /// Where the frame drew lines, boxes and dots: everything that is neither
 /// text nor a picture, each by the rectangle that bounds it.
 pub(crate) fn marks(shapes: &[Shape]) -> Vec<Rect> {

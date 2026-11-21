@@ -218,9 +218,22 @@ fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
         ui.painter()
             .rect_filled(response.rect, CONTROL_RADIUS, palette.raised);
     }
+    focus_ring(ui, palette, response, response.rect);
+}
+
+/// The ring that shows where the keyboard is: a line in the accent just
+/// inside `around`, drawn while `response` has the focus. A control laid
+/// out by hand draws this one too, so the focus looks the same on a
+/// button, a sidebar row and a tab.
+pub(super) fn focus_ring(
+    ui: &egui::Ui,
+    palette: &Palette,
+    response: &egui::Response,
+    around: egui::Rect,
+) {
     if response.has_focus() {
         ui.painter().rect_stroke(
-            response.rect,
+            around,
             CONTROL_RADIUS,
             egui::Stroke::new(1.0_f32, palette.accent),
             egui::StrokeKind::Inside,
@@ -327,6 +340,22 @@ impl<N: fmt::Display + Copy> QuietButton<'_, N> {
     /// Lay it out as the next thing in `ui`, as wide as its face asks for,
     /// and draw it.
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
+        self.lay_out(ui, palette, None)
+    }
+
+    /// As [`Self::show`], under `id`: for a button the keyboard is sent to
+    /// by code that does not draw it.
+    pub(super) fn show_as(
+        self,
+        ui: &mut egui::Ui,
+        palette: &Palette,
+        id: egui::Id,
+    ) -> egui::Response {
+        self.lay_out(ui, palette, Some(id))
+    }
+
+    /// Lay it out and draw it, under `id` or else the id `ui` gives it.
+    fn lay_out(self, ui: &mut egui::Ui, palette: &Palette, id: Option<egui::Id>) -> egui::Response {
         let words = self.words(ui);
         let text_width = words.as_ref().map_or(0.0, |words| words.size().x);
         let size = egui::vec2(
@@ -335,8 +364,8 @@ impl<N: fmt::Display + Copy> QuietButton<'_, N> {
                 .max(self.min_width),
             BUTTON_SIDE,
         );
-        let (id, rect) = ui.allocate_space(size);
-        let mut response = self.place(ui, rect, id);
+        let (given, rect) = ui.allocate_space(size);
+        let mut response = self.place(ui, rect, id.unwrap_or(given));
         response.intrinsic_size = Some(size);
         self.paint_face(ui, palette, &response, words);
         response

@@ -37,7 +37,11 @@ fn a_goal_replaces_the_documents_of_the_tabs_it_names_and_no_other() {
         |goal: Goal| [0, 1, 2].map(|index| goal.replaces(index, &harness.app.tabs[index]));
     let leave = |route: Route| Goal::Leave(1, route);
 
-    assert_eq!(replaced(Goal::Tab(1)), [false, true, false]);
+    let tab = Goal::Tab {
+        index: 1,
+        keyboard_follows: false,
+    };
+    assert_eq!(replaced(tab), [false, true, false]);
     assert_eq!(replaced(Goal::OtherTabs(1)), [true, false, true]);
     assert_eq!(replaced(Goal::Quit), [true, true, true]);
     assert_eq!(

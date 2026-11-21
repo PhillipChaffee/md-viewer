@@ -268,6 +268,12 @@ which is the Control key on a Mac too, because ⌘ with Tab switches apps.
 The menus and tooltips show the Mac's own signs. Control with a letter and
 Option with an arrow are left to the text you are editing.
 
+Without the mouse: `Tab` and `Shift+Tab` step through the buttons, the tabs,
+the rows of the sidebars and the documents of the home page, and a ring in
+the theme's accent shows which one the keyboard is on. `Enter` or `Space` presses it. Each tab's close
+button comes right after its tab, so `Enter` there closes that tab, and
+asks first when it has unsaved edits.
+
 ## How it is built
 
 ```mermaid
