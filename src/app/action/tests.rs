@@ -1,6 +1,8 @@
+use std::cell::RefCell;
+
 use super::*;
 
-use eframe::egui::{Key, Modifiers};
+use eframe::egui::{IconData, Key, Modifiers};
 
 use crate::app::tests::Harness;
 use crate::app::ui_harness::sent;
@@ -291,4 +293,64 @@ fn the_window_icon_changes_when_the_theme_crosses_between_light_and_dark() {
         !sent(&at_rest, &reversed),
         "a frame without a change asks nothing"
     );
+}
+
+thread_local! {
+    /// The icons this test's app handed the Dock, oldest first, each
+    /// named by which of the two pictures it is.
+    static DOCK: RefCell<Vec<Option<AppIcon>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A Dock that remembers what it was handed, in place of the system's.
+fn remember_for_the_dock(icon: &IconData) {
+    let named = [AppIcon::Sepia, AppIcon::Reversed]
+        .into_iter()
+        .find(|known| *known.image() == *icon);
+    DOCK.with_borrow_mut(|handed| handed.push(named));
+}
+
+/// What a Dock that was handed nothing remembers.
+const NOTHING: [Option<AppIcon>; 0] = [];
+
+/// What the Dock was handed since it was last asked.
+fn handed_to_the_dock() -> Vec<Option<AppIcon>> {
+    DOCK.with_borrow_mut(std::mem::take)
+}
+
+/// On a Mac the window's icon does not reach the Dock, so a crossing
+/// between a light theme and a dark one also hands the Dock the other
+/// icon, once; a step that stays on one side hands it nothing.
+#[test]
+fn the_dock_is_handed_the_other_icon_once_for_each_crossing() {
+    let mut harness = Harness::with_three_docs();
+    harness.app.show_in_dock = remember_for_the_dock;
+    let next_theme = |harness: &mut Harness| {
+        harness.press(Modifiers::CTRL, Key::D);
+        handed_to_the_dock()
+    };
+    assert_eq!(harness.app.theme, ThemeId::Sepia);
+
+    assert_eq!(
+        next_theme(&mut harness),
+        [Some(AppIcon::Reversed)],
+        "Sepia to Dusk"
+    );
+    assert_eq!(next_theme(&mut harness), NOTHING, "Dusk to Night");
+    assert_eq!(
+        next_theme(&mut harness),
+        [Some(AppIcon::Sepia)],
+        "Night to Paper"
+    );
+    assert_eq!(next_theme(&mut harness), NOTHING, "Paper to Sepia");
+
+    harness.apply(AppAction::SetTheme(ThemeId::Night));
+    harness.idle();
+    assert_eq!(
+        handed_to_the_dock(),
+        [Some(AppIcon::Reversed)],
+        "Sepia to Night by its swatch"
+    );
+    harness.apply(AppAction::SetTheme(ThemeId::Night));
+    harness.idle();
+    assert_eq!(handed_to_the_dock(), NOTHING, "Night picked again");
 }

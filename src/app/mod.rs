@@ -14,7 +14,7 @@ use crate::app::tabs::PathPicker;
 use crate::app::watching::LiveReload;
 use crate::explorer::FileExplorer;
 use crate::layout::{LineSpacing, ReadingWidth};
-use crate::platform::Platform;
+use crate::platform::{Platform, ShowInDock};
 use crate::recent::RecentEntry;
 use crate::search::SearchState;
 use crate::system_fonts::FontConfig;
@@ -159,6 +159,9 @@ pub(crate) struct MarkdownApp {
     lightbox: Lightbox,
     /// Which keyboard the shortcuts are for.
     platform: Platform,
+    /// Where the app's icon goes outside the window when the theme
+    /// crosses between light and dark: the Dock, on a Mac.
+    show_in_dock: ShowInDock,
     /// What each shortcut reads as in a menu or a tooltip, written when
     /// the fonts change and not while painting.
     hints: Hints,

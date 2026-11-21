@@ -21,7 +21,7 @@ use crate::dialogs::{pick_file, pick_folder};
 use crate::explorer::{FileExplorer, SortOrder};
 use crate::layout::SIDEBAR_RESIZE_GRAB_RADIUS;
 use crate::persist::{color_to_persisted, PersistedState, APP_KEY};
-use crate::platform::Platform;
+use crate::platform::{self, Platform};
 use crate::search::SearchState;
 use crate::system_fonts::{document_fonts, setup_fonts, FontConfig};
 use crate::tab::Tab;
@@ -297,6 +297,7 @@ impl MarkdownApp {
             closing: CloseState::default(),
             system_quit: SystemQuit::default(),
             platform: Platform::HOST,
+            show_in_dock: platform::show_in_dock,
             hints: Hints::new(Notation::on(Platform::HOST, false)),
             hints_stale: true,
             search: SearchState::default(),

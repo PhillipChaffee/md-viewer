@@ -82,3 +82,12 @@ fn each_icon_is_a_square_picture_of_a_tile_with_clear_corners() {
 fn the_two_icons_are_different_pictures() {
     assert_ne!(AppIcon::Sepia.image(), AppIcon::Reversed.image());
 }
+
+/// A switch of theme hands the picture to the window and to the Dock, so
+/// it is decoded once and shared, not decoded again for each.
+#[test]
+fn each_icon_is_decoded_once_and_shared() {
+    for icon in [AppIcon::Sepia, AppIcon::Reversed] {
+        assert!(Arc::ptr_eq(&icon.image(), &icon.image()), "{icon:?}");
+    }
+}
