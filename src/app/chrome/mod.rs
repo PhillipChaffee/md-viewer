@@ -26,7 +26,8 @@ pub(super) const LABEL_SIZE: f32 = 13.0;
 pub(super) const SMALL_SIZE: f32 = 11.5;
 /// Side of the square a quiet button takes at least.
 pub(super) const BUTTON_SIDE: f32 = 28.0;
-/// Side of the square an icon is painted in.
+/// Side of the square an icon is painted in, unless its button says
+/// otherwise.
 const ICON_SIDE: f32 = 16.0;
 /// Space between the text of a quiet button and its edge.
 const BUTTON_PADDING: f32 = 7.0;
@@ -116,7 +117,7 @@ pub(super) fn sense(enabled: bool) -> egui::Sense {
 }
 
 /// The wash under a pressed control and the ring around a focused one.
-pub(super) fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
+fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
     if response.is_pointer_button_down_on() {
         ui.painter()
             .rect_filled(response.rect, CONTROL_RADIUS, palette.raised);
@@ -134,7 +135,8 @@ pub(super) fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: 
 /// What a quiet button shows.
 #[derive(Clone, Copy, Debug)]
 enum Face<'a> {
-    Icon(Icon),
+    /// An icon in a square of this side.
+    Icon(Icon, f32),
     /// Text at this size.
     Text(&'a str, f32),
 }
@@ -155,8 +157,13 @@ pub(super) struct QuietButton<'a> {
 
 impl<'a> QuietButton<'a> {
     pub(super) const fn icon(icon: Icon, label: &'a str) -> Self {
+        Self::icon_sized(icon, ICON_SIDE, label)
+    }
+
+    /// A button that shows `icon` in a square `side` px wide.
+    pub(super) const fn icon_sized(icon: Icon, side: f32, label: &'a str) -> Self {
         Self {
-            face: Face::Icon(icon),
+            face: Face::Icon(icon, side),
             label,
             enabled: true,
             lit: false,
@@ -213,39 +220,86 @@ impl<'a> QuietButton<'a> {
         self
     }
 
+    /// Lay it out as the next thing in `ui`, as wide as its face asks for,
+    /// and draw it.
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
-        let galley = match self.face {
-            Face::Icon(_) => None,
-            Face::Text(text, size) => Some(ui.painter().layout_no_wrap(
-                text.to_owned(),
-                egui::FontId::proportional(size),
-                Color32::PLACEHOLDER,
-            )),
-        };
-        let text_width = galley.as_ref().map_or(0.0, |galley| galley.size().x);
+        let words = self.words(ui);
+        let text_width = words.as_ref().map_or(0.0, |words| words.size().x);
         let size = egui::vec2(
             2.0_f32
                 .mul_add(self.padding, text_width)
                 .max(self.min_width),
             BUTTON_SIDE,
         );
-        let response = ui.allocate_response(size, sense(self.enabled));
+        let (id, rect) = ui.allocate_space(size);
+        let mut response = self.place(ui, rect, id);
+        response.intrinsic_size = Some(size);
+        self.paint_face(ui, palette, &response, words);
+        response
+    }
+
+    /// Draw it in `rect`, which the caller has kept for it, under `id`.
+    pub(super) fn put(
+        self,
+        ui: &egui::Ui,
+        palette: &Palette,
+        rect: egui::Rect,
+        id: egui::Id,
+    ) -> egui::Response {
+        let response = self.place(ui, rect, id);
+        self.paint(ui, palette, &response);
+        response
+    }
+
+    /// Make `rect` the button, under `id`, and paint nothing: it takes
+    /// clicks and the keyboard, and a screen reader finds it. For a button
+    /// that is not always drawn; [`Self::paint`] draws it.
+    pub(super) fn place(self, ui: &egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
+        let response = ui.interact(rect, id, sense(self.enabled));
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, self.enabled, self.label)
         });
-        paint_feedback(ui, &response, palette);
+        response
+    }
+
+    /// Draw the button `response` is: what shows it is pressed or focused,
+    /// and its face in the ink of its state.
+    pub(super) fn paint(self, ui: &egui::Ui, palette: &Palette, response: &egui::Response) {
+        self.paint_face(ui, palette, response, self.words(ui));
+    }
+
+    /// The text of its face, laid out. `None` for an icon.
+    fn words(self, ui: &egui::Ui) -> Option<std::sync::Arc<egui::Galley>> {
+        match self.face {
+            Face::Icon(..) => None,
+            Face::Text(text, size) => Some(ui.painter().layout_no_wrap(
+                text.to_owned(),
+                egui::FontId::proportional(size),
+                Color32::PLACEHOLDER,
+            )),
+        }
+    }
+
+    /// As [`Self::paint`], with the text of its face already laid out.
+    fn paint_face(
+        self,
+        ui: &egui::Ui,
+        palette: &Palette,
+        response: &egui::Response,
+        words: Option<std::sync::Arc<egui::Galley>>,
+    ) {
+        paint_feedback(ui, response, palette);
         let strong = self.lit || response.hovered() || response.has_focus();
         let color = ink(palette, self.enabled, strong);
-        if let Face::Icon(icon) = self.face {
+        if let Face::Icon(icon, side) = self.face {
             let square =
-                egui::Rect::from_center_size(response.rect.center(), egui::Vec2::splat(ICON_SIDE));
+                egui::Rect::from_center_size(response.rect.center(), egui::Vec2::splat(side));
             icon.paint(ui.painter(), square, color);
         }
-        if let Some(galley) = galley {
-            let corner = response.rect.center() - galley.size() / 2.0;
-            ui.painter().galley(corner, galley, color);
+        if let Some(words) = words {
+            let corner = response.rect.center() - words.size() / 2.0;
+            ui.painter().galley(corner, words, color);
         }
-        response
     }
 }
 

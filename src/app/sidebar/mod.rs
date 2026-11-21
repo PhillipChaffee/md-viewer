@@ -5,7 +5,7 @@
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
-use crate::app::chrome;
+use crate::app::chrome::QuietButton;
 use crate::icons::Icon;
 use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::theme::Palette;
@@ -31,8 +31,8 @@ const CHEVRON_GAP: f32 = 4.0;
 const END_SLOT: f32 = 22.0;
 /// Space between a row's right edge and that square.
 const END_INSET: f32 = 3.0;
-/// How far the icon of a row's button stands inside the square.
-const END_ICON_INSET: f32 = 4.0;
+/// Side of the square the icon of a row's button is drawn in.
+const END_ICON: f32 = 14.0;
 /// Radius of the dot that marks a row.
 const DOT_RADIUS: f32 = 2.5;
 const HEADER_HEIGHT: f32 = 30.0;
@@ -380,9 +380,9 @@ fn end_slot(row: egui::Rect) -> egui::Rect {
     egui::Rect::from_center_size(center, egui::Vec2::splat(END_SLOT))
 }
 
-/// The button at the end of `row`, laid out and painted only while the row
-/// is pointed at or the keyboard is on the row or on the button. It is
-/// inked like a quiet button.
+/// The button at the end of `row`, a quiet one, laid out and painted only
+/// while the row is pointed at or the keyboard is on the row or on the
+/// button.
 fn end_button(
     ui: &egui::Ui,
     palette: &Palette,
@@ -404,14 +404,8 @@ fn end_button(
     if !(row.contains_pointer() || row.has_focus() || leaving || on_button) {
         return None;
     }
-    let slot = end_slot(row.rect);
-    let button = ui.interact(slot, id, egui::Sense::click());
-    button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
-    chrome::paint_feedback(ui, &button, palette);
-    let strong = button.hovered() || button.has_focus();
-    let ink = chrome::ink(palette, true, strong);
-    icon.paint(ui.painter(), slot.shrink(END_ICON_INSET), ink);
-    Some(button)
+    let button = QuietButton::icon_sized(icon, END_ICON, label);
+    Some(button.put(ui, palette, end_slot(row.rect), id))
 }
 
 /// A thin chevron centered on `center`: pointing right for a folded row,
