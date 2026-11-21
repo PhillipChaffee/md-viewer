@@ -43,7 +43,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40  # a cold eframe build plus the instrumented test build; GitHub's default is 360
+    timeout-minutes: 40  # a cold instrumented build of eframe and the test suite; GitHub's default is 360
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-test
       cancel-in-progress: true
@@ -66,14 +66,21 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      # The coverage run is the test run: llvm-cov builds the same five test
+      # binaries `cargo test --workspace` builds (mac-window, the library,
+      # the binary, tests/e2e, tests/reader) and runs every test in them, so
+      # a second, uninstrumented run of the suite proved nothing more. A
+      # failing test fails this step with libtest's own output, before any
+      # report is written. The one thing llvm-cov leaves out is doctests,
+      # and the workspace has none (`cargo test --workspace --doc` runs 0);
+      # the first doctest brings that command back as a step here.
       # Gate AND report in one pass: llvm-cov writes the report before it
       # evaluates the fail-under switches (lines, regions, functions), so the
       # upload below can still run on a gate failure (measured: exit 1 with
       # lcov.info on disk).
       - name: Install cargo-llvm-cov 0.9.0
         run: cargo install --locked --version 0.9.0 cargo-llvm-cov
-      - name: Coverage gate (lines, regions, functions — 95 each)
+      - name: Tests and coverage gate (lines, regions, functions — 95 each)
         run: cargo llvm-cov --workspace --fail-under-lines 95 --fail-under-regions 95 --fail-under-functions 95 --lcov --output-path lcov.info
       # Cognitive complexity is the only complexity metric this stack gates
       # (the consolidation decision). Threshold 15 is Sonar's S3776 default,
