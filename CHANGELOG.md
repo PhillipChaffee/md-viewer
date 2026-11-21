@@ -30,6 +30,8 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **Sidebars and a home page.** The explorer and contents sidebars are frameless, and the contents list marks the heading being read. With no document open, the home page lists what was read recently: title, folder, reading time and the opening lines.
 
+- **A file in the sidebar can be opened in a new tab without knowing the shortcut.** Pointing at a file's row, or reaching it with Tab, shows a button at its right end that opens the file in a tab of its own; its tooltip names the click that does the same (`Ctrl`-click, ⌘-click on a Mac). The file's right-click menu starts with **Open** and **Open in New Tab**, above the rows that copy. A middle click on a file opens it in a new tab, as a browser does with a link; it used to close the file's tab. A file that already has a tab comes to the front instead of getting a second one. A dot after the name marks every file that has a tab, and the button takes its place while the row is pointed at. A name too long for its row ends in an ellipsis before the dot or the button.
+
 - **Animated GIFs and WebPs play.** A picture of several frames shows each for the time the file asks for and starts over, instead of standing on its first frame. It asks the window to redraw only while it is in view, so a page with no moving picture on screen costs nothing at rest. Clicking one enlarges it, and it goes on playing there in step with the page. Its frames are kept once, as textures: up to 256 MiB for one picture, which past that shows its first frame only, and 512 MiB for all of them, past which pictures out of view are let go and read again when they come back.
 
 ### Fixes
