@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::fmt;
 
 use egui::accesskit::Role;
 use egui::{Color32, Pos2, Rect, Shape};
@@ -734,4 +735,48 @@ fn a_row_with_nothing_at_its_end_never_has_a_button() {
     });
 
     assert!(!button.get());
+}
+
+/// A button's name that counts the times it is written out.
+struct CountedName<'a> {
+    words: &'a str,
+    written: &'a Cell<u32>,
+}
+
+impl fmt::Display for CountedName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.written.set(self.written.get() + 1);
+        f.write_str(self.words)
+    }
+}
+
+#[test]
+fn a_buttons_name_is_written_only_while_a_screen_reader_listens() {
+    let written = Cell::new(0);
+    let name = CountedName {
+        words: "Open notes.md in new tab",
+        written: &written,
+    };
+    let draw = |ui: &mut egui::Ui| {
+        let shown = Row {
+            end: End::Button {
+                icon: Icon::NewTab,
+                label: &name,
+                marked: true,
+            },
+            ..plain_row("notes.md", false)
+        };
+        row(ui, PALETTE, &shown);
+    };
+
+    // Pointed at, so that the button is drawn as well as placed.
+    let pointed = paint(Some(Pos2::new(20.0, ROW_HEIGHT / 2.0)), draw);
+    assert!(!pointed.paths().is_empty(), "the button is drawn");
+    assert_eq!(written.get(), 0, "nothing listens, so nothing is written");
+
+    // The harness attaches what a screen reader does.
+    let mut harness = egui_kittest::Harness::new_ui(draw);
+    harness.run();
+    harness.get_by_role_and_label(Role::Button, "Open notes.md in new tab");
+    assert!(written.get() > 0);
 }
