@@ -50,10 +50,11 @@ const MOVES_KEYBOARD: [egui::Key; 5] = [
 /// What the reader typed in one frame after a key that moves the keyboard
 /// to another control, held for the next frame.
 ///
-/// egui moves the keyboard a frame after Shift+Tab or an arrow asks it
-/// to, and gives every key of a frame to whatever has the keyboard then.
-/// A machine slow enough to deliver Shift+Tab and Enter in one frame
-/// would have Enter press the control the reader had just left.
+/// egui takes one move of the keyboard per frame, so three presses of Tab
+/// in one are a single step, and for Shift+Tab or an arrow it makes the
+/// move a frame late. Every key of the frame goes to whatever has the
+/// keyboard then. A machine slow enough to deliver Shift+Tab and Enter in
+/// one frame would have Enter press the control the reader had just left.
 #[derive(Default)]
 pub(crate) struct TypedAhead(Vec<egui::Event>);
 
