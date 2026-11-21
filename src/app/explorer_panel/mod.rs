@@ -9,6 +9,7 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::app::chrome::{self, MenuRow};
+use crate::app::shortcuts::hints::Hints;
 use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{FileTreeNode, SortOrder};
@@ -132,7 +133,7 @@ impl MarkdownApp {
             palette,
             open_paths: &self.open_tab_paths,
             current: active_tab.map(|tab| tab.path.as_path()),
-            new_tab_click: self.hints.command_click(),
+            hints: &self.hints,
         };
 
         let mut clicks = TreeClicks::default();
@@ -281,8 +282,8 @@ struct Listing<'a> {
     open_paths: &'a HashSet<PathBuf>,
     /// The document the active tab shows.
     current: Option<&'a Path>,
-    /// The click that opens a file in a tab of its own, as a hint.
-    new_tab_click: &'a str,
+    /// How the click that opens a file in a tab of its own is written.
+    hints: &'a Hints,
 }
 
 /// One explorer row: the node it shows and how deep it sits in the tree.
@@ -336,9 +337,7 @@ fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
 fn new_tab_button(button: Option<egui::Response>, listing: &Listing<'_>) -> bool {
     button.is_some_and(|button| {
         let clicked = button.clicked();
-        button.on_hover_ui(|ui| {
-            ui.label(format!("{NEW_TAB_BUTTON} ({})", listing.new_tab_click));
-        });
+        listing.hints.click_tooltip(button, NEW_TAB_BUTTON);
         clicked
     })
 }
@@ -349,7 +348,7 @@ fn file_context_menu(ui: &mut egui::Ui, path: &Path, listing: &Listing<'_>) -> O
     let palette = listing.palette;
     ui.set_width(FILE_MENU_WIDTH);
     let here = MenuRow::new("Open").flush().show(ui, palette).clicked();
-    let new_tab = MenuRow::new("Open in New Tab").shortcut(listing.new_tab_click);
+    let new_tab = MenuRow::new("Open in New Tab").shortcut(listing.hints.command_click());
     let new_tab = new_tab.flush().show(ui, palette).clicked();
     chrome::hairline(ui, palette);
 

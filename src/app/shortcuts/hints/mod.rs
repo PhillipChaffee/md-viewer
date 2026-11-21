@@ -157,12 +157,26 @@ impl Hints {
         name: &str,
         action: AppAction,
     ) -> egui::Response {
-        response.on_hover_ui(|ui| {
-            ui.set_max_width(ui.spacing().tooltip_width);
+        hinted(response, name, || {
             let keys: Vec<&str> = self.all(action).collect();
-            ui.label(format!("{name} ({})", keys.join(" / ")));
+            keys.join(" / ")
         })
     }
+
+    /// Show `name`, with the click that gives what it opens a tab of its
+    /// own in brackets after it, while the pointer rests on `response`.
+    pub(crate) fn click_tooltip(&self, response: egui::Response, name: &str) -> egui::Response {
+        hinted(response, name, || self.command_click.clone())
+    }
+}
+
+/// A tooltip on `response` that reads `name` and then, in brackets, what
+/// `hint` writes. `hint` is called only while the tooltip shows.
+fn hinted(response: egui::Response, name: &str, hint: impl FnOnce() -> String) -> egui::Response {
+    response.on_hover_ui(|ui| {
+        ui.set_max_width(ui.spacing().tooltip_width);
+        ui.label(format!("{name} ({})", hint()));
+    })
 }
 
 impl MarkdownApp {
