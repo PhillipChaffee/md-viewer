@@ -3,7 +3,7 @@ name = "mac-window"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-description = "What md-viewer asks of AppKit about its window: where the window buttons sit, and who answers the quit key and a request to quit"
+description = "What md-viewer asks of AppKit about its window: where the window buttons sit, who answers the quit key and a request to quit, and which icon the Dock shows"
 license = "MIT"
 repository = "https://github.com/PhillipChaffee/md-viewer"
 readme = "README.md"
@@ -21,8 +21,12 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "NSApplication",
+    "NSBitmapImageRep",
     "NSButton",
     "NSControl",
+    "NSGraphics",
+    "NSImage",
+    "NSImageRep",
     "NSMenu",
     "NSMenuItem",
     "NSResponder",
@@ -44,9 +48,9 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 # out because this crate has no proof harness to declare `cfg(kani)` for.
 [lints.rust]
 # The first difference. The workspace forbids unsafe code; this crate exists
-# to hold the two unsafe functions the window needs on a Mac, each behind
+# to hold the three unsafe functions the app needs on a Mac, each behind
 # an `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an
-# error. GATES.md records both exceptions.
+# error. GATES.md records all three exceptions.
 unsafe_code = "deny"
 missing_docs = "deny"
 missing_debug_implementations = "warn"

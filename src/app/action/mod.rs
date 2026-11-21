@@ -167,17 +167,19 @@ impl MarkdownApp {
         }
     }
 
-    /// Switch the reading theme, and have the window's icon follow it
-    /// from a light theme to a dark one or back.
+    /// Switch the reading theme, and have the app's icon follow it from a
+    /// light theme to a dark one or back.
     ///
-    /// The window is asked only when the icon differs. An X11 window
-    /// takes the new icon at once. A Mac's Dock and a Wayland desktop do
-    /// not: winit has nothing to set there, and the Dock shows the icon
-    /// of the saved theme from the next launch.
+    /// The window and the Dock are asked only when the icon differs. An
+    /// X11 window takes the new icon at once, and so does a Mac's Dock,
+    /// which winit cannot reach and the window's icon does not change. A
+    /// Wayland desktop shows the launcher's icon whatever the window asks.
     fn set_theme(&mut self, ctx: &egui::Context, theme: ThemeId) {
         let icon = AppIcon::for_theme(theme);
         if icon != AppIcon::for_theme(self.theme) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon.image())));
+            let image = icon.image();
+            (self.show_in_dock)(&image);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(image)));
         }
         self.theme = theme;
     }

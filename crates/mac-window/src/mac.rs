@@ -5,14 +5,15 @@ use std::ffi::CStr;
 use objc2::ffi::class_addMethod;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Imp, Sel};
-use objc2::{sel, MainThreadMarker};
+use objc2::{sel, AllocAnyThread, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSApplicationTerminateReply, NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
+    NSApplication, NSApplicationTerminateReply, NSBitmapImageRep, NSDeviceRGBColorSpace, NSImage,
+    NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
 };
 use objc2_foundation::{ns_string, NSPoint, NSRect, NSSize};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use crate::{is_off, placement, quit_answer, QuitAnswer};
+use crate::{is_off, pixel_rows, placement, quit_answer, QuitAnswer};
 
 /// The window's own buttons, from the left.
 const BUTTONS: [NSWindowButton; 3] = [
@@ -222,5 +223,82 @@ pub(crate) fn answer_quit_requests() {
     if add_should_terminate(object.class(), main) {
         application.setDelegate(None);
         application.setDelegate(Some(&delegate));
+    }
+}
+
+/// Show the picture `rgba`, `width` pixels across and `height` down, four
+/// bytes to a pixel, as the app's icon in the Dock and the app switcher.
+///
+/// On a Mac the Dock's icon is not the window's, and winit leaves it as
+/// it was at launch. This changes it at once, for as long as the app runs:
+/// the next launch starts from the icon the window is built with. macOS
+/// keeps a copy of the pixels, so `rgba` may go once this returns.
+///
+/// Does nothing off the main thread, and for bytes that are not such a
+/// picture.
+#[expect(
+    unsafe_code,
+    reason = "the third audited exception in GATES.md: AppKit takes a picture's pixels, and a new icon for the Dock, only through unsafe calls"
+)]
+pub fn set_dock_icon(rgba: &[u8], width: u32, height: u32) {
+    let Some(main) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(rows) = pixel_rows(rgba, width, height) else {
+        return;
+    };
+    let application = NSApplication::sharedApplication(main);
+    let size = NSSize::new(f64::from(width), f64::from(height));
+    let image = NSImage::initWithSize(NSImage::alloc(), size);
+    // SAFETY: the block does four unsafe things, and nothing else in it is
+    // unsafe.
+    //
+    // Reading `NSDeviceRGBColorSpace`: an extern static, a constant
+    // `NSString` that AppKit defines and never changes.
+    //
+    // Making the bitmap: `planes` must be a valid pointer or null, and it
+    // is null. AppKit then allocates the bitmap's memory itself and owns
+    // it; it neither reads nor keeps a pointer of ours. The other
+    // arguments describe one plane of 8-bit red, green, blue and alpha,
+    // which is how eframe builds the icon it gives the Dock at launch.
+    //
+    // Copying the pixels: the copy writes `rows.bytes` bytes to `pixels`
+    // and reads as many from `rgba`. `pixel_rows` gave `rows` only
+    // because `rgba` holds exactly `rows.bytes` bytes. `pixels` is not
+    // null, and `rows.fit` has checked that the bitmap's one plane holds
+    // exactly `rows.bytes` bytes in rows as long as ours, so the write
+    // stays inside the memory AppKit allocated for this bitmap, which
+    // `bitmap` keeps alive and which no other pointer reaches. That memory
+    // is new, so it cannot overlap `rgba`, which the caller holds.
+    //
+    // Setting the icon: `setApplicationIconImage` may not take `None`, and
+    // it is given `Some`. It is sent on the main thread, which `main`
+    // proves this is; the app calls this from inside a frame, which
+    // eframe runs on the main thread on a Mac. The image retains the
+    // bitmap and the application retains the image, so neither goes when
+    // the `Retained` values here are dropped.
+    unsafe {
+        let Some(bitmap) = NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
+            NSBitmapImageRep::alloc(),
+            std::ptr::null_mut(),
+            rows.width,
+            rows.height,
+            8,
+            4,
+            true,
+            false,
+            NSDeviceRGBColorSpace,
+            rows.bytes_per_row,
+            32,
+        ) else {
+            return;
+        };
+        let pixels = bitmap.bitmapData();
+        if pixels.is_null() || !rows.fit(bitmap.bytesPerRow(), bitmap.bytesPerPlane()) {
+            return;
+        }
+        std::ptr::copy_nonoverlapping(rgba.as_ptr(), pixels, rows.bytes);
+        image.addRepresentation(&bitmap);
+        application.setApplicationIconImage(Some(&image));
     }
 }

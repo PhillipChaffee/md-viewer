@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use eframe::egui::IconData;
 
@@ -57,10 +57,18 @@ impl AppIcon {
         }
     }
 
-    /// The picture decoded, for the window. This decodes the PNG, so it
-    /// is asked for when the window is built and when the icon changes,
-    /// never per frame.
+    /// The picture decoded, for the window and the Dock. The PNG is
+    /// decoded the first time it is asked for, and the same picture is
+    /// handed out from then on. It is asked for when the window is built
+    /// and when the icon changes, never per frame.
     pub(crate) fn image(self) -> Arc<IconData> {
-        Arc::new(eframe::icon_data::from_png_bytes(self.png()).unwrap_or_default())
+        static SEPIA: OnceLock<Arc<IconData>> = OnceLock::new();
+        static REVERSED: OnceLock<Arc<IconData>> = OnceLock::new();
+        let decoded = match self {
+            Self::Sepia => &SEPIA,
+            Self::Reversed => &REVERSED,
+        };
+        let decode = || Arc::new(eframe::icon_data::from_png_bytes(self.png()).unwrap_or_default());
+        Arc::clone(decoded.get_or_init(decode))
     }
 }

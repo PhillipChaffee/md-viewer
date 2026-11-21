@@ -102,3 +102,58 @@ fn a_request_to_quit_gets_the_answer_of_the_first_asker_given() {
         "a second asker replaced the first"
     );
 }
+
+#[test]
+fn a_picture_is_four_bytes_for_each_pixel_row_after_row() {
+    let rgba = [0_u8; 3 * 2 * 4];
+
+    let rows = pixel_rows(&rgba, 3, 2);
+
+    assert_eq!(
+        rows,
+        Some(PixelRows {
+            width: 3,
+            height: 2,
+            bytes_per_row: 12,
+            bytes: 24,
+        })
+    );
+}
+
+#[test]
+fn bytes_that_are_not_a_whole_picture_are_no_picture() {
+    let rgba = [0_u8; 3 * 2 * 4];
+
+    assert_eq!(pixel_rows(&rgba[..23], 3, 2), None, "a byte short");
+    assert_eq!(pixel_rows(&[0; 25], 3, 2), None, "a byte over");
+    assert_eq!(pixel_rows(&rgba, 2, 2), None, "a column short");
+    assert_eq!(pixel_rows(&[], 0, 0), None, "no pixels");
+    assert_eq!(pixel_rows(&[], 0, 5), None, "no pixels across");
+    assert_eq!(
+        pixel_rows(&[], u32::MAX, u32::MAX),
+        None,
+        "too large to count"
+    );
+}
+
+#[test]
+fn a_bitmap_fits_a_picture_only_when_its_rows_and_its_size_match() {
+    let rows = PixelRows {
+        width: 3,
+        height: 2,
+        bytes_per_row: 12,
+        bytes: 24,
+    };
+
+    assert!(rows.fit(12, 24));
+    assert!(!rows.fit(16, 32), "rows padded to sixteen bytes");
+    assert!(!rows.fit(12, 12), "room for one row");
+    assert!(!rows.fit(12, -24));
+}
+
+/// Tests run off the main thread, so on a Mac too this reaches nothing
+/// of the system's.
+#[test]
+fn the_dock_icon_is_left_alone_off_the_main_thread() {
+    set_dock_icon(&[0; 16], 2, 2);
+}

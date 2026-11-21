@@ -72,7 +72,7 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | --- | --- |
 | `Cargo.toml` `[workspace] exclude` | `vendor/` is outside clippy, rustdoc, tests and coverage. See the caveat below. |
 | `run-gates.sh`, `ci.yml` | The cognitive gate reads `src` and `crates` (arborist has no exclude switch). The TODO grep skips `vendor`. osv-scanner reads the root `Cargo.lock` only. |
-| `crates/mac-window/Cargo.toml` lint table | `unsafe_code` is `deny` where the workspace says `forbid`, for two functions, each behind an `#[expect(unsafe_code, reason)]`. See the two sections below. |
+| `crates/mac-window/Cargo.toml` lint table | `unsafe_code` is `deny` where the workspace says `forbid`, for three functions, each behind an `#[expect(unsafe_code, reason)]`. See the three sections below. |
 | `crates/mac-window/src/mac.rs` | Compiled for macOS only, so on Linux, where the gates run, clippy, the tests, the coverage gate and mutation testing never see it. See the section below. |
 | `clippy.toml` | `unwrap`, `expect` and `panic` are allowed inside tests. |
 | `Cargo.toml` lint table | `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed. The `unexpected_cfgs` entry declares one cfg, `cfg(kani)`, which the proof harnesses are compiled under. |
@@ -119,7 +119,7 @@ comment. The owner accepted this exception.
 
 | What keeps it small | How |
 | --- | --- |
-| No other unsafe code in the crate | Its `unsafe_code` is `deny`, and only `title_bar` and `add_should_terminate` (the next section) carry the `#[expect]`. A third unsafe function fails the build. |
+| No other unsafe code in the crate | Its `unsafe_code` is `deny`, and only `title_bar`, `add_should_terminate` and `set_dock_icon` (the next two sections) carry the `#[expect]`. A fourth unsafe function fails the build. |
 | Each block says why it is sound | `clippy::undocumented_unsafe_blocks` is `deny` in the crate. |
 | The arithmetic is not in it | `placement` and `is_off` are safe, compiled on every system and unit-tested. |
 | No new dependency versions | It uses the `objc2` crates the window stack already resolves to on a Mac. |
@@ -188,6 +188,37 @@ has run this code on a Mac under a test: whether the buttons land where
 `placement` says is checked by eye, and so is whether macOS asks the method added to
 winit's delegate. The nightly mutation run covers the
 root package only, so it does not see this crate either.
+
+## The third unsafe function: the Dock icon follows the theme
+
+The app's icon has two forms, one for the light themes and one for the
+dark ones. When the theme crosses between them the app asks the window
+for the other icon. On X11 that changes it; on a Mac it changes nothing,
+because winit's `set_window_icon` is empty there, and the Dock kept the
+icon of the theme the app was launched with.
+
+A third exception was approved by the owner for live Dock icon
+switching, on 2026-11-21: one function of `crates/mac-window`,
+`mac::set_dock_icon`, with one unsafe block under a `SAFETY` comment. It
+builds an `NSImage` from the icon's RGBA pixels the way eframe 0.33.3
+builds the one it gives the Dock at launch, and hands it to
+`-[NSApplication setApplicationIconImage:]`. The block holds four unsafe
+things: reading AppKit's constant `NSDeviceRGBColorSpace`, making the
+`NSBitmapImageRep`, copying the pixels into it, and the
+`setApplicationIconImage` call. Nothing else was added that is unsafe.
+
+| What keeps it small | How |
+| --- | --- |
+| The bitmap's memory is AppKit's | The bitmap is made with no planes of ours, so AppKit allocates and owns its memory, and the pixels are copied in. eframe hands AppKit a pointer to its own buffer, which then has to outlive the icon; here nothing of the app's does. |
+| The sizes are checked before the copy | `pixel_rows` turns the bytes, the width and the height into the integers AppKit takes, or into nothing when the bytes are not exactly four for each pixel. `PixelRows::fit` checks the bitmap AppKit made has rows as long and as many bytes. Both are safe, compiled on every system and unit-tested. |
+| The app's side is safe | `set_theme` (`src/app/action`) picks the icon and calls `mac_window::set_dock_icon` through `src/platform`, under every gate of the app crate. A test puts its own function in that call's place and sees it asked once for each crossing between light and dark and never otherwise. |
+| No new dependency versions | Four more features of the `objc2-app-kit` 0.3.2 already resolved: `NSBitmapImageRep`, `NSGraphics`, `NSImage` and `NSImageRep`. The lockfile does not change. |
+
+The next launch still opens with the icon of the saved theme, which the
+window is built with. Nobody has run this on a Mac: CI builds it with
+`cargo check` on `macos-latest`, and `cargo clippy --target
+aarch64-apple-darwin -p mac-window --all-targets -- -D warnings` lints it
+from Linux and passed when it was written.
 
 ## A cost paid every frame: whether anything is unsaved
 

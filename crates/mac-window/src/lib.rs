@@ -1,9 +1,10 @@
 //! What md-viewer asks of macOS about its own window.
 //!
-//! [`center_window_buttons`], [`hand_quit_key_to_app`] and
-//! [`ask_before_quit`] reach nothing on every other system, so the app
-//! calls them without asking where it runs. [`placement`] is plain
-//! arithmetic and [`quit_answer`] a plain value, the same everywhere.
+//! [`center_window_buttons`], [`hand_quit_key_to_app`],
+//! [`ask_before_quit`] and [`set_dock_icon`] reach nothing on every other
+//! system, so the app calls them without asking where it runs.
+//! [`placement`] is plain arithmetic, and [`quit_answer`] and
+//! [`pixel_rows`] plain values, the same everywhere.
 
 use std::sync::OnceLock;
 
@@ -17,11 +18,11 @@ mod tests;
 #[cfg(not(target_os = "macos"))]
 use elsewhere::answer_quit_requests;
 #[cfg(not(target_os = "macos"))]
-pub use elsewhere::{center_window_buttons, hand_quit_key_to_app};
+pub use elsewhere::{center_window_buttons, hand_quit_key_to_app, set_dock_icon};
 #[cfg(target_os = "macos")]
 use mac::answer_quit_requests;
 #[cfg(target_os = "macos")]
-pub use mac::{center_window_buttons, hand_quit_key_to_app};
+pub use mac::{center_window_buttons, hand_quit_key_to_app, set_dock_icon};
 
 /// What the app says when the system asks whether it may quit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,4 +106,49 @@ pub fn placement(window_height: f64, row_height: f64, button_height: f64) -> Pla
 #[must_use]
 pub fn is_off(length: f64, wanted: f64) -> bool {
     (length - wanted).abs() > SLACK
+}
+
+/// The bytes a picture is made of, four to a pixel (red, green, blue and
+/// alpha), row after row from the top, in the integers macOS takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PixelRows {
+    /// Pixels across.
+    pub width: isize,
+    /// Pixels down.
+    pub height: isize,
+    /// Bytes in one row: four for each pixel across.
+    pub bytes_per_row: isize,
+    /// Bytes in the whole picture.
+    pub bytes: usize,
+}
+
+impl PixelRows {
+    /// Whether a bitmap whose rows are `bytes_per_row` long and which
+    /// holds `bytes_per_plane` bytes in all is laid out as these rows are,
+    /// so that the picture can be copied into it byte for byte.
+    #[must_use]
+    pub fn fit(self, bytes_per_row: isize, bytes_per_plane: isize) -> bool {
+        bytes_per_row == self.bytes_per_row && usize::try_from(bytes_per_plane) == Ok(self.bytes)
+    }
+}
+
+/// The rows of `rgba` read as a picture `width` pixels across and
+/// `height` down.
+///
+/// `None` when it is not one: when it holds more or fewer bytes than four
+/// for each pixel, when it has no pixels, or when its sizes do not fit
+/// the integers macOS takes.
+#[must_use]
+pub fn pixel_rows(rgba: &[u8], width: u32, height: u32) -> Option<PixelRows> {
+    let row = usize::try_from(width).ok()?.checked_mul(4)?;
+    let bytes = row.checked_mul(usize::try_from(height).ok()?)?;
+    if bytes == 0 || bytes != rgba.len() {
+        return None;
+    }
+    Some(PixelRows {
+        width: isize::try_from(width).ok()?,
+        height: isize::try_from(height).ok()?,
+        bytes_per_row: isize::try_from(row).ok()?,
+        bytes,
+    })
 }
