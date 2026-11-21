@@ -5,6 +5,7 @@ use std::mem;
 use eframe::egui::{self, Key};
 
 use crate::app::action::AppAction;
+use crate::app::modal::Modal;
 use crate::app::MarkdownApp;
 use crate::layout::{KeyboardScrollAction, ReadingWidth, ZOOM_STEP};
 use crate::platform::Platform;
@@ -257,10 +258,11 @@ fn shortcut_actions(
     // The wheel with the command key held, or a pinch, zooms
     // (multiplicative, like browsers). egui decides which key that is and
     // takes ⌘ and Ctrl alike, so on a Mac Control with the wheel zooms too.
-    // The lightbox captures wheel input itself in raw_input_hook, and
-    // nothing zooms under the prompt, so this only runs for the document.
+    // It zooms wherever a document binding is live: the lightbox captures
+    // wheel input itself in raw_input_hook, and nothing zooms under the
+    // prompt.
     let wheel_zoom_factor = input.zoom_delta();
-    let zooms_document = !matches!(focus, Focus::Lightbox | Focus::Prompt);
+    let zooms_document = Scope::Document.covers(focus);
     if zooms_document && (wheel_zoom_factor - 1.0).abs() > f32::EPSILON {
         actions.push(AppAction::ZoomBy(wheel_zoom_factor));
     }
@@ -280,16 +282,12 @@ fn keep_the_focus_through_a_tab_switch(ctx: &egui::Context, actions: &[AppAction
 impl MarkdownApp {
     /// Carry out the actions this frame's keyboard and wheel input ask for.
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let focus = if self.closing.is_asking() {
-            Focus::Prompt
-        } else if self.lightbox.open.is_some() {
-            Focus::Lightbox
-        } else if egui::Popup::is_any_open(ctx) {
-            Focus::Popup
-        } else if self.search.is_open {
-            Focus::FindBar
-        } else {
-            Focus::Reading
+        let focus = match self.modal() {
+            Some(Modal::Prompt) => Focus::Prompt,
+            Some(Modal::Lightbox) => Focus::Lightbox,
+            None if egui::Popup::is_any_open(ctx) => Focus::Popup,
+            None if self.search.is_open => Focus::FindBar,
+            None => Focus::Reading,
         };
         let platform = self.platform;
         let actions = ctx.input_mut(|input| shortcut_actions(input, focus, platform));
