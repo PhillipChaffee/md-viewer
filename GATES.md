@@ -88,12 +88,13 @@ delegate without the method to have said yes. The delegate is winit's and
 has no such method, so the app was quit with its unsaved edits unasked
 about: the window is never asked to close on that path.
 
-The owner accepted a second exception for this, of one unsafe call. It is
-in one more function of `crates/mac-window`, `mac::add_should_terminate`,
-in one unsafe block under a `SAFETY` comment. The block holds the call,
-`class_addMethod`, which gives the class of winit's delegate the missing
-method, and the `transmute` that erases the method's signature to the
-`Imp` type the call takes. Nothing else was added that is unsafe.
+The owner accepted a second exception for this: one unsafe call and the
+`transmute` that gives it its argument. Both are in one more function of
+`crates/mac-window`, `mac::add_should_terminate`, in one unsafe block
+under a `SAFETY` comment. The call is `class_addMethod`, which gives the
+class of winit's delegate the missing method. The `transmute` erases the
+method's signature to the `Imp` type the call takes. Nothing else was
+added that is unsafe, and nothing else is in the block.
 
 | What keeps it small | How |
 | --- | --- |
