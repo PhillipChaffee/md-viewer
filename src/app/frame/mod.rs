@@ -121,6 +121,7 @@ impl eframe::App for MarkdownApp {
         self.render_strips(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx, files_hover);
+        self.note_unsaved_edits();
     }
 }
 

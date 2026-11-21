@@ -76,10 +76,9 @@ impl TextBuffer for Source<'_> {
     }
 }
 
-/// A multiline text field on `text`, `width` wide. Returns whether the text
-/// was edited this frame.
-pub(super) fn edit(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
-    let font = egui::FontSelection::Default.resolve(ui.style());
+/// A multiline text field on `text`, set in `font` and `width` wide. Returns
+/// whether the text was edited this frame.
+pub(super) fn edit(ui: &mut egui::Ui, text: &mut String, font: &egui::FontId, width: f32) -> bool {
     let laid_out = RefCell::new(None);
     // As `TextEdit` lays text out itself, in the color it paints with.
     let mut lay_out = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {

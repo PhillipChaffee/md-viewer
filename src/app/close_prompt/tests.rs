@@ -2,7 +2,7 @@ use eframe::egui;
 
 use super::*;
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{enlarged, frame_with};
+use crate::app::ui_harness::{enlarged, frame_asked_to_close, sent};
 
 /// `a.md`, `b.md` and `c.md` in three tabs, `c.md` in front.
 fn three_tabs() -> Harness {
@@ -24,22 +24,6 @@ fn asked(harness: &Harness) -> Option<usize> {
         CloseState::Asking(pending) => Some(pending.asked),
         CloseState::Idle | CloseState::Quitting => None,
     }
-}
-
-/// Run one frame in which the window asks to close.
-fn frame_asked_to_close(harness: &mut Harness) -> egui::FullOutput {
-    let mut input = egui::RawInput::default();
-    let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();
-    window.events.push(egui::ViewportEvent::Close);
-    frame_with(harness, input)
-}
-
-fn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool {
-    let mut commands = output
-        .viewport_output
-        .values()
-        .flat_map(|viewport| &viewport.commands);
-    commands.any(|command| command == wanted)
 }
 
 fn answer(harness: &mut Harness, answer: CloseAnswer) {

@@ -275,6 +275,13 @@ impl MarkdownApp {
         }
     }
 
+    /// Whether a request to quit has to ask the reader first: edits are
+    /// unsaved, and the reader has not already answered for them on the
+    /// way to a quit.
+    pub(crate) fn quit_has_to_ask(&self) -> bool {
+        !matches!(self.closing, CloseState::Quitting) && self.tabs.iter().any(Tab::is_dirty)
+    }
+
     /// Turn the prompt to the first unsaved tab at or after the place
     /// `from` that `goal` would take its document out of. With no such
     /// tab the goal comes back, for nothing stands in its way.

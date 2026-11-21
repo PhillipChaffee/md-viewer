@@ -93,6 +93,97 @@ pub(super) fn popup_style(
 /// a button and the first control of the popup it opened.
 pub(super) const POPUP_SENSE: egui::Sense = egui::Sense::CLICK;
 
+/// Space kept between a popup that scrolls and the window's top and
+/// bottom edges.
+const POPUP_CLEARANCE: f32 = 4.0;
+
+/// Show `popup` with `contents` in it. Every menu and popover of the app
+/// is shown through here, so that one too tall for the window scrolls.
+pub(super) fn show_popup<R>(
+    popup: egui::Popup<'_>,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> Option<egui::InnerResponse<R>> {
+    popup.show(|ui| scrolled(ui, contents))
+}
+
+/// Lay out the contents of a menu or popover, behind a scroll bar while
+/// they are taller than the window. Contents that fit are laid out as if
+/// this were not here, and egui puts the sheet where it did.
+///
+/// The Tab key walks the controls of a popup; the one it lands on is
+/// scrolled into view.
+pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    // What the contents can take before they scroll: the window's height,
+    // less the sheet's own margins and outline and a little air above
+    // and below.
+    let style = ui.style();
+    let frame = 2.0_f32.mul_add(
+        style.visuals.window_stroke.width,
+        style.spacing.menu_margin.sum().y,
+    );
+    let room = 2.0_f32.mul_add(-POPUP_CLEARANCE, ui.ctx().content_rect().height() - frame);
+    // The sheet is as tall as it was last frame, and a scroll area takes
+    // no more than its `Ui` has: this is how far it may grow, and where
+    // it stops.
+    ui.set_max_height(room);
+    // The bar shows that there is more, with the pointer anywhere.
+    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
+    let mut area = egui::ScrollArea::vertical().min_scrolled_height(0.0);
+    // egui keeps the place a scroll area was left at. A popup that opens
+    // starts from its top.
+    if noted_last_frame(ui, "shown", ()).is_none() {
+        area = area.vertical_scroll_offset(0.0);
+    }
+    area.show(ui, |ui| {
+        let returned = add_contents(ui);
+        show_what_gained_the_keyboard(ui);
+        returned
+    })
+    .inner
+}
+
+/// Note `now` about what `ui` lays out, under `key`, and return what was
+/// noted on the frame before this one: `None` when it was not laid out
+/// then, as on the frame a popup opens.
+fn noted_last_frame<T>(ui: &egui::Ui, key: &str, now: T) -> Option<T>
+where
+    T: Copy + Send + Sync + 'static,
+{
+    let id = ui.id().with(key);
+    let frame = ui.ctx().cumulative_frame_nr();
+    let last: Option<(u64, T)> = ui.data_mut(|data| {
+        let last = data.get_temp(id);
+        data.insert_temp(id, (frame, now));
+        last
+    });
+    last.filter(|(noted, _)| noted + 1 >= frame)
+        .map(|(_, was)| was)
+}
+
+/// Scroll the row `ui` laid out back into view on the frame the window's
+/// scale changes under it. A zoom changes how much of a popup the window
+/// shows, and the row that was pressed should still be there to press
+/// again.
+pub(super) fn stays_in_view_through_a_rescale(ui: &egui::Ui) {
+    let now = ui.pixels_per_point().to_bits();
+    // Only while the popup stays open: one opened again at another zoom
+    // starts from its top, and must not jump to this row.
+    if noted_last_frame(ui, "scale", now).is_some_and(|was| was != now) {
+        ui.scroll_to_rect(ui.min_rect(), None);
+    }
+}
+
+/// Scroll to the control of `ui`'s sheet the keyboard moved to this frame.
+fn show_what_gained_the_keyboard(ui: &egui::Ui) {
+    let focused = ui.memory(egui::Memory::focused);
+    let Some(control) = focused.and_then(|id| ui.ctx().read_response(id)) else {
+        return;
+    };
+    if control.layer_id == ui.layer_id() && control.gained_focus() {
+        control.scroll_to_me(None);
+    }
+}
+
 /// Whether the popup anchored to the widget `ui` lays out next is open, so
 /// that widget can be drawn lit.
 pub(super) fn next_widget_popup_is_open(ui: &egui::Ui) -> bool {

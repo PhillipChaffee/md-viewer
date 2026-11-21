@@ -239,7 +239,9 @@ fn the_edit_action_does_nothing_without_a_document() {
 fn a_text_size_action_sets_the_size_class_the_fonts_follow() {
     let mut harness = Harness::with_three_docs();
     harness.idle();
-    let body = |harness: &Harness| harness.ctx.style().text_styles[&egui::TextStyle::Body].size;
+    let body = |harness: &Harness| {
+        harness.app.document_look.style.text_styles[&egui::TextStyle::Body].size
+    };
     let normal = body(&harness);
 
     harness.apply(AppAction::SetTextSize(TextSizeClass::Huge));
