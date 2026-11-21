@@ -252,16 +252,6 @@ impl Window<'_> {
         colors.parse::<u32>().is_ok_and(|colors| colors > 1)
     }
 
-    /// What is painted in `area` of the window, given as the left and top
-    /// of its corner and then its width and height: a text that is the
-    /// same for two pictures only when every pixel of them is.
-    #[track_caller]
-    pub(crate) fn picture(&self, scratch: &Path, area: (u32, u32, u32, u32)) -> String {
-        let (x, y, width, height) = area;
-        let area = format!("{width}x{height}+{x}+{y}");
-        self.read_shot(scratch, &["-crop", &area, "-format", "%#"])
-    }
-
     /// Wait until the pixel at `x`, `y` is `color`. Returns whether it
     /// ever was.
     pub(crate) fn pixel_becomes(&self, scratch: &Path, x: u32, y: u32, color: &str) -> bool {
