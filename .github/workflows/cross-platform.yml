@@ -10,8 +10,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The same question ci.yml's `changes` job asks, for this workflow: a pull
+  # request that touches only documentation skips the check. A push to main
+  # runs it, and so does a failure here.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.paths.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 2  # the merge commit and its parents
+      - name: Changed paths
+        id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            scripts/ci-changes.sh HEAD^1 HEAD >>"$GITHUB_OUTPUT"
+          else
+            scripts/ci-changes.sh >>"$GITHUB_OUTPUT"
+          fi
+
   check:
     name: cargo check (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:

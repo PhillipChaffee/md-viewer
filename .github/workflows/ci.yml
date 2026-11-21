@@ -12,7 +12,36 @@ on:
   pull_request:
 
 jobs:
+  # Which jobs this change needs. On a pull request it reads the paths the
+  # merge commit changes against its first parent, the base branch; on a
+  # push to main there is no such list and everything runs. A pull request
+  # that touches only documentation skips the Rust jobs: they report as
+  # skipped, which a required check accepts. scripts/ci-changes.sh holds the
+  # path rules. The jobs below run unless the answer is the word `false`,
+  # so a failure here runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5  # one shallow checkout and one git diff
+    outputs:
+      code: ${{ steps.paths.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 2  # the merge commit and its parents
+      - name: Changed paths
+        id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            scripts/ci-changes.sh HEAD^1 HEAD >>"$GITHUB_OUTPUT"
+          else
+            scripts/ci-changes.sh >>"$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40  # a cold eframe build plus the instrumented test build; GitHub's default is 360
     concurrency:
@@ -83,6 +112,8 @@ jobs:
   # harness that does not verify, on a cover check that is not reached, and
   # on a harness that was declared but did not run.
   proofs:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60  # a cold build of the dependency graph under Kani, then the harnesses
     concurrency:
@@ -110,6 +141,8 @@ jobs:
         run: ./run-proofs.sh
 
   doc-comments:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20  # bounds a hung network gate; GitHub's default is 360
     concurrency:
@@ -245,6 +278,8 @@ jobs:
         run: actionlint ./.github/workflows/*.yml
 
   renderer:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
