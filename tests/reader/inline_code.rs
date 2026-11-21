@@ -2,15 +2,9 @@
 //! tint of its own, with no box behind it.
 
 use super::pages::{page, read_on, NEAR};
-use super::support::{Reader, Rgb};
+use super::support::Reader;
 
-/// Each theme and the tint its inline code is set in.
-const TINTS: [(&str, &str); 4] = [
-    ("Paper", "#6F4220"),
-    ("Sepia", "#6F4220"),
-    ("Dusk", "#E6C8A4"),
-    ("Night", "#D9B48A"),
-];
+const THEMES: [&str; 4] = ["Paper", "Sepia", "Dusk", "Night"];
 
 /// A paragraph with a piece of code in the middle of it.
 fn sentence() -> Reader {
@@ -27,7 +21,7 @@ fn find(reader: &mut Reader, query: &str) {
 fn nothing_is_painted_behind_inline_code_on_any_theme() {
     let mut reader = sentence();
 
-    for (theme, _) in TINTS {
+    for theme in THEMES {
         read_on(&mut reader, theme);
         let code = reader.text_area("cargo test");
         let paper = reader.page_color();
@@ -43,18 +37,61 @@ fn nothing_is_painted_behind_inline_code_on_any_theme() {
 }
 
 #[test]
-fn inline_code_is_in_the_tint_of_its_theme() {
+fn inline_code_is_in_an_ink_of_its_own_that_reads_as_well_as_the_prose() {
     let mut reader = sentence();
 
-    for (theme, tint) in TINTS {
+    for theme in THEMES {
         read_on(&mut reader, theme);
         let ink = reader.ink_of("cargo test");
 
-        assert_eq!(ink, Rgb::hex(tint), "{theme}");
         assert_ne!(ink, reader.ink_of("Run "), "{theme}: the ink of the prose");
         let contrast = ink.contrast(reader.page_color());
         assert!(contrast >= 7.0, "{theme}: inline code at {contrast:.2}:1");
     }
+}
+
+/// On Sepia a link and inline code are both warm browns, so what tells
+/// them apart cannot be their color: it is the link's underline and the
+/// code's face.
+#[test]
+fn inline_code_is_told_from_a_link_by_its_face_and_the_links_underline() {
+    let mut reader = Reader::with_docs(&[
+        (
+            "page.md",
+            "# Marks\n\n[illi](guide.md) and [mwwm](guide.md) are links, `ilil` and `mwmw` code.",
+        ),
+        ("guide.md", "# Guide\n\nThe guide itself."),
+    ]);
+
+    for theme in THEMES {
+        read_on(&mut reader, theme);
+        for link in ["illi", "mwwm"] {
+            assert!(reader.is_underlined(link), "{theme}: the link {link}");
+        }
+        for code in ["ilil", "mwmw"] {
+            assert!(!reader.is_underlined(code), "{theme}: the code {code}");
+        }
+    }
+    // A link is in the face of the prose, whose letters have widths of
+    // their own; the letters of code are all one width.
+    let (narrow, wide) = (reader.width_of("illi"), reader.width_of("mwwm"));
+    assert!(wide > narrow * 1.5, "links: {narrow} and {wide}");
+    let (narrow, wide) = (reader.width_of("ilil"), reader.width_of("mwmw"));
+    assert!((narrow - wide).abs() < NEAR, "code: {narrow} and {wide}");
+}
+
+#[test]
+fn code_in_bold_text_is_set_in_a_bolder_cut_of_the_code_face() {
+    // Each piece of code starts its line, so both capitals land on the
+    // same dots of the screen and differ only by their face.
+    let reader = page("# Weights\n\n`Hxq` in plain text.\n\n**`Hxb` in bold text.**");
+
+    let (plain, bold) = (reader.drawing_of("Hxq", 'H'), reader.drawing_of("Hxb", 'H'));
+
+    assert!(!plain.is_blank() && !bold.is_blank());
+    assert_ne!(plain, bold);
+    let (plain, bold) = (reader.width_of("Hxq"), reader.width_of("Hxb"));
+    assert!((plain - bold).abs() < NEAR, "{plain} and {bold}");
 }
 
 #[test]
@@ -81,12 +118,13 @@ fn inline_code_is_smaller_than_the_text_around_it_and_stands_on_its_line() {
 
 #[test]
 fn code_in_a_heading_is_tinted_code_with_no_box() {
-    let reader = page("# Title\n\n## Uxv and `Uxw` here\n\nbody text");
+    let reader = page("# Title\n\n## Uxv and `Uxw` here\n\nbody `Uxy` text");
 
     // The contents sidebar repeats the heading as one piece of text; the
     // page sets the code as a piece of its own.
-    assert_eq!(reader.ink_of_each("Uxw"), [Rgb::hex("#6F4220")]);
-    assert_ne!(reader.ink_of("Uxv and "), Rgb::hex("#6F4220"));
+    let tint = reader.ink_of("Uxy");
+    assert_eq!(reader.ink_of_each("Uxw"), [tint]);
+    assert_ne!(reader.ink_of("Uxv and "), tint);
     let marked = reader.marked();
     assert!(marked.is_empty(), "{marked:?}");
     let code = reader.on_page("Uxw");

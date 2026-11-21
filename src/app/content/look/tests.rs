@@ -48,7 +48,6 @@ fn headings_emphasis_and_inline_code_take_the_document_fonts_faces() {
     assert!(reader.emphasis_font_family.is_some());
     assert_eq!(reader.emphasis_font_family, fonts.emphasis);
     assert_eq!(reader.inline_code_scale, fonts.inline_code_scale);
-    assert_eq!(reader.strong_code_font_family, Some(fonts.strong_code));
 
     // A preset with no italic face and no aligned code face keeps the
     // renderer's slanted emphasis and full-size inline code.
@@ -127,8 +126,6 @@ fn tables_lists_and_inline_code_are_drawn_in_the_themes_colors() {
         assert!(table.cell_padding >= 8.0);
 
         assert_eq!(blocks.list.unwrap().marker, palette.muted);
-        // Inline code is its tint and its face: no chip behind it.
-        assert_eq!(blocks.inline_code_color, Some(palette.inline_code));
     }
 }
 

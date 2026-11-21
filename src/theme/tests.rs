@@ -70,7 +70,7 @@ fn body_text_and_headings_reach_seven_to_one_on_every_surface_of_every_theme() {
 }
 
 #[test]
-fn inline_code_is_a_warm_tint_that_reads_as_well_as_body_text() {
+fn inline_code_is_a_tint_that_reads_as_well_as_body_text() {
     for theme in ThemeId::ALL {
         let palette = theme.palette();
         let on_page = contrast(palette.inline_code, palette.page);
@@ -78,14 +78,10 @@ fn inline_code_is_a_warm_tint_that_reads_as_well_as_body_text() {
         // Found or selected code has to stay text, as body text does.
         let marked = contrast(palette.inline_code, palette.selection);
         assert!(marked >= 4.5, "{theme:?}: marked code is {marked:.2}:1");
-        // The tint is all the color code has: it is neither the text's
-        // ink nor a link's, and it leans to red, away from the links' blue.
+        // The tint is the code's own. It need not be far from a link's
+        // color, and on Sepia it is not: a link is told by its underline
+        // and code by its face, which `tests/reader/inline_code.rs` reads.
         assert_ne!(palette.inline_code, palette.text, "{theme:?}");
-        assert_ne!(palette.inline_code, palette.link, "{theme:?}");
-        assert!(
-            palette.inline_code.r() > palette.inline_code.b(),
-            "{theme:?}"
-        );
     }
 }
 

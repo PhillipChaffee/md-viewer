@@ -195,7 +195,7 @@ fn bullets_and_numbers_hang_in_the_muted_color() {
 }
 
 #[test]
-fn inline_code_is_in_the_themes_code_tint_with_no_chip_behind_it() {
+fn inline_code_is_in_the_themes_code_tint_and_the_code_face() {
     let mut harness = reader("Some `inline code` in a line.\n");
     let output = harness.idle();
     let palette = ThemeId::Sepia.palette();
@@ -207,14 +207,6 @@ fn inline_code_is_in_the_themes_code_tint_with_no_chip_behind_it() {
     assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
     let prose = painted_text_starting(&output, "Some ");
     assert!(format.font_id.size < prose.galley.job.sections[0].format.font_id.size);
-    let chips = painted_shapes(&output)
-        .into_iter()
-        .filter(|shape| match shape {
-            Shape::Rect(rect) => rect.fill == palette.raised && rect.rect.top() > BAR_HEIGHT,
-            _ => false,
-        })
-        .count();
-    assert_eq!(chips, 0);
 }
 
 /// Four boxes in a row: wider than the default column, narrower than the
