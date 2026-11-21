@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Says which CI jobs a change needs, from the paths it touches. Prints one
 # line for $GITHUB_OUTPUT:
-#   code=true|false    the Rust jobs: test, proofs, doc-comments, renderer
+#   code=true|false    the Rust jobs: lint, test, proofs, doc-comments, renderer
 #                      and the cross-platform cargo check
 # hygiene and version-sync are not on the list: they always run.
 #
