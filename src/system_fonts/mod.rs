@@ -321,10 +321,13 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
     }
 }
 
-/// Apply the shared base text size class to the context styles: the sizes
-/// of its headings and its code. The body size is not among them: what the
-/// context sets in it is the window's own text, hover texts included, and
-/// that keeps the size of the chrome whatever the document is read at.
+/// Set the context's heading and code styles from the text size class.
+/// The document reads neither: `DocumentLook` gives it its own. What still
+/// reads them is egui's title of the Colors and the Fonts window, set in
+/// the heading style at twice the text size. The body size is not among
+/// them: what the context sets in it is the window's own text, hover
+/// texts included, and that keeps the size of the chrome whatever the
+/// document is read at.
 fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     let base = size.px();
     ctx.style_mut(|style| {

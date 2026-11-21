@@ -75,9 +75,13 @@ fn configure_context(ctx: &egui::Context) {
         scroll.active_handle_opacity = 1.0;
         style.spacing.scroll.floating_width = style.spacing.scroll.bar_width;
         style.url_in_tooltip = true;
-        // Heading and code sizes belong to the text-size class, which
-        // `setup_fonts` has already applied; setting them here would undo a
-        // restored class until the user next changed it.
+        // The context's styles are written in two places. Its heading and
+        // code sizes come from the text-size class, which `setup_fonts` has
+        // already applied: setting them here would undo a restored class
+        // until the user next changed it. Only the titles of the Colors and
+        // Fonts windows read them, since the document has its own (see
+        // `DocumentLook`). The small style is set here and the document
+        // inherits it, for its footnote marks.
         style
             .text_styles
             .insert(TextStyle::Small, FontId::proportional(13.0));
