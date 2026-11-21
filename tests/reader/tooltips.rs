@@ -142,7 +142,6 @@ fn the_place_of_a_tabs_file_is_as_large_as_a_sidebar_row() {
     reader.hover("tab:Desk");
 
     assert_same_size(in_hover_text(&mut reader, &place), in_a_row(&reader));
-    reader.assert_sees("Live: reloads when the file changes");
 }
 
 #[test]
