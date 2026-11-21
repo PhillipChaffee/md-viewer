@@ -95,8 +95,10 @@ impl MarkdownApp {
     fn submenu(&self, ui: &mut egui::Ui, label: &str, rows: impl FnOnce(&mut egui::Ui)) {
         let row = MenuRow::new(label).submenu().show(ui, self.theme.palette());
         SubMenu::new().show(ui, &row, |ui| {
-            ui.set_width(SUBMENU_WIDTH);
-            rows(ui);
+            chrome::scrolled(ui, |ui| {
+                ui.set_width(SUBMENU_WIDTH);
+                rows(ui);
+            });
         });
     }
 

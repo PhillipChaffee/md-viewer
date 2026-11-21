@@ -2,7 +2,10 @@
 //! be reached, with the wheel and with the Tab key. In a window that has
 //! room they do not scroll.
 
-use super::support::Reader;
+use super::support::{Reader, Rgb};
+
+/// The paper of the theme a first run starts in.
+const SEPIA: &str = "#F8F1E3";
 
 /// As far as the wheel has to turn to reach the end of any menu.
 const TO_THE_END: f32 = 4000.0;
@@ -182,10 +185,24 @@ struct Popup {
     done: fn(&Reader) -> bool,
 }
 
-/// The popups a window can be too short for. The smallest window the app
+/// The popups a window can be too short for, beside the More menu. The smallest window the app
 /// asks for is 300 px tall; a tab's menu takes a shorter one still, which
 /// a window manager is free to give.
-const POPUPS: [Popup; 3] = [
+const POPUPS: [Popup; 4] = [
+    Popup {
+        name: "a submenu of the More menu",
+        window: 300.0,
+        open: |reader| {
+            // Wide enough for a submenu to stand beside its menu, clear
+            // of the pointer that opens it.
+            reader.resize_window(2400.0, 300.0);
+            reader.click("More");
+            tab_to(reader, "Theme");
+            reader.click("Theme");
+        },
+        last: "Night",
+        done: |reader| reader.count("Night") == 0 && reader.page_color() != Rgb::hex(SEPIA),
+    },
     Popup {
         name: "the appearance popover",
         window: 300.0,
