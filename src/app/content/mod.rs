@@ -128,6 +128,8 @@ impl MarkdownApp {
             // The find bar's matches are of the text before the edit. They
             // are found again next frame and counted in the one after.
             self.search.invalidate();
+            // The edit may have changed the first heading, which names the tab.
+            self.tab_names_changed();
             ui.ctx().request_repaint();
         }
         self.document_pane_width = pane_width;

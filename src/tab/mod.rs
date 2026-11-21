@@ -96,6 +96,14 @@ pub(crate) enum Route {
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
+/// Work out what the tab row calls each of `tabs`. Called when a tab
+/// opens, closes or is renamed, never per frame.
+pub(crate) fn name_tabs(tabs: &mut [Tab]) {
+    for tab in tabs {
+        tab.shown = tab.name().to_owned();
+    }
+}
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
     pub(crate) id: egui::Id,
@@ -105,6 +113,9 @@ pub(crate) struct Tab {
     pub(crate) content: String,
     pub(crate) cache: CommonMarkCache,
     pub(crate) document_title: Option<String>,
+    /// What the tab row calls this tab. `name_tabs` works it out from
+    /// every open tab when one opens, closes or is renamed.
+    shown: String,
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
@@ -171,6 +182,7 @@ impl Tab {
             cache: CommonMarkCache::default(),
             pictures_left: BTreeSet::new(),
             document_title: None,
+            shown: String::new(),
             kicker: String::new(),
             outline: Outline::default(),
             scroll_offset: 0.0,
@@ -190,6 +202,7 @@ impl Tab {
             pre_edit_view_content_height: 0.0,
         };
         tab.index_content(false);
+        tab.shown = tab.name().to_owned();
         Ok(tab)
     }
 
@@ -230,6 +243,11 @@ impl Tab {
     /// name. Both are worked out when the text is loaded or edited.
     pub(crate) fn name(&self) -> &str {
         self.document_title.as_deref().unwrap_or(&self.title)
+    }
+
+    /// What the tab row calls this tab, as `name_tabs` last worked it out.
+    pub(crate) fn shown_name(&self) -> &str {
+        &self.shown
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {

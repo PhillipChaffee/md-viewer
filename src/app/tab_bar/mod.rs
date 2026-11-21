@@ -110,7 +110,7 @@ impl MarkdownApp {
                 for (index, tab) in self.tabs.iter().enumerate() {
                     let label = TabLabel {
                         index,
-                        title: tab.name(),
+                        title: tab.shown_name(),
                         path: &tab.path,
                         is_active: self.front() == Some(index),
                         live,

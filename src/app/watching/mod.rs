@@ -243,6 +243,10 @@ impl MarkdownApp {
             }
         }
 
+        // A reloaded document may have another first heading, which names
+        // its tab.
+        self.tab_names_changed();
+
         // Refresh only affected parents instead of rebuilding the entire tree.
         for directory in refresh_directories {
             log::debug!("Refreshing explorer directory: {}", directory.display());
