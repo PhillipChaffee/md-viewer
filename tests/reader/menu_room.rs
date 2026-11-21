@@ -165,12 +165,12 @@ fn a_menu_that_scrolls_stands_clear_of_the_top_and_the_bottom_of_the_window() {
     let mut reader = zoomed_in(2);
     reader.click("More");
     let first = reader.area_of("New Tab");
-    assert!(first.top > 8.0 && first.top < 40.0, "{first:?}");
+    assert!(first.top > 16.0 && first.top < 40.0, "{first:?}");
 
     wheel_down_on(&mut reader, "Open Folder\u{2026}", TO_THE_END);
 
     let quit = reader.area_of("Quit");
-    assert!(quit.bottom() < 800.0 - 8.0, "{quit:?}");
+    assert!(quit.bottom() < 800.0 - 12.0, "{quit:?}");
     assert!(quit.bottom() > 800.0 - 40.0, "{quit:?}");
 }
 

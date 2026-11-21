@@ -94,13 +94,6 @@ pub(super) const POPUP_SENSE: egui::Sense = egui::Sense::CLICK;
 /// bottom edges.
 const POPUP_CLEARANCE: f32 = 4.0;
 
-/// The height the contents of a popup can take before they have to
-/// scroll: the window's, less the sheet's own margins and outline
-/// (`frame`) and a little air above and below.
-fn popup_room(window: f32, frame: f32) -> f32 {
-    2.0_f32.mul_add(-POPUP_CLEARANCE, window - frame)
-}
-
 /// Show `popup` with `contents` in it. Every menu and popover of the app
 /// is shown through here, so that one too tall for the window scrolls.
 pub(super) fn show_popup<R>(
@@ -117,20 +110,22 @@ pub(super) fn show_popup<R>(
 /// The Tab key walks the controls of a popup; the one it lands on is
 /// scrolled into view.
 pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    // What the contents can take before they scroll: the window's height,
+    // less the sheet's own margins and outline and a little air above
+    // and below.
     let style = ui.style();
     let frame = 2.0_f32.mul_add(
         style.visuals.window_stroke.width,
         style.spacing.menu_margin.sum().y,
     );
-    let room = popup_room(ui.ctx().content_rect().height(), frame);
+    let room = 2.0_f32.mul_add(-POPUP_CLEARANCE, ui.ctx().content_rect().height() - frame);
     // The sheet is as tall as it was last frame, and a scroll area takes
-    // no more than its `Ui` has: say how far it may grow.
+    // no more than its `Ui` has: this is how far it may grow, and where
+    // it stops.
     ui.set_max_height(room);
     // The bar shows that there is more, with the pointer anywhere.
     ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
-    let mut area = egui::ScrollArea::vertical()
-        .max_height(room)
-        .min_scrolled_height(0.0);
+    let mut area = egui::ScrollArea::vertical().min_scrolled_height(0.0);
     // egui keeps the place a scroll area was left at. A popup that opens
     // starts from its top.
     if noted_last_frame(ui, "shown", ()).is_none() {
