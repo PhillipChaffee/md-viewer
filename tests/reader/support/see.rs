@@ -464,19 +464,6 @@ impl Reader {
             .collect()
     }
 
-    /// How tall `letter` is drawn, in screen pixels, in every painted text
-    /// that reads exactly `text` and holds the letter, in the order
-    /// painted: a row of the sidebar, then the hover text that repeats it.
-    /// Two texts set in one face draw a letter equally tall only at one
-    /// size.
-    pub(crate) fn letter_heights(&self, text: &str, letter: char) -> Vec<u16> {
-        let painted = self.painted().into_iter();
-        painted
-            .filter(|painted| painted.text == text)
-            .filter_map(|painted| painted.height_of(letter))
-            .collect()
-    }
-
     /// The pieces of text painted on a marker, as find paints its matches:
     /// each one's words and the marker's color, in the order painted.
     pub(crate) fn marked(&self) -> Vec<(String, Rgb)> {

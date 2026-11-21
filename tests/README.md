@@ -35,9 +35,9 @@ processes itself.
   It also reads what a frame painted: the ink and coverage of a picture
   (`picture_ink`, `picture_cover`), the lines and boxes in an area
   (`marks_in`), its dots and their colors (`dots_in`), where a painted
-  text ends (`end_of`), how tall a letter of a painted text is drawn
-  (`letter_heights`, for telling whether two texts are set at one size
-  without naming the size), and what the app asked of the desktop
+  text ends (`end_of`), the size a painted text is set at (`sizes_of`,
+  for telling whether two texts are set at one size without naming the
+  size), and what the app asked of the desktop
   (`opened_in_browser`, `clipboard`).
 - `e2e/support/` has `Home`, `Running`, `Screen` and `Window`.
 
