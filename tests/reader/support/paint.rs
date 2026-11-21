@@ -47,6 +47,24 @@ impl Rgb {
         let (a, b) = (self.luminance(), other.luminance());
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
+
+    /// Where the color is on the color wheel, in degrees: red is 0, yellow
+    /// 60, green 120 and blue 240. A gray is nowhere on it and is not a
+    /// number.
+    pub(crate) fn hue(self) -> f64 {
+        let Self(red, green, blue) = self;
+        let strongest = red.max(green).max(blue);
+        let spread = f64::from(strongest) - f64::from(red.min(green).min(blue));
+        let [r, g, b] = [red, green, blue].map(f64::from);
+        let sixths = if strongest == red {
+            ((g - b) / spread).rem_euclid(6.0)
+        } else if strongest == green {
+            (b - r) / spread + 2.0
+        } else {
+            (r - g) / spread + 4.0
+        };
+        sixths * 60.0
+    }
 }
 
 impl fmt::Debug for Rgb {
