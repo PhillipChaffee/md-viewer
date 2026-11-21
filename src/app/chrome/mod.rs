@@ -133,7 +133,7 @@ pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui
         .min_scrolled_height(0.0);
     // egui keeps the place a scroll area was left at. A popup that opens
     // starts from its top.
-    if !was_laid_out_last_frame(ui) {
+    if noted_last_frame(ui, "shown", ()).is_none() {
         area = area.vertical_scroll_offset(0.0);
     }
     area.show(ui, |ui| {
@@ -144,17 +144,35 @@ pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui
     .inner
 }
 
-/// Whether the popup `ui` lays out was laid out on the frame before this
-/// one too: it stayed open, and did not open just now.
-fn was_laid_out_last_frame(ui: &egui::Ui) -> bool {
-    let shown = ui.id().with("shown");
-    let now = ui.ctx().cumulative_frame_nr();
-    let last: Option<u64> = ui.data_mut(|data| {
-        let last = data.get_temp(shown);
-        data.insert_temp(shown, now);
+/// Note `now` about what `ui` lays out, under `key`, and return what was
+/// noted on the frame before this one: `None` when it was not laid out
+/// then, as on the frame a popup opens.
+fn noted_last_frame<T>(ui: &egui::Ui, key: &str, now: T) -> Option<T>
+where
+    T: Copy + Send + Sync + 'static,
+{
+    let id = ui.id().with(key);
+    let frame = ui.ctx().cumulative_frame_nr();
+    let last: Option<(u64, T)> = ui.data_mut(|data| {
+        let last = data.get_temp(id);
+        data.insert_temp(id, (frame, now));
         last
     });
-    last.is_some_and(|last| last + 1 >= now)
+    last.filter(|(noted, _)| noted + 1 >= frame)
+        .map(|(_, was)| was)
+}
+
+/// Scroll the row `ui` laid out back into view on the frame the window's
+/// scale changes under it. A zoom changes how much of a popup the window
+/// shows, and the row that was pressed should still be there to press
+/// again.
+pub(super) fn stays_in_view_through_a_rescale(ui: &egui::Ui) {
+    let now = ui.pixels_per_point().to_bits();
+    // Only while the popup stays open: one opened again at another zoom
+    // starts from its top, and must not jump to this row.
+    if noted_last_frame(ui, "scale", now).is_some_and(|was| was != now) {
+        ui.scroll_to_rect(ui.min_rect(), None);
+    }
 }
 
 /// Scroll to the control of `ui`'s sheet the keyboard moved to this frame.

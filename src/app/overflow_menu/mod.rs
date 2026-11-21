@@ -237,28 +237,7 @@ impl MarkdownApp {
                 *picked = Some(zoom_in);
             }
 
-            keep_in_view_through_a_zoom(ui);
+            chrome::stays_in_view_through_a_rescale(ui);
         });
-    }
-}
-
-/// Scroll the row `ui` laid out back into view on the frame the zoom
-/// changes under it. A zoom changes how much of the menu the window shows,
-/// and the row that was pressed should still be there to press again.
-fn keep_in_view_through_a_zoom(ui: &egui::Ui) {
-    let shown_at = ui.id().with("shown at");
-    let now = (
-        ui.ctx().cumulative_frame_nr(),
-        ui.pixels_per_point().to_bits(),
-    );
-    let last: Option<(u64, u32)> = ui.data_mut(|data| {
-        let last = data.get_temp(shown_at);
-        data.insert_temp(shown_at, now);
-        last
-    });
-    // The frame before this one: a menu opened again at another zoom
-    // starts from its top.
-    if last.is_some_and(|(frame, scale)| frame + 1 == now.0 && scale != now.1) {
-        ui.scroll_to_rect(ui.min_rect(), None);
     }
 }
