@@ -1,6 +1,10 @@
 use super::*;
 
+use eframe::egui::{Key, Modifiers};
+
 use crate::app::tests::Harness;
+use crate::app::ui_harness::sent;
+use crate::app_icon::AppIcon;
 use crate::tab::SaveOutcome;
 use crate::test_support::assert_close;
 
@@ -250,4 +254,41 @@ fn a_text_size_action_sets_the_size_class_the_fonts_follow() {
     harness.idle();
 
     assert!(body(&harness) > normal, "the next frame sets text larger");
+}
+
+/// Crossing between a light theme and a dark one asks the window for the
+/// other icon, once; a step between two light themes or two dark ones
+/// asks for nothing.
+#[test]
+fn the_window_icon_changes_when_the_theme_crosses_between_light_and_dark() {
+    let mut harness = Harness::with_three_docs();
+    let asks_for = |icon: AppIcon| egui::ViewportCommand::Icon(Some(icon.image()));
+    let (sepia, reversed) = (asks_for(AppIcon::Sepia), asks_for(AppIcon::Reversed));
+    let next_theme = |harness: &mut Harness| harness.press(Modifiers::CTRL, Key::D);
+    assert_eq!(harness.app.theme, ThemeId::Sepia);
+
+    let to_dusk = next_theme(&mut harness);
+    assert!(sent(&to_dusk, &reversed), "Sepia to Dusk");
+    assert!(!sent(&to_dusk, &sepia));
+    let to_night = next_theme(&mut harness);
+    assert!(!sent(&to_night, &reversed), "Dusk to Night");
+    assert!(!sent(&to_night, &sepia));
+    let to_paper = next_theme(&mut harness);
+    assert!(sent(&to_paper, &sepia), "Night to Paper");
+    assert!(!sent(&to_paper, &reversed));
+    let to_sepia = next_theme(&mut harness);
+    assert!(!sent(&to_sepia, &sepia), "Paper to Sepia");
+    assert!(!sent(&to_sepia, &reversed));
+
+    harness.apply(AppAction::SetTheme(ThemeId::Night));
+    let picked_night = harness.idle();
+    assert!(
+        sent(&picked_night, &reversed),
+        "Sepia to Night by its swatch"
+    );
+    let at_rest = harness.idle();
+    assert!(
+        !sent(&at_rest, &reversed),
+        "a frame without a change asks nothing"
+    );
 }

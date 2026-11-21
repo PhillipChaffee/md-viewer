@@ -24,6 +24,24 @@ Press `Ctrl+D` to step through them.
 | **Dusk** | **Night** |
 | ![Dusk theme](screenshots/reader/dusk.png) | ![Night theme](screenshots/reader/night.png) |
 
+### An icon that follows the theme
+
+<img src="assets/icons/sepia-512.png" width="96" alt="The icon of the light themes: a dark serif M on a warm paper tile"> <img src="assets/icons/reversed-512.png" width="96" alt="The icon of the dark themes: the same M in paper on a near-black tile">
+
+A serif M on a tile: dark on warm paper while Paper or Sepia is on, and
+reversed on near-black while Dusk or Night is. The app opens with the one
+that goes with the theme you used last, and a first run opens with the
+sepia one.
+
+| Where | What shows the icon |
+| --- | --- |
+| Mac | The Dock and the app switcher, while the app runs. It is chosen when the app starts: after a change between a light theme and a dark one, the Dock shows the other icon from the next launch. Finder shows a plain program icon for the binary itself; an icon there takes an `.app` bundle, which this repository does not build |
+| Linux, X11 | The window, in the desktop's window list and task switcher. It changes as soon as the theme crosses between light and dark |
+| Linux, Wayland | A Wayland window has no icon of its own. The desktop shows the launcher's, which `make install` puts in place and which is always the sepia one |
+
+The two pictures are original work for this project, drawn as
+`assets/icons/sepia.svg` and `assets/icons/reversed.svg`.
+
 ### A column as wide as you want
 
 Drag either edge of the text and the column follows, from 280 px up to the
@@ -188,6 +206,10 @@ The binary is `target/release/md-viewer`. To copy it to `~/.local/bin`:
 make install
 ```
 
+On Linux that also installs a launcher for the desktop's menu and, under
+`~/.local/share/icons`, the icon the launcher shows. `make uninstall`
+removes all of it.
+
 ### System packages
 
 **Debian and Ubuntu**
@@ -216,7 +238,7 @@ tells you whether Tk is installed).
 | --- | --- |
 | Linux, X11 | Built and run for every change here |
 | Linux, Wayland | Supported by the windowing backend; not exercised in this repository's checks |
-| macOS, Windows | CI type-checks the code for both; the reader redesign has not been run on either. That includes everything Mac-only: the window's buttons in the top row and `⌘Q` reaching the app have never been seen on a Mac |
+| macOS, Windows | CI type-checks the code for both; the reader redesign has not been run on either. That includes everything Mac-only: the window's buttons in the top row, `⌘Q` reaching the app and the icon in the Dock have never been seen on a Mac |
 
 ### Packaged builds
 
@@ -298,6 +320,7 @@ flowchart LR
 | --- | --- |
 | `src/app/` | The window: top bar, popover, tabs, sidebars, home page, document pane |
 | `src/theme/` | The four palettes. No other code names a color |
+| `src/app_icon/`, `assets/icons/` | The two forms of the app's icon, and which one goes with a theme |
 | `src/layout/` | The reading column and line spacing |
 | `src/tab/`, `src/links/`, `src/headers/`, `src/search/` | One document: loading, link resolution, outline, find |
 | `src/explorer/`, `src/watcher/` | The file tree and live reload |

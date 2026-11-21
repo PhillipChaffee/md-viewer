@@ -11,6 +11,7 @@ use clap::Parser;
 use eframe::egui;
 
 use crate::app::MarkdownApp;
+use crate::app_icon::AppIcon;
 use crate::layout::{
     CONTENT_OPTIMAL_WIDTH, EXPLORER_DEFAULT_WIDTH, OPTIMAL_WINDOW_HEIGHT, OUTLINE_DEFAULT_WIDTH,
     PANEL_SEPARATORS,
@@ -137,7 +138,11 @@ pub(crate) fn launch(
 /// title over it, so all it still shows is the window's buttons. Hiding
 /// that bar outright (`with_decorations(false)`) would take the buttons
 /// with it.
-pub(crate) fn native_options(platform: Platform) -> eframe::NativeOptions {
+///
+/// `icon` is what the Dock of a Mac shows while the app runs, and what an
+/// X11 window hands its desktop. eframe sets a Mac's once, from these
+/// settings, so it has to be chosen before the window exists.
+pub(crate) fn native_options(platform: Platform, icon: AppIcon) -> eframe::NativeOptions {
     // Calculate optimal window width assuming both sidebars are shown (the default)
     let optimal_width =
         CONTENT_OPTIMAL_WIDTH + EXPLORER_DEFAULT_WIDTH + OUTLINE_DEFAULT_WIDTH + PANEL_SEPARATORS;
@@ -147,6 +152,7 @@ pub(crate) fn native_options(platform: Platform) -> eframe::NativeOptions {
         .with_min_inner_size([400.0, 300.0])
         .with_title("Markdown Viewer")
         .with_app_id(APP_ID)
+        .with_icon(icon.image())
         .with_drag_and_drop(true);
     let viewport = match platform {
         Platform::Mac => viewport

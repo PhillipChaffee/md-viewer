@@ -163,3 +163,50 @@ fn saved_settings_are_read_back_with_out_of_range_numbers_pulled_in() {
     assert_close(saved.explorer_width(), SIDEBAR_MIN_WIDTH);
     assert_close(saved.outline_width(), 300.0);
 }
+
+/// The text of eframe's settings file after a session saved as `session`,
+/// beside what egui keeps there for itself.
+fn settings_holding(session: &str) -> String {
+    let stored = HashMap::from([
+        (APP_KEY.to_owned(), session.to_owned()),
+        ("egui".to_owned(), "()".to_owned()),
+    ]);
+    ron::to_string(&stored).unwrap()
+}
+
+#[test]
+fn the_saved_theme_is_read_from_the_settings_file_before_the_window_exists() {
+    for theme in ThemeId::ALL {
+        let state = PersistedState {
+            theme: Some(theme),
+            ..PersistedState::default()
+        };
+        let mut storage = MemoryStorage(HashMap::new());
+        eframe::set_value(&mut storage, APP_KEY, &state);
+        let settings = settings_holding(&storage.0[APP_KEY]);
+
+        assert_eq!(theme_saved_in(&settings), theme);
+    }
+}
+
+#[test]
+fn a_session_from_before_the_themes_gives_the_theme_the_app_restores_it_as() {
+    let dark = settings_holding("(dark_mode:Some(true))");
+    let light = settings_holding("(dark_mode:Some(false))");
+
+    assert_eq!(theme_saved_in(&dark), ThemeId::Dusk);
+    assert_eq!(theme_saved_in(&light), ThemeId::Paper);
+}
+
+#[test]
+fn settings_without_a_readable_session_give_the_default_theme() {
+    let no_session = ron::to_string(&HashMap::from([("egui", "()")])).unwrap();
+
+    assert_eq!(theme_saved_in(""), ThemeId::default());
+    assert_eq!(theme_saved_in("not a settings file"), ThemeId::default());
+    assert_eq!(theme_saved_in(&no_session), ThemeId::default());
+    assert_eq!(
+        theme_saved_in(&settings_holding("not a session")),
+        ThemeId::default()
+    );
+}

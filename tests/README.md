@@ -13,7 +13,7 @@ internal types and move with the code they test.
 | Folder | What runs | What it can observe |
 | --- | --- | --- |
 | `reader/` | The whole app, in the test process, without a window | Accessible labels, roles and states; painted text and colors; the window title; files on disk; what a restart remembers |
-| `e2e/` | The built `md-viewer` binary | Exit codes and output; a real window on a private X display: its title, a screenshot's pixels, key presses, the saved session |
+| `e2e/` | The built `md-viewer` binary | Exit codes and output; a real window on a private X display: its title, its icon, a screenshot's pixels, key presses, the saved session |
 | `fixtures/` | Nothing | Small documents the tests open |
 
 `reader/` reaches the app through one function, `md_viewer::app(args,
@@ -43,7 +43,7 @@ processes itself.
   for telling whether two texts are set at one size without naming the
   size), and what the app asked of the desktop
   (`opened_in_browser`, `clipboard`).
-- `e2e/support/` has `Home`, `Running`, `Screen` and `Window`.
+- `e2e/support/` has `Home`, `Running`, `Screen`, `Window` and `Icon`.
 
 If the way the app is built or run changes, the driver changes and no test
 does. If a test needs something the driver cannot do, add a method to the
@@ -62,10 +62,10 @@ cargo test --test e2e
 `cargo test` runs both, with the unit tests.
 
 The window tests in `e2e/` need `Xvfb`, `xdotool`, ImageMagick (`import`
-and `convert`) and `script`. On Debian and Ubuntu:
+and `convert`), `xprop` and `script`. On Debian and Ubuntu:
 
 ```bash
-sudo apt-get install xvfb xdotool imagemagick
+sudo apt-get install xvfb xdotool imagemagick x11-utils
 ```
 
 Without those tools the window tests fail and say what is missing. They do

@@ -9,6 +9,7 @@ use std::io;
 
 use clap::Parser;
 
+use crate::app_icon::AppIcon;
 use crate::cli::{
     app_creator, dead_wayland_variables, launch, launched_from_terminal, native_options,
     spawn_detached, Args, APP_ID,
@@ -16,6 +17,7 @@ use crate::cli::{
 use crate::platform::Platform;
 
 mod app;
+mod app_icon;
 mod cli;
 mod diagram;
 mod dialogs;
@@ -55,7 +57,12 @@ pub fn run() -> eframe::Result<()> {
         for name in dead_wayland_variables(&std::env::var_os) {
             std::env::remove_var(name);
         }
-        eframe::run_native(APP_ID, native_options(Platform::HOST), app_creator(args))
+        let icon = AppIcon::at_launch(eframe::storage_dir(APP_ID).as_deref());
+        eframe::run_native(
+            APP_ID,
+            native_options(Platform::HOST, icon),
+            app_creator(args),
+        )
     })
 }
 

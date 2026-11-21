@@ -8,8 +8,11 @@ use std::process::{Child, Command, Stdio};
 use super::{wait_for, Home};
 
 /// What the real-window tests run: a virtual display, a way to press keys
-/// on it, a way to photograph it, and a pseudo-terminal.
-const TOOLS: [&str; 6] = ["Xvfb", "xdotool", "import", "convert", "script", "timeout"];
+/// on it, a way to photograph it, a way to read what a window tells its
+/// desktop, and a pseudo-terminal.
+const TOOLS: [&str; 7] = [
+    "Xvfb", "xdotool", "import", "convert", "xprop", "script", "timeout",
+];
 
 /// Set to run the suite on a machine without `TOOLS`.
 const SKIP: &str = "MD_VIEWER_SKIP_WINDOW_TESTS";
@@ -62,7 +65,7 @@ impl Screen {
         if !missing.is_empty() {
             let need = format!(
                 "the real-window tests need {missing:?} on PATH \
-                 (Debian and Ubuntu: apt-get install xvfb xdotool imagemagick)"
+                 (Debian and Ubuntu: apt-get install xvfb xdotool imagemagick x11-utils)"
             );
             assert!(
                 std::env::var_os(SKIP).is_some(),
@@ -153,6 +156,14 @@ impl Drop for Screen {
     }
 }
 
+/// The icon a window hands its desktop, for the window list and the task
+/// switcher: a square picture of a tile, told apart by the tile.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Icon {
+    LightTile,
+    DarkTile,
+}
+
 /// One window on a [`Screen`].
 pub(crate) struct Window<'screen> {
     screen: &'screen Screen,
@@ -167,6 +178,37 @@ impl Window<'_> {
     /// The process that owns the window.
     pub(crate) fn pid(&self) -> String {
         self.screen.xdotool(&["getwindowpid", &self.id])
+    }
+
+    /// The icon the window has handed the display, or `None` while it has
+    /// handed over none that is a square picture.
+    ///
+    /// The display holds it as the picture's width and height and then
+    /// its pixels, row by row, each as `0xAARRGGBB`. The tile is read a
+    /// fifth of the way down the middle, above the letter on it.
+    pub(crate) fn icon(&self) -> Option<Icon> {
+        let mut xprop = self.screen.tool("xprop");
+        // Asked for as numbers: left to itself `xprop` draws an icon.
+        let as_hex = ["-notype", "-f", "_NET_WM_ICON", "32x", "_NET_WM_ICON"];
+        xprop.args(["-id", &self.id]).args(as_hex);
+        let output = xprop.output().unwrap();
+        let printed = String::from_utf8_lossy(&output.stdout);
+        let (_, numbers) = printed.split_once('=')?;
+        let mut numbers = numbers
+            .split(',')
+            .map(|number| u32::from_str_radix(number.trim().trim_start_matches("0x"), 16).ok());
+        let (width, height) = (numbers.next()??, numbers.next()??);
+        if width == 0 || width != height {
+            return None;
+        }
+        let on_the_tile = usize::try_from(height / 5 * width + width / 2).ok()?;
+        let [_, red, green, blue] = numbers.nth(on_the_tile)??.to_be_bytes();
+        let light = u32::from(red) + u32::from(green) + u32::from(blue) > 3 * 128;
+        Some(if light {
+            Icon::LightTile
+        } else {
+            Icon::DarkTile
+        })
     }
 
     /// Give the window the keyboard, hold Ctrl, press `key`, and let go of

@@ -1,5 +1,6 @@
 //! Session state persisted between runs.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use eframe::egui::Color32;
@@ -142,6 +143,22 @@ impl PersistedState {
     pub(crate) fn outline_width(&self) -> f32 {
         restored_sidebar_width(self.outline_width, OUTLINE_DEFAULT_WIDTH)
     }
+}
+
+/// The theme of the session saved in `settings`: the text of the file
+/// eframe keeps the app's storage in, which maps each key to its value as
+/// RON text. Text that holds no session, or none that can be read, gives
+/// the default theme, as a first launch has.
+///
+/// eframe hands the app its storage once the window exists. This reads
+/// the same text earlier, for the one thing the window is built with.
+pub(crate) fn theme_saved_in(settings: &str) -> ThemeId {
+    ron::from_str::<HashMap<String, String>>(settings)
+        .ok()
+        .and_then(|mut stored| stored.remove(APP_KEY))
+        .and_then(|session| ron::from_str::<PersistedState>(&session).ok())
+        .unwrap_or_default()
+        .theme()
 }
 
 /// The document zoom a saved session comes back at.
