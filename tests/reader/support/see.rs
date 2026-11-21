@@ -212,6 +212,25 @@ impl Reader {
         spot
     }
 
+    /// What the tab `label` reads as on screen, from left to right: its
+    /// name as the row draws it, with an ellipsis where it is cut short.
+    #[track_caller]
+    pub(crate) fn tab_reads(&self, label: &str) -> String {
+        let area = self.the(label).area;
+        let scale = self.scale();
+        let mut drawn: Vec<(f32, String)> = Vec::new();
+        for painted in self.painted() {
+            let at = (painted.first_line.to_vec2() * scale).to_pos2();
+            if (area.left..=area.right()).contains(&at.x)
+                && (area.top..=area.bottom()).contains(&at.y)
+            {
+                drawn.push((at.x, painted.drawn()));
+            }
+        }
+        drawn.sort_by(|left, right| left.0.total_cmp(&right.0));
+        drawn.into_iter().map(|(_, words)| words).collect()
+    }
+
     /// Where the last frame painted pictures: images, formulas and
     /// diagrams. Top to bottom.
     pub(crate) fn pictures(&self) -> Vec<Area> {

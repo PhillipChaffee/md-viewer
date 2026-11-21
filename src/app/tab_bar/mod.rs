@@ -4,6 +4,7 @@
 //! the last of them.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use eframe::egui::{self, Rangef};
 
@@ -12,6 +13,7 @@ use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT};
 use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
+use crate::tab::names::ShownName;
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -31,6 +33,10 @@ const NAME_WIDTH: Rangef = Rangef {
     min: 26.0,
     max: 162.0,
 };
+/// The least of a tab's name that stays where its folder follows it. The
+/// folder takes the rest at most, so a long folder cannot push the name
+/// out, and the name is what gives way to a short one.
+const NAME_KEPT: f32 = 44.0;
 /// Diameter of the dot that stands for live reload in a tab's hover text.
 const LIVE_DOT: f32 = 6.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
@@ -49,7 +55,7 @@ pub(crate) struct TabPicks {
 /// One tab as the row draws it.
 struct TabLabel<'a> {
     index: usize,
-    title: &'a str,
+    title: &'a ShownName,
     path: &'a Path,
     is_active: bool,
     /// Whether the document is reloaded when its file changes.
@@ -190,6 +196,32 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
     }
 }
 
+/// `text` set on one line in the tabs' font, cut short with an ellipsis
+/// where it is wider than `width`.
+fn cut_short(ui: &egui::Ui, text: &str, width: f32) -> Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        text.to_owned(),
+        chrome::label_font(),
+        egui::Color32::PLACEHOLDER,
+    );
+    job.wrap = egui::text::TextWrapping::truncate_at_width(width);
+    ui.painter().layout_job(job)
+}
+
+/// A tab's name set for the row, no wider than a name may be: the name,
+/// and after it the folder that tells the tab from another of its name.
+/// Where the two do not fit, the name is cut short and not the folder,
+/// which is the part the reader tells the tabs apart by.
+fn title_galleys(
+    ui: &egui::Ui,
+    title: &ShownName,
+) -> (Arc<egui::Galley>, Option<Arc<egui::Galley>>) {
+    let (name, place) = title.parts();
+    let place = (!place.is_empty()).then(|| cut_short(ui, place, NAME_WIDTH.max - NAME_KEPT));
+    let taken = place.as_ref().map_or(0.0, |place| place.size().x);
+    (cut_short(ui, name, NAME_WIDTH.max - taken), place)
+}
+
 /// Draws one tab: its name, the line under it while it is the active one,
 /// the close button while the pointer is over it, its hover text and its
 /// context menu. Returns the tab's response.
@@ -199,14 +231,9 @@ fn tab_label(
     palette: &'static Palette,
     actions: &mut TabPicks,
 ) -> egui::Response {
-    let mut job = egui::text::LayoutJob::simple_singleline(
-        label.title.to_owned(),
-        chrome::label_font(),
-        egui::Color32::PLACEHOLDER,
-    );
-    job.wrap = egui::text::TextWrapping::truncate_at_width(NAME_WIDTH.max);
-    let galley = ui.painter().layout_job(job);
-    let name_width = galley.size().x.max(NAME_WIDTH.min);
+    let (name, place) = title_galleys(ui, label.title);
+    let place_width = place.as_ref().map_or(0.0, |place| place.size().x);
+    let name_width = (name.size().x + place_width).max(NAME_WIDTH.min);
     let width = 2.0_f32.mul_add(TAB_PADDING, name_width) + CLOSE_SIDE;
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(width, BAR_HEIGHT), egui::Sense::click());
@@ -215,7 +242,7 @@ fn tab_label(
             egui::WidgetType::SelectableLabel,
             true,
             label.is_active,
-            label.title,
+            label.title.as_str(),
         )
     });
     // egui has no tab among its widget types: a tab is told apart from a
@@ -230,9 +257,13 @@ fn tab_label(
     let color = chrome::ink(palette, true, label.is_active || pointed);
     let title_corner = egui::pos2(
         rect.left() + TAB_PADDING,
-        rect.center().y - galley.size().y / 2.0,
+        rect.center().y - name.size().y / 2.0,
     );
-    ui.painter().galley(title_corner, galley, color);
+    let place_corner = title_corner + egui::vec2(name.size().x, 0.0);
+    ui.painter().galley(title_corner, name, color);
+    if let Some(place) = place {
+        ui.painter().galley(place_corner, place, color);
+    }
     if label.is_active {
         let line = egui::Rect::from_min_max(
             egui::pos2(rect.left() + TAB_PADDING, rect.bottom() - UNDERLINE),

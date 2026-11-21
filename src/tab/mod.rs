@@ -12,8 +12,10 @@ use egui_commonmark_extended::CommonMarkCache;
 use crate::headers::{parse_headers, Outline};
 use crate::links::{parse_local_links, resolve_local_link_path, split_link_fragment};
 use crate::search::{find_matches, SearchMatch};
+use crate::tab::names::{shown_names, ShownName};
 use crate::tab::scroll::ScrollCorrections;
 
+pub(crate) mod names;
 #[cfg(kani)]
 mod proofs;
 pub(crate) mod scroll;
@@ -96,11 +98,16 @@ pub(crate) enum Route {
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
-/// Work out what the tab row calls each of `tabs`. Called when a tab
-/// opens, closes or is renamed, never per frame.
+/// Work out what each of `tabs` is called beside the others. Called when
+/// a tab opens, closes or is renamed, never per frame.
 pub(crate) fn name_tabs(tabs: &mut [Tab]) {
-    for tab in tabs {
-        tab.shown = tab.name().to_owned();
+    let documents: Vec<(&str, &Path)> = tabs
+        .iter()
+        .map(|tab| (tab.name(), tab.path.as_path()))
+        .collect();
+    let names = shown_names(&documents);
+    for (tab, name) in tabs.iter_mut().zip(names) {
+        tab.shown = name;
     }
 }
 
@@ -115,7 +122,7 @@ pub(crate) struct Tab {
     pub(crate) document_title: Option<String>,
     /// What the tab row calls this tab. `name_tabs` works it out from
     /// every open tab when one opens, closes or is renamed.
-    shown: String,
+    shown: ShownName,
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
@@ -182,7 +189,7 @@ impl Tab {
             cache: CommonMarkCache::default(),
             pictures_left: BTreeSet::new(),
             document_title: None,
-            shown: String::new(),
+            shown: ShownName::default(),
             kicker: String::new(),
             outline: Outline::default(),
             scroll_offset: 0.0,
@@ -202,7 +209,7 @@ impl Tab {
             pre_edit_view_content_height: 0.0,
         };
         tab.index_content(false);
-        tab.shown = tab.name().to_owned();
+        tab.shown = ShownName::plain(tab.name());
         Ok(tab)
     }
 
@@ -246,7 +253,7 @@ impl Tab {
     }
 
     /// What the tab row calls this tab, as `name_tabs` last worked it out.
-    pub(crate) fn shown_name(&self) -> &str {
+    pub(crate) const fn shown_name(&self) -> &ShownName {
         &self.shown
     }
 

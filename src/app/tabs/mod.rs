@@ -264,7 +264,7 @@ impl MarkdownApp {
         self.update_watched_paths();
     }
 
-    /// Work the names in the tab row out again, after the set of tabs
+    /// Work the names of the tabs out again, after the set of tabs
     /// changed or a tab's document did: on open, close, reload and edit.
     pub(crate) fn tab_names_changed(&mut self) {
         name_tabs(&mut self.tabs);
