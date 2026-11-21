@@ -35,8 +35,6 @@ const RHYTHM: BlockRhythm = BlockRhythm {
     tight_item: 0.35,
     display_math: 0.35,
 };
-/// Corner radius of the chip behind inline code.
-const INLINE_CODE_RADIUS: f32 = 4.0;
 /// Radius of a list bullet in multiples of the body font size.
 const BULLET_RADIUS: f32 = 0.125;
 /// Width of the slot a list marker hangs in, in multiples of the body font
@@ -106,9 +104,9 @@ impl DocumentLook {
                 rhythm: Some(RHYTHM),
                 // The pane decides this each frame: see `preview_pane`.
                 figure_max_width: None,
-                inline_code_radius: Some(INLINE_CODE_RADIUS),
-                inline_code_color: None,
-                strong_code_font_family: None,
+                inline_code_radius: None,
+                inline_code_color: Some(palette.code),
+                strong_code_font_family: fonts.strong_code.clone(),
             },
             syntax_theme: palette.syntax_theme,
             muted: palette.muted,

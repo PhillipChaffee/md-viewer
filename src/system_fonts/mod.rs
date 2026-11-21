@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::bundled::{
     install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY,
-    DOCUMENT_HEADING_FAMILY,
+    DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY,
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
@@ -36,7 +36,8 @@ mod tests;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum FontPreset {
     /// The reading look: the bundled Source Serif 4 for body text and
-    /// headings, the system sans for everything around the document.
+    /// headings, its companion Source Code Pro for code, the system sans
+    /// for everything around the document.
     #[default]
     Reader,
     /// The app's look before the reader: best installed general-purpose
@@ -72,7 +73,7 @@ impl FontPreset {
     pub(crate) const fn description(self) -> &'static str {
         match self {
             Self::Reader => {
-                "Reading style: bundled Source Serif 4 body and headings, sans everywhere else."
+                "Reading style: bundled Source Serif 4 text and Source Code Pro code, sans everywhere else."
             }
             Self::Current => "Best installed sans + bundled mono code font.",
             Self::Github => {
@@ -84,12 +85,14 @@ impl FontPreset {
         }
     }
 
-    /// Line height of code blocks as a multiple of the code font size. The
-    /// body line height is the user's line-spacing setting, whatever the
-    /// preset. GitHub: `pre{line-height:1.45}`; VS Code preview: 1.357em.
+    /// Line height of code blocks as a multiple of the code face's own
+    /// line. The body line height is the user's line-spacing setting,
+    /// whatever the preset. GitHub: `pre{line-height:1.45}`; VS Code
+    /// preview: 1.357em. The Reader's Source Code Pro has a tall line of
+    /// its own, so 1.39 of it is 1.75 of the code size.
     pub(crate) const fn code_line_height(self) -> f32 {
         match self {
-            Self::Reader => 1.5,
+            Self::Reader => 1.39,
             Self::Current => 1.3,
             Self::Github => 1.45,
             Self::Vscode => 1.36,
@@ -260,9 +263,12 @@ const VSCODE: ViewerStack = ViewerStack {
     mono: &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"],
 };
 
-/// Code is set this much smaller than the body text around it: a
-/// monospace face looks larger than a proportional one at the same size.
+/// A code block is set this much smaller than the body text: a monospace
+/// face looks larger than a proportional one at the same size.
 const CODE_SCALE: f32 = 0.875;
+/// Inline code in the bundled faces is set this much smaller than the text
+/// around it, so that a line dense with code still reads as prose.
+const INLINE_CODE_SCALE: f32 = 0.86;
 
 /// The fonts the document pane lays out with, as opposed to the chrome
 /// around it.
@@ -281,6 +287,9 @@ pub(crate) struct DocumentFonts {
     /// A true italic family, where the document's faces have one. `None`
     /// means emphasis is the body face slanted.
     pub(crate) emphasis: Option<FontFamily>,
+    /// A bold code family, where the document's faces have one. `None`
+    /// means code in bold text is the regular code face.
+    pub(crate) strong_code: Option<FontFamily>,
 }
 
 /// What the reader chose the document to be set in.
@@ -308,8 +317,9 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
         body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
         heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
         code: FontId::monospace(body * CODE_SCALE),
-        inline_code_scale: bundled.then_some(CODE_SCALE),
+        inline_code_scale: bundled.then_some(INLINE_CODE_SCALE),
         emphasis: bundled.then(|| FontFamily::Name(DOCUMENT_EMPHASIS_FAMILY.into())),
+        strong_code: bundled.then(|| FontFamily::Name(DOCUMENT_STRONG_CODE_FAMILY.into())),
     }
 }
 

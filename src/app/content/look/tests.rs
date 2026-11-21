@@ -48,13 +48,16 @@ fn headings_emphasis_and_inline_code_take_the_document_fonts_faces() {
     assert!(reader.emphasis_font_family.is_some());
     assert_eq!(reader.emphasis_font_family, fonts.emphasis);
     assert_eq!(reader.inline_code_scale, fonts.inline_code_scale);
+    assert!(reader.strong_code_font_family.is_some());
+    assert_eq!(reader.strong_code_font_family, fonts.strong_code);
 
     // A preset with no italic face and no aligned code face keeps the
-    // renderer's slanted emphasis and full-size inline code.
+    // renderer's slanted emphasis and full-size inline code in one weight.
     let system = look(ThemeId::Sepia, FontPreset::Current).blocks;
     assert!(system.heading_font_family.is_some());
     assert_eq!(system.emphasis_font_family, None);
     assert_eq!(system.inline_code_scale, None);
+    assert_eq!(system.strong_code_font_family, None);
 }
 
 #[test]
@@ -110,7 +113,7 @@ fn the_document_is_a_centered_column_with_reader_block_styling() {
 }
 
 #[test]
-fn tables_lists_and_code_chips_are_drawn_in_the_themes_colors() {
+fn tables_lists_and_inline_code_are_drawn_in_the_themes_colors() {
     for theme in ThemeId::ALL {
         let palette = theme.palette();
         let blocks = look(theme, FontPreset::Reader).blocks;
@@ -126,7 +129,9 @@ fn tables_lists_and_code_chips_are_drawn_in_the_themes_colors() {
         assert!(table.cell_padding >= 8.0);
 
         assert_eq!(blocks.list.unwrap().marker, palette.muted);
-        assert_eq!(blocks.inline_code_radius, Some(4.0));
+        // Inline code is its tint and its face: no chip behind it.
+        assert_eq!(blocks.inline_code_color, Some(palette.code));
+        assert_eq!(blocks.inline_code_radius, None);
     }
 }
 

@@ -143,6 +143,8 @@ pub(crate) struct Painted {
     /// Each character of its first line, with the corners of its picture on
     /// the sheet the frame keeps them on.
     glyphs: Vec<(char, [u16; 4])>,
+    /// Each character of its first line, with where its picture is painted.
+    pub(crate) letters: Vec<(char, Rect)>,
 }
 
 impl Painted {
@@ -223,6 +225,22 @@ fn glyphs(text: &TextShape) -> Vec<(char, [u16; 4])> {
         .collect()
 }
 
+/// Each character on the first line of `text`, with the box its picture is
+/// painted in.
+fn letters(text: &TextShape) -> Vec<(char, Rect)> {
+    let Some(line) = text.galley.rows.first() else {
+        return Vec::new();
+    };
+    let origin = text.pos + line.pos.to_vec2();
+    let glyphs = line.row.glyphs.iter();
+    glyphs
+        .map(|glyph| {
+            let corner = origin + glyph.pos.to_vec2() + glyph.uv_rect.offset;
+            (glyph.chr, Rect::from_min_size(corner, glyph.uv_rect.size))
+        })
+        .collect()
+}
+
 /// The middle of the glyphs on the first line of `text`.
 fn first_line(text: &TextShape) -> Pos2 {
     let line = text.galley.rows.first();
@@ -281,6 +299,7 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                     first_line: first_line(text),
                     first_line_width: first_line_width(text),
                     glyphs: glyphs(text),
+                    letters: letters(text),
                 });
             }
             _ => {}

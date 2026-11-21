@@ -148,6 +148,7 @@ fn preset_labels_and_descriptions_tell_the_presets_apart() {
     assert_eq!(descriptions.len(), FontPreset::ALL.len());
     assert_eq!(FontPreset::default().label(), "Reader");
     assert!(FontPreset::Reader.description().contains("Source Serif 4"));
+    assert!(FontPreset::Reader.description().contains("Source Code Pro"));
     assert!(FontPreset::Github.description().contains("github.com"));
     assert!(FontPreset::Vscode.description().contains("VS Code"));
 }
@@ -158,7 +159,7 @@ fn preset_code_line_heights_follow_the_emulated_stylesheets() {
     assert_close(FontPreset::Github.code_line_height(), 1.45);
     assert_close(FontPreset::Vscode.code_line_height(), 1.36);
     assert_close(FontPreset::Current.code_line_height(), 1.3);
-    assert_close(FontPreset::Reader.code_line_height(), 1.5);
+    assert_close(FontPreset::Reader.code_line_height(), 1.39);
 }
 
 #[test]
@@ -193,11 +194,19 @@ fn machine_without_fonts_keeps_egui_faces_and_gains_the_bundled_emoji() {
     let definitions = Fonts::none().definitions(None, FontPreset::default());
     let defaults = FontDefinitions::default();
 
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        let mut expected = chain(&defaults, &family);
+    let with_emoji = |family: &FontFamily| {
+        let mut expected = chain(&defaults, family);
         expected.push("NotoEmoji".to_owned());
-        assert_eq!(chain(&definitions, &family), expected);
-    }
+        expected
+    };
+    assert_eq!(
+        chain(&definitions, &FontFamily::Proportional),
+        with_emoji(&FontFamily::Proportional)
+    );
+    // The Reader's own code face leads; egui's stays behind it.
+    let code = chain(&definitions, &FontFamily::Monospace);
+    assert_eq!(code[0], "ReaderCode");
+    assert_eq!(code[1..], with_emoji(&FontFamily::Monospace));
 }
 
 #[test]
@@ -426,7 +435,12 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
         fonts.emphasis,
         Some(FontFamily::Name("MarkdownEmphasis".into()))
     );
-    assert_eq!(fonts.inline_code_scale, Some(0.875));
+    // Inline code is a little smaller again than a block of code.
+    assert_eq!(fonts.inline_code_scale, Some(0.86));
+    assert_eq!(
+        fonts.strong_code,
+        Some(FontFamily::Name("MarkdownStrongCode".into()))
+    );
 
     // Every size class scales the same way.
     for size in TextSizeClass::ALL {
@@ -445,6 +459,15 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
         assert_close(fonts.code.size, 18.0 * 0.875);
         assert_eq!(fonts.emphasis, None, "{preset:?}");
         assert_eq!(fonts.inline_code_scale, None, "{preset:?}");
+        assert_eq!(fonts.strong_code, None, "{preset:?}");
+
+        // Each keeps its own code stack: the bundled code face is the
+        // Reader's alone.
+        let definitions = Fonts::with_sans().definitions(None, preset);
+        let code = chain(&definitions, &FontFamily::Monospace);
+        assert!(!code.contains(&"ReaderCode".to_owned()), "{preset:?}");
+        let strong_code = FontFamily::Name("MarkdownStrongCode".into());
+        assert_eq!(chain(&definitions, &strong_code), code, "{preset:?}");
     }
 }
 
@@ -458,6 +481,7 @@ fn a_picked_family_outranks_the_readers_serif() {
     // The serif's scale stays with the preset; its faces do not lead.
     assert_eq!(fonts.emphasis, None);
     assert_eq!(fonts.inline_code_scale, None);
+    assert_eq!(fonts.strong_code, None);
 
     let mut system = Fonts::with_sans();
     let picked = system.definitions(Some("Fixture Sans"), FontPreset::Reader);
@@ -674,15 +698,18 @@ fn each_preset_installs_its_own_faces_in_a_fixed_order() {
         }
     };
 
-    assert_eq!(
-        installed_chains(&mut fonts, FontPreset::Reader),
-        expected(
+    // The Reader's own code face leads its code, as its serif leads its
+    // text.
+    let reader = InstalledChains {
+        monospace: led_by(&["ReaderCode"], &monospace),
+        ..expected(
             &["ReaderSemibold", "SystemSansBold"],
             &["ReaderRegular"],
             LATIN_FACE,
-            None
+            None,
         )
-    );
+    };
+    assert_eq!(installed_chains(&mut fonts, FontPreset::Reader), reader);
     assert_eq!(
         installed_chains(&mut fonts, FontPreset::Current),
         expected(&["SystemSansBold"], &[], LATIN_FACE, None)

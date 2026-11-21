@@ -86,6 +86,32 @@ impl Reader {
         })
     }
 
+    /// The box the picture of `character` is painted in, on the first line
+    /// of the first painted text that contains `text`: its bottom is where
+    /// a letter such as `x` stands, its height how tall the letter is.
+    #[track_caller]
+    pub(crate) fn letter_of(&self, text: &str, character: char) -> Area {
+        let painted = self.painted_with(text);
+        let found = painted.letters.iter().find(|(set, _)| *set == character);
+        let Some((_, drawn)) = found else {
+            panic!("the painted `{text}` has no `{character}` on its first line");
+        };
+        let drawn = *drawn * self.scale();
+        Area {
+            left: drawn.left(),
+            top: drawn.top(),
+            width: drawn.width(),
+            height: drawn.height(),
+        }
+    }
+
+    /// The color laid behind the first painted text that contains `text`,
+    /// as find lays one behind a match. `None` when nothing is.
+    #[track_caller]
+    pub(crate) fn marker_of(&self, text: &str) -> Option<Rgb> {
+        self.painted_with(text).marker
+    }
+
     /// Whether a line is drawn through the painted text that contains
     /// `text`.
     #[track_caller]
@@ -122,7 +148,7 @@ impl Reader {
 
     /// The lines, boxes and dots the last frame drew wholly inside `area`,
     /// each by the rectangle that bounds it, top to bottom: a rule, a
-    /// quote's bar, a check box and its tick, the chip behind inline code.
+    /// quote's bar, a check box and its tick.
     pub(crate) fn marks_in(&self, area: Area) -> Vec<Area> {
         let scale = self.scale();
         let drawn = marks(&self.shapes()).into_iter();

@@ -42,6 +42,9 @@ fn without_the_bundled_faces_the_document_is_set_in_the_chromes_own_chains() {
     assert_eq!(&family(&definitions, DOCUMENT_EMPHASIS_FAMILY), regular);
     assert_eq!(&family(&definitions, DOCUMENT_HEADING_FAMILY), bold);
     assert_eq!(&family(&definitions, STRONG_FONT_FAMILY), bold);
+    let code = &before.families[&FontFamily::Monospace];
+    assert_eq!(&definitions.families[&FontFamily::Monospace], code);
+    assert_eq!(&family(&definitions, DOCUMENT_STRONG_CODE_FAMILY), code);
     // No face is added and none is touched.
     assert_eq!(definitions.font_data, before.font_data);
 }
@@ -76,6 +79,48 @@ fn the_bundled_serif_leads_every_document_family_and_keeps_the_fallbacks() {
 }
 
 #[test]
+fn the_bundled_code_face_leads_the_code_families_and_keeps_the_fallbacks() {
+    let before = chrome_definitions();
+    let mut definitions = before.clone();
+
+    install_document_families(&mut definitions, true);
+
+    let code = &before.families[&FontFamily::Monospace];
+    assert_eq!(
+        definitions.families[&FontFamily::Monospace],
+        led_by("ReaderCode", code)
+    );
+    assert_eq!(
+        family(&definitions, DOCUMENT_STRONG_CODE_FAMILY),
+        led_by("ReaderCodeSemibold", code)
+    );
+}
+
+#[test]
+fn each_bundled_code_face_is_the_source_code_pro_cut_its_family_asks_for() {
+    let mut definitions = chrome_definitions();
+    install_document_families(&mut definitions, true);
+
+    for (key, weight) in [("ReaderCode", 400), ("ReaderCodeSemibold", 600)] {
+        let face = face(&definitions, key);
+        assert_eq!(face.weight().to_number(), weight, "{key}");
+        assert!(face.is_monospaced(), "{key}");
+        assert!(!face.is_italic(), "{key}");
+        let named_source_code = face.names().into_iter().any(|name| {
+            name.name_id == ttf_parser::name_id::FAMILY
+                && name
+                    .to_string()
+                    .is_some_and(|family| family.starts_with("Source Code Pro"))
+        });
+        assert!(named_source_code, "{key}");
+        // What code is written in, and the lines a drawn box is made of.
+        for glyph in "Aa0_{}[]<>|\\`~→─│┌┘".chars() {
+            assert!(face.glyph_index(glyph).is_some(), "{key} lacks {glyph:?}");
+        }
+    }
+}
+
+#[test]
 fn each_bundled_face_is_the_source_serif_cut_its_family_asks_for() {
     let mut definitions = chrome_definitions();
     install_document_families(&mut definitions, true);
@@ -105,37 +150,34 @@ fn each_bundled_face_is_the_source_serif_cut_its_family_asks_for() {
 
 #[test]
 fn code_set_smaller_than_the_serif_is_shifted_onto_its_baseline() {
-    let before = chrome_definitions();
-    let mut definitions = before.clone();
+    let mut definitions = chrome_definitions();
     install_document_families(&mut definitions, true);
 
-    let key = &definitions.families[&FontFamily::Monospace][0];
-    let code = &definitions.font_data[key];
-    let shift = code.tweak.y_offset_factor;
-    assert!(shift > 0.0, "the code face moves down, got {shift}");
+    let code_faces = ["ReaderCode", "ReaderCodeSemibold"];
+    for key in code_faces {
+        let code = &definitions.font_data[key];
+        let shift = code.tweak.y_offset_factor;
+        assert!(shift > 0.0, "{key} moves down, got {shift}");
 
-    // egui hangs a face from the top of its line by its ascent. With the
-    // shift, code at `CODE_SCALE` of the body size has its baseline at the
-    // same height as the serif's.
-    let body_size = 20.0;
-    let serif_baseline = ascent_em(READER_REGULAR.1, 0).unwrap() * body_size;
-    let code_ascent = ascent_em(&code.font, code.index).unwrap();
-    let code_baseline = (code_ascent + shift) * body_size * CODE_SCALE;
-    assert!(
-        (code_baseline - serif_baseline).abs() < 1e-3,
-        "code baseline {code_baseline}, serif baseline {serif_baseline}"
-    );
+        // egui hangs a face from the top of its line by its ascent. With
+        // the shift, code at `INLINE_CODE_SCALE` of the body size has its
+        // baseline at the same height as the serif's.
+        let body_size = 20.0;
+        let serif_baseline = ascent_em(READER_REGULAR.1, 0).unwrap() * body_size;
+        let code_ascent = ascent_em(&code.font, code.index).unwrap();
+        let code_baseline = (code_ascent + shift) * body_size * INLINE_CODE_SCALE;
+        assert!(
+            (code_baseline - serif_baseline).abs() < 1e-3,
+            "{key}: code baseline {code_baseline}, serif baseline {serif_baseline}"
+        );
+    }
 
-    // Only the code face moves.
+    // Only the code faces move.
     for (other, data) in &definitions.font_data {
-        if other != key {
+        if !code_faces.contains(&other.as_str()) {
             assert_eq!(
                 data.tweak.y_offset_factor.to_bits(),
-                before
-                    .font_data
-                    .get(other)
-                    .map_or(0.0_f32, |data| data.tweak.y_offset_factor)
-                    .to_bits(),
+                0.0_f32.to_bits(),
                 "{other}"
             );
         }
@@ -150,50 +192,9 @@ fn an_ascent_is_read_in_ems_and_only_from_a_real_face() {
 }
 
 #[test]
-fn no_shift_is_worked_out_without_a_readable_code_face() {
-    // No monospace family at all.
-    let mut definitions = chrome_definitions();
-    definitions.families.remove(&FontFamily::Monospace);
-    assert_eq!(code_baseline_shift(&definitions), None);
-
-    // A monospace family with no face in it.
-    let mut definitions = chrome_definitions();
-    definitions
-        .families
-        .insert(FontFamily::Monospace, Vec::new());
-    assert_eq!(code_baseline_shift(&definitions), None);
-
-    // A face the chain names but nobody registered.
-    let mut definitions = chrome_definitions();
-    definitions
-        .families
-        .insert(FontFamily::Monospace, vec!["Missing".to_owned()]);
-    assert_eq!(code_baseline_shift(&definitions), None);
-
-    // A registered face that is not a font.
-    let mut definitions = chrome_definitions();
-    definitions.font_data.insert(
-        "Broken".to_owned(),
-        FontData::from_static(b"not a font").into(),
-    );
-    definitions
-        .families
-        .insert(FontFamily::Monospace, vec!["Broken".to_owned()]);
-    assert_eq!(code_baseline_shift(&definitions), None);
-
-    // The document families are registered all the same.
-    install_document_families(&mut definitions, true);
-    assert_eq!(
-        family(&definitions, DOCUMENT_BODY_FAMILY)[0],
-        "ReaderRegular"
-    );
-    assert_eq!(
-        definitions.font_data["Broken"]
-            .tweak
-            .y_offset_factor
-            .to_bits(),
-        0.0_f32.to_bits()
-    );
+fn no_shift_is_worked_out_for_a_face_that_cannot_be_read() {
+    assert_eq!(code_baseline_shift(b"not a font"), None);
+    assert!(code_baseline_shift(READER_CODE.1).is_some());
 }
 
 #[test]
