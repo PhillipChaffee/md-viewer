@@ -257,6 +257,12 @@ fn tab_label(
     if pointed || button.has_focus() {
         close.paint(ui, palette, &button);
     }
+    // The Tab key reaches the tabs that are scrolled out of the strip too.
+    // egui does not scroll to what it focuses, so the tab is brought in
+    // once, as the keyboard arrives on it or on its button.
+    if response.gained_focus() || button.gained_focus() {
+        scroll_into_strip(ui, rect);
+    }
 
     if response.clicked() {
         actions.activate = Some(label.index);

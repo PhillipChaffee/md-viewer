@@ -219,3 +219,36 @@ fn a_screen_reader_is_told_which_tab_each_close_button_closes() {
     }
     assert_eq!(reader.count("Close tab"), 0, "none is nameless");
 }
+
+#[test]
+fn a_tab_the_keyboard_reaches_outside_the_strip_is_scrolled_into_it() {
+    let names: Vec<String> = (1..=30).map(|n| format!("chapter-{n:02}.md")).collect();
+    let mut launch = Reader::launch();
+    for name in &names {
+        launch = launch.doc(name, "Words.");
+    }
+    let mut reader = launch.args(&[names[0].as_str()]).open();
+    for name in &names[1..] {
+        reader.drop_file(name);
+    }
+    point_away(&mut reader);
+    // The tab in front is the last one, so the strip shows its far end.
+    let in_strip = |reader: &Reader, label: &str| {
+        let (tab, from) = (reader.area_of(label), reader.area_of("Go forward"));
+        tab.left >= from.right() && tab.right() <= reader.area_of("New tab").left
+    };
+    assert!(!in_strip(&reader, "tab:chapter-01.md"), "more than fit");
+
+    reader.tab_to("tab:chapter-01.md");
+    assert!(in_strip(&reader, "tab:chapter-01.md"), "the tab");
+    reader.press("Tab");
+    assert_eq!(reader.focused(), Some(close("chapter-01.md")));
+    assert!(in_strip(&reader, &close("chapter-01.md")), "its button");
+
+    reader.tab_to("tab:chapter-30.md");
+    assert!(
+        in_strip(&reader, "tab:chapter-30.md"),
+        "and back to the end"
+    );
+    assert_eq!(reader.tab_in_front().as_deref(), Some("chapter-30.md"));
+}
