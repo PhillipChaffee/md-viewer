@@ -100,6 +100,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 - **The vendored forks moved from `crates/` to `vendor/`.**
 - **The app's state was regrouped by owner.** Live reload, the fonts, the color overrides, the font picker, the lightbox and the window title are each one value with its own module, and the app holds 40 fields where it held 59. A document owns its scrolling, its jumps to a heading or a match, and its folded outline. The explorer keeps its open folders read by itself. Nothing a reader sees changed apart from the fixes above.
 - **The `mcp` test-bridge feature was removed.** It could not be built: its dependency, egui-mcp-bridge, was a path on one developer's machine and was commented out of `Cargo.toml`. The widget registrations that fed it are gone with it. The tests drive the app through its accessibility tree, which is unchanged.
+- **A website for the project, in `docs/`.** One static page and a page for a wrong address, set in the two bundled font families and served by GitHub Pages from `main`. Nothing builds it; the README says how to see it locally and how it is published.
 
 ## [0.3.0] - 2026-09-13
 
