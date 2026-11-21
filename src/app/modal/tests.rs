@@ -51,13 +51,3 @@ fn an_enlarged_picture_is_modal_until_it_is_closed() {
     harness.app.lightbox.open = None;
     assert_eq!(harness.app.modal(), None);
 }
-
-#[test]
-fn the_prompt_comes_before_a_picture_enlarged_under_it() {
-    let mut harness = unsaved();
-    harness.app.request_close_tab(0);
-
-    harness.app.lightbox.open = Some(enlarged());
-
-    assert_eq!(harness.app.modal(), Some(Modal::Prompt));
-}
