@@ -339,6 +339,20 @@ fn on_the_close_button_of_unsaved_edits() -> Reader {
 }
 
 #[test]
+fn a_key_held_down_on_the_close_button_of_unsaved_edits_asks_and_answers_nothing() {
+    for key in ["Enter", "Space"] {
+        let mut reader = on_the_close_button_of_unsaved_edits();
+        let written = reader.read_file("a.md");
+
+        reader.hold(key, 12);
+
+        reader.assert_sees("Save changes to “Alpha” (a.md)?");
+        assert_eq!(reader.tabs(), ["Alpha", "Beta"], "{key}");
+        assert_eq!(reader.read_file("a.md"), written, "{key} saved nothing");
+    }
+}
+
+#[test]
 fn a_tab_closed_from_the_keyboard_after_its_prompt_leaves_the_keyboard_on_the_tab_in_front() {
     let mut reader = on_the_close_button_of_unsaved_edits();
 

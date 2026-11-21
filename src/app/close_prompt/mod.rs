@@ -128,6 +128,19 @@ fn shortened(name: &str) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
+/// Whether `event` is Enter or Space pressing again because it is held.
+const fn is_repeated_press(event: &egui::Event) -> bool {
+    matches!(
+        event,
+        egui::Event::Key {
+            key: egui::Key::Enter | egui::Key::Space,
+            pressed: true,
+            repeat: true,
+            ..
+        }
+    )
+}
+
 impl MarkdownApp {
     /// Close the tab at `index`, asking first when it has unsaved edits.
     pub(crate) fn request_close_tab(&mut self, index: usize) {
@@ -230,6 +243,10 @@ impl MarkdownApp {
         };
         let palette = self.theme.palette();
         let focus_save = std::mem::take(&mut pending.focus_due);
+        // A key held down repeats, and egui takes each repeat for a press.
+        // Enter or Space held on the button that asked to close would press
+        // Save, which has the keyboard, before the question could be read.
+        ctx.input_mut(|input| input.events.retain(|event| !is_repeated_press(event)));
         let frame = egui::Frame::popup(&ctx.style())
             .fill(palette.surface)
             .stroke(egui::Stroke::new(1.0_f32, palette.rule))
