@@ -22,7 +22,7 @@ use crate::app::action::AppAction;
 use crate::app::chrome::{self, QuietButton};
 use crate::app::MarkdownApp;
 use crate::tab::{Route, Saved, Tab, Theirs};
-use crate::theme;
+use crate::theme::{self, Palette};
 
 #[cfg(test)]
 mod tests;
@@ -202,6 +202,30 @@ fn shortened(name: &str) -> Cow<'_, str> {
     Cow::Owned(format!("{}…", kept.trim_end()))
 }
 
+/// The answers to the question `about` as a row of buttons, with the
+/// keyboard put on the safe one where that is `focus_due`. Returns the
+/// answer the reader gave this frame.
+fn answers(
+    ui: &mut egui::Ui,
+    palette: &Palette,
+    about: Question,
+    focus_due: bool,
+) -> Option<CloseAnswer> {
+    let mut answer = None;
+    for &(label, given) in about.answers() {
+        let button = QuietButton::text(label)
+            .min_width(ANSWER_WIDTH)
+            .show(ui, palette);
+        if focus_due && given == about.safe_answer() {
+            button.request_focus();
+        }
+        if button.clicked() {
+            answer = Some(given);
+        }
+    }
+    answer
+}
+
 impl MarkdownApp {
     /// Close the tab at `index`, asking first when it has unsaved edits.
     pub(crate) fn request_close_tab(&mut self, index: usize) {
@@ -372,19 +396,8 @@ impl MarkdownApp {
                     // The answers to one question are not those to the
                     // other: a key still down on Save must not find the
                     // keyboard on Overwrite.
-                    ui.push_id(about, |ui| {
-                        for &(label, given) in about.answers() {
-                            let button = QuietButton::text(label)
-                                .min_width(ANSWER_WIDTH)
-                                .show(ui, palette);
-                            if focus_due && given == about.safe_answer() {
-                                button.request_focus();
-                            }
-                            if button.clicked() {
-                                answer = Some(given);
-                            }
-                        }
-                    });
+                    let buttons = |ui: &mut egui::Ui| answers(ui, palette, about, focus_due);
+                    answer = ui.push_id(about, buttons).inner;
                 });
             });
         // Escape is Cancel. A click beside the sheet is not: the app's
