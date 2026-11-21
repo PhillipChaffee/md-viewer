@@ -98,16 +98,21 @@ pub(crate) enum Route {
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
 
-/// Work out what each of `tabs` is called beside the others. Called when
-/// a tab opens, closes or is renamed, never per frame.
+/// Work out what each of `tabs` is called beside the others: by its
+/// document's name, and by its file. Called when a tab opens, closes or
+/// is renamed, never per frame.
 pub(crate) fn name_tabs(tabs: &mut [Tab]) {
-    let documents: Vec<(&str, &Path)> = tabs
-        .iter()
-        .map(|tab| (tab.name(), tab.path.as_path()))
-        .collect();
-    let names = shown_names(&documents);
-    for (tab, name) in tabs.iter_mut().zip(names) {
+    let shown_by = |name: fn(&Tab) -> &str| {
+        let documents: Vec<(&str, &Path)> = tabs
+            .iter()
+            .map(|tab| (name(tab), tab.path.as_path()))
+            .collect();
+        shown_names(&documents)
+    };
+    let (names, files) = (shown_by(Tab::name), shown_by(Tab::title));
+    for ((tab, name), file) in tabs.iter_mut().zip(names).zip(files) {
         tab.shown = name;
+        tab.shown_file = file;
     }
 }
 
@@ -123,6 +128,9 @@ pub(crate) struct Tab {
     /// What the tab row calls this tab. `name_tabs` works it out from
     /// every open tab when one opens, closes or is renamed.
     shown: ShownName,
+    /// What the window and the unsaved-edits question call this tab's
+    /// file, worked out with `shown`.
+    shown_file: ShownName,
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
@@ -190,6 +198,7 @@ impl Tab {
             pictures_left: BTreeSet::new(),
             document_title: None,
             shown: ShownName::default(),
+            shown_file: ShownName::default(),
             kicker: String::new(),
             outline: Outline::default(),
             scroll_offset: 0.0,
@@ -210,6 +219,7 @@ impl Tab {
         };
         tab.index_content(false);
         tab.shown = ShownName::plain(tab.name());
+        tab.shown_file = ShownName::plain(tab.title());
         Ok(tab)
     }
 
@@ -255,6 +265,12 @@ impl Tab {
     /// What the tab row calls this tab, as `name_tabs` last worked it out.
     pub(crate) const fn shown_name(&self) -> &ShownName {
         &self.shown
+    }
+
+    /// The file's name, with its folder while another open tab's file
+    /// has the same name, as `name_tabs` last worked it out.
+    pub(crate) fn shown_file(&self) -> &str {
+        self.shown_file.as_str()
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {

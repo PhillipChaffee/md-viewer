@@ -239,3 +239,35 @@ fn a_long_folder_leaves_the_start_of_the_name_in_view() {
         assert!(reader.area_of(&label).width <= WIDEST_TAB, "{tab}");
     }
 }
+
+#[test]
+fn the_window_names_the_folder_of_a_file_name_two_tabs_share() {
+    let mut reader = notes_at(&["guides/notes.md"])
+        .doc("drafts/notes.md", "# Sketches\n\nRough.")
+        .args(&["guides/notes.md"])
+        .open();
+    assert_eq!(reader.title(), "notes.md - Markdown Viewer");
+
+    reader.drop_file("drafts/notes.md");
+
+    assert_eq!(reader.tabs(), ["Notes", "Sketches"]);
+    assert_eq!(reader.title(), "notes.md · drafts - Markdown Viewer");
+
+    reader.click("tab:Notes");
+
+    assert_eq!(reader.title(), "notes.md · guides - Markdown Viewer");
+
+    reader.middle_click("tab:Sketches");
+
+    assert_eq!(reader.title(), "notes.md - Markdown Viewer");
+}
+
+#[test]
+fn the_unsaved_question_names_the_folder_of_a_file_name_two_tabs_share() {
+    let mut reader = notes_open(&["guides/notes.md", "drafts/notes.md"]);
+    type_at_the_end(&mut reader, " Mine.");
+
+    reader.press("Ctrl+W");
+
+    reader.assert_sees("Save changes to “Notes” (notes.md · drafts)?");
+}

@@ -258,7 +258,6 @@ impl MarkdownApp {
     /// included when a document opens into an empty strip.
     fn tab_documents_changed(&mut self) {
         self.tab_names_changed();
-        self.window_title.mark_stale();
         self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
@@ -266,8 +265,11 @@ impl MarkdownApp {
 
     /// Work the names of the tabs out again, after the set of tabs
     /// changed or a tab's document did: on open, close, reload and edit.
+    /// The window is named after the document in front, so its title
+    /// follows.
     pub(crate) fn tab_names_changed(&mut self) {
         name_tabs(&mut self.tabs);
+        self.window_title.mark_stale();
     }
 
     /// Record a file in the recent list (most-recent first, deduped, capped),

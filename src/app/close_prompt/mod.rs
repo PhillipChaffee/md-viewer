@@ -104,12 +104,13 @@ pub(crate) enum CloseAnswer {
     Cancel,
 }
 
-/// What the prompt asks about `tab`. It names the document as its tab
-/// does, by its first heading, and by its file, which tells two documents
-/// with one heading apart. A tab named by its file is named once.
+/// What the prompt asks about `tab`. It names the document by its first
+/// heading, and by its file, which tells two documents with one heading
+/// apart: the file comes with its folder while another open tab's file
+/// has the same name. A tab named by its file is named once.
 fn question(tab: &Tab) -> String {
-    let (name, file) = (tab.name(), tab.title());
-    if name == file {
+    let (name, file) = (tab.name(), tab.shown_file());
+    if name == tab.title() {
         format!("Save changes to {file}?")
     } else {
         format!("Save changes to “{}” ({file})?", shortened(name))

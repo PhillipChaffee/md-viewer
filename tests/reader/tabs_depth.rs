@@ -133,7 +133,7 @@ fn two_documents_with_one_name_get_a_tab_each() {
 
     reader.assert_sees("First folder.");
     reader.assert_hides("Second folder.");
-    assert_eq!(reader.title(), "same.md - Markdown Viewer");
+    assert_eq!(reader.title(), "same.md · one - Markdown Viewer");
 }
 
 #[test]
