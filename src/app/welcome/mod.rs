@@ -38,7 +38,6 @@ const CAPTION_GAP: f32 = 10.0;
 /// Space above a row's title and below its last line.
 const ROW_PADDING: f32 = 18.0;
 const META_SIZE: f32 = 13.0;
-const TOOLTIP_SIZE: f32 = 12.0;
 /// Space between a row's title and its meta line.
 const META_GAP: f32 = 4.0;
 /// Space between a row's meta line and its excerpt.
@@ -433,7 +432,7 @@ fn recent_row(ui: &mut egui::Ui, row: &HomeRow, style: &HomeStyle<'_>) -> bool {
     // Where the file is, for a reader who rests the pointer on the row.
     let hovered = response.on_hover_ui(|ui| {
         let path = egui::RichText::new(row.path.to_string_lossy());
-        ui.label(path.size(TOOLTIP_SIZE).color(style.palette.muted));
+        ui.label(path.color(style.palette.muted));
     });
     hovered.clicked()
 }

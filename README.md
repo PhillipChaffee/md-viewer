@@ -69,9 +69,10 @@ front instead. A dot after the name marks the files that have a tab.
 
 The home page lists recent documents with their title, folder, reading
 time and opening lines. It shows with no document open, and over the open
-tabs when you press the Home button, **+** or `Ctrl+T`: the tabs stay, and
-a document picked there opens in a new tab, or comes to the front if it
-has one. The Home button again, Back, or a click on a tab leads back.
+tabs when you press the Home button, **+**, `Ctrl+T` or **⋯ > New Tab**:
+the tabs stay, and a document picked there opens in a new tab, or comes
+to the front if it has one. The Home button again, Back, or a click on a
+tab leads back.
 
 ![The home page listing recently read documents](screenshots/reader/home.png)
 
@@ -81,14 +82,16 @@ has one. The Home button again, Back, or a click on a tab leads back.
 
 - Four themes, a resizable centered column, three line spacings, five text
   sizes and 50% to 300% zoom.
+- A menu taller than the window, as **⋯** is at a high zoom, scrolls:
+  with the wheel, or with `Tab`, which brings each row into view.
 - Documents are set in the bundled
   [Source Serif 4](https://github.com/adobe-fonts/source-serif), and their
   code in its companion,
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
   font presets and any installed font family are under **Aa → Fonts…**.
 - Code in a line of prose has no box. It is a little smaller than the text
-  around it and in a warm tint of its own, which keeps the same 7:1 contrast
-  as body text on all four themes.
+  around it and in a tint of its own, warm or on Sepia a muted olive,
+  which keeps the same 7:1 contrast as body text on all four themes.
 - A `file-name · N min read` line above the title.
 
 **Rendering**

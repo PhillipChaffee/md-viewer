@@ -47,6 +47,27 @@ impl Rgb {
         let (a, b) = (self.luminance(), other.luminance());
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
+
+    /// Where the color is on the color wheel, in degrees: red is 0, yellow
+    /// 60, green 120 and blue 240. A gray is nowhere on it.
+    pub(crate) fn hue(self) -> Option<f64> {
+        let Self(red, green, blue) = self;
+        let strongest = red.max(green).max(blue);
+        let weakest = red.min(green).min(blue);
+        if strongest == weakest {
+            return None;
+        }
+        let spread = f64::from(strongest - weakest);
+        let [r, g, b] = [red, green, blue].map(f64::from);
+        let sixths = if strongest == red {
+            ((g - b) / spread).rem_euclid(6.0)
+        } else if strongest == green {
+            (b - r) / spread + 2.0
+        } else {
+            (r - g) / spread + 4.0
+        };
+        Some(sixths * 60.0)
+    }
 }
 
 impl fmt::Debug for Rgb {
@@ -134,6 +155,8 @@ pub(crate) struct Painted {
     pub(crate) underlined: bool,
     /// The color laid behind its first glyph, when it is marked.
     pub(crate) marker: Option<Rgb>,
+    /// The size its first words are set at, in points.
+    pub(crate) size: f32,
     /// The middle of its first line, where a person would click on it. A
     /// text that wraps has its own middle off its words.
     pub(crate) first_line: Pos2,
@@ -296,6 +319,7 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                     struck_out: sections.iter().any(struck),
                     underlined: sections.iter().any(underlined),
                     marker: marker.map(Rgb::of),
+                    size: section.map_or(0.0, |section| section.format.font_id.size),
                     first_line: first_line(text),
                     first_line_width: first_line_width(text),
                     glyphs: glyphs(text),

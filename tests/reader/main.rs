@@ -62,6 +62,8 @@ mod math;
 #[cfg(test)]
 mod menu;
 #[cfg(test)]
+mod menu_room;
+#[cfg(test)]
 mod opening;
 #[cfg(test)]
 mod opening_depth;
@@ -89,6 +91,8 @@ mod tabs;
 mod tabs_depth;
 #[cfg(test)]
 mod themes;
+#[cfg(test)]
+mod tooltips;
 #[cfg(test)]
 mod unsaved;
 #[cfg(test)]
