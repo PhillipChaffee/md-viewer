@@ -307,3 +307,18 @@ fn the_default_family_is_the_one_in_use_until_another_is_picked() {
         unlit
     );
 }
+
+#[test]
+fn a_file_dropped_while_a_dialog_is_open_opens_as_ever() {
+    for row in ["Colors\u{2026}", "Fonts\u{2026}"] {
+        let mut reader = linked();
+        open(&mut reader, row);
+
+        reader.drag_files_over(&["other.md"]);
+        reader.assert_sees("Drop markdown file here");
+        reader.drop_file("other.md");
+
+        assert_eq!(reader.tab_in_front().as_deref(), Some("Other"), "{row}");
+        assert_eq!(reader.title(), "other.md - Markdown Viewer", "{row}");
+    }
+}

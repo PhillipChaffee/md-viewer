@@ -33,6 +33,7 @@ mod error_bar;
 mod explorer_panel;
 mod frame;
 mod lightbox;
+mod modal;
 mod outline;
 mod overflow_menu;
 #[cfg(kani)]

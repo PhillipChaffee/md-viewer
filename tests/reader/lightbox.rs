@@ -578,3 +578,28 @@ fn a_formula_is_not_something_to_enlarge() {
 
     assert_eq!(reader.count(CLOSE), 0);
 }
+
+#[test]
+fn a_file_dropped_on_the_enlarged_view_opens_nothing() {
+    let mut reader = enlarged("blue.png");
+
+    reader.drag_files_over(&["other.md"]);
+    reader.assert_hides("Drop markdown file here");
+    reader.drop_file("other.md");
+
+    assert_eq!(reader.count(CLOSE), 1, "the picture is still enlarged");
+    assert_eq!(reader.tabs(), ["page.md"]);
+    assert_eq!(reader.title(), "page.md - Markdown Viewer");
+}
+
+#[test]
+fn a_file_dropped_once_the_enlarged_view_is_closed_opens() {
+    let mut reader = enlarged("blue.png");
+    reader.drop_file("other.md");
+    reader.press("Escape");
+
+    reader.drop_file("other.md");
+
+    assert_eq!(reader.tabs(), ["page.md", "Other"]);
+    assert_eq!(reader.title(), "other.md - Markdown Viewer");
+}

@@ -49,11 +49,14 @@ pub(crate) enum Icon {
     Minus,
     /// A ringed exclamation mark.
     Warning,
+    /// A square with an arrow leaving its top right corner: open in a tab
+    /// of its own.
+    NewTab,
 }
 
 impl Icon {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 15] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::Sidebar,
         Self::Home,
         Self::Back,
@@ -69,6 +72,7 @@ impl Icon {
         Self::Plus,
         Self::Minus,
         Self::Warning,
+        Self::NewTab,
     ];
 
     const fn marks(self) -> &'static [Mark] {
@@ -121,6 +125,17 @@ impl Icon {
                 Mark::Ring([8.0, 8.0], 6.0),
                 Mark::Path(&[[8.0, 4.5], [8.0, 9.0]]),
                 Mark::Dot([8.0, 11.3], 0.7),
+            ],
+            Self::NewTab => &[
+                Mark::Path(&[
+                    [7.5, 4.5],
+                    [2.5, 4.5],
+                    [2.5, 13.5],
+                    [11.5, 13.5],
+                    [11.5, 8.5],
+                ]),
+                Mark::Path(&[[9.5, 2.5], [13.5, 2.5], [13.5, 6.5]]),
+                Mark::Path(&[[13.5, 2.5], [7.5, 8.5]]),
             ],
         }
     }

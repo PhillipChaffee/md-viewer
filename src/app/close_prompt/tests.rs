@@ -1,9 +1,8 @@
 use eframe::egui;
 
 use super::*;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::frame_with;
+use crate::app::ui_harness::{enlarged, frame_with};
 
 /// `a.md`, `b.md` and `c.md` in three tabs, `c.md` in front.
 fn three_tabs() -> Harness {
@@ -270,13 +269,7 @@ fn the_last_answer_closes_the_window_and_the_close_goes_through() {
 fn the_prompt_closes_an_open_lightbox_so_it_can_be_seen() {
     let mut harness = three_tabs();
     edit(&mut harness, 1);
-    harness.app.lightbox.open = Some(LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    });
+    harness.app.lightbox.open = Some(enlarged());
 
     frame_asked_to_close(&mut harness);
 

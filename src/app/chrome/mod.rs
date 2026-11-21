@@ -5,6 +5,8 @@
 //! size, so the controls that change the text do not move under the
 //! pointer while they are used.
 
+use std::fmt;
+
 use eframe::egui::{self, Color32};
 
 use crate::icons::Icon;
@@ -29,7 +31,8 @@ pub(super) const BUTTON_SIDE: f32 = 28.0;
 /// Diameter of a dot in the warning color: the one beside the mode switch
 /// for unsaved edits, and the one on a tab whose file changed under them.
 pub(super) const WARNING_DOT: f32 = 7.0;
-/// Side of the square an icon is painted in.
+/// Side of the square an icon is painted in, unless its button says
+/// otherwise.
 const ICON_SIDE: f32 = 16.0;
 /// Space between the text of a quiet button and its edge.
 const BUTTON_PADDING: f32 = 7.0;
@@ -137,18 +140,25 @@ fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
 /// What a quiet button shows.
 #[derive(Clone, Copy, Debug)]
 enum Face<'a> {
-    Icon(Icon),
+    /// An icon in a square of this side.
+    Icon(Icon, f32),
     /// Text at this size.
     Text(&'a str, f32),
 }
 
 /// A button with no outline and no fill: an icon or a word in the muted
 /// color, which turns to the text color under the pointer.
+///
+/// Its name is of any type `N` that can be written out, and is written
+/// only when something asks what the button is called: a screen reader, or
+/// egui's record of a click. Most names are words that are already there. A
+/// button that is one of many, each named after its row, hands in a name
+/// that writes itself, so that no frame builds a name nothing reads.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct QuietButton<'a> {
+pub(super) struct QuietButton<'a, N = &'a str> {
     face: Face<'a>,
     /// What a screen reader calls it.
-    label: &'a str,
+    label: N,
     enabled: bool,
     lit: bool,
     min_width: f32,
@@ -157,17 +167,6 @@ pub(super) struct QuietButton<'a> {
 }
 
 impl<'a> QuietButton<'a> {
-    pub(super) const fn icon(icon: Icon, label: &'a str) -> Self {
-        Self {
-            face: Face::Icon(icon),
-            label,
-            enabled: true,
-            lit: false,
-            min_width: BUTTON_SIDE,
-            padding: BUTTON_PADDING,
-        }
-    }
-
     /// A button that reads `text` and is called that by a screen reader.
     pub(super) const fn text(text: &'a str) -> Self {
         Self::text_sized(text, LABEL_SIZE)
@@ -178,6 +177,24 @@ impl<'a> QuietButton<'a> {
         Self {
             face: Face::Text(text, size),
             label: text,
+            enabled: true,
+            lit: false,
+            min_width: BUTTON_SIDE,
+            padding: BUTTON_PADDING,
+        }
+    }
+}
+
+impl<N: fmt::Display + Copy> QuietButton<'_, N> {
+    pub(super) const fn icon(icon: Icon, label: N) -> Self {
+        Self::icon_sized(icon, ICON_SIDE, label)
+    }
+
+    /// A button that shows `icon` in a square `side` px wide.
+    pub(super) const fn icon_sized(icon: Icon, side: f32, label: N) -> Self {
+        Self {
+            face: Face::Icon(icon, side),
+            label,
             enabled: true,
             lit: false,
             min_width: BUTTON_SIDE,
@@ -200,7 +217,7 @@ impl<'a> QuietButton<'a> {
     }
 
     /// Call it `label` where the text on its face does not say what it does.
-    pub(super) const fn labelled(mut self, label: &'a str) -> Self {
+    pub(super) const fn labelled(mut self, label: N) -> Self {
         self.label = label;
         self
     }
@@ -216,39 +233,74 @@ impl<'a> QuietButton<'a> {
         self
     }
 
+    /// Lay it out as the next thing in `ui`, as wide as its face asks for,
+    /// and draw it.
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
-        let galley = match self.face {
-            Face::Icon(_) => None,
-            Face::Text(text, size) => Some(ui.painter().layout_no_wrap(
-                text.to_owned(),
-                egui::FontId::proportional(size),
-                Color32::PLACEHOLDER,
-            )),
-        };
-        let text_width = galley.as_ref().map_or(0.0, |galley| galley.size().x);
+        let words = self.words(ui);
+        let text_width = words.as_ref().map_or(0.0, |words| words.size().x);
         let size = egui::vec2(
             2.0_f32
                 .mul_add(self.padding, text_width)
                 .max(self.min_width),
             BUTTON_SIDE,
         );
-        let response = ui.allocate_response(size, sense(self.enabled));
+        let (id, rect) = ui.allocate_space(size);
+        let mut response = self.place(ui, rect, id);
+        response.intrinsic_size = Some(size);
+        self.paint_face(ui, palette, &response, words);
+        response
+    }
+
+    /// Make `rect`, which the caller has kept for it, the button under
+    /// `id`, and paint nothing: it takes clicks and the keyboard, and a
+    /// screen reader finds it. [`Self::paint`] draws it, which a caller may
+    /// leave out while the button is not to show.
+    pub(super) fn place(self, ui: &egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
+        let response = ui.interact(rect, id, sense(self.enabled));
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, self.enabled, self.label)
         });
-        paint_feedback(ui, &response, palette);
+        response
+    }
+
+    /// Draw the button `response` is: what shows it is pressed or focused,
+    /// and its face in the ink of its state.
+    pub(super) fn paint(self, ui: &egui::Ui, palette: &Palette, response: &egui::Response) {
+        self.paint_face(ui, palette, response, self.words(ui));
+    }
+
+    /// The text of its face, laid out. `None` for an icon.
+    fn words(self, ui: &egui::Ui) -> Option<std::sync::Arc<egui::Galley>> {
+        match self.face {
+            Face::Icon(..) => None,
+            Face::Text(text, size) => Some(ui.painter().layout_no_wrap(
+                text.to_owned(),
+                egui::FontId::proportional(size),
+                Color32::PLACEHOLDER,
+            )),
+        }
+    }
+
+    /// As [`Self::paint`], with the text of its face already laid out.
+    fn paint_face(
+        self,
+        ui: &egui::Ui,
+        palette: &Palette,
+        response: &egui::Response,
+        words: Option<std::sync::Arc<egui::Galley>>,
+    ) {
+        paint_feedback(ui, response, palette);
         let strong = self.lit || response.hovered() || response.has_focus();
         let color = ink(palette, self.enabled, strong);
-        if let Face::Icon(icon) = self.face {
+        if let Face::Icon(icon, side) = self.face {
             let square =
-                egui::Rect::from_center_size(response.rect.center(), egui::Vec2::splat(ICON_SIDE));
+                egui::Rect::from_center_size(response.rect.center(), egui::Vec2::splat(side));
             icon.paint(ui.painter(), square, color);
         }
-        if let Some(galley) = galley {
-            let corner = response.rect.center() - galley.size() / 2.0;
-            ui.painter().galley(corner, galley, color);
+        if let Some(words) = words {
+            let corner = response.rect.center() - words.size() / 2.0;
+            ui.painter().galley(corner, words, color);
         }
-        response
     }
 }
 
