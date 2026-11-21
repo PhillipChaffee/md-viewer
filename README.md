@@ -87,8 +87,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
   font presets and any installed font family are under **Aa → Fonts…**.
 - Code in a line of prose has no box. It is a little smaller than the text
-  around it and in a warm tint of its own, which keeps the same 7:1 contrast
-  as body text on all four themes.
+  around it and in a tint of its own, warm or on Sepia a muted olive,
+  which keeps the same 7:1 contrast as body text on all four themes.
 - A `file-name · N min read` line above the title.
 
 **Rendering**

@@ -50,9 +50,8 @@ fn inline_code_is_in_an_ink_of_its_own_that_reads_as_well_as_the_prose() {
     }
 }
 
-/// On Sepia a link and inline code are both warm browns, so what tells
-/// them apart cannot be their color: it is the link's underline and the
-/// code's face.
+/// What tells a link from inline code does not rest on their colors: it
+/// is the link's underline and the code's face.
 #[test]
 fn inline_code_is_told_from_a_link_by_its_face_and_the_links_underline() {
     let mut reader = Reader::with_docs(&[
@@ -78,6 +77,33 @@ fn inline_code_is_told_from_a_link_by_its_face_and_the_links_underline() {
     assert!(wide > narrow * 1.5, "links: {narrow} and {wide}");
     let (narrow, wide) = (reader.width_of("ilil"), reader.width_of("mwmw"));
     assert!((narrow - wide).abs() < NEAR, "code: {narrow} and {wide}");
+}
+
+/// Sepia's links are a warm brown. The code beside one is an olive, well
+/// round the color wheel from it towards green, so the two differ at a
+/// glance and not only by underline and face.
+#[test]
+fn on_sepia_inline_code_is_on_the_green_side_of_a_link() {
+    /// Half the step from one named color to the next, red to yellow.
+    const APART: f64 = 30.0;
+    const GREEN: f64 = 120.0;
+    let mut reader = Reader::with_docs(&[
+        (
+            "page.md",
+            "# Inks\n\nA [plain link](guide.md) beside `some code`.",
+        ),
+        ("guide.md", "# Guide\n\nThe guide itself."),
+    ]);
+
+    read_on(&mut reader, "Sepia");
+    let link = reader.ink_of("plain link").hue();
+    let code = reader.ink_of("some code").hue();
+    let (link, code) = (link.expect("a gray link"), code.expect("gray code"));
+
+    assert!(
+        code >= link + APART && code <= GREEN,
+        "the link is at {link:.0} degrees and the code at {code:.0}"
+    );
 }
 
 #[test]
