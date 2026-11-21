@@ -73,6 +73,15 @@ impl Painted {
     }
 }
 
+/// The one ink every open path is stroked in: that of an icon's strokes.
+#[track_caller]
+fn stroke_ink(painted: &Painted) -> Color32 {
+    let mut inks: Vec<_> = painted.paths().into_iter().map(|(_, ink)| ink).collect();
+    inks.dedup();
+    assert_eq!(inks.len(), 1, "one ink for at least one stroke: {inks:?}");
+    inks[0]
+}
+
 /// The one color a path is stroked with.
 fn solid(color: &egui::epaint::ColorMode) -> Color32 {
     match color {
@@ -651,14 +660,12 @@ fn the_button_takes_the_dots_place_while_the_row_is_pointed_at() {
     assert!(pointed.circles().is_empty(), "the dot gives way");
     assert!(button.contains(dot.unwrap()), "in the dot's place");
     assert!(rect.contains_rect(button));
-    // The icon's three strokes, muted until the button itself is pointed at.
-    let inks: Vec<_> = pointed.paths().into_iter().map(|(_, ink)| ink).collect();
-    assert_eq!(inks, [PALETTE.muted; 3]);
+    // The icon is muted until the button itself is pointed at.
+    assert_eq!(stroke_ink(&pointed), PALETTE.muted);
 
     // The button is laid out a frame after its row is pointed at.
     let on_button = paint_after(2, Some(button.center()), draw);
-    let inks: Vec<_> = on_button.paths().into_iter().map(|(_, ink)| ink).collect();
-    assert_eq!(inks, [PALETTE.text; 3]);
+    assert_eq!(stroke_ink(&on_button), PALETTE.text);
     assert_eq!(on_button.fills()[0], (rect, PALETTE.raised), "still lit");
 }
 
