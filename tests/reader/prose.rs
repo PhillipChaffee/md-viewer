@@ -542,20 +542,6 @@ fn the_three_ways_to_write_a_rule_all_draw_one() {
 }
 
 #[test]
-fn inline_code_sits_on_a_chip_of_its_own_color() {
-    let reader = page("# Code\n\nRun `cargo test` before you push.");
-
-    let code = reader.text_area("cargo test");
-    let chip = reader.color_at(code.left + 2.0, code.top + code.height / 2.0);
-    let prose = reader.text_area("Run ");
-    let paper = reader.color_at(prose.left + 2.0, prose.top + prose.height / 2.0);
-
-    assert_eq!(paper, reader.page_color());
-    assert_ne!(chip, paper, "the chip is the color of the page");
-    reader.assert_hides("`");
-}
-
-#[test]
 fn code_is_set_in_a_face_whose_letters_are_all_one_width() {
     let reader = page("# Code\n\n`iiiiii` and `mmmmmm` in code, iiiiii and mmmmmm in prose.");
 

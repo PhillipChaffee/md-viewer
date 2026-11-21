@@ -13,7 +13,7 @@ the app; `GATES.md` lists every quality gate and each exception to one.
 | Markdown, math, diagrams | `vendor/egui_commonmark` (a fork), typst + mitex, merman |
 | Painter | `vendor/epaint` (a patched copy) |
 | File watching | notify 6.1 + notify-debouncer-mini |
-| Fonts | fontique; Source Serif 4 bundled in `assets/fonts/` |
+| Fonts | fontique; Source Serif 4 and Source Code Pro bundled in `assets/fonts/` |
 
 ## Layout
 

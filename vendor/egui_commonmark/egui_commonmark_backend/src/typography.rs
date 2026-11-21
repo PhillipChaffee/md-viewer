@@ -293,9 +293,17 @@ pub struct BlockStyle {
     /// centered on the column, before it is scaled down. `None` keeps
     /// diagrams inside the column.
     pub figure_max_width: Option<f32>,
-    /// Corner radius of the background of inline code. `None` keeps the
-    /// square background as tall as the line.
-    pub inline_code_radius: Option<f32>,
+    /// The ink of inline code. Set, the code is told apart by this color
+    /// and its face alone: nothing is painted behind it. Code in a link
+    /// is in the link's color. `None` keeps the text color on the square
+    /// code background, as tall as the line.
+    /// md-viewer patch.
+    pub inline_code_color: Option<egui::Color32>,
+    /// A bold code face, for inline code in strong text and in the
+    /// headings that are bold. Callers must register the family with egui
+    /// before setting it. `None` keeps the regular code face there.
+    /// md-viewer patch.
+    pub strong_code_font_family: Option<egui::FontFamily>,
 }
 
 #[cfg(test)]
@@ -469,6 +477,76 @@ mod tests {
 
             assert!((format.font_id.size - body_size * 0.5).abs() < 1e-3);
             assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
+        });
+    }
+
+    #[test]
+    fn inline_code_with_an_ink_of_its_own_is_scaled_code_with_no_background() {
+        egui::__run_test_ui(|ui| {
+            let ink = egui::Color32::from_rgb(122, 74, 34);
+            let options = options_with(BlockStyle {
+                inline_code_scale: Some(0.5),
+                inline_code_color: Some(ink),
+                ..Default::default()
+            });
+            let body_size = egui::TextStyle::Body.resolve(ui.style()).size;
+            let code = Style {
+                code: true,
+                ..Default::default()
+            };
+
+            let format = format_of(ui, code.to_richtext_with_options(ui, "text", &options));
+
+            assert_eq!(format.color, ink);
+            assert_eq!(format.background, egui::Color32::TRANSPARENT);
+            assert!((format.font_id.size - body_size * 0.5).abs() < 1e-3);
+            assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
+
+            let plain = Style::default();
+            let format = format_of(ui, plain.to_richtext_with_options(ui, "text", &options));
+            assert_ne!(format.color, ink, "the ink is the code's alone");
+        });
+    }
+
+    #[test]
+    fn code_in_bold_text_takes_the_strong_code_family() {
+        egui::__run_test_ui(|ui| {
+            let options = options_with(BlockStyle {
+                strong_code_font_family: Some(family("CodeBold")),
+                ..Default::default()
+            });
+            let family_of = |style: Style| {
+                format_of(ui, style.to_richtext_with_options(ui, "text", &options))
+                    .font_id
+                    .family
+            };
+            let code = Style {
+                code: true,
+                ..Default::default()
+            };
+
+            assert_eq!(family_of(code.clone()), egui::FontFamily::Monospace);
+            let strong = Style {
+                strong: true,
+                ..code.clone()
+            };
+            assert_eq!(family_of(strong), family("CodeBold"));
+            // The first four heading levels are bold; the last two are not.
+            let title = Style {
+                heading: Some(0),
+                ..code.clone()
+            };
+            assert_eq!(family_of(title), family("CodeBold"));
+            let minor = Style {
+                heading: Some(5),
+                ..code
+            };
+            assert_eq!(family_of(minor), egui::FontFamily::Monospace);
+            let prose = Style {
+                strong: true,
+                ..Default::default()
+            };
+            assert_ne!(family_of(prose), family("CodeBold"));
         });
     }
 

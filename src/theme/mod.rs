@@ -46,10 +46,13 @@ pub(crate) struct Palette {
     pub(crate) page: Color32,
     /// Sidebars, popovers and dialogs: a hair off the page color.
     pub(crate) surface: Color32,
-    /// Code blocks, table headers, inline code and hovered rows.
+    /// Code blocks, table headers and hovered rows.
     pub(crate) raised: Color32,
     /// Body text.
     pub(crate) text: Color32,
+    /// Inline code: a warm tint of the body text, which with the code face
+    /// is all that tells it from the prose around it.
+    pub(crate) inline_code: Color32,
     /// Titles, slightly stronger than body text.
     pub(crate) heading: Color32,
     /// Meta lines, icons at rest and outline entries.
@@ -75,6 +78,7 @@ const PAPER: Palette = Palette {
     surface: rgb(0xF6_F6_F3),
     raised: rgb(0xF0_F0_EC),
     text: rgb(0x1F_1F_1F),
+    inline_code: rgb(0x6F_42_20),
     heading: rgb(0x11_11_11),
     muted: rgb(0x6B_6B_68),
     rule: rgb(0xE3_E3_DE),
@@ -92,6 +96,7 @@ const SEPIA: Palette = Palette {
     surface: rgb(0xF3_EB_DA),
     raised: rgb(0xF0_E7_D3),
     text: rgb(0x2B_26_22),
+    inline_code: rgb(0x6F_42_20),
     heading: rgb(0x1E_1A_17),
     muted: rgb(0x76_6C_5E),
     rule: rgb(0xE6_DC_C8),
@@ -109,6 +114,7 @@ const DUSK: Palette = Palette {
     surface: rgb(0x26_26_28),
     raised: rgb(0x38_38_3B),
     text: rgb(0xDA_D7_D0),
+    inline_code: rgb(0xE6_C8_A4),
     heading: rgb(0xEE_EB_E4),
     muted: rgb(0x9C_99_91),
     rule: rgb(0x40_40_44),
@@ -126,6 +132,7 @@ const NIGHT: Palette = Palette {
     surface: rgb(0x0B_0B_0B),
     raised: rgb(0x17_17_17),
     text: rgb(0xC8_C6_C1),
+    inline_code: rgb(0xD9_B4_8A),
     heading: rgb(0xE2_E0_DB),
     muted: rgb(0x8C_8A_84),
     rule: rgb(0x26_26_26),

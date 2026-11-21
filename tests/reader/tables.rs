@@ -241,9 +241,14 @@ fn cells_keep_their_inline_styles() {
         ("guide.md", "# Guide\n\nThe guide itself."),
     ]);
     let code = reader.text_area("cargo test");
-    let chip = reader.color_at(code.left + 2.0, code.top + code.height / 2.0);
+    let behind = reader.color_at(code.left + 2.0, code.top + code.height / 2.0);
 
-    assert_ne!(chip, reader.page_color(), "inline code keeps its chip");
+    assert_eq!(behind, reader.page_color(), "no chip behind inline code");
+    assert_ne!(
+        reader.ink_of("cargo test"),
+        reader.ink_of("old way"),
+        "inline code keeps its ink"
+    );
     assert!(reader.is_struck_out("old way"));
     reader.assert_hides("**");
 

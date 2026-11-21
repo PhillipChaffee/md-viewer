@@ -22,6 +22,24 @@ pub(crate) struct Area {
 }
 
 impl Area {
+    /// The area `rect` covers, a rectangle already in pixels.
+    pub(super) fn of(rect: egui::Rect) -> Self {
+        Self {
+            left: rect.left(),
+            top: rect.top(),
+            width: rect.width(),
+            height: rect.height(),
+        }
+    }
+
+    /// Whether `other` lies wholly inside it.
+    pub(super) fn holds(self, other: Self) -> bool {
+        other.left >= self.left
+            && other.top >= self.top
+            && other.right() <= self.right()
+            && other.bottom() <= self.bottom()
+    }
+
     pub(crate) fn right(self) -> f32 {
         self.left + self.width
     }
@@ -218,13 +236,7 @@ impl Reader {
         let scale = self.scale();
         let mut found: Vec<Area> = pictures(&self.shapes())
             .into_iter()
-            .map(|picture| picture.rect * scale)
-            .map(|rect| Area {
-                left: rect.left(),
-                top: rect.top(),
-                width: rect.width(),
-                height: rect.height(),
-            })
+            .map(|picture| Area::of(picture.rect * scale))
             .collect();
         found.sort_by(|a, b| a.top.total_cmp(&b.top));
         found
