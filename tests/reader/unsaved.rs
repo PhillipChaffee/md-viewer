@@ -10,7 +10,7 @@ const EDITED: &str = "# Draft\n\nFirst thoughts. Mine.";
 const ASKS_DRAFT: &str = "Save changes to “Draft” (draft.md)?";
 
 /// Put the document in front in edit mode and type `text` at its end.
-fn edit(reader: &mut Reader, text: &str) {
+pub(super) fn edit(reader: &mut Reader, text: &str) {
     reader.press("Ctrl+E");
     reader.click_text_field(0);
     reader.press("Ctrl+End");

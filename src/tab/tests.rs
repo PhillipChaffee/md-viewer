@@ -309,6 +309,94 @@ mod editing {
     }
 }
 
+mod disk {
+    use super::*;
+
+    /// A tab on `notes.md` with an unsaved `!` typed at its end.
+    fn edited_tab() -> (ScratchDir, Tab) {
+        let (dir, mut tab) = tab_with("# Notes");
+        tab.content.push('!');
+        tab.content_edited();
+        (dir, tab)
+    }
+
+    #[test]
+    fn a_tab_without_unsaved_edits_reloads_and_has_no_notice() {
+        let (dir, mut tab) = tab_with("# Notes");
+        dir.file("notes.md", "# Theirs");
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::Reloaded);
+
+        assert_eq!(tab.content, "# Theirs");
+        assert_eq!(tab.disk_notice(), None);
+        fs::remove_file(&tab.path).unwrap();
+        assert!(tab.follow_disk().is_err());
+        assert_eq!(tab.disk_notice(), None);
+    }
+
+    #[test]
+    fn unsaved_edits_are_kept_and_measured_against_the_files_new_text() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::KeptEdits);
+
+        assert_eq!(tab.content, "# Notes!");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        tab.content.pop();
+        tab.content_edited();
+        assert!(tab.is_dirty(), "the file no longer holds this text");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+
+        tab.content = "# Theirs".to_owned();
+        tab.content_edited();
+        assert!(!tab.is_dirty());
+        assert_eq!(tab.disk_notice(), None, "no notice without unsaved edits");
+    }
+
+    #[test]
+    fn a_file_left_as_it_was_is_not_announced() {
+        let (_dir, mut tab) = edited_tab();
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::KeptEdits);
+
+        assert_eq!(tab.disk_notice(), None);
+    }
+
+    #[test]
+    fn keep_mine_takes_the_notice_down_until_the_file_changes_again() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+
+        tab.keep_mine();
+        assert_eq!(tab.disk_notice(), None);
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None, "the same text is no news");
+
+        dir.file("notes.md", "# Theirs again");
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+    }
+
+    #[test]
+    fn a_file_that_is_gone_is_announced_once_and_a_save_settles_it() {
+        let (_dir, mut tab) = edited_tab();
+        fs::remove_file(&tab.path).unwrap();
+
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Gone));
+        tab.keep_mine();
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None, "it was gone already");
+
+        tab.save().unwrap();
+        tab.content.push('?');
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None);
+    }
+}
+
 mod navigation {
     use super::*;
 

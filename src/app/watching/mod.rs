@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use notify_debouncer_mini::DebounceEventResult;
 
 use crate::app::MarkdownApp;
+use crate::tab::Followed;
 use crate::watcher::{
     ancestors_within, explorer_watch_dirs, next_watcher_retry, settled_paths, FileWatcher,
     WatchPlan, MAX_WATCHER_RETRIES,
@@ -263,23 +264,23 @@ impl MarkdownApp {
         }
     }
 
-    /// Reloads every tab showing `path` from disk. Returns whether a reload
-    /// replaced the document the active tab shows.
+    /// Has every tab showing `path` follow its file: one without unsaved
+    /// edits reloads, and one with them keeps them and shows the notice.
+    /// Returns whether a reload replaced the document the active tab shows.
     fn reload_tabs_showing(&mut self, path: &Path) -> bool {
         let active_shows_path = self.front_tab().is_some_and(|tab| tab.path == path);
         let mut reloaded = false;
         for tab in self.tabs.iter_mut().filter(|tab| tab.path == path) {
-            // Never clobber unsaved edits with a disk reload, whether the
-            // tab shows the editor or the preview of what was typed. A
-            // reload of identical content (e.g. our own save echoing back
-            // through the watcher) still proceeds.
-            if tab.is_dirty() {
-                log::info!("Skipping reload of unsaved tab: {}", path.display());
-                continue;
-            }
-            log::info!("Reloading tab: {}", path.display());
-            match tab.reload() {
-                Ok(()) => reloaded = true,
+            // A reload of identical content (e.g. our own save echoing
+            // back through the watcher) still proceeds.
+            match tab.follow_disk() {
+                Ok(Followed::Reloaded) => {
+                    log::info!("Reloaded tab: {}", path.display());
+                    reloaded = true;
+                }
+                Ok(Followed::KeptEdits) => {
+                    log::info!("Kept the unsaved edits of {}", path.display());
+                }
                 Err(error) => {
                     self.error_message =
                         Some(format!("Unable to reload {}: {error}", path.display()));
@@ -287,5 +288,23 @@ impl MarkdownApp {
             }
         }
         reloaded && active_shows_path
+    }
+
+    /// Reload the tab in front from its file, in place of its unsaved
+    /// edits: what the reader asks for with the notice's Reload.
+    pub(crate) fn reload_front_tab(&mut self) {
+        let Some(tab) = self.front_tab_mut() else {
+            return;
+        };
+        let reloaded = tab.reload();
+        let path = tab.path.clone();
+        match reloaded {
+            // What the find bar found was in the text the reload replaced.
+            Ok(()) if self.search.is_open => self.search.invalidate(),
+            Ok(()) => {}
+            Err(error) => {
+                self.error_message = Some(format!("Unable to reload {}: {error}", path.display()));
+            }
+        }
     }
 }

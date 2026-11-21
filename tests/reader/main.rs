@@ -18,6 +18,8 @@ mod diagrams;
 #[cfg(test)]
 mod dialogs;
 #[cfg(test)]
+mod disk_change;
+#[cfg(test)]
 mod docs;
 #[cfg(test)]
 mod editing;

@@ -9,9 +9,11 @@ use eframe::egui::{self, Rangef};
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT};
+use crate::app::disk_notice;
 use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
+use crate::tab::DiskChange;
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -33,6 +35,9 @@ const NAME_WIDTH: Rangef = Rangef {
 };
 /// Diameter of the dot that stands for live reload in a tab's hover text.
 const LIVE_DOT: f32 = 6.0;
+/// Diameter of the dot on a tab whose file changed under unsaved edits:
+/// that of the unsaved dot beside the mode switch.
+const DISK_DOT: f32 = 7.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
 
 /// What the user asked of the tabs during one frame.
@@ -54,6 +59,9 @@ struct TabLabel<'a> {
     is_active: bool,
     /// Whether the document is reloaded when its file changes.
     live: bool,
+    /// What became of the file under the document's unsaved edits, while
+    /// the notice of it waits for an answer.
+    disk: Option<DiskChange>,
 }
 
 impl MarkdownApp {
@@ -114,6 +122,7 @@ impl MarkdownApp {
                         path: &tab.path,
                         is_active: self.front() == Some(index),
                         live,
+                        disk: tab.disk_notice(),
                     };
                     let shown = tab_label(ui, &label, palette, picks);
                     if reveal && label.is_active {
@@ -188,6 +197,9 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
             chrome::small_label(ui, palette, "Live: reloads when the file changes");
         });
     }
+    if let Some(change) = label.disk {
+        chrome::small_label(ui, palette, disk_notice::message(change));
+    }
 }
 
 /// Draws one tab: its name, the line under it while it is the active one,
@@ -250,12 +262,39 @@ fn tab_label(
     }
     if pointed {
         tab_close_button(ui, &response, label, palette, actions);
+    } else if let Some(change) = label.disk {
+        tab_disk_mark(ui, &response, change, palette);
     }
 
     egui::Popup::context_menu(&response)
         .style(chrome::popup_style(palette))
         .show(|ui| tab_context_menu(ui, label, palette, actions));
     response.on_hover_ui(|ui| tab_hover(ui, label, palette))
+}
+
+/// The square a tab keeps free at its right end.
+fn end_square(tab: egui::Rect) -> egui::Rect {
+    egui::Rect::from_center_size(
+        egui::pos2(
+            tab.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
+            tab.center().y,
+        ),
+        egui::Vec2::splat(CLOSE_SIDE),
+    )
+}
+
+/// The mark of a tab whose file changed under its unsaved edits: a dot in
+/// the warning color where the close button shows while the tab is pointed
+/// at, so the reader sees which tab waits for an answer when another is in
+/// front.
+fn tab_disk_mark(ui: &egui::Ui, tab: &egui::Response, change: DiskChange, palette: &Palette) {
+    let square = end_square(tab.rect);
+    let mark = ui.interact(square, tab.id.with("disk"), egui::Sense::hover());
+    mark.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Label, true, disk_notice::mark(change))
+    });
+    ui.painter()
+        .circle_filled(square.center(), DISK_DOT / 2.0, palette.warning);
 }
 
 /// The close button in the square a tab keeps free at its right end.
@@ -266,13 +305,7 @@ fn tab_close_button(
     palette: &Palette,
     actions: &mut TabPicks,
 ) {
-    let square = egui::Rect::from_center_size(
-        egui::pos2(
-            tab.rect.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
-            tab.rect.center().y,
-        ),
-        egui::Vec2::splat(CLOSE_SIDE),
-    );
+    let square = end_square(tab.rect);
     let close = ui.interact(square, tab.id.with("close"), egui::Sense::click());
     close.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close tab"));
 

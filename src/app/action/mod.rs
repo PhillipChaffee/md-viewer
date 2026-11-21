@@ -44,6 +44,12 @@ pub(crate) enum AppAction {
     CloseSearch,
     /// Write the active tab's unsaved edits to disk.
     Save,
+    /// Show the active tab's file as it is on disk now, in place of its
+    /// unsaved edits.
+    ReloadFromDisk,
+    /// Keep the active tab's unsaved edits, and take down the notice that
+    /// its file changed on disk.
+    KeepMine,
     /// Switch the active tab between the rendered document and its source.
     ToggleEditMode,
     ToggleWatch,
@@ -106,6 +112,12 @@ impl MarkdownApp {
             AppAction::PreviousMatch => self.jump_match(-1),
             AppAction::CloseSearch => self.close_search(),
             AppAction::Save => self.save_active_tab(),
+            AppAction::ReloadFromDisk => self.reload_front_tab(),
+            AppAction::KeepMine => {
+                if let Some(tab) = self.front_tab_mut() {
+                    tab.keep_mine();
+                }
+            }
             AppAction::ToggleEditMode => {
                 if let Some(tab) = self.front_tab_mut() {
                     tab.set_edit_mode(!tab.is_editing);

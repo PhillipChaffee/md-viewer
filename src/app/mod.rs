@@ -26,6 +26,7 @@ mod appearance;
 mod chrome;
 mod close_prompt;
 mod content;
+mod disk_notice;
 mod drop;
 mod edit_controls;
 mod error_bar;

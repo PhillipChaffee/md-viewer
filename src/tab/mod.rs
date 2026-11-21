@@ -80,6 +80,35 @@ pub(crate) enum SaveOutcome {
     Failed,
 }
 
+/// What another program did to a tab's file while the tab had unsaved
+/// edits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DiskChange {
+    /// The file holds other text now, or can no longer be read.
+    Changed,
+    /// The file is not there.
+    Gone,
+}
+
+/// A change to a tab's file that its unsaved edits kept it from following,
+/// until the reader reloads the file or saves over it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Unfollowed {
+    change: DiskChange,
+    /// Whether the notice of it is up: it is until the reader keeps their
+    /// own text.
+    notice_shows: bool,
+}
+
+/// What a tab did when its file changed on disk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Followed {
+    /// It shows the file's text now.
+    Reloaded,
+    /// It has unsaved edits and kept them.
+    KeptEdits,
+}
+
 /// A way to show another document in a tab, in place of the one it shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Route {
@@ -135,9 +164,14 @@ pub(crate) struct Tab {
     pub(crate) content_version: u64,
     /// When true, the content area shows a `TextEdit` instead of `CommonMarkViewer`.
     pub(crate) is_editing: bool,
-    /// Snapshot of the on-disk content at last load/save. `is_dirty`
-    /// compares the edit buffer with it.
+    /// The file's text as the tab last knew it: loaded, saved, or seen
+    /// changed under unsaved edits. `is_dirty` compares the edit buffer
+    /// with it.
     saved_content: String,
+    /// The change to the file that the unsaved edits kept the tab from
+    /// following. There is one only while there are unsaved edits: a tab
+    /// without them reloads, and `follow_disk` decides which it is.
+    unfollowed: Option<Unfollowed>,
     /// The outcome of the last save and when it was, for the edit
     /// toolbar to show until it has had its time.
     pub(crate) save_flash: Option<(SaveOutcome, Instant)>,
@@ -167,6 +201,7 @@ impl Tab {
             title: file_title(&path),
             path,
             saved_content: content.clone(),
+            unfollowed: None,
             content,
             cache: CommonMarkCache::default(),
             pictures_left: BTreeSet::new(),
@@ -216,10 +251,73 @@ impl Tab {
         self.content_version = self.content_version.wrapping_add(1);
     }
 
-    /// Whether the text differs from what was last loaded or saved. Text
-    /// typed back to what is on disk is not dirty.
+    /// Whether the text differs from the file as the tab last knew it.
+    /// Text typed back to what is on disk is not dirty.
     pub(crate) fn is_dirty(&self) -> bool {
         self.content != self.saved_content
+    }
+
+    /// Answer a change to the tab's file. Without unsaved edits the tab
+    /// reloads. With them it keeps them, and notes what became of the file
+    /// for the notice to show.
+    pub(crate) fn follow_disk(&mut self) -> io::Result<Followed> {
+        if self.is_dirty() {
+            self.look_at_disk();
+            Ok(Followed::KeptEdits)
+        } else {
+            self.reload().map(|()| Followed::Reloaded)
+        }
+    }
+
+    /// Set the unsaved edits against the file as it is now. Other text in
+    /// it is what the edits are measured against from here on, so taking
+    /// them out by hand does not make the tab look saved. A file that
+    /// stays gone or unreadable is not announced a second time.
+    fn look_at_disk(&mut self) {
+        match read_document(&self.path) {
+            Ok(theirs) if theirs == self.saved_content => {
+                // The file is as the tab knew it. One that was gone is back.
+                self.unfollowed
+                    .take_if(|unfollowed| unfollowed.change == DiskChange::Gone);
+            }
+            Ok(theirs) => {
+                self.saved_content = theirs;
+                self.note_disk_change(DiskChange::Changed);
+            }
+            Err(error) => {
+                let change = if error.kind() == io::ErrorKind::NotFound {
+                    DiskChange::Gone
+                } else {
+                    DiskChange::Changed
+                };
+                let noted = self.unfollowed.map(|unfollowed| unfollowed.change);
+                if noted != Some(change) {
+                    self.note_disk_change(change);
+                }
+            }
+        }
+    }
+
+    /// Put the notice of `change` up, unless the other program wrote just
+    /// what was typed here and nothing is unsaved any more.
+    fn note_disk_change(&mut self, change: DiskChange) {
+        self.unfollowed = self.is_dirty().then_some(Unfollowed {
+            change,
+            notice_shows: true,
+        });
+    }
+
+    /// The change to the file the reader has still to be told of.
+    pub(crate) fn disk_notice(&self) -> Option<DiskChange> {
+        let unfollowed = self.unfollowed?;
+        unfollowed.notice_shows.then_some(unfollowed.change)
+    }
+
+    /// Take the notice down and keep the edits. A save still has to ask.
+    pub(crate) const fn keep_mine(&mut self) {
+        if let Some(unfollowed) = &mut self.unfollowed {
+            unfollowed.notice_shows = false;
+        }
     }
 
     pub(crate) fn title(&self) -> &str {
@@ -267,6 +365,7 @@ impl Tab {
             return Err(error);
         }
         self.saved_content = self.content.clone();
+        self.unfollowed = None;
         Ok(())
     }
 
@@ -295,6 +394,7 @@ impl Tab {
         self.pictures_left.extend(shown);
         self.content = content;
         self.saved_content = self.content.clone();
+        self.unfollowed = None;
         self.path = path;
         self.title = file_title(&self.path);
         self.id = egui::Id::new(&self.path);
@@ -312,6 +412,11 @@ impl Tab {
     /// Called once per edit, never per frame.
     pub(crate) fn content_edited(&mut self) {
         self.index_content(true);
+        if !self.is_dirty() {
+            // The text is the file's again: there is nothing left to
+            // reload or to save over.
+            self.unfollowed = None;
+        }
     }
 
     /// Work out everything that is read off `content`: its line count,

@@ -203,9 +203,13 @@ impl MarkdownApp {
         }
     }
 
-    /// The error bar and the find bar.
+    /// The error bar, the notice that the document's file changed on
+    /// disk, and the find bar.
     fn render_strips(&mut self, ctx: &egui::Context) {
         self.render_error_bar(ctx);
+        if let Some(answer) = self.render_disk_notice(ctx) {
+            self.apply_action(ctx, answer);
+        }
 
         // Find bar (conditional, under the error bar)
         let find_actions = self.render_search_bar(ctx);
