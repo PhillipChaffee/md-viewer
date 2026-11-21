@@ -18,8 +18,8 @@ impl MarkdownApp {
         };
         let palette = self.theme.palette();
         let mut dismissed = false;
-        let message = (error.as_str(), palette.warning);
-        chrome::warning_bar(ctx, "error_bar", palette, message, |ui| {
+        let ink = palette.warning;
+        chrome::warning_bar(ctx, "error_bar", palette, error, ink, |ui| {
             let dismiss = QuietButton::icon(Icon::Close, "Dismiss")
                 .show(ui, palette)
                 .on_hover_text("Dismiss");

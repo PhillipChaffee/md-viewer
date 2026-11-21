@@ -35,8 +35,8 @@ impl MarkdownApp {
         let change = self.front_tab()?.disk_notice()?;
         let palette = self.theme.palette();
         let mut answer = None;
-        let message = (message(change), palette.text);
-        chrome::warning_bar(ctx, "disk_notice", palette, message, |ui| {
+        let (message, ink) = (message(change), palette.text);
+        chrome::warning_bar(ctx, "disk_notice", palette, message, ink, |ui| {
             if QuietButton::text("Keep mine").show(ui, palette).clicked() {
                 answer = Some(AppAction::KeepMine);
             }

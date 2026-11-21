@@ -294,7 +294,8 @@ pub(super) fn warning_bar(
     ctx: &egui::Context,
     id: &'static str,
     palette: &Palette,
-    (message, ink): (&str, Color32),
+    message: &str,
+    ink: Color32,
     buttons: impl FnOnce(&mut egui::Ui),
 ) {
     let bar = egui::TopBottomPanel::top(id)
