@@ -248,26 +248,30 @@ fn the_tab_keys_do_nothing_with_one_document_or_none() {
 #[test]
 fn each_tab_keeps_its_own_place_on_the_page() {
     let mut reader = Reader::with_docs(&[
-        ("long.md", &long_document(80)),
-        ("other.md", &long_document(40)),
+        ("reads/long.md", &long_document(80)),
+        ("reads/other.md", &long_document(40)),
     ]);
-    reader.drop_file("other.md");
+    reader.drop_file("reads/other.md");
     // One heading twice, in one folder: each tab shows its file too.
-    let tabs = reader.tabs().into_iter().map(|tab| format!("tab:{tab}"));
-    let [long, other] = [0, 1].map(|place| tabs.clone().nth(place).unwrap());
-    assert!(long.starts_with("tab:Long read · ") && long.ends_with("/long.md"));
-    assert!(other.starts_with("tab:Long read · ") && other.ends_with("/other.md"));
-    reader.click(&long);
+    let (long, other) = (
+        "tab:Long read · reads/long.md",
+        "tab:Long read · reads/other.md",
+    );
+    assert_eq!(
+        reader.tabs(),
+        ["Long read · reads/long.md", "Long read · reads/other.md"]
+    );
+    reader.click(long);
     reader.scroll_down(3000.0);
     let place = reader.text_area("Section 30");
 
-    reader.click(&other);
+    reader.click(other);
     assert!(reader.in_view("Section 1"), "the other tab is at its start");
     reader.scroll_down(1000.0);
-    reader.click(&long);
+    reader.click(long);
 
     assert_eq!(reader.text_area("Section 30"), place);
-    reader.click(&other);
+    reader.click(other);
     assert!(!reader.in_view("Section 1"), "and it kept its own place");
 }
 
