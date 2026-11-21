@@ -37,38 +37,42 @@ impl MarkdownApp {
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .sense(chrome::POPUP_SENSE)
             .style(chrome::popup_style(palette))
-            .show(|ui| {
-                ui.set_width(MENU_WIDTH);
-                self.file_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.document_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.history_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.view_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.zoom_row(ui, picked);
-                chrome::hairline(ui, palette);
-                self.item(
-                    ui,
-                    MenuRow::new("Colors…"),
-                    AppAction::OpenColorSettings,
-                    picked,
-                );
-                self.item(
-                    ui,
-                    MenuRow::new("Fonts…"),
-                    AppAction::OpenFontSettings,
-                    picked,
-                );
-                chrome::hairline(ui, palette);
-                self.item(
-                    ui,
-                    MenuRow::new("Quit").shortcut(self.hints.of(AppAction::Quit)),
-                    AppAction::Quit,
-                    picked,
-                );
-            });
+            .show(|ui| self.rows(ui, picked));
+    }
+
+    /// Every row of the menu, top to bottom.
+    fn rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let palette = self.theme.palette();
+        ui.set_width(MENU_WIDTH);
+        self.file_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.document_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.history_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.view_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.zoom_row(ui, picked);
+        chrome::hairline(ui, palette);
+        self.item(
+            ui,
+            MenuRow::new("Colors…"),
+            AppAction::OpenColorSettings,
+            picked,
+        );
+        self.item(
+            ui,
+            MenuRow::new("Fonts…"),
+            AppAction::OpenFontSettings,
+            picked,
+        );
+        chrome::hairline(ui, palette);
+        self.item(
+            ui,
+            MenuRow::new("Quit").shortcut(self.hints.of(AppAction::Quit)),
+            AppAction::Quit,
+            picked,
+        );
     }
 
     /// One row of the menu: picking it asks for `action` and closes the
