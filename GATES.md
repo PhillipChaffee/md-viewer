@@ -22,6 +22,12 @@ by hand: `scripts/ci-changes.sh <base> <head>`.
 | Other code and configuration only: `tests/`, `data/`, the other scripts, lint and tool configuration, and any path not named in this table | Run | Run | Skipped |
 | Documentation only: `docs/`, `screenshots/`, `LICENSE`, `THIRD_PARTY_NOTICES`, and Markdown outside `src/`, `crates/`, `vendor/`, `assets/`, `tests/`, `data/`, `scripts/` and `.github/` | Run | Skipped | Skipped |
 
+A skipped job reports as skipped, which the branch rules accept. The
+cross-platform check and `proofs` are matrix jobs, and a matrix job skipped
+as a whole would never report the names the rules wait for. So the
+cross-platform job always starts and skips its steps, and a last job named
+`proofs` reports for the shares.
+
 Four things keep this from hiding a failure:
 
 - **Documentation is still checked.** `hygiene` holds the spelling,

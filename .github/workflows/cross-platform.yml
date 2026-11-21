@@ -10,9 +10,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # The same question ci.yml's `changes` job asks, for this workflow: a pull
-  # request that touches only documentation skips the check. A push to main
-  # runs it, and so does a failure here.
+  # The same question ci.yml's `changes` job asks, for this workflow: on a
+  # pull request that touches only documentation the check has nothing to
+  # compile. A push to main runs it, and so does a failure here.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -38,7 +38,13 @@ jobs:
   check:
     name: cargo check (${{ matrix.os }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    # The job always starts, and its steps carry the condition. A matrix
+    # job skipped as a whole reports one check under the job's unexpanded
+    # name, and the two names the branch rules require, one per system,
+    # would never arrive.
+    if: ${{ !cancelled() }}
+    env:
+      CODE_CHANGED: ${{ needs.changes.outputs.code != 'false' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -49,8 +55,11 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+        if: env.CODE_CHANGED == 'true'
       - uses: dtolnay/rust-toolchain@stable
+        if: env.CODE_CHANGED == 'true'
       - uses: Swatinem/rust-cache@v2
+        if: env.CODE_CHANGED == 'true'
       # --all-targets so test code compiles here too. Without it, a test
       # behind `#[cfg(target_os = "windows")]` is not merely unexecuted on
       # Windows — it is never compiled anywhere, which is how
@@ -59,3 +68,7 @@ jobs:
       # unchecked. Still `check`, not `test`: this job is a portability guard,
       # and running the suite on three platforms is a separate decision.
       - run: cargo check --locked --all-targets
+        if: env.CODE_CHANGED == 'true'
+      - name: Documentation only, nothing to compile
+        if: env.CODE_CHANGED != 'true'
+        run: echo "This change touches only documentation."
