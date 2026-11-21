@@ -8,7 +8,7 @@ use mac_window::QuitAnswer;
 
 use crate::app::close_prompt::CloseAnswer;
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_asked_to_close, sent};
+use crate::app::ui_harness::{frame_asked_to_close, painted_text, sent};
 
 const CLOSE: egui::ViewportCommand = egui::ViewportCommand::Close;
 const REFUSE: egui::ViewportCommand = egui::ViewportCommand::CancelClose;
@@ -32,6 +32,14 @@ fn next_frame(harness: &mut Harness, output: &egui::FullOutput) -> egui::FullOut
 
 fn prompt_shows(harness: &Harness) -> bool {
     harness.app.closing.is_asking()
+}
+
+/// Whether `output` painted the question about saving over another
+/// program's text, and not the one about unsaved edits.
+fn asks_to_overwrite(output: &egui::FullOutput) -> bool {
+    let painted = painted_text(output);
+    let has = |words: &str| painted.iter().any(|text| text.contains(words));
+    has("changed on disk. Overwrite it?") && !has("Save changes to")
 }
 
 const THEIRS: &str = "written by another program";
@@ -234,7 +242,55 @@ fn a_request_while_the_overwrite_question_shows_writes_nothing_and_keeps_asking(
     let output = next_frame(&mut harness, &output);
 
     assert!(sent(&output, &REFUSE));
-    assert!(prompt_shows(&harness));
+    assert!(asks_to_overwrite(&output), "the same question");
     assert!(harness.app.tabs[0].is_dirty());
     assert_eq!(on_disk(&harness), THEIRS);
+}
+
+/// Leave the document in front with an unsaved edit, have another program
+/// write to its file, and save it: the prompt asks whether to overwrite.
+fn save_asked_over_a_changed_file(harness: &mut Harness) -> impl Fn() -> QuitAnswer {
+    let ask = harness.app.quit_asker();
+    edit(harness);
+    fs::write(&harness.app.tabs[0].path, THEIRS).unwrap();
+    harness.app.request_save(0);
+    harness.idle();
+    assert!(
+        asks_to_overwrite(&harness.idle()),
+        "a sheet is laid out unseen first"
+    );
+    ask
+}
+
+#[test]
+fn a_request_while_a_plain_save_asks_keeps_the_question_and_the_system_waits() {
+    let mut harness = Harness::with_three_docs();
+    let ask = save_asked_over_a_changed_file(&mut harness);
+
+    assert_eq!(ask(), QuitAnswer::NotYet);
+    let output = harness.idle();
+    let output = next_frame(&mut harness, &output);
+
+    assert!(sent(&output, &REFUSE));
+    assert!(asks_to_overwrite(&output), "the same question");
+    assert_eq!(on_disk(&harness), THEIRS);
+}
+
+#[test]
+fn overwrite_after_a_request_while_a_plain_save_asks_writes_and_quits() {
+    let mut harness = Harness::with_three_docs();
+    let ask = save_asked_over_a_changed_file(&mut harness);
+    ask();
+    let output = harness.idle();
+    next_frame(&mut harness, &output);
+
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+    let output = harness.idle();
+
+    assert_eq!(on_disk(&harness), harness.app.tabs[0].content);
+    assert!(
+        sent(&output, &CLOSE),
+        "the app closes on its own, as it said"
+    );
+    assert_eq!(ask(), QuitAnswer::Now);
 }

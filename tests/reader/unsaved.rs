@@ -583,6 +583,44 @@ fn cancel_while_quitting_keeps_the_app_and_every_tab() {
 }
 
 #[test]
+fn a_second_quit_does_not_ask_again_about_a_document_already_discarded() {
+    let mut reader = two_unsaved_of_three();
+    reader.press("Ctrl+Q");
+    reader.click("Discard");
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
+
+    reader.close_window();
+
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
+    reader.assert_hides("Save changes to “Alpha” (a.md)?");
+    assert!(reader.keyboard_is_on("Save"));
+    reader.click("Discard");
+    assert!(reader.has_quit());
+    assert_eq!(reader.read_file("a.md"), as_written("a.md"));
+    assert_eq!(reader.read_file("b.md"), as_written("b.md"));
+}
+
+#[test]
+fn a_quit_while_closing_a_tab_asks_keeps_the_question_and_then_asks_about_the_rest() {
+    let mut reader = two_unsaved_of_three();
+    reader.click("tab:Beta");
+    reader.press("Ctrl+W");
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
+
+    reader.close_window();
+
+    reader.assert_sees("Save changes to “Beta” (b.md)?");
+    assert!(!reader.has_quit());
+    reader.click("Discard");
+    reader.assert_sees("Save changes to “Alpha” (a.md)?");
+    assert!(!reader.has_quit(), "a.md is still to be answered for");
+    reader.click("Discard");
+    assert!(reader.has_quit());
+    assert_eq!(reader.read_file("a.md"), as_written("a.md"));
+    assert_eq!(reader.read_file("b.md"), as_written("b.md"));
+}
+
+#[test]
 fn quitting_again_after_a_cancel_asks_again() {
     let mut reader = unsaved_draft();
     reader.press("Ctrl+Q");
