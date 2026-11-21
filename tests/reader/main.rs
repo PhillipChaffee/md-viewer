@@ -88,6 +88,8 @@ mod rendering;
 #[cfg(test)]
 mod same_name;
 #[cfg(test)]
+mod same_name_changes;
+#[cfg(test)]
 mod session;
 #[cfg(test)]
 mod session_depth;
