@@ -28,6 +28,9 @@ pub(super) const LABEL_SIZE: f32 = 13.0;
 pub(super) const SMALL_SIZE: f32 = 11.5;
 /// Side of the square a quiet button takes at least.
 pub(super) const BUTTON_SIDE: f32 = 28.0;
+/// Diameter of a dot in the warning color: the one beside the mode switch
+/// for unsaved edits, and the one on a tab whose file changed under them.
+pub(super) const WARNING_DOT: f32 = 7.0;
 /// Side of the square an icon is painted in, unless its button says
 /// otherwise.
 const ICON_SIDE: f32 = 16.0;
@@ -428,6 +431,40 @@ pub(super) fn small_label(ui: &mut egui::Ui, palette: &Palette, text: &str) -> e
         )
         .selectable(false),
     )
+}
+
+/// A bar under the top bar that opens with the warning sign: `message` in
+/// `ink`, and at its right end what `buttons` adds, laid out from the
+/// right. `id` tells the bars apart.
+pub(super) fn warning_bar(
+    ctx: &egui::Context,
+    id: &'static str,
+    palette: &Palette,
+    message: &str,
+    ink: Color32,
+    buttons: impl FnOnce(&mut egui::Ui),
+) {
+    let bar = egui::TopBottomPanel::top(id)
+        .exact_height(STRIP_HEIGHT)
+        .frame(bar_frame(palette));
+    bar.show(ctx, |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add_space(6.0);
+            let (sign, _) =
+                ui.allocate_exact_size(egui::Vec2::splat(ICON_SIDE), egui::Sense::hover());
+            Icon::Warning.paint(ui.painter(), sign, palette.warning);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                buttons(ui);
+                // The message takes what the buttons leave, and is cut
+                // short rather than pushing them out.
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    let message = egui::RichText::new(message).font(label_font()).color(ink);
+                    ui.add(egui::Label::new(message).truncate());
+                });
+            });
+        });
+    });
 }
 
 /// What stands at the right end of a menu row.

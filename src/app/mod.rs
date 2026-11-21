@@ -26,6 +26,7 @@ mod appearance;
 mod chrome;
 mod close_prompt;
 mod content;
+mod disk_notice;
 mod drop;
 mod edit_controls;
 mod error_bar;
@@ -143,6 +144,9 @@ pub(crate) struct MarkdownApp {
     // Last zoom level handed to set_zoom_factor; skips redundant writes
     last_applied_zoom_level: Option<f32>,
     window_title: frame::WindowTitle,
+    /// What the reader typed in one frame after a key that moves the
+    /// keyboard to another control.
+    typed_ahead: frame::TypedAhead,
     /// Cached set of open tab paths for file explorer highlighting (avoids per-frame syscalls).
     open_tab_paths: HashSet<PathBuf>,
     /// The overlay that shows a clicked diagram or image enlarged.
@@ -154,8 +158,9 @@ pub(crate) struct MarkdownApp {
     hints: Hints,
     /// Whether the fonts changed since `hints` were written.
     hints_stale: bool,
-    /// A close that waits for the reader to say what becomes of unsaved
-    /// edits, and the quit that follows their last answer.
+    /// A close or a save that waits for the reader to say what becomes of
+    /// unsaved edits or of what another program wrote, and the quit that
+    /// follows their last answer.
     closing: close_prompt::CloseState,
     /// Word left for the system of whether it may quit the app unasked.
     system_quit: system_quit::SystemQuit,

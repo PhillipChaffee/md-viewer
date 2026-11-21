@@ -1,6 +1,8 @@
 //! A request to quit from the system: let through with nothing unsaved,
 //! and turned into the window's own request to close otherwise.
 
+use std::fs;
+
 use eframe::egui;
 use mac_window::QuitAnswer;
 
@@ -30,6 +32,27 @@ fn next_frame(harness: &mut Harness, output: &egui::FullOutput) -> egui::FullOut
 
 fn prompt_shows(harness: &Harness) -> bool {
     harness.app.closing.is_asking()
+}
+
+const THEIRS: &str = "written by another program";
+
+/// What the file of the document in front holds.
+fn on_disk(harness: &Harness) -> String {
+    fs::read_to_string(&harness.app.tabs[0].path).unwrap()
+}
+
+/// Leave the document in front with an unsaved edit, have another program
+/// write to its file, and have the system ask to quit: the prompt asks
+/// about the edit.
+fn quit_asked_over_a_changed_file(harness: &mut Harness) -> impl Fn() -> QuitAnswer {
+    let ask = harness.app.quit_asker();
+    edit(harness);
+    fs::write(&harness.app.tabs[0].path, THEIRS).unwrap();
+    ask();
+    let output = harness.idle();
+    next_frame(harness, &output);
+    assert!(prompt_shows(harness));
+    ask
 }
 
 #[test]
@@ -133,4 +156,85 @@ fn a_request_while_the_prompt_shows_leaves_it_asking() {
     assert!(sent(&output, &REFUSE));
     assert!(prompt_shows(&harness));
     assert!(harness.app.tabs[0].is_dirty());
+}
+
+#[test]
+fn save_over_a_file_changed_on_disk_asks_again_and_the_system_still_waits() {
+    let mut harness = Harness::with_three_docs();
+    let ask = quit_asked_over_a_changed_file(&mut harness);
+
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+    let output = harness.idle();
+
+    assert!(prompt_shows(&harness), "the overwrite question");
+    assert_eq!(on_disk(&harness), THEIRS, "nothing is written unasked");
+    assert!(!sent(&output, &CLOSE));
+    assert_eq!(ask(), QuitAnswer::NotYet);
+}
+
+#[test]
+fn cancel_at_the_overwrite_question_keeps_the_app_and_a_later_request_asks_again() {
+    let mut harness = Harness::with_three_docs();
+    let ask = quit_asked_over_a_changed_file(&mut harness);
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+
+    harness.app.answer_close_prompt(CloseAnswer::Cancel);
+    let output = harness.idle();
+
+    assert!(!sent(&output, &CLOSE));
+    assert!(!prompt_shows(&harness));
+    assert!(harness.app.tabs[0].is_dirty());
+    assert_eq!(on_disk(&harness), THEIRS);
+    assert_eq!(ask(), QuitAnswer::NotYet);
+    let output = harness.idle();
+    let output = next_frame(&mut harness, &output);
+    assert!(sent(&output, &REFUSE));
+    assert!(prompt_shows(&harness));
+}
+
+#[test]
+fn overwrite_writes_the_edits_and_then_the_system_may_quit() {
+    let mut harness = Harness::with_three_docs();
+    let ask = quit_asked_over_a_changed_file(&mut harness);
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+    let output = harness.idle();
+
+    assert!(sent(&output, &CLOSE));
+    assert_eq!(on_disk(&harness), harness.app.tabs[0].content);
+    assert!(!harness.app.tabs[0].is_dirty());
+    assert_eq!(ask(), QuitAnswer::Now, "nothing is left to ask about");
+    let output = next_frame(&mut harness, &output);
+    assert!(!sent(&output, &REFUSE), "the close goes through");
+}
+
+#[test]
+fn discard_over_a_file_changed_on_disk_writes_nothing_and_quits() {
+    let mut harness = Harness::with_three_docs();
+    let ask = quit_asked_over_a_changed_file(&mut harness);
+
+    harness.app.answer_close_prompt(CloseAnswer::Discard);
+    let output = harness.idle();
+
+    assert!(sent(&output, &CLOSE));
+    assert_eq!(on_disk(&harness), THEIRS);
+    assert_eq!(ask(), QuitAnswer::Now, "the reader answered Discard");
+}
+
+#[test]
+fn a_request_while_the_overwrite_question_shows_writes_nothing_and_keeps_asking() {
+    let mut harness = Harness::with_three_docs();
+    let ask = quit_asked_over_a_changed_file(&mut harness);
+    harness.app.answer_close_prompt(CloseAnswer::Save);
+    harness.idle();
+
+    assert_eq!(ask(), QuitAnswer::NotYet);
+    let output = harness.idle();
+    let output = next_frame(&mut harness, &output);
+
+    assert!(sent(&output, &REFUSE));
+    assert!(prompt_shows(&harness));
+    assert!(harness.app.tabs[0].is_dirty());
+    assert_eq!(on_disk(&harness), THEIRS);
 }

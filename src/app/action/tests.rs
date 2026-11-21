@@ -113,6 +113,8 @@ fn document_actions_without_a_document_do_nothing() {
     assert!(harness.app.tabs.is_empty());
 
     harness.apply(AppAction::Save);
+    harness.apply(AppAction::ReloadFromDisk);
+    harness.apply(AppAction::KeepMine);
     harness.apply(AppAction::Scroll(KeyboardScrollAction::PageDown));
     harness.apply(AppAction::CloseTab);
 

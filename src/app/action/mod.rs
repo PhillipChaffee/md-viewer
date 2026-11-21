@@ -27,7 +27,8 @@ pub(crate) enum AppAction {
     OpenFolder,
     /// Close the active tab, asking first if it has unsaved edits.
     CloseTab,
-    /// What the reader answered when asked about unsaved edits.
+    /// What the reader answered when asked about unsaved edits, or about
+    /// saving over what another program wrote.
     AnswerClosePrompt(CloseAnswer),
     NextTab,
     PreviousTab,
@@ -42,8 +43,15 @@ pub(crate) enum AppAction {
     NextMatch,
     PreviousMatch,
     CloseSearch,
-    /// Write the active tab's unsaved edits to disk.
+    /// Write the active tab's unsaved edits to disk, asking first if that
+    /// would replace what another program wrote there.
     Save,
+    /// Show the active tab's file as it is on disk now, in place of its
+    /// unsaved edits.
+    ReloadFromDisk,
+    /// Keep the active tab's unsaved edits, and take down the notice that
+    /// its file changed on disk.
+    KeepMine,
     /// Switch the active tab between the rendered document and its source.
     ToggleEditMode,
     ToggleWatch,
@@ -106,6 +114,12 @@ impl MarkdownApp {
             AppAction::PreviousMatch => self.jump_match(-1),
             AppAction::CloseSearch => self.close_search(),
             AppAction::Save => self.save_active_tab(),
+            AppAction::ReloadFromDisk => self.reload_front_tab(),
+            AppAction::KeepMine => {
+                if let Some(tab) = self.front_tab_mut() {
+                    tab.keep_mine();
+                }
+            }
             AppAction::ToggleEditMode => {
                 if let Some(tab) = self.front_tab_mut() {
                     tab.set_edit_mode(!tab.is_editing);
@@ -185,30 +199,8 @@ impl MarkdownApp {
     /// reports the outcome.
     fn save_active_tab(&mut self) {
         if let Some(front) = self.front() {
-            self.save_tab(front);
+            self.request_save(front);
         }
-    }
-
-    /// Write the unsaved edits of the tab at `index` to its file, and say
-    /// in the error bar why where that failed. Returns whether the tab is
-    /// left with nothing unsaved.
-    pub(crate) fn save_tab(&mut self, index: usize) -> bool {
-        let Some(tab) = self.tabs.get_mut(index) else {
-            return true;
-        };
-        if !tab.is_dirty() {
-            return true;
-        }
-        match tab.save() {
-            Ok(()) => log::info!("Saved tab edits: {}", tab.path.display()),
-            Err(error) => {
-                log::error!("Failed to save {}: {error}", tab.path.display());
-                self.error_message =
-                    Some(format!("Unable to save {}: {error}", tab.path.display()));
-                return false;
-            }
-        }
-        true
     }
 
     /// Queue a keyboard scroll step through the pending-scroll pipeline the

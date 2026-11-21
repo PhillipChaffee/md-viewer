@@ -9,7 +9,7 @@ use eframe::egui::{self, FontId, TextStyle};
 use crate::app::chrome;
 use crate::app::close_prompt::CloseState;
 use crate::app::content::look::DocumentLook;
-use crate::app::frame::WindowTitle;
+use crate::app::frame::{TypedAhead, WindowTitle};
 use crate::app::lightbox::Lightbox;
 use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::settings::FontPicker;
@@ -290,6 +290,7 @@ impl MarkdownApp {
             egui_ctx: ctx.clone(),
             last_applied_zoom_level: None,
             window_title: WindowTitle::unset(),
+            typed_ahead: TypedAhead::default(),
             open_tab_paths: HashSet::new(),
             lightbox: Lightbox::default(),
             closing: CloseState::default(),

@@ -19,8 +19,6 @@ mod tests;
 /// How long a save's outcome stays beside the mode toggle.
 const SAVE_FLASH: Duration = Duration::from_millis(FLASH_DURATION_MS * 3);
 
-const UNSAVED_DOT: f32 = 7.0;
-
 impl MarkdownApp {
     /// The edit controls of the document in front, laid out from the
     /// right in the part of the bar `part` is. Returns their left edge, or
@@ -52,12 +50,12 @@ fn edit_mode_controls(ui: &mut egui::Ui, tab: &mut Tab, palette: &Palette, save_
     }
     if tab.is_dirty() {
         let (dot, response) =
-            ui.allocate_exact_size(egui::Vec2::splat(UNSAVED_DOT), egui::Sense::hover());
+            ui.allocate_exact_size(egui::Vec2::splat(chrome::WARNING_DOT), egui::Sense::hover());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "Unsaved changes")
         });
         ui.painter()
-            .circle_filled(dot.center(), UNSAVED_DOT / 2.0, palette.warning);
+            .circle_filled(dot.center(), chrome::WARNING_DOT / 2.0, palette.warning);
         response.on_hover_ui(|ui| {
             ui.set_max_width(ui.spacing().tooltip_width);
             ui.label(format!("Unsaved changes: press {save_hint} to save"));

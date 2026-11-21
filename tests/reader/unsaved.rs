@@ -10,7 +10,7 @@ const EDITED: &str = "# Draft\n\nFirst thoughts. Mine.";
 const ASKS_DRAFT: &str = "Save changes to “Draft” (draft.md)?";
 
 /// Put the document in front in edit mode and type `text` at its end.
-fn edit(reader: &mut Reader, text: &str) {
+pub(super) fn edit(reader: &mut Reader, text: &str) {
     reader.press("Ctrl+E");
     reader.click_text_field(0);
     reader.press("Ctrl+End");
@@ -143,6 +143,28 @@ fn enter_saves_because_the_keyboard_starts_on_save() {
 
     assert_eq!(reader.read_file("draft.md"), EDITED);
     assert_eq!(reader.title(), "Markdown Viewer");
+}
+
+#[test]
+fn keys_typed_in_one_frame_answer_in_the_order_they_were_pressed() {
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.press("Tab");
+    assert_eq!(reader.focused().as_deref(), Some("Discard"));
+    reader.tap_in_turn(&["Shift+Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "back on Save");
+    assert_eq!(reader.title(), "Markdown Viewer", "Save closes");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Tab", "Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "around to Save");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), SOURCE, "Discard");
+    assert_eq!(reader.title(), "Markdown Viewer", "Discard closes");
 }
 
 #[test]

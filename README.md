@@ -149,6 +149,12 @@ tab leads back.
   button, and **Quit** in the menu bar and in the Dock. Logging out with
   unsaved edits asks too, and the log-out stops there, as it does for any
   Mac app that has a question: log out again once the app has closed.
+- A file that another program changes while its document has unsaved
+  edits is neither reloaded nor overwritten. A bar on the document says
+  the file changed on disk, with **Reload** (take the file, drop the
+  edits) and **Keep mine**. A save then asks before it replaces what the
+  other program wrote: **Overwrite** or **Cancel**. With live reload off
+  the question still comes at the save.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
