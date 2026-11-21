@@ -254,7 +254,7 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
-| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, and `⌘Q` handed to the app. Does nothing elsewhere. Holds the one unsafe function ([GATES.md](GATES.md)) |
+| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, `⌘Q` handed to the app, and the app asked before macOS quits it. Does nothing elsewhere. Holds the two unsafe functions ([GATES.md](GATES.md)) |
 
 ## Development
 

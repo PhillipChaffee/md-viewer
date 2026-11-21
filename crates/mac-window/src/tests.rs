@@ -1,7 +1,9 @@
-//! The arithmetic of the title bar, and what a window that is not a
-//! Mac's gets: nothing.
+//! The arithmetic of the title bar, the answer to a request to quit, and
+//! what a window that is not a Mac's gets: nothing.
 
 use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use raw_window_handle::{HandleError, HasWindowHandle, WindowHandle};
 
@@ -69,4 +71,34 @@ fn a_window_that_is_not_a_macs_is_left_alone() {
     hand_quit_key_to_app();
 
     assert!(window.asked.get() <= 1);
+}
+
+/// One test, because the asker is the process's and is given once. Tests
+/// run off the main thread, so on a Mac too nothing of the system's is
+/// reached.
+#[test]
+fn a_request_to_quit_gets_the_answer_of_the_first_asker_given() {
+    assert_eq!(quit_answer(), QuitAnswer::Now, "nobody asked to be asked");
+
+    let unsaved = Arc::new(AtomicBool::new(false));
+    let seen = Arc::clone(&unsaved);
+    ask_before_quit(move || {
+        if seen.load(Ordering::Relaxed) {
+            QuitAnswer::NotYet
+        } else {
+            QuitAnswer::Now
+        }
+    });
+    assert_eq!(quit_answer(), QuitAnswer::Now);
+    unsaved.store(true, Ordering::Relaxed);
+    assert_eq!(quit_answer(), QuitAnswer::NotYet);
+    unsaved.store(false, Ordering::Relaxed);
+    assert_eq!(quit_answer(), QuitAnswer::Now);
+
+    ask_before_quit(|| QuitAnswer::NotYet);
+    assert_eq!(
+        quit_answer(),
+        QuitAnswer::Now,
+        "a second asker replaced the first"
+    );
 }

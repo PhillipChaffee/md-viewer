@@ -3,7 +3,7 @@ name = "mac-window"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-description = "What md-viewer asks of AppKit about its window: where the window buttons sit, and who answers the quit key"
+description = "What md-viewer asks of AppKit about its window: where the window buttons sit, and who answers the quit key and a request to quit"
 license = "MIT"
 repository = "https://github.com/PhillipChaffee/md-viewer"
 readme = "README.md"
@@ -42,9 +42,9 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 # and this crate differs from it in one entry.
 [lints.rust]
 # The one difference. The workspace forbids unsafe code; this crate exists
-# to hold the single unsafe function the window needs on a Mac, behind an
-# `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an error.
-# GATES.md records the exception.
+# to hold the two unsafe functions the window needs on a Mac, each behind
+# an `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an
+# error. GATES.md records both exceptions.
 unsafe_code = "deny"
 missing_docs = "deny"
 missing_debug_implementations = "warn"
