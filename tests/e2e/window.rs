@@ -14,6 +14,11 @@ const MARGIN: (u32, u32) = (60, 400);
 /// a document has unsaved edits, in a window of the size the app opens at.
 const UNSAVED_DOT: (u32, u32) = (911, 20);
 
+/// The square the notice that a file changed on disk paints its warning
+/// sign in, under the top row at the window's left edge: its corner and
+/// its side. The page is blank there without the notice.
+const NOTICE_SIGN: (u32, u32, u32) = (14, 47, 20);
+
 /// Start `md-viewer <args>` on `screen`, attached to the test.
 fn show(home: &Home, screen: &Screen, args: &[&str]) -> Running {
     let mut command = home.md_viewer(args);
@@ -101,15 +106,15 @@ fn ctrl_q_quits_and_the_next_launch_resumes_the_session() {
     screen.window_titled("notes.md - Markdown Viewer");
 }
 
-/// Open `notes.md`, type an edit into its source, press Ctrl+Q, and wait
-/// for the prompt about unsaved edits, which is seen by the shade it lays
-/// over the page. Returns the app, still running, and its window.
-fn quit_with_an_unsaved_edit<'screen>(
+/// Open `notes.md` with `args` and type an edit into its source. Returns
+/// the app and its window.
+fn edit_notes<'screen>(
     home: &Home,
     screen: &'screen Screen,
+    args: &[&str],
 ) -> (Running, Window<'screen>) {
     home.doc("notes.md", "# Notes\n\nSome text.");
-    let mut app = show(home, screen, &["--foreground", "notes.md", "--no-watch"]);
+    let app = show(home, screen, args);
     let window = screen.window_titled("notes.md - Markdown Viewer");
     let (x, y) = MARGIN;
     assert!(window.pixel_becomes(home.root(), x, y, SEPIA));
@@ -124,6 +129,19 @@ fn quit_with_an_unsaved_edit<'screen>(
         (window.pixel(home.root(), dot_x, dot_y) != SEPIA).then_some(())
     });
     assert!(edited.is_some(), "the edit was never taken");
+    (app, window)
+}
+
+/// Open `notes.md`, type an edit into its source, press Ctrl+Q, and wait
+/// for the prompt about unsaved edits, which is seen by the shade it lays
+/// over the page. Returns the app, still running, and its window.
+fn quit_with_an_unsaved_edit<'screen>(
+    home: &Home,
+    screen: &'screen Screen,
+) -> (Running, Window<'screen>) {
+    let args = ["--foreground", "notes.md", "--no-watch"];
+    let (mut app, window) = edit_notes(home, screen, &args);
+    let (x, y) = MARGIN;
     let shaded = window.press_ctrl("q", || window.pixel(home.root(), x, y) != SEPIA);
 
     assert!(shaded, "no prompt came up");
@@ -163,6 +181,47 @@ fn discard_at_the_quit_prompt_closes_the_window_and_writes_nothing() {
     let on_disk = std::fs::read_to_string(home.doc_path("notes.md")).unwrap();
     assert_eq!(on_disk, "# Notes\n\nSome text.");
     assert!(screen.has_no_window());
+}
+
+#[test]
+fn a_file_changed_under_unsaved_edits_is_announced_and_a_save_asks_before_it_writes() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = Home::new();
+    let theirs = "# Notes\n\nWritten by another program.";
+    let on_disk = || std::fs::read_to_string(home.doc_path("notes.md")).unwrap();
+    let (mut app, window) = edit_notes(&home, &screen, &["--foreground", "notes.md"]);
+    let (sign_x, sign_y, side) = NOTICE_SIGN;
+    let announced = || window.paints_in(home.root(), sign_x, sign_y, side);
+    assert!(!announced(), "a notice before the file changed");
+
+    home.doc("notes.md", theirs);
+
+    assert!(
+        wait_for(|| announced().then_some(())).is_some(),
+        "no notice"
+    );
+    assert_eq!(on_disk(), theirs, "the notice alone wrote the file");
+
+    // The question is seen by the shade it lays over the page.
+    let (x, y) = MARGIN;
+    let asked = window.press_ctrl("s", || window.pixel(home.root(), x, y) != SEPIA);
+    assert!(asked, "Ctrl+S asked nothing");
+    assert_eq!(on_disk(), theirs, "the save wrote before it was answered");
+
+    // The keyboard starts on Cancel.
+    window.press("Return");
+    assert!(window.pixel_becomes(home.root(), x, y, SEPIA));
+    assert_eq!(on_disk(), theirs, "Cancel wrote the file");
+
+    let asked = window.press_ctrl("s", || window.pixel(home.root(), x, y) != SEPIA);
+    assert!(asked, "Ctrl+S asked nothing the second time");
+    window.press("shift+Tab");
+    window.press("Return");
+    let written = wait_for(|| on_disk().contains("Mine. ").then_some(()));
+    assert!(written.is_some(), "Overwrite wrote {:?}", on_disk());
+    assert!(app.is_alive());
 }
 
 #[test]
