@@ -55,8 +55,11 @@ impl MarkdownApp {
     }
 
     /// Leave word of whether a quit has to ask about unsaved edits, at the
-    /// end of a frame: only a frame changes that. One comparison a tab,
-    /// which is what the tab in front already costs for its unsaved marker.
+    /// end of a frame: only a frame changes that.
+    ///
+    /// Deliberately every frame: each tab's text is compared with what
+    /// was last saved, in full for a tab with nothing unsaved. GATES.md
+    /// records it under "A cost paid every frame".
     pub(crate) fn note_unsaved_edits(&self) {
         let unsaved = self.quit_has_to_ask();
         self.system_quit.unsaved.store(unsaved, Ordering::Relaxed);

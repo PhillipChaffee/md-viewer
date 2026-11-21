@@ -32,6 +32,7 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | `clippy.toml` | `unwrap`, `expect` and `panic` are allowed inside tests. |
 | `Cargo.toml` lint table | `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed. The `unexpected_cfgs` entry declares one cfg, `cfg(kani)`, which the proof harnesses are compiled under. |
 | `src/**/proofs.rs` | The proof harnesses are compiled only by `cargo kani`, so clippy, rustdoc, the tests and the coverage gate never see them. rustfmt, the complexity cap and the file-length cap do. `./run-proofs.sh` and the `proofs` CI job are their gate; it is not part of `run-gates.sh`. See [PROOFS.md](PROOFS.md). |
+| `src/app/system_quit/mod.rs` | "Nothing computed per frame" is narrowed for one comparison of each tab's text with its saved text. See the section below. |
 | `src/` | Seven `#[expect(..., reason)]`: five float casts on pixel math, one percentage cast, one `struct_excessive_bools` on `MarkdownApp`. No `#[allow]`. |
 | `deny.toml` | Four advisories ignored with review dates. 66 duplicate crates skipped by name, plus the template's `windows-sys` tree. Five licenses added to the allow-list. `unmaintained` and `unsound` fail for direct dependencies only (the template's setting). |
 | `osv-scanner.toml` | Fourteen advisories ignored: the same four, and ten "unmaintained" notices on transitive crates. Two license overrides: one for a `WITH LLVM-exception` expression, and one naming this repository's own unpublished `mac-window` crate as MIT, which the registry cannot answer for. |
@@ -132,6 +133,20 @@ has run this code on a Mac under a test: whether the buttons land where
 `placement` says is checked by eye, and so is whether macOS asks the method added to
 winit's delegate. The nightly mutation run covers the
 root package only, so it does not see this crate either.
+
+## A cost paid every frame: whether anything is unsaved
+
+The house rule is that nothing is computed per frame. One thing is, and
+the owner accepted it: at the end of each frame
+`MarkdownApp::note_unsaved_edits` (`src/app/system_quit`) compares the
+text of every open tab with what was last saved, to leave word for macOS
+of whether a quit has to ask. For a tab with nothing unsaved that is a
+comparison of the whole document. Before, only the tab in front paid it,
+for its unsaved marker.
+
+It is not kept as a flag on the tab because the editor and the tests
+write a tab's text directly, so every writer would have to refresh the
+flag, and one that forgot would let the app quit with edits unsaved.
 
 ## The detach change is weaker than what it replaced
 
