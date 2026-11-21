@@ -13,6 +13,7 @@ use crate::app::lightbox::Lightbox;
 use crate::app::outline::{HeadingSpy, OutlineRule};
 use crate::app::settings::FontPicker;
 use crate::app::shortcuts::hints::{Hints, Notation};
+use crate::app::system_quit::SystemQuit;
 use crate::app::watching::LiveReload;
 use crate::app::MarkdownApp;
 use crate::dialogs::{pick_file, pick_folder};
@@ -277,6 +278,7 @@ impl MarkdownApp {
             open_tab_paths: HashSet::new(),
             lightbox: Lightbox::default(),
             closing: CloseState::default(),
+            system_quit: SystemQuit::default(),
             platform: Platform::HOST,
             hints: Hints::new(Notation::on(Platform::HOST, false)),
             hints_stale: true,

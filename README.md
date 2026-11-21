@@ -126,9 +126,10 @@ has one. The Home button again, Back, or a click on a tab leads back.
   **Cancel** at any question leaves every tab open with its edits. A
   link, a file in the sidebar, Back or Forward asks the same before it
   shows another document in a tab with unsaved edits.
-  On a Mac quitting covers `⌘Q`, **⋯ > Quit** and the window's close
-  button. **Quit** picked with the mouse from the menu bar or from the
-  Dock is macOS's own and still quits without asking.
+  On a Mac quitting covers `⌘Q`, **⋯ > Quit**, the window's close
+  button, and **Quit** in the menu bar and in the Dock. Logging out with
+  unsaved edits asks too, and the log-out stops there, as it does for any
+  Mac app that has a question: log out again once the app has closed.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
