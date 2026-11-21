@@ -16,13 +16,12 @@ use eframe::egui;
 use mac_window::QuitAnswer;
 
 use crate::app::MarkdownApp;
-use crate::tab::Tab;
 
 #[cfg(test)]
 mod tests;
 
-/// Whether edits were unsaved when the last frame ended, where a request
-/// to quit can read it.
+/// Whether a quit had to ask about unsaved edits when the last frame
+/// ended, where a request to quit can read it.
 #[derive(Debug, Default)]
 pub(super) struct SystemQuit {
     unsaved: Arc<AtomicBool>,
@@ -55,11 +54,11 @@ impl MarkdownApp {
         self.system_quit.asker(self.egui_ctx.clone())
     }
 
-    /// Leave word of whether any tab has unsaved edits, at the end of a
-    /// frame: only a frame changes that. One comparison a tab, which is
-    /// what the tab in front already costs for its unsaved marker.
+    /// Leave word of whether a quit has to ask about unsaved edits, at the
+    /// end of a frame: only a frame changes that. One comparison a tab,
+    /// which is what the tab in front already costs for its unsaved marker.
     pub(crate) fn note_unsaved_edits(&self) {
-        let unsaved = self.tabs.iter().any(Tab::is_dirty);
+        let unsaved = self.quit_has_to_ask();
         self.system_quit.unsaved.store(unsaved, Ordering::Relaxed);
     }
 }

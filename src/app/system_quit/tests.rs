@@ -93,6 +93,8 @@ fn discard_goes_on_to_close_the_window() {
     let output = harness.idle();
 
     assert!(sent(&output, &CLOSE));
+    assert!(harness.app.tabs[0].is_dirty(), "nothing was written");
+    assert_eq!(ask(), QuitAnswer::Now, "the reader answered Discard");
     let output = next_frame(&mut harness, &output);
     assert!(!sent(&output, &REFUSE), "the close goes through");
 }
