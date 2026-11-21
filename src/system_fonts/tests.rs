@@ -153,13 +153,26 @@ fn preset_labels_and_descriptions_tell_the_presets_apart() {
     assert!(FontPreset::Vscode.description().contains("VS Code"));
 }
 
+#[test]
+fn the_lines_of_a_reader_code_block_are_one_and_three_quarters_of_its_size_apart() {
+    let definitions = Fonts::with_sans().definitions(None, FontPreset::Reader);
+    let code = &definitions.font_data["ReaderCode"];
+    let face = ttf_parser::Face::parse(&code.font, code.index).unwrap();
+    // The face's own line, as egui measures it, in multiples of its size.
+    let own_line = f32::from(face.ascender() - face.descender() + face.line_gap())
+        / f32::from(face.units_per_em());
+
+    let pitch = FontPreset::Reader.code_line_height() * own_line;
+
+    assert!((pitch - 1.75).abs() < 0.005, "{pitch}");
+}
+
 /// GitHub: `pre{line-height:1.45}`. VS Code preview: code 1.357em.
 #[test]
 fn preset_code_line_heights_follow_the_emulated_stylesheets() {
     assert_close(FontPreset::Github.code_line_height(), 1.45);
     assert_close(FontPreset::Vscode.code_line_height(), 1.36);
     assert_close(FontPreset::Current.code_line_height(), 1.3);
-    assert_close(FontPreset::Reader.code_line_height(), 1.39);
 }
 
 #[test]

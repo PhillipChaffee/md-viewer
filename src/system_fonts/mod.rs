@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::bundled::{
     install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY,
-    DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY,
+    DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY, INLINE_CODE_SCALE,
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
@@ -88,8 +88,9 @@ impl FontPreset {
     /// Line height of code blocks as a multiple of the code face's own
     /// line. The body line height is the user's line-spacing setting,
     /// whatever the preset. GitHub: `pre{line-height:1.45}`; VS Code
-    /// preview: 1.357em. The Reader's Source Code Pro has a tall line of
-    /// its own, so 1.39 of it is 1.75 of the code size.
+    /// preview: 1.357em. The Reader's lines are 1.75 of the code size
+    /// apart: Source Code Pro's own line is 1.257 of its size (ascent 984,
+    /// descent 273 of 1000 units), and 1.39 of that is 1.75.
     pub(crate) const fn code_line_height(self) -> f32 {
         match self {
             Self::Reader => 1.39,
@@ -266,9 +267,6 @@ const VSCODE: ViewerStack = ViewerStack {
 /// A code block is set this much smaller than the body text: a monospace
 /// face looks larger than a proportional one at the same size.
 const CODE_SCALE: f32 = 0.875;
-/// Inline code in the bundled faces is set this much smaller than the text
-/// around it, so that a line dense with code still reads as prose.
-const INLINE_CODE_SCALE: f32 = 0.86;
 
 /// The fonts the document pane lays out with, as opposed to the chrome
 /// around it.

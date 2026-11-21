@@ -4,8 +4,6 @@
 use egui::{FontData, FontDefinitions, FontFamily};
 use egui_commonmark_extended::STRONG_FONT_FAMILY;
 
-use crate::system_fonts::INLINE_CODE_SCALE;
-
 #[cfg(test)]
 mod tests;
 
@@ -78,6 +76,10 @@ const READER_CODE_SEMIBOLD: BundledFace = BundledFace {
     baseline_shift: CODE_BASELINE_SHIFT,
 };
 
+/// Inline code in the bundled faces is set this much smaller than the text
+/// around it, so that a line dense with code still reads as prose.
+pub(crate) const INLINE_CODE_SCALE: f32 = 0.86;
+
 /// Distance from the baseline to the top of the line in every cut of
 /// Source Serif 4, in ems: its ascender is 1036 of 1000 units.
 const SERIF_ASCENT_EM: f32 = 1.036;
@@ -90,9 +92,12 @@ const CODE_ASCENT_EM: f32 = 0.984;
 ///
 /// egui hangs every face from the top of the line by its own ascent, so a
 /// smaller face with a lower ascent floats above the text beside it. The
-/// shift is a visual tweak of the face: it moves no line. It also centers
-/// the lines of a code block in their box, which the same ascent gap left
-/// top-heavy.
+/// shift is a visual tweak of the face: it moves no line.
+///
+/// A code block is set in the same face at another size, so its letters
+/// move down by the same fraction of that size. The number is not worked
+/// out for a block: there it only takes the letters off the top of their
+/// line, to near its middle.
 const CODE_BASELINE_SHIFT: f32 = SERIF_ASCENT_EM / INLINE_CODE_SCALE - CODE_ASCENT_EM;
 
 /// Register the families the document pane names: body, strong, heading,
