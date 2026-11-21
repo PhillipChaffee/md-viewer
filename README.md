@@ -128,8 +128,9 @@ tab leads back.
   the folders share a name as well (`Notes · a/guides`). A name too long
   for its tab is cut short before the folder, and a long folder is drawn
   without what it shares with the other one (`Notes · …-board-1998`). The window's title and the
-  question about unsaved edits name a file with its folder in the same
-  way while two open files share a name.
+  questions about unsaved edits and about overwriting a changed file name
+  a file with its folder in the same way while two open files share a
+  name.
 - On a Mac that row is the window's title bar: the close, minimize and
   zoom buttons sit in it, on its centre line, and the row starts after
   them. Drag an empty part of the row to move the window; double-click
