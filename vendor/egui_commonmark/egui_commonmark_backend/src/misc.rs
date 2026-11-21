@@ -259,6 +259,8 @@ impl Style {
             .get(&TextStyle::Body)
             .map_or(14.0, |d| d.size);
         let mut selected_font_size = base_font_size;
+        // Whether the text is bold: strong text, or a heading that is.
+        let mut bold = self.strong;
 
         if let Some(level) = self.heading {
             // Evidence-based heading scale using Major Third ratio (1.25×)
@@ -275,6 +277,7 @@ impl Style {
 
             rich_text = rich_text.size(size);
             selected_font_size = size;
+            bold |= is_bold;
             if is_bold {
                 rich_text = rich_text.strong();
             }
@@ -320,7 +323,7 @@ impl Style {
         if self.strong {
             // Always keep egui's strong styling hint. Only md-viewer opts into
             // the named bold font after registering it; inline code keeps the
-            // monospace family applied later by `RichText::code()`.
+            // monospace family applied later.
             rich_text = rich_text.strong();
             // A heading family is already the heading's bold face.
             if use_strong_font_family && !self.code && heading_family.is_none() {
@@ -345,16 +348,33 @@ impl Style {
         }
 
         if self.code {
-            // `RichText::code()` sets the Monospace text style, which carries its
-            // own (smaller, 14px) size — so inline code rendered smaller than the
-            // surrounding 16px body text and sat raised off the shared baseline
-            // (issue #46). Pin the size to the current context (body, or the
-            // heading size when code is inside a heading) so code keeps the
-            // monospace family + code background but aligns with adjacent text.
+            // The Monospace text style carries its own (smaller, 14px) size,
+            // so inline code rendered smaller than the surrounding 16px body
+            // text and sat raised off the shared baseline (issue #46). Pin the
+            // size to the current context (body, or the heading size when
+            // code is inside a heading) so code aligns with adjacent text.
             let scale = block_style
                 .and_then(|style| style.inline_code_scale)
                 .unwrap_or(1.0);
-            rich_text = rich_text.code().size(selected_font_size * scale);
+            rich_text = rich_text
+                .text_style(TextStyle::Monospace)
+                .size(selected_font_size * scale);
+            // md-viewer patch: never `RichText::code()`, whose background
+            // no caller can replace: a search highlight sets its own over
+            // this one. A link colors its text after this, so its color
+            // wins over the ink.
+            rich_text = match block_style.and_then(|style| style.inline_code_color) {
+                Some(ink) => rich_text.color(ink),
+                None => rich_text.background_color(ui.visuals().code_bg_color),
+            };
+            // md-viewer patch: the bold code face, where the text around
+            // the code is bold.
+            let strong_family = block_style
+                .and_then(|style| style.strong_code_font_family.as_ref())
+                .filter(|_| bold);
+            if let Some(family) = strong_family {
+                rich_text = rich_text.family(family.clone());
+            }
         }
 
         rich_text
@@ -673,6 +693,14 @@ pub struct Link {
 
 impl Link {
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache) {
+        let (destination, layout_job) = self.into_job(ui);
+        show_link(ui, cache, destination, layout_job);
+    }
+
+    /// md-viewer patch: where the link leads and its words as they are
+    /// set, for [`show_link`]. The two are apart so that a caller can
+    /// measure the words, or say how they wrap, before they are shown.
+    pub fn into_job(self, ui: &Ui) -> (String, LayoutJob) {
         let Self { destination, text } = self;
 
         let mut layout_job = LayoutJob::default();
@@ -694,53 +722,64 @@ impl Link {
             section.format.line_height = None;
         }
 
-        // Use clickable label to preserve our custom underline styling
-        let response = ui.add(
-            egui::Label::new(layout_job)
-                .selectable(false)
-                .sense(egui::Sense::click()),
-        );
+        (destination, layout_job)
+    }
+}
 
-        let is_hook = cache.link_hooks().contains_key(&destination);
+/// md-viewer patch: show the words of a link to `destination`, as
+/// [`Link::into_job`] set them, and follow the link when it is clicked.
+pub fn show_link(
+    ui: &mut Ui,
+    cache: &mut CommonMarkCache,
+    destination: String,
+    layout_job: LayoutJob,
+) {
+    // Use clickable label to preserve our custom underline styling
+    let response = ui.add(
+        egui::Label::new(layout_job)
+            .selectable(false)
+            .sense(egui::Sense::click()),
+    );
 
-        // Right-click copies the destination (issue #169). Clicking a link
-        // hands it to the desktop's URL handler, which may open a browser
-        // instance without the reader's session — so the address has to be
-        // obtainable without following it.
-        //
-        // Both link kinds get the item, and both copy `destination` exactly as
-        // the document spells it. For an external link that is the URL. For a
-        // link this viewer resolves itself, the source spelling is the honest
-        // answer: the resolved path depends on which document is open, so
-        // copying it would hand out something the author never wrote and that
-        // means nothing pasted elsewhere.
-        //
-        // The label is deliberately the browser wording, since that is where
-        // the gesture is learned.
-        {
-            let destination = destination.clone();
-            response.context_menu(|ui| {
-                if ui.button("Copy Link Address").clicked() {
-                    ui.ctx().copy_text(destination.clone());
-                    ui.close();
-                }
-            });
-        }
+    let is_hook = cache.link_hooks().contains_key(&destination);
 
-        if response.clicked() || response.middle_clicked() {
-            if is_hook {
-                cache.link_hooks_mut().insert(destination.clone(), true);
-            } else {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(&destination));
+    // Right-click copies the destination (issue #169). Clicking a link
+    // hands it to the desktop's URL handler, which may open a browser
+    // instance without the reader's session — so the address has to be
+    // obtainable without following it.
+    //
+    // Both link kinds get the item, and both copy `destination` exactly as
+    // the document spells it. For an external link that is the URL. For a
+    // link this viewer resolves itself, the source spelling is the honest
+    // answer: the resolved path depends on which document is open, so
+    // copying it would hand out something the author never wrote and that
+    // means nothing pasted elsewhere.
+    //
+    // The label is deliberately the browser wording, since that is where
+    // the gesture is learned.
+    {
+        let destination = destination.clone();
+        response.context_menu(|ui| {
+            if ui.button("Copy Link Address").clicked() {
+                ui.ctx().copy_text(destination.clone());
+                ui.close();
             }
-        }
+        });
+    }
 
-        // Show pointer cursor and URL on hover
-        if response.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            if !is_hook {
-                response.on_hover_text(&destination);
-            }
+    if response.clicked() || response.middle_clicked() {
+        if is_hook {
+            cache.link_hooks_mut().insert(destination.clone(), true);
+        } else {
+            ui.ctx().open_url(egui::OpenUrl::new_tab(&destination));
+        }
+    }
+
+    // Show pointer cursor and URL on hover
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        if !is_hook {
+            response.on_hover_text(&destination);
         }
     }
 }

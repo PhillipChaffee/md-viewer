@@ -10,6 +10,7 @@ mod act;
 mod figures;
 mod folder;
 mod keys;
+mod lines;
 mod paint;
 mod pointer;
 mod see;

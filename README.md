@@ -57,15 +57,22 @@ A file list on the left and a table of contents on the right. The contents
 list marks the heading you are reading. Both are hidden or shown with one
 click and can be resized.
 
+A click on a file shows it in the tab in front. To give it a tab of its
+own, click the button that appears at the end of its row while you point
+at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
+from its right-click menu. A file that already has a tab comes to the
+front instead. A dot after the name marks the files that have a tab.
+
 ![The files and contents sidebars](screenshots/reader/sidebars.png)
 
 ### A home page of what you read last
 
 The home page lists recent documents with their title, folder, reading
 time and opening lines. It shows with no document open, and over the open
-tabs when you press the Home button, **+** or `Ctrl+T`: the tabs stay, and
-a document picked there opens in a new tab, or comes to the front if it
-has one. The Home button again, Back, or a click on a tab leads back.
+tabs when you press the Home button, **+**, `Ctrl+T` or **⋯ > New Tab**:
+the tabs stay, and a document picked there opens in a new tab, or comes
+to the front if it has one. The Home button again, Back, or a click on a
+tab leads back.
 
 ![The home page listing recently read documents](screenshots/reader/home.png)
 
@@ -75,9 +82,19 @@ has one. The Home button again, Back, or a click on a tab leads back.
 
 - Four themes, a resizable centered column, three line spacings, five text
   sizes and 50% to 300% zoom.
+- A menu taller than the window, as **⋯** is at a high zoom, scrolls:
+  with the wheel, or with `Tab`, which brings each row into view.
 - Documents are set in the bundled
-  [Source Serif 4](https://github.com/adobe-fonts/source-serif). Other font
-  presets and any installed font family are under **Aa → Fonts…**.
+  [Source Serif 4](https://github.com/adobe-fonts/source-serif), and their
+  code in its companion,
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
+  font presets and any installed font family are under **Aa → Fonts…**.
+- Code in a line of prose has no box. It is a little smaller than the text
+  around it and in a tint of its own, warm or on Sepia a muted olive,
+  which keeps the same 7:1 contrast as body text on all four themes.
+- A line ends only where prose can break. A bracket, a comma, a full stop
+  or a letter written against a piece of code, a link or bold text stays
+  on the line with it.
 - A `file-name · N min read` line above the title.
 
 **Rendering**
@@ -121,6 +138,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
   bar their desktop draws.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
+- A file in the sidebar opens in place too; its row's button, `Ctrl+Click`,
+  a middle click or **Open in New Tab** in its menu opens a new tab.
 - Drag a file onto the window to open it.
 - Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
   is checked while the setting is on, also with nothing open to follow.
@@ -133,9 +152,16 @@ has one. The Home button again, Back, or a click on a tab leads back.
   **Cancel** at any question leaves every tab open with its edits. A
   link, a file in the sidebar, Back or Forward asks the same before it
   shows another document in a tab with unsaved edits.
-  On a Mac quitting covers `⌘Q`, **⋯ > Quit** and the window's close
-  button. **Quit** picked with the mouse from the menu bar or from the
-  Dock is macOS's own and still quits without asking.
+  On a Mac quitting covers `⌘Q`, **⋯ > Quit**, the window's close
+  button, and **Quit** in the menu bar and in the Dock. Logging out with
+  unsaved edits asks too, and the log-out stops there, as it does for any
+  Mac app that has a question: log out again once the app has closed.
+- A file that another program changes while its document has unsaved
+  edits is neither reloaded nor overwritten. A bar on the document says
+  the file changed on disk, with **Reload** (take the file, drop the
+  edits) and **Keep mine**. A save then asks before it replaces what the
+  other program wrote: **Overwrite** or **Cancel**. With live reload off
+  the question still comes at the save.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
@@ -233,11 +259,27 @@ md-viewer notes.md
 | `F5` | `F5` | Live reload on or off |
 | `Ctrl+Q` | `⌘Q` | Quit |
 
+With the mouse:
+
+| Linux and Windows | Mac | Action |
+| --- | --- | --- |
+| Click a file in the sidebar | the same | Show it in the tab in front |
+| `Ctrl`-click a file or a link | ⌘-click | Open it in a new tab |
+| Middle-click a file in the sidebar | the same | Open it in a new tab |
+| Right-click a file in the sidebar | the same | **Open**, **Open in New Tab**, and what to copy |
+| Middle-click a tab | the same | Close the tab |
+
 On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘
 there: `⌘D`, `⌘F`, ⌘-click on a link. The one exception is the tab switch,
 which is the Control key on a Mac too, because ⌘ with Tab switches apps.
 The menus and tooltips show the Mac's own signs. Control with a letter and
 Option with an arrow are left to the text you are editing.
+
+Without the mouse: `Tab` and `Shift+Tab` step through the buttons, the tabs,
+the rows of the sidebars and the documents of the home page, and a ring in
+the theme's accent shows which one the keyboard is on. `Enter` or `Space` presses it. Each tab's close
+button comes right after its tab, so `Enter` there closes that tab, and
+asks first when it has unsaved edits.
 
 ## How it is built
 
@@ -261,7 +303,7 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
-| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, and `⌘Q` handed to the app. Does nothing elsewhere. Holds the one unsafe function ([GATES.md](GATES.md)) |
+| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, `⌘Q` handed to the app, and the app asked before macOS quits it. Does nothing elsewhere. Holds the two unsafe functions ([GATES.md](GATES.md)) |
 
 ## Development
 
@@ -327,6 +369,10 @@ Two things to know before you rely on those gates:
   of a keycap: `a*️⃣b*️⃣c` sets the `b` in italics. Write `\*️⃣` there.
 - While the find bar marks part of an emoji written as several characters,
   such as the `1` of 1️⃣, that emoji is drawn as its parts.
+- In a table cell a line can still end between a piece of code, a link or
+  bold text and the bracket or comma written against it. Anywhere, it can
+  end between a formula, a picture or a footnote mark in a line of prose
+  and what is written against that.
 - A picture is read when you come within a window's height of it, and
   decoded in the background. Until it is there its place is empty, with a
   spinner while it is in view. An animated GIF or WebP is decoded whole:
@@ -358,8 +404,9 @@ Two things to know before you rely on those gates:
   [mitex](https://github.com/mitex-rs/mitex) for math.
 - [merman](https://github.com/Latias94/merman) for Mermaid diagrams.
 - [syntect](https://github.com/trishume/syntect) for syntax highlighting.
-- [Source Serif 4](https://github.com/adobe-fonts/source-serif) by Adobe,
-  under the SIL Open Font License.
+- [Source Serif 4](https://github.com/adobe-fonts/source-serif) and
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro) by
+  Adobe, under the SIL Open Font License.
 
 Third-party license texts are in `THIRD_PARTY_NOTICES`.
 

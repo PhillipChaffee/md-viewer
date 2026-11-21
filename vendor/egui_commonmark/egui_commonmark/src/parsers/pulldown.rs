@@ -8,10 +8,11 @@ use crate::{CommonMarkCache, CommonMarkOptions};
 
 use egui::{self, Id, Pos2, TextStyle, Ui};
 
+use super::runs::Runs;
 use crate::List;
 use egui_commonmark_backend_extended::elements::{
     blockquote, body_font_size, footnote, footnote_label, footnote_start, heading_end_spacing,
-    heading_start_spacing, inline_code_label, newline, paragraph_end_spacing, row_is_fresh,
+    heading_start_spacing, newline, paragraph_end_spacing, row_is_fresh,
     rule_styled, soft_break, start_row_below, ImmutableCheckbox,
 };
 use egui_commonmark_backend_extended::misc::*;
@@ -1863,6 +1864,28 @@ enum HeadingPiece {
     Link(Link),
 }
 
+/// md-viewer patch: what setting the running text does about the marker
+/// of the list item it is in, which waits for the item's first text.
+#[derive(Clone, Copy)]
+enum ItemMarker {
+    /// The first text decides where the marker is painted.
+    FromFirstText,
+    /// A heading leaves the marker to the end of the item.
+    Leave,
+}
+
+/// md-viewer patch: where a piece of text is set, when it is not kept as
+/// the words of a picture or the content of a code block.
+enum TextSink {
+    /// A heading collects its pieces and sets them at its end.
+    Heading,
+    /// A table cell sets each piece as it comes.
+    TableCell,
+    /// The running text of a paragraph, a list item or a quote: it waits
+    /// in [`CommonMarkViewerInternal::runs`].
+    Runs,
+}
+
 pub struct CommonMarkViewerInternal {
     curr_table: usize,
     curr_code_block: usize,
@@ -1907,6 +1930,10 @@ pub struct CommonMarkViewerInternal {
     /// The next block continues the row it starts on: the text of a
     /// footnote after the footnote's label.
     continues_row: bool,
+    /// md-viewer patch: the running text not set yet.
+    runs: Runs,
+    /// md-viewer patch: the link being collected holds find's current match.
+    link_is_active: bool,
 }
 
 pub(crate) struct CheckboxClickEvent {
@@ -1937,6 +1964,8 @@ impl CommonMarkViewerInternal {
             upcoming: None,
             column: None,
             continues_row: false,
+            runs: Runs::default(),
+            link_is_active: false,
             current_heading_y: None,
             current_heading_source_start: None,
             current_heading_text: String::new(),
@@ -2760,23 +2789,14 @@ impl CommonMarkViewerInternal {
             if let Some((_, (e, src_span))) = events_iter.next() {
                 self.process_event(ui, &mut events_iter, e, src_span, cache, options, max_width);
             }
+            self.set_runs(ui, cache);
 
             ui.label(" ".repeat(options.indentation_spaces));
             self.line.should_start_newline = true;
             self.line.should_end_newline = false;
             // Required to ensure that the content is aligned with the identation
             ui.horizontal_wrapped(|ui| {
-                while let Some((_, (e, src_span))) = events_iter.next() {
-                    self.process_event(
-                        ui,
-                        &mut events_iter,
-                        e,
-                        src_span,
-                        cache,
-                        options,
-                        max_width,
-                    );
-                }
+                self.process_to_end(ui, &mut events_iter, cache, options, max_width);
             });
             self.line.should_end_newline = true;
 
@@ -2796,6 +2816,22 @@ impl CommonMarkViewerInternal {
         }
     }
 
+    /// Process what is left of `events`, and set the running text that
+    /// waits at their end: the `ui` they are laid out in ends with them.
+    fn process_to_end<'e>(
+        &mut self,
+        ui: &mut Ui,
+        events: &mut Peekable<impl Iterator<Item = EventIteratorItem<'e>>>,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+    ) {
+        while let Some((_, (e, src_span))) = events.next() {
+            self.process_event(ui, events, e, src_span, cache, options, max_width);
+        }
+        self.set_runs(ui, cache);
+    }
+
     fn item_list_wrapping<'e>(
         &mut self,
         events: &mut impl Iterator<Item = EventIteratorItem<'e>>,
@@ -2813,17 +2849,7 @@ impl CommonMarkViewerInternal {
             // Required to ensure that the content of the list item is aligned with
             // the * or - when wrapping
             ui.horizontal_wrapped(|ui| {
-                while let Some((_, (e, src_span))) = events_iter.next() {
-                    self.process_event(
-                        ui,
-                        &mut events_iter,
-                        e,
-                        src_span,
-                        cache,
-                        options,
-                        max_width,
-                    );
-                }
+                self.process_to_end(ui, &mut events_iter, cache, options, max_width);
             });
         }
     }
@@ -2902,12 +2928,14 @@ impl CommonMarkViewerInternal {
                 event,
                 pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote(_))
             ) {
+                self.set_runs(ui, cache);
                 self.quote(&mut events, max_width, cache, options, ui);
                 continue;
             }
             self.upcoming = upcoming_block(events.peek().map(|(_, (event, _))| event));
             self.event(ui, event, src_span, cache, options, max_width);
         }
+        self.set_runs(ui, cache);
     }
 
     /// Before a block. With the built-in spacing this is the blank line
@@ -2916,6 +2944,7 @@ impl CommonMarkViewerInternal {
     /// content of its own container (the text of a tight list item) still
     /// has to start a row of its own.
     fn block_start(&mut self, ui: &mut Ui, options: &CommonMarkOptions, kind: BlockKind) {
+        debug_assert!(self.runs.is_empty(), "a block starts after the text before it is set");
         let continues_row = std::mem::take(&mut self.continues_row);
         match options.block_style.rhythm {
             Some(rhythm) => {
@@ -2949,6 +2978,7 @@ impl CommonMarkViewerInternal {
     /// Continue on a new line inside a block. With a rhythm the line
     /// starts `gap_em` body font sizes below the content so far.
     fn new_line(&mut self, ui: &mut Ui, options: &CommonMarkOptions, gap_em: f32) {
+        debug_assert!(self.runs.is_empty(), "a line starts after the text before it is set");
         if options.block_style.rhythm.is_some() {
             if !row_is_fresh(ui) {
                 start_row_below(ui, (gap_em * body_font_size(ui)).round());
@@ -3403,11 +3433,10 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
         max_width: f32,
     ) {
+        use pulldown_cmark::{Tag, TagEnd};
         match event {
-            pulldown_cmark::Event::Start(tag) => {
-                self.start_tag(ui, tag, src_span.start, options)
-            }
-            pulldown_cmark::Event::End(tag) => self.end_tag(ui, tag, cache, options, max_width),
+            // md-viewer patch: running text and the marks on it wait in
+            // `self.runs`.
             pulldown_cmark::Event::Text(text) => {
                 // Inside a frontmatter block the text is metadata, not prose:
                 // collect it and paint the whole block at TagEnd instead.
@@ -3468,6 +3497,7 @@ impl CommonMarkViewerInternal {
                         }
                     }
                     if wrap {
+                        self.set_runs(ui, cache);
                         ui.end_row();
                     }
                 }
@@ -3476,7 +3506,48 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::Event::InlineHtml(text) => {
                 self.event_text(text, ui, options);
             }
+            // A price between two dollar signs is set as the text it is,
+            // between the two dollar signs the parser took for its
+            // delimiters.
+            pulldown_cmark::Event::InlineMath(tex) if is_likely_currency(&tex) => {
+                self.event_text(format!("${tex}$").into(), ui, options);
+            }
+            pulldown_cmark::Event::Start(
+                tag @ (Tag::Emphasis | Tag::Strong | Tag::Strikethrough | Tag::Link { .. }),
+            ) => self.start_tag(ui, tag, src_span.start, options),
+            pulldown_cmark::Event::End(
+                tag @ (TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link),
+            ) => self.end_tag(ui, tag, cache, options, max_width),
+            // md-viewer patch: anything else is laid out on the spot,
+            // after the text before it.
+            event => {
+                self.set_runs(ui, cache);
+                self.block_event(ui, event, src_span, cache, options, max_width);
+            }
+        }
+    }
 
+    /// An event that is laid out where it comes. [`Self::event`] sets the
+    /// running text before it first.
+    fn block_event(
+        &mut self,
+        ui: &mut Ui,
+        event: pulldown_cmark::Event,
+        src_span: Range<usize>,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+    ) {
+        match event {
+            pulldown_cmark::Event::Start(tag) => {
+                self.start_tag(ui, tag, src_span.start, options)
+            }
+            pulldown_cmark::Event::End(tag) => self.end_tag(ui, tag, cache, options, max_width),
+            pulldown_cmark::Event::Text(_)
+            | pulldown_cmark::Event::Code(_)
+            | pulldown_cmark::Event::InlineHtml(_) => {
+                unreachable!("running text waits: `event` takes it")
+            }
             pulldown_cmark::Event::Html(text) => {
                 // Always accumulate HTML blocks for table detection
                 self.html_block.push_str(&text);
@@ -3523,24 +3594,17 @@ impl CommonMarkViewerInternal {
                 }
             }
             pulldown_cmark::Event::InlineMath(tex) => {
-                if is_likely_currency(&tex) {
-                    // Render as plain text instead of math, between the two
-                    // dollar signs the parser took for its delimiters.
-                    let text: CowStr = format!("${tex}$").into();
-                    self.event_text(text, ui, options);
-                } else {
-                    #[cfg(feature = "math")]
-                    {
-                        if self.is_table {
-                            crate::render_math_in_table(ui, cache, &tex, options);
-                        } else {
-                            crate::render_math(ui, cache, &tex, true, options);
-                        }
+                #[cfg(feature = "math")]
+                {
+                    if self.is_table {
+                        crate::render_math_in_table(ui, cache, &tex, options);
+                    } else {
+                        crate::render_math(ui, cache, &tex, true, options);
                     }
-                    #[cfg(not(feature = "math"))]
-                    if let Some(math_fn) = options.math_fn {
-                        math_fn(ui, &tex, true);
-                    }
+                }
+                #[cfg(not(feature = "math"))]
+                if let Some(math_fn) = options.math_fn {
+                    math_fn(ui, &tex, true);
                 }
             }
             pulldown_cmark::Event::DisplayMath(tex) => {
@@ -3577,11 +3641,71 @@ impl CommonMarkViewerInternal {
     /// A link is complete: show it, or in a heading keep it for its place
     /// among the heading's pieces.
     fn end_link(&mut self, link: Link, ui: &mut Ui, cache: &mut CommonMarkCache) {
-        if self.text_style.heading.is_some() {
-            self.current_heading_pieces.push(HeadingPiece::Link(link));
-        } else {
-            link.end(ui, cache);
+        let active = std::mem::take(&mut self.link_is_active);
+        match self.text_sink() {
+            TextSink::Heading => self.current_heading_pieces.push(HeadingPiece::Link(link)),
+            TextSink::TableCell => link.end(ui, cache),
+            TextSink::Runs => {
+                let (destination, job) = link.into_job(ui);
+                self.runs.push(job, Some(destination), active);
+            }
         }
+    }
+
+    /// md-viewer patch: where a piece of text emitted now is set.
+    fn text_sink(&self) -> TextSink {
+        if self.text_style.heading.is_some() {
+            TextSink::Heading
+        } else if self.is_table {
+            TextSink::TableCell
+        } else {
+            TextSink::Runs
+        }
+    }
+
+    /// md-viewer patch: whether text emitted now waits in [`Self::runs`],
+    /// so that the row it is set on is not known yet.
+    fn text_waits(&self) -> bool {
+        self.image.is_none()
+            && self.code_block.is_none()
+            && matches!(self.text_sink(), TextSink::Runs)
+    }
+
+    /// md-viewer patch: set the running text that waited, each piece
+    /// where the one before it ends.
+    fn set_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache) {
+        self.show_runs(ui, cache, ItemMarker::FromFirstText);
+    }
+
+    /// Set the running text that waited.
+    fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marker: ItemMarker) {
+        if self.runs.is_empty() {
+            return;
+        }
+        let mut runs = std::mem::take(&mut self.runs);
+        for run in runs.drain_with_room(ui) {
+            if run.active {
+                let top = ui.cursor().top();
+                record_active_search_content_y(cache, top, self.render_origin_y, self.slice_start_y);
+            }
+            match run.link {
+                Some(destination) => show_link(ui, cache, destination, run.job),
+                None => {
+                    if matches!(marker, ItemMarker::FromFirstText) {
+                        // The item's first text decides where its deferred
+                        // marker paints: its format gives the marker's
+                        // reference galley the real layout, and the marker
+                        // is flushed with no widget in between.
+                        let first = run.job.sections.first();
+                        let format = first.map(|section| section.format.clone());
+                        self.list.flush_pending_markers(ui, format);
+                    }
+                    ui.label(run.job);
+                }
+            }
+        }
+        // Emptied, and kept for the room it has.
+        self.runs = runs;
     }
 
     fn event_text(&mut self, text: CowStr, ui: &mut Ui, options: &CommonMarkOptions) {
@@ -3598,31 +3722,7 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
     ) {
         let bg = hl.background_color(ui);
-        let mut rich_text = if bg.is_some() && self.text_style.code {
-            // egui's RichText renderer overrides `background_color` with the theme's
-            // `code_bg_color` whenever `.code()` is set (widget_text.rs:421). To make
-            // our search highlight visible inside inline code, build the RichText
-            // manually with a monospace font instead of calling `.code()` — that gives
-            // the visual effect of code (monospace + slightly larger weight) while
-            // letting our background_color survive.
-            let mut t = egui::RichText::new(text.as_ref())
-                .text_style(egui::TextStyle::Monospace);
-            if self.text_style.strong {
-                t = t.strong();
-            }
-            if self.text_style.emphasis {
-                t = t.italics();
-            }
-            if self.text_style.strikethrough {
-                t = t.strikethrough();
-            }
-            if self.text_style.quote {
-                t = t.weak();
-            }
-            t
-        } else {
-            self.text_style.to_richtext_with_options(ui, &text, options)
-        };
+        let mut rich_text = self.text_style.to_richtext_with_options(ui, &text, options);
         if let Some(bg) = bg {
             rich_text = rich_text.background_color(bg);
         }
@@ -3634,50 +3734,34 @@ impl CommonMarkViewerInternal {
             block.content.push_str(&text);
         } else if let Some(link) = &mut self.link {
             link.text.push(rich_text);
-        } else if self.text_style.heading.is_some() {
-            self.current_heading_text
-                .push_str(raw_heading_text.unwrap_or(&text));
-            // Accumulate RichText - will render all at once in end_tag(Heading)
-            self.current_heading_pieces
-                .push(HeadingPiece::Text(rich_text));
-        } else if self.is_table {
-            match self.code_chip_radius(bg, options) {
-                Some(radius) => inline_code_label(ui, rich_text, radius, true),
-                None => ui.add(egui::Label::new(rich_text).wrap()),
-            };
+            self.link_is_active |= hl == HighlightKind::Active;
         } else {
-            // The item's first text decides where its deferred marker paints:
-            // mirror exactly the job `ui.label` is about to build (same format,
-            // same valign) so the marker's reference galley matches the real
-            // layout, and flush with no widget in between.
-            let mut job = egui::text::LayoutJob::default();
-            rich_text.clone().append_to(
-                &mut job,
-                ui.style(),
-                egui::FontSelection::Default,
-                ui.text_valign(),
-            );
-            let format = job.sections.first().map(|section| section.format.clone());
-            self.list.flush_pending_markers(ui, format);
-            match self.code_chip_radius(bg, options) {
-                Some(radius) => inline_code_label(ui, rich_text, radius, false),
-                None => ui.label(rich_text),
-            };
+            match self.text_sink() {
+                TextSink::Heading => {
+                    self.current_heading_text
+                        .push_str(raw_heading_text.unwrap_or(&text));
+                    // Accumulate RichText - will render all at once in end_tag(Heading)
+                    self.current_heading_pieces
+                        .push(HeadingPiece::Text(rich_text));
+                }
+                TextSink::TableCell => {
+                    ui.add(egui::Label::new(rich_text).wrap());
+                }
+                TextSink::Runs => {
+                    // md-viewer patch: the job `ui.label` would build of the
+                    // text (same format, same valign), kept until what
+                    // follows the text is known. See `Runs`.
+                    let mut job = egui::text::LayoutJob::default();
+                    rich_text.append_to(
+                        &mut job,
+                        ui.style(),
+                        egui::FontSelection::Default,
+                        ui.text_valign(),
+                    );
+                    self.runs.push(job, None, hl == HighlightKind::Active);
+                }
+            }
         }
-    }
-
-    /// The corner radius to paint the text being emitted on a chip with:
-    /// inline code, when the style asks for chips. A search highlight keeps
-    /// its own background.
-    fn code_chip_radius(
-        &self,
-        highlight: Option<egui::Color32>,
-        options: &CommonMarkOptions,
-    ) -> Option<f32> {
-        options
-            .block_style
-            .inline_code_radius
-            .filter(|_| self.text_style.code && highlight.is_none())
     }
 
     /// Render source-literal text while preserving fine-grained search highlighting.
@@ -3697,7 +3781,7 @@ impl CommonMarkViewerInternal {
             cache.search_ranges(),
             cache.active_search_range(),
             |segment_text, hl| {
-                if hl == HighlightKind::Active {
+                if hl == HighlightKind::Active && !self.text_waits() {
                     active_y = Some(ui.cursor().top());
                 }
                 self.emit_text(segment_text.into(), None, hl, ui, options);
@@ -3752,7 +3836,7 @@ impl CommonMarkViewerInternal {
                         options,
                     );
                     if let Some(link) = self.link.take() {
-                        link.end(ui, cache);
+                        self.end_link(link, ui, cache);
                     }
                     cursor = range.end;
                 }
@@ -3797,7 +3881,7 @@ impl CommonMarkViewerInternal {
                     cache.search_ranges(),
                     cache.active_search_range(),
                 );
-                if hl == HighlightKind::Active {
+                if hl == HighlightKind::Active && !self.text_waits() {
                     active_y = Some(ui.cursor().top());
                 }
                 self.emit_text(segment.rendered.into(), Some(segment.raw), hl, ui, options);
@@ -3811,7 +3895,7 @@ impl CommonMarkViewerInternal {
                 cache.search_ranges(),
                 cache.active_search_range(),
                 |segment_text, hl| {
-                    if hl == HighlightKind::Active {
+                    if hl == HighlightKind::Active && !self.text_waits() {
                         active_y = Some(ui.cursor().top());
                     }
                     self.emit_text(segment_text.into(), None, hl, ui, options);
@@ -4009,14 +4093,27 @@ impl CommonMarkViewerInternal {
                     );
                     let pieces = std::mem::take(&mut self.current_heading_pieces);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(heading_rect), |ui| {
+                        // md-viewer patch: the pieces are set as running
+                        // text is, so that those that touch share a row.
                         for piece in pieces {
                             match piece {
                                 HeadingPiece::Text(rt) => {
-                                    ui.label(rt);
+                                    let mut job = egui::text::LayoutJob::default();
+                                    rt.append_to(
+                                        &mut job,
+                                        ui.style(),
+                                        egui::FontSelection::Default,
+                                        ui.text_valign(),
+                                    );
+                                    self.runs.push(job, None, false);
                                 }
-                                HeadingPiece::Link(link) => link.end(ui, cache),
+                                HeadingPiece::Link(link) => {
+                                    let (destination, job) = link.into_job(ui);
+                                    self.runs.push(job, Some(destination), false);
+                                }
                             }
                         }
+                        self.show_runs(ui, cache, ItemMarker::Leave);
                     });
                 }
                 // Record under a source-stable key shared with the Outline parser.
@@ -4163,6 +4260,7 @@ impl CommonMarkViewerInternal {
                         // Render non-table HTML as plain text (existing fallback)
                         let text: pulldown_cmark::CowStr = std::mem::take(&mut self.html_block).into();
                         self.event_text(text, ui, options);
+                        self.set_runs(ui, cache);
                     }
                     self.html_block.clear();
                     // The built-in spacing leaves the gap to the block
@@ -6162,6 +6260,57 @@ mod tests {
                 .is_some_and(|y| y > minimum_nested_y),
             "table-cell search match lost the preceding document height"
         );
+    }
+
+    /// md-viewer patch: where find's current match is recorded when it is
+    /// `needle` in `markdown`, and the height of a line of body text.
+    fn active_match_y(markdown: &str, needle: &str) -> (Option<f32>, f32) {
+        let start = markdown.find(needle).expect("the fixture holds the needle");
+        let range = start..start + needle.len();
+        let mut cache = CommonMarkCache::default();
+        cache.set_search_ranges(vec![range.clone()]);
+        cache.set_active_search_range(Some(range));
+        let ctx = egui::Context::default();
+        let mut line_height = 0.0;
+
+        ctx.begin_pass(Default::default());
+        egui::CentralPanel::default().show(&ctx, |ui| {
+            ui.set_width(400.0);
+            line_height = ui.text_style_height(&egui::TextStyle::Body);
+            CommonMarkViewerInternal::new().show(
+                ui,
+                &mut cache,
+                &CommonMarkOptions::default(),
+                markdown,
+                None,
+            );
+        });
+        let _ = ctx.end_pass();
+        (cache.active_search_y(), line_height)
+    }
+
+    /// md-viewer patch: running text waits to be set until what follows it
+    /// is known. The place of find's current match is still the row it is
+    /// set on: in plain text, in code and in a link, each with brackets
+    /// written against it, and not the row the next block starts on.
+    #[test]
+    fn a_match_in_running_text_is_recorded_on_the_row_it_is_set_on() {
+        let page = |fifth: &str| {
+            format!("One.\n\nTwo.\n\nThree.\n\nFour.\n\n{fifth}\n\nSix.\n\nSeven.\n")
+        };
+        let (plain, line_height) = active_match_y(&page("Then NEEDLE here."), "NEEDLE");
+        let plain = plain.expect("a match in plain text has a place");
+        assert!(plain > line_height * 4.0, "{plain} is above the fifth paragraph");
+
+        for fifth in [
+            "Then (NEEDLE), here.",
+            "Then (`NEEDLE`), here.",
+            "Then ([the NEEDLE](x.md)), here.",
+            "Then (**the [NEEDLE](x.md)**), here.",
+        ] {
+            let (y, _) = active_match_y(&page(fifth), "NEEDLE");
+            assert_eq!(y, Some(plain), "in `{fifth}`");
+        }
     }
 
     #[test]

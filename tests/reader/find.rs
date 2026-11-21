@@ -132,6 +132,24 @@ fn stepping_to_a_match_brings_it_into_view() {
     reader.assert_sees("1 / 1");
 }
 
+/// A match in a link is where the link is set, with the brackets written
+/// against it.
+#[test]
+fn stepping_to_a_match_in_a_link_brings_it_into_view() {
+    let mut text = long_document(80);
+    text.push_str("## Appendix\n\nSee ([the only heron](long.md)).\n");
+    let mut reader = Reader::with_docs(&[("long.md", &text)]);
+    assert!(!reader.in_view("Appendix"));
+
+    reader.press("Ctrl+F");
+    reader.type_text("heron");
+    reader.wait_for("the match to scroll into view", |reader| {
+        reader.in_view("Appendix")
+    });
+
+    reader.assert_sees("1 / 1");
+}
+
 #[test]
 fn the_count_follows_the_document_in_front() {
     let mut reader = Reader::with_docs(&[

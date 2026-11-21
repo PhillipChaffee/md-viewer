@@ -32,6 +32,11 @@ unicode-segmentation = "1.12"
 
 
 [patch.crates-io]
+# md-viewer patch: the renderer asks the app's patched painter to keep
+# pieces of text that touch on one row, so it builds and is tested against
+# that painter here too.
+epaint = { path = "../epaint", version = "0.33.3" }
+
 # eframe = { git = "https://github.com/emilk/egui.git", branch = "main" }
 # egui = { git = "https://github.com/emilk/egui.git", branch = "main" }
 # egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" }

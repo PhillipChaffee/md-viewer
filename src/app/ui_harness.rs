@@ -10,6 +10,7 @@ use eframe::egui::{self, accesskit};
 use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
+use super::lightbox::{LightboxState, LightboxTexture};
 use super::settings::FontPicker;
 use super::tests::Harness;
 use super::MarkdownApp;
@@ -53,6 +54,18 @@ pub(crate) fn launch(storage: &MemoryStorage, file: Option<PathBuf>, watch: bool
     MarkdownApp::new(&creation, file, watch)
 }
 
+/// A picture as the lightbox holds one that was just enlarged: 100 by
+/// 100, at its own size, not panned.
+pub(crate) fn enlarged() -> LightboxState {
+    LightboxState {
+        texture: LightboxTexture::Loaded(egui::TextureId::default()),
+        base_size: egui::vec2(100.0, 100.0),
+        zoom: 1.0,
+        open_id: 1,
+        scroll_offset: egui::Vec2::ZERO,
+    }
+}
+
 /// Run one frame of the key-driven harness on `input`, through the same
 /// input hook and update call eframe makes.
 pub(crate) fn frame_with(harness: &mut Harness, mut input: egui::RawInput) -> egui::FullOutput {
@@ -60,6 +73,24 @@ pub(crate) fn frame_with(harness: &mut Harness, mut input: egui::RawInput) -> eg
     harness.app.raw_input_hook(&harness.ctx, &mut input);
     let (app, frame) = (&mut harness.app, &mut harness.frame);
     harness.ctx.run(input, |ctx| app.update(ctx, frame))
+}
+
+/// Run one frame of the key-driven harness in which the window asks to
+/// close.
+pub(crate) fn frame_asked_to_close(harness: &mut Harness) -> egui::FullOutput {
+    let mut input = egui::RawInput::default();
+    let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();
+    window.events.push(egui::ViewportEvent::Close);
+    frame_with(harness, input)
+}
+
+/// Whether the frame behind `output` sent `wanted` to a window.
+pub(crate) fn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool {
+    let mut commands = output
+        .viewport_output
+        .values()
+        .flat_map(|viewport| &viewport.commands);
+    commands.any(|command| command == wanted)
 }
 
 /// Run one frame of the key-driven harness on `events`.

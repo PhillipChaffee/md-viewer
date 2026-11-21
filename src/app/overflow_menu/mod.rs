@@ -29,46 +29,50 @@ impl MarkdownApp {
     /// the button opens and closes it.
     pub(crate) fn overflow_menu(&self, button: &egui::Response, picked: &mut Option<AppAction>) {
         let palette = self.theme.palette();
-        egui::Popup::menu(button)
+        let menu = egui::Popup::menu(button)
             .align(egui::RectAlign::BOTTOM_END)
             .gap(4.0)
             // The zoom row is pressed again and again; a picked row closes
             // the menu itself.
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .sense(chrome::POPUP_SENSE)
-            .style(chrome::popup_style(palette))
-            .show(|ui| {
-                ui.set_width(MENU_WIDTH);
-                self.file_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.document_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.history_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.view_rows(ui, picked);
-                chrome::hairline(ui, palette);
-                self.zoom_row(ui, picked);
-                chrome::hairline(ui, palette);
-                self.item(
-                    ui,
-                    MenuRow::new("Colors…"),
-                    AppAction::OpenColorSettings,
-                    picked,
-                );
-                self.item(
-                    ui,
-                    MenuRow::new("Fonts…"),
-                    AppAction::OpenFontSettings,
-                    picked,
-                );
-                chrome::hairline(ui, palette);
-                self.item(
-                    ui,
-                    MenuRow::new("Quit").shortcut(self.hints.of(AppAction::Quit)),
-                    AppAction::Quit,
-                    picked,
-                );
-            });
+            .style(chrome::popup_style(palette));
+        chrome::show_popup(menu, |ui| self.rows(ui, picked));
+    }
+
+    /// Every row of the menu, top to bottom.
+    fn rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let palette = self.theme.palette();
+        ui.set_width(MENU_WIDTH);
+        self.file_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.document_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.history_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.view_rows(ui, picked);
+        chrome::hairline(ui, palette);
+        self.zoom_row(ui, picked);
+        chrome::hairline(ui, palette);
+        self.item(
+            ui,
+            MenuRow::new("Colors…"),
+            AppAction::OpenColorSettings,
+            picked,
+        );
+        self.item(
+            ui,
+            MenuRow::new("Fonts…"),
+            AppAction::OpenFontSettings,
+            picked,
+        );
+        chrome::hairline(ui, palette);
+        self.item(
+            ui,
+            MenuRow::new("Quit").shortcut(self.hints.of(AppAction::Quit)),
+            AppAction::Quit,
+            picked,
+        );
     }
 
     /// One row of the menu: picking it asks for `action` and closes the
@@ -91,12 +95,16 @@ impl MarkdownApp {
     fn submenu(&self, ui: &mut egui::Ui, label: &str, rows: impl FnOnce(&mut egui::Ui)) {
         let row = MenuRow::new(label).submenu().show(ui, self.theme.palette());
         SubMenu::new().show(ui, &row, |ui| {
-            ui.set_width(SUBMENU_WIDTH);
-            rows(ui);
+            chrome::scrolled(ui, |ui| {
+                ui.set_width(SUBMENU_WIDTH);
+                rows(ui);
+            });
         });
     }
 
     fn file_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let new_tab = MenuRow::new("New Tab").shortcut(self.hints.of(AppAction::NewTab));
+        self.item(ui, new_tab, AppAction::NewTab, picked);
         let open = MenuRow::new("Open File…").shortcut(self.hints.of(AppAction::OpenFile));
         self.item(ui, open, AppAction::OpenFile, picked);
         self.item(
@@ -228,6 +236,8 @@ impl MarkdownApp {
             if self.hints.tooltip(plus, "Zoom in", zoom_in).clicked() {
                 *picked = Some(zoom_in);
             }
+
+            chrome::stays_in_view_through_a_rescale(ui);
         });
     }
 }

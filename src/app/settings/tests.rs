@@ -7,7 +7,7 @@ use egui_kittest::kittest::Queryable as _;
 
 use crate::app::ui_harness::UiHarness;
 use crate::system_fonts::{FontPreset, TextSizeClass};
-use crate::test_support::assert_close;
+use crate::test_support::{assert_close, painted_text_starting};
 
 const RED: Color32 = Color32::from_rgb(200, 30, 30);
 const GREEN: Color32 = Color32::from_rgb(30, 160, 60);
@@ -150,6 +150,19 @@ fn clicking_a_family_selects_it_and_system_default_clears_it() {
 }
 
 #[test]
+fn the_note_under_the_presets_is_smaller_than_the_label_above_them() {
+    let mut harness = fonts_dialog(&["Alpha Sans"]);
+    harness.click("Alpha Sans");
+
+    let output = harness.ui.output();
+    let size = |prefix: &str| {
+        let text = painted_text_starting(output, prefix);
+        text.galley.job.sections[0].format.font_id.size
+    };
+    assert!(size("A picked family leads") < size("Preset"));
+}
+
+#[test]
 fn the_search_box_narrows_the_list_without_regard_to_case() {
     let mut harness = fonts_dialog(&["Alpha Sans", "Beta Serif", "Gamma Beta"]);
     let search_box = harness.centers_with_role(accesskit::Role::TextInput)[0];
@@ -193,7 +206,7 @@ fn a_preset_click_switches_the_preset() {
 fn a_text_size_click_resizes_the_body_text() {
     let mut harness = fonts_dialog(&[]);
     let body_size = |harness: &UiHarness| -> f32 {
-        let style = harness.ui.ctx.style();
+        let style = &harness.app().document_look.style;
         style.text_styles[&TextStyle::Body].size
     };
     assert_eq!(harness.app().fonts.size, TextSizeClass::Normal);

@@ -251,13 +251,13 @@ mod editing {
         let (dir, mut tab) = tab_with("# Notes");
         tab.content.push('!');
 
-        tab.save().unwrap();
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::Written);
         assert!(matches!(tab.save_flash, Some((SaveOutcome::Saved, _))));
         assert!(!tab.is_dirty());
 
         tab.content.push('!');
         fs::remove_dir_all(dir.path()).unwrap();
-        assert!(tab.save().is_err());
+        assert!(tab.save(Theirs::Ask).is_err());
         assert!(matches!(tab.save_flash, Some((SaveOutcome::Failed, _))));
         assert!(tab.is_dirty());
     }
@@ -306,6 +306,159 @@ mod editing {
 
         assert!(tab.save_to_disk().is_err());
         assert_eq!(tab.saved_content, "# Notes");
+    }
+}
+
+mod disk {
+    use super::*;
+
+    /// A tab on `notes.md` with an unsaved `!` typed at its end.
+    fn edited_tab() -> (ScratchDir, Tab) {
+        let (dir, mut tab) = tab_with("# Notes");
+        tab.content.push('!');
+        tab.content_edited();
+        (dir, tab)
+    }
+
+    #[test]
+    fn a_tab_without_unsaved_edits_reloads_and_has_no_notice() {
+        let (dir, mut tab) = tab_with("# Notes");
+        dir.file("notes.md", "# Theirs");
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::Reloaded);
+
+        assert_eq!(tab.content, "# Theirs");
+        assert_eq!(tab.disk_notice(), None);
+        fs::remove_file(&tab.path).unwrap();
+        assert!(tab.follow_disk().is_err());
+        assert_eq!(tab.disk_notice(), None);
+    }
+
+    #[test]
+    fn unsaved_edits_are_kept_and_measured_against_the_files_new_text() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::KeptEdits);
+
+        assert_eq!(tab.content, "# Notes!");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        tab.content.pop();
+        tab.content_edited();
+        assert!(tab.is_dirty(), "the file no longer holds this text");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+
+        tab.content = "# Theirs".to_owned();
+        tab.content_edited();
+        assert!(!tab.is_dirty());
+        assert_eq!(tab.disk_notice(), None, "no notice without unsaved edits");
+    }
+
+    #[test]
+    fn a_file_left_as_it_was_is_not_announced() {
+        let (_dir, mut tab) = edited_tab();
+
+        assert_eq!(tab.follow_disk().unwrap(), Followed::KeptEdits);
+
+        assert_eq!(tab.disk_notice(), None);
+    }
+
+    #[test]
+    fn keep_mine_takes_the_notice_down_until_the_file_changes_again() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+
+        tab.keep_mine();
+        assert_eq!(tab.disk_notice(), None);
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None, "the same text is no news");
+
+        dir.file("notes.md", "# Theirs again");
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+    }
+
+    #[test]
+    fn a_file_that_is_gone_is_announced_once_and_a_save_settles_it() {
+        let (_dir, mut tab) = edited_tab();
+        fs::remove_file(&tab.path).unwrap();
+
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Gone));
+        tab.keep_mine();
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None, "it was gone already");
+
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::Written);
+        tab.content.push('?');
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), None);
+    }
+
+    #[test]
+    fn text_the_reader_has_not_taken_is_not_theirs_after_the_file_went_and_came_back() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+        tab.keep_mine();
+
+        fs::remove_file(&tab.path).unwrap();
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Gone));
+
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        assert_eq!(tab.save(Theirs::Ask).unwrap(), Saved::WouldOverwrite);
+        assert_eq!(fs::read_to_string(&tab.path).unwrap(), "# Theirs");
+    }
+
+    #[test]
+    fn text_the_reader_has_not_taken_is_not_asked_about_once_its_file_is_gone() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+        tab.keep_mine();
+        fs::remove_file(&tab.path).unwrap();
+        tab.follow_disk().unwrap();
+
+        let asked = tab.save(Theirs::Ask).unwrap();
+
+        assert_eq!(asked, Saved::Written, "nothing is there to replace");
+        assert_eq!(fs::read_to_string(&tab.path).unwrap(), "# Notes!");
+    }
+
+    #[test]
+    fn a_save_that_asks_leaves_only_text_the_reader_has_not_taken() {
+        let (dir, mut tab) = tab_with("# Notes");
+        let on_disk = |tab: &Tab| fs::read_to_string(&tab.path).ok();
+        let theirs = Some("# Theirs".to_owned());
+        dir.file("notes.md", "# Theirs");
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "nothing is unsaved");
+        assert_eq!(on_disk(&tab), theirs, "and nothing is written");
+
+        tab.content.push('!');
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::WouldOverwrite, "no watcher said so");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        tab.keep_mine();
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::WouldOverwrite, "kept is not saved over");
+        assert_eq!(on_disk(&tab), theirs);
+
+        assert_eq!(tab.save(Theirs::Replace).unwrap(), Saved::Written);
+        assert_eq!(on_disk(&tab), Some("# Notes!".to_owned()));
+        tab.content.push('!');
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "the file held what was saved");
+
+        tab.content.push('!');
+        fs::remove_file(&tab.path).unwrap();
+        let asked = tab.save(Theirs::Ask).unwrap();
+        assert_eq!(asked, Saved::Written, "a file that is gone has no text");
+        assert_eq!(on_disk(&tab), Some("# Notes!!!".to_owned()));
     }
 }
 

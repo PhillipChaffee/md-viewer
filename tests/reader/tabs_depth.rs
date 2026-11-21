@@ -202,7 +202,7 @@ fn closing_the_middle_tab_in_front_shows_a_neighbor() {
     reader.click("tab:Beta");
 
     reader.hover("tab:Beta");
-    reader.click("Close tab");
+    reader.click("Close Beta");
 
     assert_eq!(reader.count("tab:Beta"), 0);
     assert_eq!(reader.tabs(), ["Alpha", "Gamma"]);

@@ -83,6 +83,9 @@ impl MarkdownApp {
             force_full_render: corrections.header_key.is_some() || corrections.search,
         };
 
+        // The source in edit mode is set at the text size, in the window's
+        // face: the context's own body style is the chrome's fixed size.
+        let source_font = egui::FontId::proportional(self.fonts.size.px());
         let (reading_width, palette) = (self.reading_width, self.theme.palette());
         let column_drag_grab = &mut self.column_drag_grab;
 
@@ -102,7 +105,7 @@ impl MarkdownApp {
 
                 // (the Preview|Edit toggle lives in the bars above)
                 let edit = if tab.is_editing {
-                    edit_pane(ui, tab, column)
+                    edit_pane(ui, tab, &source_font, column)
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
                     let corrected = scroll_correction(tab, scroll.state.offset.y, &corrections);
@@ -173,13 +176,14 @@ enum Edit {
 }
 
 /// Edit mode: a scrollable `TextEdit` holding the raw markdown, as wide as
-/// the text column and centered like it. The `TextEdit`'s own `ScrollArea`
-/// handles the wheel natively. Returns what was typed this frame.
-fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> Edit {
+/// the text column and centered like it, set in `font`. The `TextEdit`'s
+/// own `ScrollArea` handles the wheel natively. Returns what was typed
+/// this frame.
+fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, font: &egui::FontId, column: Column) -> Edit {
     let pending_edit = tab.pending_edit_scroll.take();
     let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
-        .id_salt(tab.id.with("edit-scroll"))
+        .id_salt(tab.document_id.with("edit-scroll"))
         .auto_shrink(false)
         .max_width(column.pane.width())
         .show(ui, |ui| {
@@ -189,7 +193,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> Edit {
                 ui.add_space(column.inset());
                 let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4_i8, 2_i8));
                 frame.show(ui, |ui| {
-                    edited = source::edit(ui, &mut tab.content, column.width - 8.0);
+                    edited = source::edit(ui, &mut tab.content, font, column.width - 8.0);
                 });
             });
         });
@@ -273,7 +277,7 @@ fn preview_pane(
             drag: false,
             mouse_wheel: true,
         })
-        .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content);
+        .show_scrollable(tab.document_id, ui, &mut tab.cache, &tab.content);
 
     tab.measured(&output);
     output

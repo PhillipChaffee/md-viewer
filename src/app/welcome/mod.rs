@@ -8,8 +8,8 @@ use egui::text::{LayoutJob, TextFormat, TextWrapping};
 use egui::{FontFamily, FontId, TextStyle};
 
 use crate::app::action::AppAction;
-use crate::app::sidebar;
 use crate::app::MarkdownApp;
+use crate::app::{chrome, sidebar};
 use crate::layout::{centered_column_left, ReadingWidth};
 use crate::recent::now_epoch_secs;
 use crate::theme::Palette;
@@ -38,7 +38,6 @@ const CAPTION_GAP: f32 = 10.0;
 /// Space above a row's title and below its last line.
 const ROW_PADDING: f32 = 18.0;
 const META_SIZE: f32 = 13.0;
-const TOOLTIP_SIZE: f32 = 12.0;
 /// Space between a row's title and its meta line.
 const META_GAP: f32 = 4.0;
 /// Space between a row's meta line and its excerpt.
@@ -241,6 +240,7 @@ fn quiet_button(ui: &egui::Ui, palette: &Palette, rect: egui::Rect, text: &str) 
     };
     let label = ui.painter().layout_job(sans(text, BUTTON_TEXT_SIZE, ink));
     ui.painter().galley(rect.min + BUTTON_PADDING, label, ink);
+    chrome::focus_ring(ui, palette, &response, rect);
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -408,11 +408,12 @@ fn recent_row(ui: &mut egui::Ui, row: &HomeRow, style: &HomeStyle<'_>) -> bool {
     });
     if ui.is_rect_visible(rect) {
         let palette = style.palette;
+        // Clear of the hairlines above and below.
+        let wash = rect.expand2(egui::vec2(WASH_REACH, -1.0));
         if row.exists && response.hovered() {
-            // Clear of the hairlines above and below.
-            let wash = rect.expand2(egui::vec2(WASH_REACH, -1.0));
             ui.painter().rect_filled(wash, WASH_RADIUS, palette.raised);
         }
+        chrome::focus_ring(ui, palette, &response, wash);
         let mut at = rect.min + egui::vec2(0.0, ROW_PADDING);
         let title_height = text.title.size().y;
         ui.painter().galley(at, text.title, palette.heading);
@@ -433,7 +434,7 @@ fn recent_row(ui: &mut egui::Ui, row: &HomeRow, style: &HomeStyle<'_>) -> bool {
     // Where the file is, for a reader who rests the pointer on the row.
     let hovered = response.on_hover_ui(|ui| {
         let path = egui::RichText::new(row.path.to_string_lossy());
-        ui.label(path.size(TOOLTIP_SIZE).color(style.palette.muted));
+        ui.label(path.color(style.palette.muted));
     });
     hovered.clicked()
 }

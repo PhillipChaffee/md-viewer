@@ -22,6 +22,24 @@ pub(crate) struct Area {
 }
 
 impl Area {
+    /// The area `rect` covers, a rectangle already in pixels.
+    pub(super) fn of(rect: egui::Rect) -> Self {
+        Self {
+            left: rect.left(),
+            top: rect.top(),
+            width: rect.width(),
+            height: rect.height(),
+        }
+    }
+
+    /// Whether `other` lies wholly inside it.
+    pub(super) fn holds(self, other: Self) -> bool {
+        other.left >= self.left
+            && other.top >= self.top
+            && other.right() <= self.right()
+            && other.bottom() <= self.bottom()
+    }
+
     pub(crate) fn right(self) -> f32 {
         self.left + self.width
     }
@@ -123,6 +141,12 @@ impl Reader {
         let mut focused = self.elements();
         focused.retain(|element| element.focused);
         focused.pop().map(|element| element.name)
+    }
+
+    /// Whether the keyboard is in the one thing named `label`, a tab
+    /// where the name starts with `tab:`.
+    pub(crate) fn keyboard_is_on(&self, label: &str) -> bool {
+        self.all(label).iter().any(|element| element.focused)
     }
 
     /// The names of the tabs in the top row, from left to right.
@@ -237,13 +261,7 @@ impl Reader {
         let scale = self.scale();
         let mut found: Vec<Area> = pictures(&self.shapes())
             .into_iter()
-            .map(|picture| picture.rect * scale)
-            .map(|rect| Area {
-                left: rect.left(),
-                top: rect.top(),
-                width: rect.width(),
-                height: rect.height(),
-            })
+            .map(|picture| Area::of(picture.rect * scale))
             .collect();
         found.sort_by(|a, b| a.top.total_cmp(&b.top));
         found
@@ -361,6 +379,17 @@ impl Reader {
                 && area.right() <= self.window.0
                 && area.bottom() <= self.window.1
         })
+    }
+
+    /// Whether the one control `label` lies wholly inside the window, so
+    /// a pointer can get to all of it.
+    #[track_caller]
+    pub(crate) fn is_within_window(&self, label: &str) -> bool {
+        let area = self.area_of(label);
+        area.left >= 0.0
+            && area.top >= 0.0
+            && area.right() <= self.window.0
+            && area.bottom() <= self.window.1
     }
 
     /// What the text fields hold, in reading order: the find bar's query,

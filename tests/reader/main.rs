@@ -18,6 +18,8 @@ mod diagrams;
 #[cfg(test)]
 mod dialogs;
 #[cfg(test)]
+mod disk_change;
+#[cfg(test)]
 mod docs;
 #[cfg(test)]
 mod editing;
@@ -25,6 +27,8 @@ mod editing;
 mod editing_depth;
 #[cfg(test)]
 mod far_pictures;
+#[cfg(test)]
+mod files_new_tab;
 #[cfg(test)]
 mod files_sidebar;
 #[cfg(test)]
@@ -44,9 +48,15 @@ mod home_depth;
 #[cfg(test)]
 mod home_view;
 #[cfg(test)]
+mod inline_code;
+#[cfg(test)]
 mod keyboard;
 #[cfg(test)]
+mod keyboard_focus;
+#[cfg(test)]
 mod lightbox;
+#[cfg(test)]
+mod line_breaks;
 #[cfg(test)]
 mod links;
 #[cfg(test)]
@@ -58,9 +68,13 @@ mod math;
 #[cfg(test)]
 mod menu;
 #[cfg(test)]
+mod menu_room;
+#[cfg(test)]
 mod opening;
 #[cfg(test)]
 mod opening_depth;
+#[cfg(test)]
+mod overwrite;
 #[cfg(test)]
 mod pages;
 #[cfg(test)]
@@ -87,6 +101,8 @@ mod tabs;
 mod tabs_depth;
 #[cfg(test)]
 mod themes;
+#[cfg(test)]
+mod tooltips;
 #[cfg(test)]
 mod unsaved;
 #[cfg(test)]

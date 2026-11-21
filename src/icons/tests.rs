@@ -144,3 +144,16 @@ fn the_warning_sign_dots_its_exclamation_mark() {
     assert_eq!(filled.count(), 1, "one dot under the stroke: {marks:?}");
     assert_eq!(marks.len(), 3);
 }
+
+#[test]
+fn the_new_tab_arrow_leaves_its_square_by_the_top_right_corner() {
+    let square = Rect::from_min_size(Pos2::ZERO, egui::Vec2::splat(16.0));
+    let marks = marks_of(Icon::NewTab, square);
+    let [frame, head, shaft] = [0, 1, 2].map(|mark| marks[mark].visual_bounding_rect());
+
+    assert!(head.right() > frame.right() && head.top() < frame.top());
+    // The shaft starts inside the square and ends at the arrow's tip.
+    assert!(frame.contains(shaft.left_bottom()), "{shaft:?} {frame:?}");
+    assert_close(shaft.right(), head.right());
+    assert_close(shaft.top(), head.top());
+}

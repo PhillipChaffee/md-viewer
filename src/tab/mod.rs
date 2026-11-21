@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use eframe::egui;
@@ -82,6 +83,71 @@ pub(crate) enum SaveOutcome {
     Failed,
 }
 
+/// What a save does about text another program wrote to the tab's file
+/// and the reader has not taken.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Theirs {
+    /// Leave it there and write nothing: the reader is asked first.
+    Ask,
+    /// Write over it: the reader said to.
+    Replace,
+}
+
+/// What a save that did not fail came to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Saved {
+    /// The file holds the tab's text.
+    Written,
+    /// Nothing was written, for it would replace what another program
+    /// wrote.
+    WouldOverwrite,
+}
+
+/// What another program did to a tab's file while the tab had unsaved
+/// edits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DiskChange {
+    /// The file holds other text now, or can no longer be read.
+    Changed,
+    /// The file is not there.
+    Gone,
+}
+
+/// What a look at a tab's file finds there.
+enum Seen {
+    /// The text the tab last knew it to hold.
+    AsKnown,
+    /// This other text.
+    Other(String),
+    /// No file.
+    Gone,
+    /// A file that cannot be read.
+    Unreadable,
+}
+
+/// A change to a tab's file that its unsaved edits kept it from following,
+/// until the reader reloads the file or saves over it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Unfollowed {
+    change: DiskChange,
+    /// Whether `saved_content` is text another program wrote, which the
+    /// reader has not taken: a file that goes and comes back with it is
+    /// still not theirs to save over unasked.
+    holds_theirs: bool,
+    /// Whether the notice of it is up: it is until the reader keeps their
+    /// own text.
+    notice_shows: bool,
+}
+
+/// What a tab did when its file changed on disk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Followed {
+    /// It shows the file's text now.
+    Reloaded,
+    /// It has unsaved edits and kept them.
+    KeptEdits,
+}
+
 /// A way to show another document in a tab, in place of the one it shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Route {
@@ -97,6 +163,9 @@ pub(crate) enum Route {
 
 /// A document to open, and the `#fragment` in it to land on.
 pub(crate) type LinkTarget = (PathBuf, Option<String>);
+
+/// The [`Tab::serial`] of the next tab to open.
+static NEXT_SERIAL: AtomicU64 = AtomicU64::new(0);
 
 /// Work out what each of `tabs` is called beside the others: by its
 /// document's name, and by its file. Called when a tab opens, closes or
@@ -118,7 +187,14 @@ pub(crate) fn name_tabs(tabs: &mut [Tab]) {
 
 /// Per-tab state for a document.
 pub(crate) struct Tab {
-    pub(crate) id: egui::Id,
+    /// The document this tab shows, by its path: egui keeps what it
+    /// remembers about the page under it.
+    pub(crate) document_id: egui::Id,
+    /// A number no other tab of this run has, the same from the tab's
+    /// opening to its closing. `document_id` is neither: it names the
+    /// document, which two tabs can show at once and which changes when
+    /// a tab follows a link.
+    pub(crate) serial: u64,
     pub(crate) path: PathBuf,
     /// The file name of `path`, worked out when the path is set.
     title: String,
@@ -161,9 +237,14 @@ pub(crate) struct Tab {
     pub(crate) content_version: u64,
     /// When true, the content area shows a `TextEdit` instead of `CommonMarkViewer`.
     pub(crate) is_editing: bool,
-    /// Snapshot of the on-disk content at last load/save. `is_dirty`
-    /// compares the edit buffer with it.
+    /// The file's text as the tab last knew it: loaded, saved, or seen
+    /// changed under unsaved edits. `is_dirty` compares the edit buffer
+    /// with it.
     saved_content: String,
+    /// The change to the file that the unsaved edits kept the tab from
+    /// following. There is one only while there are unsaved edits: a tab
+    /// without them reloads, and `follow_disk` decides which it is.
+    unfollowed: Option<Unfollowed>,
     /// The outcome of the last save and when it was, for the edit
     /// toolbar to show until it has had its time.
     pub(crate) save_flash: Option<(SaveOutcome, Instant)>,
@@ -188,11 +269,13 @@ impl Tab {
         let path = path.canonicalize().unwrap_or(path);
         let content = read_document(&path)?;
         let mut tab = Self {
-            id: egui::Id::new(&path),
+            document_id: egui::Id::new(&path),
+            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
             base_uri: Self::compute_base_uri(&path),
             title: file_title(&path),
             path,
             saved_content: content.clone(),
+            unfollowed: None,
             content,
             cache: CommonMarkCache::default(),
             pictures_left: BTreeSet::new(),
@@ -246,10 +329,80 @@ impl Tab {
         self.content_version = self.content_version.wrapping_add(1);
     }
 
-    /// Whether the text differs from what was last loaded or saved. Text
-    /// typed back to what is on disk is not dirty.
+    /// Whether the text differs from the file as the tab last knew it.
+    /// Text typed back to what is on disk is not dirty.
     pub(crate) fn is_dirty(&self) -> bool {
         self.content != self.saved_content
+    }
+
+    /// Answer a change to the tab's file. Without unsaved edits the tab
+    /// reloads. With them it keeps them, and notes what became of the file
+    /// for the notice to show.
+    pub(crate) fn follow_disk(&mut self) -> io::Result<Followed> {
+        if self.is_dirty() {
+            self.look_at_disk();
+            Ok(Followed::KeptEdits)
+        } else {
+            self.reload().map(|()| Followed::Reloaded)
+        }
+    }
+
+    /// Look at the tab's file as it is now.
+    fn see(&self) -> Seen {
+        match read_document(&self.path) {
+            Ok(text) if text == self.saved_content => Seen::AsKnown,
+            Ok(text) => Seen::Other(text),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Seen::Gone,
+            Err(_) => Seen::Unreadable,
+        }
+    }
+
+    /// Set the unsaved edits against the file as it is now. Other text in
+    /// it is what the edits are measured against from here on, so taking
+    /// them out by hand does not make the tab look saved. The notice goes
+    /// up for other text and for another kind of change, not for a file
+    /// that stays as it was last found.
+    fn look_at_disk(&mut self) {
+        let before = self.unfollowed;
+        let seen = self.see();
+        let news = matches!(seen, Seen::Other(_));
+        let holds_theirs = news || before.is_some_and(|before| before.holds_theirs);
+        if matches!(seen, Seen::AsKnown) && !holds_theirs {
+            // The file is as the tab read or wrote it: one that was gone
+            // is back, and a save replaces nothing.
+            self.unfollowed = None;
+            return;
+        }
+        let change = if matches!(seen, Seen::Gone) {
+            DiskChange::Gone
+        } else {
+            DiskChange::Changed
+        };
+        let notice_shows =
+            news || before.is_none_or(|before| before.change != change || before.notice_shows);
+        if let Seen::Other(text) = seen {
+            self.saved_content = text;
+        }
+        // The other program may have written just what was typed here,
+        // and then nothing is unsaved.
+        self.unfollowed = self.is_dirty().then_some(Unfollowed {
+            change,
+            holds_theirs,
+            notice_shows,
+        });
+    }
+
+    /// The change to the file the reader has still to be told of.
+    pub(crate) fn disk_notice(&self) -> Option<DiskChange> {
+        let unfollowed = self.unfollowed?;
+        unfollowed.notice_shows.then_some(unfollowed.change)
+    }
+
+    /// Take the notice down and keep the edits. A save still has to ask.
+    pub(crate) const fn keep_mine(&mut self) {
+        if let Some(unfollowed) = &mut self.unfollowed {
+            unfollowed.notice_shows = false;
+        }
     }
 
     pub(crate) fn title(&self) -> &str {
@@ -279,9 +432,25 @@ impl Tab {
         Ok(())
     }
 
-    /// Write the text to the tab's file, and note how that went for the
-    /// edit toolbar to show.
-    pub(crate) fn save(&mut self) -> io::Result<()> {
+    /// Write the unsaved edits to the tab's file, and note how that went
+    /// for the edit toolbar to show. With nothing unsaved it does nothing.
+    ///
+    /// Under [`Theirs::Ask`] nothing is written over text another program
+    /// wrote and the reader has not taken. The file is read to find out,
+    /// so a change no watcher reported counts too. A file that is gone has
+    /// no text to replace.
+    pub(crate) fn save(&mut self, theirs: Theirs) -> io::Result<Saved> {
+        if theirs == Theirs::Ask && self.is_dirty() {
+            self.look_at_disk();
+            let unfollowed = self.unfollowed.map(|unfollowed| unfollowed.change);
+            if unfollowed == Some(DiskChange::Changed) {
+                return Ok(Saved::WouldOverwrite);
+            }
+        }
+        // Looking may have found the file holding just what was typed.
+        if !self.is_dirty() {
+            return Ok(Saved::Written);
+        }
         let result = self.save_to_disk();
         let outcome = if result.is_ok() {
             SaveOutcome::Saved
@@ -289,7 +458,7 @@ impl Tab {
             SaveOutcome::Failed
         };
         self.save_flash = Some((outcome, Instant::now()));
-        result
+        result.map(|()| Saved::Written)
     }
 
     /// Atomic save: write a temp file next to the target, then rename over
@@ -308,6 +477,7 @@ impl Tab {
             return Err(error);
         }
         self.saved_content = self.content.clone();
+        self.unfollowed = None;
         Ok(())
     }
 
@@ -336,9 +506,10 @@ impl Tab {
         self.pictures_left.extend(shown);
         self.content = content;
         self.saved_content = self.content.clone();
+        self.unfollowed = None;
         self.path = path;
         self.title = file_title(&self.path);
-        self.id = egui::Id::new(&self.path);
+        self.document_id = egui::Id::new(&self.path);
         self.cache = CommonMarkCache::default();
         self.content_version = self.content_version.wrapping_add(1);
         self.base_uri = Self::compute_base_uri(&self.path);
@@ -357,6 +528,11 @@ impl Tab {
     pub(crate) fn content_edited(&mut self) -> bool {
         let title = self.document_title.take();
         self.index_content(true);
+        if !self.is_dirty() {
+            // The text is the file's again: there is nothing left to
+            // reload or to save over.
+            self.unfollowed = None;
+        }
         self.document_title != title
     }
 

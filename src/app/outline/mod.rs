@@ -2,7 +2,8 @@
 
 use eframe::egui;
 
-use crate::app::sidebar::{self, Chevron, Row, Side};
+use crate::app::chrome;
+use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
 use crate::tab::Tab;
@@ -160,7 +161,7 @@ fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     let Some(more) = sidebar::header(ui, outline.palette, &header) else {
         return;
     };
-    let picked = egui::Popup::menu(&more).show(outline_menu);
+    let picked = chrome::show_popup(egui::Popup::menu(&more), outline_menu);
     if let Some(click) = picked.and_then(|menu| menu.inner) {
         outline.click = Some(click);
     }
@@ -236,6 +237,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
         indent: f32::from(row.header.level.saturating_sub(2)) * sidebar::INDENT,
         current: outline.current == Some(row.index),
         chevron: row.chevron,
+        end: End::Nothing,
     };
     let laid_out = sidebar::row(ui, outline.palette, &shown);
 
@@ -268,6 +270,7 @@ fn fold_control(
         let name = format!("{verb} {}", row.header.title);
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
+    chrome::focus_ring(ui, outline.palette, &response, rect);
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));
