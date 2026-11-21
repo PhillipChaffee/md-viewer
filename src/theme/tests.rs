@@ -73,16 +73,19 @@ fn body_text_and_headings_reach_seven_to_one_on_every_surface_of_every_theme() {
 fn inline_code_is_a_warm_tint_that_reads_as_well_as_body_text() {
     for theme in ThemeId::ALL {
         let palette = theme.palette();
-        let on_page = contrast(palette.code, palette.page);
+        let on_page = contrast(palette.inline_code, palette.page);
         assert!(on_page >= 7.0, "{theme:?}: code on page is {on_page:.2}:1");
         // Found or selected code has to stay text, as body text does.
-        let marked = contrast(palette.code, palette.selection);
+        let marked = contrast(palette.inline_code, palette.selection);
         assert!(marked >= 4.5, "{theme:?}: marked code is {marked:.2}:1");
         // The tint is all the color code has: it is neither the text's
         // ink nor a link's, and it leans to red, away from the links' blue.
-        assert_ne!(palette.code, palette.text, "{theme:?}");
-        assert_ne!(palette.code, palette.link, "{theme:?}");
-        assert!(palette.code.r() > palette.code.b(), "{theme:?}");
+        assert_ne!(palette.inline_code, palette.text, "{theme:?}");
+        assert_ne!(palette.inline_code, palette.link, "{theme:?}");
+        assert!(
+            palette.inline_code.r() > palette.inline_code.b(),
+            "{theme:?}"
+        );
     }
 }
 

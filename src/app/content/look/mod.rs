@@ -104,7 +104,7 @@ impl DocumentLook {
                 rhythm: Some(RHYTHM),
                 // The pane decides this each frame: see `preview_pane`.
                 figure_max_width: None,
-                inline_code_color: Some(palette.code),
+                inline_code_color: Some(palette.inline_code),
                 strong_code_font_family: Some(fonts.strong_code.clone()),
             },
             syntax_theme: palette.syntax_theme,

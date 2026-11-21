@@ -202,7 +202,7 @@ fn inline_code_is_in_the_themes_code_tint_with_no_chip_behind_it() {
 
     let code = painted_text_starting(&output, "inline code");
     let format = &code.galley.job.sections[0].format;
-    assert_eq!(format.color, palette.code);
+    assert_eq!(format.color, palette.inline_code);
     assert_eq!(format.background, egui::Color32::TRANSPARENT);
     assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
     let prose = painted_text_starting(&output, "Some ");
