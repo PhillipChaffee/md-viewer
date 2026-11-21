@@ -80,6 +80,20 @@ fn the_wheel_brings_the_first_row_back() {
 }
 
 #[test]
+fn a_menu_left_scrolled_to_its_end_opens_again_from_its_top() {
+    let mut reader = zoomed_in(2);
+    reader.click("More");
+    let first = reader.area_of("New Tab");
+    wheel_down_on(&mut reader, "Open Folder\u{2026}", TO_THE_END);
+    assert!(!reader.is_within_window("New Tab"));
+
+    reader.press("Escape");
+    reader.click("More");
+
+    assert_eq!(reader.area_of("New Tab"), first);
+}
+
+#[test]
 fn the_tab_key_walks_to_the_last_row_of_a_menu_and_brings_it_into_view() {
     let mut reader = zoomed_in(2);
     reader.click("More");

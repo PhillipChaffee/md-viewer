@@ -128,15 +128,33 @@ pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui
     ui.set_max_height(room);
     // The bar shows that there is more, with the pointer anywhere.
     ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
-    egui::ScrollArea::vertical()
+    let mut area = egui::ScrollArea::vertical()
         .max_height(room)
-        .min_scrolled_height(0.0)
-        .show(ui, |ui| {
-            let returned = add_contents(ui);
-            show_what_gained_the_keyboard(ui);
-            returned
-        })
-        .inner
+        .min_scrolled_height(0.0);
+    // egui keeps the place a scroll area was left at. A popup that opens
+    // starts from its top.
+    if !was_laid_out_last_frame(ui) {
+        area = area.vertical_scroll_offset(0.0);
+    }
+    area.show(ui, |ui| {
+        let returned = add_contents(ui);
+        show_what_gained_the_keyboard(ui);
+        returned
+    })
+    .inner
+}
+
+/// Whether the popup `ui` lays out was laid out on the frame before this
+/// one too: it stayed open, and did not open just now.
+fn was_laid_out_last_frame(ui: &egui::Ui) -> bool {
+    let shown = ui.id().with("shown");
+    let now = ui.ctx().cumulative_frame_nr();
+    let last: Option<u64> = ui.data_mut(|data| {
+        let last = data.get_temp(shown);
+        data.insert_temp(shown, now);
+        last
+    });
+    last.is_some_and(|last| last + 1 >= now)
 }
 
 /// Scroll to the control of `ui`'s sheet the keyboard moved to this frame.
