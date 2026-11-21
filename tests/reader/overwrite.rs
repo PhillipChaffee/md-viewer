@@ -139,6 +139,29 @@ fn save_in_the_close_prompt_asks_the_overwrite_question_too() {
 }
 
 #[test]
+fn enter_held_on_save_does_not_answer_the_overwrite_question() {
+    let mut reader = changed_under_edits();
+    reader.press("Ctrl+W");
+    assert_eq!(reader.focused().as_deref(), Some("Save"));
+
+    reader.hold("Enter", &[1, 1]);
+
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    assert_eq!(reader.title(), "draft.md - Markdown Viewer");
+}
+
+#[test]
+fn enter_pressed_twice_on_save_does_not_answer_the_overwrite_question() {
+    let mut reader = changed_under_edits();
+    reader.press("Ctrl+W");
+
+    reader.press_twice("Enter");
+
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    assert_eq!(reader.title(), "draft.md - Markdown Viewer");
+}
+
+#[test]
 fn overwrite_in_the_close_prompt_writes_and_then_closes() {
     let mut reader = changed_under_edits();
     reader.press("Ctrl+W");

@@ -181,6 +181,46 @@ impl Reader {
         self.settle();
     }
 
+    /// Press a shortcut and keep it down while frames are drawn, then let
+    /// go. Each number in `repeats` is one frame and says how many times
+    /// the key repeated before it: one at an ordinary pace, more when the
+    /// frame was slow to draw.
+    #[track_caller]
+    pub(crate) fn hold(&mut self, shortcut: &str, repeats: &[usize]) {
+        let (modifiers, key) = chord(shortcut);
+        let stroke = |pressed, repeat| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat,
+            modifiers,
+        };
+        self.frame(modifiers, vec![stroke(true, false)]);
+        for &count in repeats {
+            self.frame(modifiers, vec![stroke(true, true); count]);
+        }
+        self.frame(modifiers, vec![stroke(false, false)]);
+        self.settle();
+    }
+
+    /// Press a shortcut twice so fast that the second press lands in the
+    /// frame that shows what the first one did.
+    #[track_caller]
+    pub(crate) fn press_twice(&mut self, shortcut: &str) {
+        let (modifiers, key) = chord(shortcut);
+        let stroke = |pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers,
+        };
+        self.frame(modifiers, vec![stroke(true)]);
+        self.frame(modifiers, vec![stroke(false), stroke(true)]);
+        self.frame(modifiers, vec![stroke(false)]);
+        self.settle();
+    }
+
     /// Type `text` into whatever has the keyboard.
     pub(crate) fn type_text(&mut self, text: &str) {
         self.frame(Modifiers::NONE, vec![egui::Event::Text(text.to_owned())]);

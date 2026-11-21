@@ -71,7 +71,7 @@ impl Goal {
 }
 
 /// What the prompt asks about a document.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Question {
     /// Whether to save its unsaved edits before they are lost.
     Unsaved,
@@ -351,17 +351,22 @@ impl MarkdownApp {
                 chrome::small_label(ui, palette, about.warning());
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    for &(label, given) in about.answers() {
-                        let button = QuietButton::text(label)
-                            .min_width(ANSWER_WIDTH)
-                            .show(ui, palette);
-                        if focus_due && given == about.safe_answer() {
-                            button.request_focus();
+                    // The answers to one question are not those to the
+                    // other: a key still down on Save must not find the
+                    // keyboard on Overwrite.
+                    ui.push_id(about, |ui| {
+                        for &(label, given) in about.answers() {
+                            let button = QuietButton::text(label)
+                                .min_width(ANSWER_WIDTH)
+                                .show(ui, palette);
+                            if focus_due && given == about.safe_answer() {
+                                button.request_focus();
+                            }
+                            if button.clicked() {
+                                answer = Some(given);
+                            }
                         }
-                        if button.clicked() {
-                            answer = Some(given);
-                        }
-                    }
+                    });
                 });
             });
         // Escape is Cancel. A click beside the sheet is not: the app's
