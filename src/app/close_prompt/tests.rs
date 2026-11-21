@@ -94,7 +94,7 @@ fn leaving_a_document_asks_only_when_edits_would_be_lost() {
     let CloseState::Asking(pending) = &harness.app.closing else {
         panic!("the prompt is not asking");
     };
-    assert_eq!(pending.goal, Goal::Leave(2, Route::Back));
+    assert_eq!(pending.goal, Some(Goal::Leave(2, Route::Back)));
 }
 
 #[test]

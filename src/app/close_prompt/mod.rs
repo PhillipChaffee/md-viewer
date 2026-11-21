@@ -51,8 +51,6 @@ enum Goal {
     /// Show another document in the tab at this place: the one the route
     /// leads to.
     Leave(usize, Route),
-    /// Write the document the prompt asks about, which stays in its tab.
-    Save,
 }
 
 impl Goal {
@@ -65,7 +63,6 @@ impl Goal {
             Self::OtherTabs(kept) => index != *kept,
             Self::Quit => true,
             Self::Leave(left, route) => index == *left && tab.leads_away(route),
-            Self::Save => false,
         }
     }
 }
@@ -106,7 +103,7 @@ impl Question {
                 ("Cancel", CloseAnswer::Cancel),
             ],
             Self::Overwrite => &[
-                ("Overwrite", CloseAnswer::Overwrite),
+                ("Overwrite", CloseAnswer::Save),
                 ("Cancel", CloseAnswer::Cancel),
             ],
         }
@@ -120,12 +117,24 @@ impl Question {
             Self::Overwrite => CloseAnswer::Cancel,
         }
     }
+
+    /// What a save under the question does about text another program
+    /// wrote to the file: the first question has not asked about it, and
+    /// Save under the second is the reader's word to replace it.
+    const fn theirs(self) -> Theirs {
+        match self {
+            Self::Unsaved => Theirs::Ask,
+            Self::Overwrite => Theirs::Replace,
+        }
+    }
 }
 
 /// A request that waits on the reader's answers.
 #[derive(Debug)]
 pub(super) struct PendingClose {
-    goal: Goal,
+    /// What the answers lead to. A plain save leads to nothing more: its
+    /// document stays in its tab.
+    goal: Option<Goal>,
     /// The unsaved tab the prompt asks about now. Those before it that
     /// the goal replaces have been answered for.
     asked: usize,
@@ -158,11 +167,11 @@ impl CloseState {
 /// One of the prompt's answers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CloseAnswer {
-    /// Write the document, then go on closing. If that would replace what
-    /// another program wrote, ask about that first.
+    /// Write the document, then go on closing. Under the question about
+    /// unsaved edits, ask first if that would replace what another program
+    /// wrote. Under the question about that, write over it: its button
+    /// reads Overwrite.
     Save,
-    /// Write the document over what another program wrote, then go on.
-    Overwrite,
     /// Go on closing without writing it.
     Discard,
     /// Close nothing after all.
@@ -216,7 +225,9 @@ impl MarkdownApp {
     /// Save the tab at `index`, asking first when that would replace what
     /// another program wrote to its file.
     pub(crate) fn request_save(&mut self, index: usize) {
-        self.save_for(Goal::Save, index, Theirs::Ask);
+        if self.save_tab(index, Theirs::Ask) == Some(Saved::WouldOverwrite) {
+            self.ask(None, index, Question::Overwrite);
+        }
     }
 
     /// Reach `goal`: now if that loses no unsaved edits, and otherwise
@@ -249,13 +260,13 @@ impl MarkdownApp {
         let Some((asked, _)) = unsaved else {
             return Err(goal);
         };
-        self.ask(goal, asked, Question::Unsaved);
+        self.ask(Some(goal), asked, Question::Unsaved);
         Ok(())
     }
 
     /// Turn the prompt to the tab at `asked`, with what it asks `about`
     /// that tab.
-    fn ask(&mut self, goal: Goal, asked: usize, about: Question) {
+    fn ask(&mut self, goal: Option<Goal>, asked: usize, about: Question) {
         let Some(tab) = self.tabs.get(asked) else {
             return;
         };
@@ -271,29 +282,19 @@ impl MarkdownApp {
         });
     }
 
-    /// Write the unsaved edits of the tab at `asked` on the way to `goal`.
-    /// Where `theirs` is to ask and the write would replace what another
-    /// program wrote to the file, the prompt asks about that and nothing
-    /// is written yet. Where the write fails, the error bar says why.
-    /// Returns the goal once the tab has nothing unsaved and the way to it
-    /// is free.
-    fn save_for(&mut self, goal: Goal, asked: usize, theirs: Theirs) -> Option<Goal> {
-        let Some(tab) = self.tabs.get_mut(asked) else {
-            return Some(goal);
+    /// Write the unsaved edits of the tab at `index` to its file. Returns
+    /// what that came to, or `None` where the write failed, which the
+    /// error bar then says.
+    fn save_tab(&mut self, index: usize, theirs: Theirs) -> Option<Saved> {
+        let Some(tab) = self.tabs.get_mut(index) else {
+            return Some(Saved::Written);
         };
-        match tab.save(theirs) {
-            Ok(Saved::Written) => Some(goal),
-            Ok(Saved::WouldOverwrite) => {
-                self.ask(goal, asked, Question::Overwrite);
-                None
-            }
-            Err(error) => {
-                log::error!("Failed to save {}: {error}", tab.path.display());
-                self.error_message =
-                    Some(format!("Unable to save {}: {error}", tab.path.display()));
-                None
-            }
+        let saved = tab.save(theirs);
+        if let Err(error) = &saved {
+            log::error!("Failed to save {}: {error}", tab.path.display());
+            self.error_message = Some(format!("Unable to save {}: {error}", tab.path.display()));
         }
+        saved.ok()
     }
 
     /// Carry out the reader's answer to the prompt.
@@ -301,14 +302,23 @@ impl MarkdownApp {
         let CloseState::Asking(pending) = std::mem::take(&mut self.closing) else {
             return;
         };
-        let PendingClose { goal, asked, .. } = pending;
-        let free = match answer {
-            CloseAnswer::Save => self.save_for(goal, asked, Theirs::Ask),
-            CloseAnswer::Overwrite => self.save_for(goal, asked, Theirs::Replace),
-            CloseAnswer::Discard => Some(goal),
-            CloseAnswer::Cancel => None,
-        };
-        let Some(goal) = free else {
+        let PendingClose {
+            goal, asked, about, ..
+        } = pending;
+        match answer {
+            CloseAnswer::Save => match self.save_tab(asked, about.theirs()) {
+                Some(Saved::Written) => {}
+                Some(Saved::WouldOverwrite) => {
+                    self.ask(goal, asked, Question::Overwrite);
+                    return;
+                }
+                None => return,
+            },
+            CloseAnswer::Discard => {}
+            CloseAnswer::Cancel => return,
+        }
+        // A plain save is done once its document is written.
+        let Some(goal) = goal else {
             return;
         };
         if let Err(goal) = self.ask_from(goal, asked + 1) {
@@ -327,8 +337,6 @@ impl MarkdownApp {
                 self.egui_ctx.send_viewport_cmd(window);
             }
             Goal::Leave(index, route) => self.take_route(index, &route),
-            // The answer wrote it.
-            Goal::Save => {}
         }
     }
 
