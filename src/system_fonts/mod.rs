@@ -195,9 +195,10 @@ impl TextSizeClass {
         }
     }
 
-    /// Base text size in px: what the chrome is set in. The document
-    /// scales it by the preset (see [`document_fonts`]), and its headings
-    /// and code cascade from there.
+    /// Base text size in px: what the source in edit mode is set in. The
+    /// document scales it by the preset (see [`document_fonts`]), and its
+    /// headings and code cascade from there. The chrome keeps its own
+    /// fixed sizes.
     pub(crate) const fn px(self) -> f32 {
         match self {
             Self::Small => 14.0,

@@ -89,6 +89,9 @@ fn configure_context(ctx: &egui::Context) {
         // document's: egui lays out every hover text in it, wherever the
         // widget under the pointer stands, and a hover text belongs to the
         // window. The document pane has its own (see `DocumentLook`).
+        // 13 px is egui's own default too: it is set here on purpose, so
+        // that an egui with another default does not resize the window's
+        // text.
         style
             .text_styles
             .insert(TextStyle::Body, chrome::label_font());
