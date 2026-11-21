@@ -185,10 +185,10 @@ struct Popup {
     done: fn(&Reader) -> bool,
 }
 
-/// The popups a window can be too short for, beside the More menu. The smallest window the app
-/// asks for is 300 px tall; a tab's menu takes a shorter one still, which
+/// The popups a window can be too short for, beside the More menu. The
+/// smallest window the app asks for is 300 px tall; a tab's menu takes a shorter one still, which
 /// a window manager is free to give.
-const POPUPS: [Popup; 4] = [
+const POPUPS: [Popup; 5] = [
     Popup {
         name: "a submenu of the More menu",
         window: 300.0,
@@ -219,6 +219,19 @@ const POPUPS: [Popup; 4] = [
         },
         last: "Newest First",
         done: |reader| reader.count("Newest First") == 0,
+    },
+    Popup {
+        name: "a file's menu",
+        window: 300.0,
+        open: |reader| {
+            reader.press("Ctrl+Shift+E");
+            reader.right_click("notes.md");
+        },
+        last: "Copy File URI",
+        done: |reader| {
+            let copied = reader.clipboard();
+            copied.is_some_and(|text| text.starts_with("file://"))
+        },
     },
     Popup {
         name: "a tab's menu",

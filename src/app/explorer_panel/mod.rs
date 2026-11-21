@@ -228,7 +228,7 @@ impl MarkdownApp {
         };
         let menu = egui::Popup::context_menu(&response)
             .style(chrome::popup_style(listing.palette))
-            .show(|ui| file_context_menu(ui, row.path, listing));
+            .show(|ui| chrome::scrolled(ui, |ui| file_context_menu(ui, row.path, listing)));
         if let Some(place) = menu.and_then(|menu| menu.inner).or(place) {
             clicks.file = Some((row.path.to_path_buf(), place));
         }
