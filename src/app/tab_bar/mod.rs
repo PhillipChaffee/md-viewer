@@ -66,9 +66,7 @@ enum Landing {
 /// One tab as the row draws it.
 struct TabLabel<'a> {
     index: usize,
-    /// What its widgets are told apart by. Its place in the strip would
-    /// not do: a tab that closes hands its place to the next, and the
-    /// keyboard, which egui keeps by widget, would go with the place.
+    /// What its widgets are told apart by: see [`tab_id`].
     serial: u64,
     title: &'a str,
     path: &'a Path,
@@ -181,7 +179,8 @@ impl MarkdownApp {
     /// it. There is no empty tab: the tab is there once a document is.
     /// With `land` the button takes the keyboard.
     fn new_tab_button(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>, land: bool) {
-        let new_tab = QuietButton::icon(Icon::Plus, "New tab").show(ui, self.theme.palette());
+        let new_tab = QuietButton::icon(Icon::Plus, "New tab");
+        let new_tab = new_tab.show_as(ui, self.theme.palette(), new_tab_id());
         if land {
             new_tab.request_focus();
         }
@@ -209,6 +208,18 @@ impl MarkdownApp {
             .or(picks.close_others)
             .is_some()
     }
+}
+
+/// What egui knows the tab with `serial` by. Its place in the strip would
+/// not do: a tab that closes hands its place to the next, and the keyboard,
+/// which egui keeps by widget, would go with the place.
+fn tab_id(serial: u64) -> egui::Id {
+    egui::Id::new(("tab", serial))
+}
+
+/// What egui knows the new-tab button by, wherever in the row it is.
+fn new_tab_id() -> egui::Id {
+    egui::Id::new("new tab")
 }
 
 /// One screen pixel, in points. egui sets the scrolled row on whole pixels,
@@ -271,8 +282,7 @@ fn tab_label(
     let name_width = galley.size().x.max(NAME_WIDTH.min);
     let width = 2.0_f32.mul_add(TAB_PADDING, name_width) + CLOSE_SIDE;
     let (_, rect) = ui.allocate_space(egui::vec2(width, BAR_HEIGHT));
-    let id = egui::Id::new(("tab", label.serial));
-    let response = ui.interact(rect, id, egui::Sense::click());
+    let response = ui.interact(rect, tab_id(label.serial), egui::Sense::click());
     if label.takes_keyboard {
         response.request_focus();
     }
