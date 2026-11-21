@@ -110,6 +110,18 @@ pub(crate) enum DiskChange {
     Gone,
 }
 
+/// What a look at a tab's file finds there.
+enum Seen {
+    /// The text the tab last knew it to hold.
+    AsKnown,
+    /// This other text.
+    Other(String),
+    /// No file.
+    Gone,
+    /// A file that cannot be read.
+    Unreadable,
+}
+
 /// A change to a tab's file that its unsaved edits kept it from following,
 /// until the reader reloads the file or saves over it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -293,6 +305,16 @@ impl Tab {
         }
     }
 
+    /// Look at the tab's file as it is now.
+    fn see(&self) -> Seen {
+        match read_document(&self.path) {
+            Ok(text) if text == self.saved_content => Seen::AsKnown,
+            Ok(text) => Seen::Other(text),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Seen::Gone,
+            Err(_) => Seen::Unreadable,
+        }
+    }
+
     /// Set the unsaved edits against the file as it is now. Other text in
     /// it is what the edits are measured against from here on, so taking
     /// them out by hand does not make the tab look saved. The notice goes
@@ -300,28 +322,25 @@ impl Tab {
     /// that stays as it was last found.
     fn look_at_disk(&mut self) {
         let before = self.unfollowed;
-        let held_theirs = before.is_some_and(|before| before.holds_theirs);
-        let (change, holds_theirs, other_text) = match read_document(&self.path) {
-            Ok(text) if text == self.saved_content && !held_theirs => {
-                // The file is as the tab read or wrote it: one that was
-                // gone is back, and a save replaces nothing.
-                self.unfollowed = None;
-                return;
-            }
-            Ok(text) if text == self.saved_content => (DiskChange::Changed, true, false),
-            Ok(text) => {
-                self.saved_content = text;
-                (DiskChange::Changed, true, true)
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                (DiskChange::Gone, held_theirs, false)
-            }
-            Err(_) => (DiskChange::Changed, held_theirs, false),
+        let seen = self.see();
+        let news = matches!(seen, Seen::Other(_));
+        let holds_theirs = news || before.is_some_and(|before| before.holds_theirs);
+        if matches!(seen, Seen::AsKnown) && !holds_theirs {
+            // The file is as the tab read or wrote it: one that was gone
+            // is back, and a save replaces nothing.
+            self.unfollowed = None;
+            return;
+        }
+        let change = if matches!(seen, Seen::Gone) {
+            DiskChange::Gone
+        } else {
+            DiskChange::Changed
         };
-        let notice_shows = match before {
-            Some(before) if before.change == change && !other_text => before.notice_shows,
-            _ => true,
-        };
+        let notice_shows =
+            news || before.is_none_or(|before| before.change != change || before.notice_shows);
+        if let Seen::Other(text) = seen {
+            self.saved_content = text;
+        }
         // The other program may have written just what was typed here,
         // and then nothing is unsaved.
         self.unfollowed = self.is_dirty().then_some(Unfollowed {
