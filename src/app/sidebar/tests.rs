@@ -685,6 +685,21 @@ fn a_long_name_stops_short_of_the_dot_and_of_the_button() {
     assert!(pointed_end <= slot_left, "{pointed_end} runs under it");
 }
 
+#[test]
+fn the_buttons_icon_is_14_px_in_the_middle_of_the_button() {
+    let place = Cell::new(Rect::NOTHING);
+    let pointed = paint(Some(Pos2::new(20.0, ROW_HEIGHT / 2.0)), |ui| {
+        let drawn = row(ui, PALETTE, &row_with_button("open.md", false));
+        place.set(drawn.button.unwrap().rect);
+    });
+
+    let square = Rect::from_center_size(place.get().center(), egui::Vec2::splat(14.0));
+    let alone = paint(None, |ui| {
+        Icon::NewTab.paint(ui.painter(), square, PALETTE.muted);
+    });
+    assert_eq!(pointed.paths(), alone.paths());
+}
+
 /// What the keyboard can be on in a row.
 #[derive(Clone, Copy, Debug)]
 enum On {
