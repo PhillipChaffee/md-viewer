@@ -241,6 +241,7 @@ impl MarkdownApp {
             active_tab,
             home_shows: false,
             revealed_tab: None,
+            keyboard_closing: None,
             theme,
             zoom_level,
             show_outline,

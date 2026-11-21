@@ -166,6 +166,26 @@ impl Reader {
         panic!("the Tab key never reached `{label}`\n{}", self.describe());
     }
 
+    /// Press a key and hold it down while the keyboard repeats it `repeats`
+    /// times, a frame for each, then let it go.
+    #[track_caller]
+    pub(crate) fn hold(&mut self, shortcut: &str, repeats: usize) {
+        let (modifiers, key) = chord(shortcut);
+        let stroke = |pressed, repeat| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat,
+            modifiers,
+        };
+        self.frame(modifiers, vec![stroke(true, false)]);
+        for _ in 0..repeats {
+            self.frame(modifiers, vec![stroke(true, true)]);
+        }
+        self.frame(modifiers, vec![stroke(false, false)]);
+        self.settle();
+    }
+
     /// Press and release a shortcut so fast that the whole of it, the
     /// modifiers going down and coming up included, lands in one frame, as
     /// a quick tap does while the app is busy drawing.

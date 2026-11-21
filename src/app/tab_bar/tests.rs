@@ -704,7 +704,7 @@ fn a_frame_that_picks_a_tab_and_closes_another_does_both() {
     let picks = super::TabPicks {
         activate: Some(0),
         close: Some(1),
-        close_others: None,
+        ..super::TabPicks::default()
     };
 
     assert!(harness.state_mut().apply_tab_picks(&picks));

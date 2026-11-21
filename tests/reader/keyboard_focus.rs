@@ -252,3 +252,126 @@ fn a_tab_the_keyboard_reaches_outside_the_strip_is_scrolled_into_it() {
     );
     assert_eq!(reader.tab_in_front().as_deref(), Some("chapter-30.md"));
 }
+
+/// Check that the keyboard is on the tab in front, with the ring to show
+/// it, and that neither Enter nor Space there closes anything.
+#[track_caller]
+fn assert_keyboard_rests_on_the_tab_in_front(reader: &mut Reader) {
+    let front = reader.tab_in_front().expect("a tab is in front");
+    let tab = format!("tab:{front}");
+    assert!(reader.keyboard_is_on(&tab), "{:?}", reader.focused());
+    assert!(reader.ring_around(&tab).is_some(), "and it shows");
+    let open = reader.tabs();
+    for key in ["Enter", "Space"] {
+        reader.press(key);
+        assert_eq!(reader.tabs(), open, "{key} closes nothing more");
+    }
+    assert!(reader.keyboard_is_on(&tab), "and it stays there");
+}
+
+#[test]
+fn closing_a_tab_behind_from_the_keyboard_puts_the_keyboard_on_the_tab_in_front() {
+    for key in ["Enter", "Space"] {
+        let mut reader = three_tabs();
+        point_away(&mut reader);
+        reader.tab_to(&close("Alpha"));
+
+        reader.press(key);
+
+        assert_eq!(reader.tabs(), ["Beta", "Gamma"], "{key}");
+        assert_eq!(reader.tab_in_front().as_deref(), Some("Gamma"), "{key}");
+        assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+    }
+}
+
+#[test]
+fn closing_the_tab_in_front_from_the_keyboard_puts_it_on_the_tab_that_comes_forward() {
+    let mut reader = three_tabs();
+    point_away(&mut reader);
+    reader.tab_to(&close("Gamma"));
+
+    reader.press("Enter");
+
+    assert_eq!(reader.tabs(), ["Alpha", "Beta"]);
+    assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+}
+
+#[test]
+fn closing_the_last_tab_from_the_keyboard_puts_the_keyboard_on_the_new_tab_button() {
+    let mut reader = three_linked();
+    point_away(&mut reader);
+    reader.tab_to(&close("Alpha"));
+
+    reader.press("Enter");
+
+    assert!(reader.tabs().is_empty());
+    assert_eq!(reader.focused().as_deref(), Some("New tab"));
+    assert!(reader.ring_around("New tab").is_some(), "and it shows");
+}
+
+#[test]
+fn a_key_held_down_on_a_close_button_closes_one_tab() {
+    for key in ["Enter", "Space"] {
+        let mut reader = three_tabs();
+        point_away(&mut reader);
+        reader.tab_to(&close("Alpha"));
+
+        reader.hold(key, 12);
+
+        assert_eq!(reader.tabs(), ["Beta", "Gamma"], "{key}");
+        assert_eq!(reader.tab_in_front().as_deref(), Some("Gamma"), "{key}");
+    }
+}
+
+/// Alpha with an edit that is not saved, and Beta in front of it, with the
+/// keyboard on Alpha's close button.
+fn on_the_close_button_of_unsaved_edits() -> Reader {
+    let mut reader = three_linked();
+    reader.drop_file("b.md");
+    reader.click("tab:Alpha");
+    reader.press("Ctrl+E");
+    reader.click_text_field(0);
+    reader.type_text(" Mine.");
+    reader.click("tab:Beta");
+    point_away(&mut reader);
+    reader.tab_to(&close("Alpha"));
+    reader
+}
+
+#[test]
+fn a_tab_closed_from_the_keyboard_after_its_prompt_leaves_the_keyboard_on_the_tab_in_front() {
+    let mut reader = on_the_close_button_of_unsaved_edits();
+
+    reader.press("Enter");
+    reader.assert_sees("Save changes to “Alpha” (a.md)?");
+    reader.click("Discard");
+
+    assert_eq!(reader.tabs(), ["Beta"]);
+    assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+}
+
+#[test]
+fn a_close_from_the_keyboard_that_is_cancelled_moves_the_keyboard_nowhere_later() {
+    let mut reader = on_the_close_button_of_unsaved_edits();
+    reader.press("Enter");
+    reader.press("Escape");
+    assert_eq!(reader.tabs(), ["Alpha", "Beta"], "cancelled");
+
+    reader.hover("tab:Alpha");
+    reader.click(&close("Alpha"));
+    reader.click("Discard");
+
+    assert_eq!(reader.tabs(), ["Beta"]);
+    assert_eq!(reader.focused(), None, "the pointer closed it");
+}
+
+#[test]
+fn a_tab_closed_with_the_pointer_moves_the_keyboard_nowhere() {
+    let mut reader = three_tabs();
+
+    reader.hover("tab:Alpha");
+    reader.click(&close("Alpha"));
+
+    assert_eq!(reader.tabs(), ["Beta", "Gamma"]);
+    assert_eq!(reader.focused(), None);
+}
