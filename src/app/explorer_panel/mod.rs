@@ -214,8 +214,8 @@ impl MarkdownApp {
         let response = drawn.response;
 
         // A middle click opens a tab, as a browser's does on a link.
-        let new_tab = response.middle_clicked() | new_tab_button(drawn.button, listing);
-        let place = if new_tab {
+        let on_button = new_tab_button(drawn.button, listing);
+        let place = if on_button || response.middle_clicked() {
             Some(Place::NewTab)
         } else {
             response.clicked().then_some(Place::Here)
