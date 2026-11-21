@@ -49,12 +49,15 @@ impl Rgb {
     }
 
     /// Where the color is on the color wheel, in degrees: red is 0, yellow
-    /// 60, green 120 and blue 240. A gray is nowhere on it and is not a
-    /// number.
-    pub(crate) fn hue(self) -> f64 {
+    /// 60, green 120 and blue 240. A gray is nowhere on it.
+    pub(crate) fn hue(self) -> Option<f64> {
         let Self(red, green, blue) = self;
         let strongest = red.max(green).max(blue);
-        let spread = f64::from(strongest) - f64::from(red.min(green).min(blue));
+        let weakest = red.min(green).min(blue);
+        if strongest == weakest {
+            return None;
+        }
+        let spread = f64::from(strongest - weakest);
         let [r, g, b] = [red, green, blue].map(f64::from);
         let sixths = if strongest == red {
             ((g - b) / spread).rem_euclid(6.0)
@@ -63,7 +66,7 @@ impl Rgb {
         } else {
             (r - g) / spread + 4.0
         };
-        sixths * 60.0
+        Some(sixths * 60.0)
     }
 }
 

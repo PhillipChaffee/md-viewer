@@ -98,6 +98,7 @@ fn on_sepia_inline_code_is_on_the_green_side_of_a_link() {
     read_on(&mut reader, "Sepia");
     let link = reader.ink_of("plain link").hue();
     let code = reader.ink_of("some code").hue();
+    let (link, code) = (link.expect("a gray link"), code.expect("gray code"));
 
     assert!(
         code >= link + APART && code <= GREEN,
