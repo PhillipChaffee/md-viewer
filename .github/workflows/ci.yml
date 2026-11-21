@@ -268,7 +268,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: vendor/egui_commonmark -> target
+          workspaces: |
+            vendor/egui_commonmark -> target
+            vendor/epaint -> target
 
       - name: Lint renderer crates
         run: |
@@ -282,6 +284,11 @@ jobs:
           cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --no-default-features
           cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_backend_extended --all-features
           cargo test --manifest-path vendor/egui_commonmark/Cargo.toml -p egui_commonmark_macros_extended
+
+      # The renderer's line breaking rests on the patched painter's row rule,
+      # and these tests are what pins it.
+      - name: Test the painter's text layout
+        run: "cargo test --manifest-path vendor/epaint/Cargo.toml --lib text::"
 
   version-sync:
     runs-on: ubuntu-latest
