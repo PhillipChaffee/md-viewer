@@ -157,6 +157,9 @@ extern "C-unwind" fn should_terminate(
 )]
 fn add_should_terminate(class: &'static AnyClass, _main: MainThreadMarker) -> bool {
     let method: extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject) -> _ = should_terminate;
+    let class = std::ptr::from_ref(class).cast_mut();
+    let selector = sel!(applicationShouldTerminate:);
+    let types = SHOULD_TERMINATE_TYPES.as_ptr();
     // SAFETY: the block does two unsafe things, a transmute and a call.
     //
     // The transmute only forgets the signature of `should_terminate`:
@@ -164,7 +167,7 @@ fn add_should_terminate(class: &'static AnyClass, _main: MainThreadMarker) -> bo
     // convention", both are plain function pointers of one size, and the
     // runtime never calls an `Imp` as written. It calls it with the
     // arguments of the method it is registered as, which
-    // `SHOULD_TERMINATE_TYPES` and the selector below state and which
+    // `SHOULD_TERMINATE_TYPES` and the selector above state and which
     // are exactly `should_terminate`'s: the receiver, the selector and
     // one object in, one `NSUInteger` out, which
     // `NSApplicationTerminateReply` is a transparent wrapper of. The
@@ -182,7 +185,7 @@ fn add_should_terminate(class: &'static AnyClass, _main: MainThreadMarker) -> bo
     // leaves it and returns `NO`. `_main` proves this is the main thread,
     // the only one that sends `applicationShouldTerminate:`, so no call
     // of the method can be in flight while it is added.
-    unsafe {
+    let added = unsafe {
         let method = std::mem::transmute::<
             extern "C-unwind" fn(
                 *mut AnyObject,
@@ -191,14 +194,9 @@ fn add_should_terminate(class: &'static AnyClass, _main: MainThreadMarker) -> bo
             ) -> NSApplicationTerminateReply,
             Imp,
         >(method);
-        class_addMethod(
-            std::ptr::from_ref(class).cast_mut(),
-            sel!(applicationShouldTerminate:),
-            method,
-            SHOULD_TERMINATE_TYPES.as_ptr(),
-        )
-        .as_bool()
-    }
+        class_addMethod(class, selector, method, types)
+    };
+    added.as_bool()
 }
 
 /// Have the application's delegate answer `applicationShouldTerminate:`
