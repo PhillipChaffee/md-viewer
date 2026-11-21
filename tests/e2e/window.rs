@@ -1,6 +1,6 @@
 //! The real window, on a private X display.
 
-use super::support::{wait_for, Home, Running, Screen, Window};
+use super::support::{wait_for, Home, Icon, Running, Screen, Window};
 
 /// The paper of the two themes a first run meets: Sepia, then Dusk.
 const SEPIA: &str = "F8F1E3";
@@ -267,4 +267,35 @@ fn the_theme_survives_a_quit() {
         "the page is {}",
         window.pixel(home.root(), x, y)
     );
+}
+
+/// The README: the icon is a dark M on warm paper, and the same M reversed
+/// on a near-black tile while a dark theme is on.
+#[test]
+fn a_first_run_opens_with_the_light_tile_for_its_icon() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = Home::new();
+    home.doc("notes.md", "# Notes\n\nSome text.");
+
+    let _app = show(&home, &screen, &["--foreground", "notes.md"]);
+
+    let window = screen.window_titled("notes.md - Markdown Viewer");
+    assert_eq!(window.icon(), Some(Icon::LightTile));
+}
+
+#[test]
+fn a_launch_into_a_saved_dark_theme_opens_with_the_dark_tile() {
+    let Some(screen) = Screen::start() else {
+        return;
+    };
+    let home = Home::new();
+    home.doc("notes.md", "# Notes\n\nSome text.");
+    home.left_session("(theme:Some(Night))");
+
+    let _app = show(&home, &screen, &["--foreground", "notes.md"]);
+
+    let window = screen.window_titled("notes.md - Markdown Viewer");
+    assert_eq!(window.icon(), Some(Icon::DarkTile));
 }

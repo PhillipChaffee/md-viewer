@@ -58,6 +58,9 @@ mimalloc = "0.1"
 
 # Serialization for persistence
 serde = { version = "1", features = ["derive"] }
+# The format of eframe's settings file, at the version eframe writes it
+# with. The file is read once before the window exists, for the app icon.
+ron = "0.11"
 
 # Logging
 env_logger = "0.11"

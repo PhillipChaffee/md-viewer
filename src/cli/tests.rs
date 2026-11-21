@@ -295,7 +295,7 @@ mod window {
 
     #[test]
     fn window_fits_the_reading_column_and_both_sidebars() {
-        let viewport = native_options(Platform::Other).viewport;
+        let viewport = native_options(Platform::Other, AppIcon::Sepia).viewport;
         let width = CONTENT_OPTIMAL_WIDTH
             + EXPLORER_DEFAULT_WIDTH
             + OUTLINE_DEFAULT_WIDTH
@@ -314,7 +314,7 @@ mod window {
     /// window keeps its buttons.
     #[test]
     fn a_mac_window_has_no_title_strip_of_its_own_and_keeps_its_buttons() {
-        let viewport = native_options(Platform::Mac).viewport;
+        let viewport = native_options(Platform::Mac, AppIcon::Sepia).viewport;
 
         assert_eq!(viewport.fullsize_content_view, Some(true));
         assert_eq!(viewport.titlebar_shown, Some(false));
@@ -327,12 +327,12 @@ mod window {
     /// nothing but those three settings, which it leaves to the system.
     #[test]
     fn a_window_elsewhere_keeps_the_title_bar_its_system_gives_it() {
-        let viewport = native_options(Platform::Other).viewport;
+        let viewport = native_options(Platform::Other, AppIcon::Sepia).viewport;
 
         assert_eq!(viewport.fullsize_content_view, None);
         assert_eq!(viewport.titlebar_shown, None);
         assert_eq!(viewport.title_shown, None);
-        let mac = native_options(Platform::Mac).viewport;
+        let mac = native_options(Platform::Mac, AppIcon::Sepia).viewport;
         let like_elsewhere = egui::ViewportBuilder {
             fullsize_content_view: None,
             titlebar_shown: None,
@@ -340,6 +340,19 @@ mod window {
             ..mac
         };
         assert_eq!(like_elsewhere, viewport);
+    }
+
+    /// The window is built with the icon it is given, which the Dock of a
+    /// Mac and the window list of an X11 desktop show while the app runs.
+    #[test]
+    fn the_window_is_built_with_the_icon_it_is_given() {
+        for platform in [Platform::Mac, Platform::Other] {
+            for icon in [AppIcon::Sepia, AppIcon::Reversed] {
+                let viewport = native_options(platform, icon).viewport;
+
+                assert_eq!(viewport.icon, Some(icon.image()), "{platform:?} {icon:?}");
+            }
+        }
     }
 
     /// GNOME pairs a running window with its launcher icon only when the
@@ -354,7 +367,7 @@ mod window {
             .lines()
             .find_map(|line| line.strip_prefix("StartupWMClass="))
             .expect("launcher declares StartupWMClass");
-        let options = native_options(Platform::Other);
+        let options = native_options(Platform::Other, AppIcon::Sepia);
         assert_eq!(options.viewport.app_id.as_deref(), Some(class));
     }
 
