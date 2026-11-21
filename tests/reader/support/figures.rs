@@ -1,7 +1,7 @@
 //! What a picture on the page looks like, how a text is set, and what the
 //! app asked of the desktop around it.
 
-use super::paint::{dots, marks, pictures, Drawing, Painted, Picture};
+use super::paint::{dots, marks, outlines, pictures, Drawing, Painted, Picture};
 use super::{Area, Reader, Rgb};
 
 /// How far apart, in pixels, two areas may be and still be one picture.
@@ -143,6 +143,27 @@ impl Reader {
         inside.retain(|(dot, _)| area.holds(*dot));
         inside.sort_by(|(a, _), (b, _)| a.left.total_cmp(&b.left));
         inside
+    }
+
+    /// The color of the ring round the one thing named `label`: an outline
+    /// with nothing filled in, drawn inside it and at least half as wide
+    /// and as tall as it is. `None` where the last frame drew no ring.
+    #[track_caller]
+    pub(crate) fn ring_around(&self, label: &str) -> Option<Rgb> {
+        let area = self.area_of(label);
+        let room = Area {
+            left: area.left - SAME_PLACE,
+            top: area.top - SAME_PLACE,
+            width: 2.0_f32.mul_add(SAME_PLACE, area.width),
+            height: 2.0_f32.mul_add(SAME_PLACE, area.height),
+        };
+        let scale = self.scale();
+        let drawn = outlines(&self.shapes()).into_iter();
+        let mut rings = drawn.map(|(rect, ink)| (Area::of(rect * scale), ink));
+        let ring = rings.find(|(ring, _)| {
+            room.holds(*ring) && ring.width >= area.width / 2.0 && ring.height >= area.height / 2.0
+        });
+        ring.map(|(_, ink)| ink)
     }
 
     /// Where the first line of the first painted text that contains `text`

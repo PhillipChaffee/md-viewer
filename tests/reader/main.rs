@@ -48,6 +48,8 @@ mod home_view;
 #[cfg(test)]
 mod keyboard;
 #[cfg(test)]
+mod keyboard_focus;
+#[cfg(test)]
 mod lightbox;
 #[cfg(test)]
 mod links;
