@@ -28,6 +28,9 @@ pub(super) const LABEL_SIZE: f32 = 13.0;
 pub(super) const SMALL_SIZE: f32 = 11.5;
 /// Side of the square a quiet button takes at least.
 pub(super) const BUTTON_SIDE: f32 = 28.0;
+/// Diameter of a dot in the warning color: the one beside the mode switch
+/// for unsaved edits, and the one on a tab whose file changed under them.
+pub(super) const WARNING_DOT: f32 = 7.0;
 /// Side of the square an icon is painted in, unless its button says
 /// otherwise.
 const ICON_SIDE: f32 = 16.0;
@@ -215,9 +218,22 @@ fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
         ui.painter()
             .rect_filled(response.rect, CONTROL_RADIUS, palette.raised);
     }
+    focus_ring(ui, palette, response, response.rect);
+}
+
+/// The ring that shows where the keyboard is: a line in the accent just
+/// inside `around`, drawn while `response` has the focus. A control laid
+/// out by hand draws this one too, so the focus looks the same on a
+/// button, a sidebar row and a tab.
+pub(super) fn focus_ring(
+    ui: &egui::Ui,
+    palette: &Palette,
+    response: &egui::Response,
+    around: egui::Rect,
+) {
     if response.has_focus() {
         ui.painter().rect_stroke(
-            response.rect,
+            around,
             CONTROL_RADIUS,
             egui::Stroke::new(1.0_f32, palette.accent),
             egui::StrokeKind::Inside,
@@ -324,6 +340,22 @@ impl<N: fmt::Display + Copy> QuietButton<'_, N> {
     /// Lay it out as the next thing in `ui`, as wide as its face asks for,
     /// and draw it.
     pub(super) fn show(self, ui: &mut egui::Ui, palette: &Palette) -> egui::Response {
+        self.lay_out(ui, palette, None)
+    }
+
+    /// As [`Self::show`], under `id`: for a button the keyboard is sent to
+    /// by code that does not draw it.
+    pub(super) fn show_as(
+        self,
+        ui: &mut egui::Ui,
+        palette: &Palette,
+        id: egui::Id,
+    ) -> egui::Response {
+        self.lay_out(ui, palette, Some(id))
+    }
+
+    /// Lay it out and draw it, under `id` or else the id `ui` gives it.
+    fn lay_out(self, ui: &mut egui::Ui, palette: &Palette, id: Option<egui::Id>) -> egui::Response {
         let words = self.words(ui);
         let text_width = words.as_ref().map_or(0.0, |words| words.size().x);
         let size = egui::vec2(
@@ -332,8 +364,8 @@ impl<N: fmt::Display + Copy> QuietButton<'_, N> {
                 .max(self.min_width),
             BUTTON_SIDE,
         );
-        let (id, rect) = ui.allocate_space(size);
-        let mut response = self.place(ui, rect, id);
+        let (given, rect) = ui.allocate_space(size);
+        let mut response = self.place(ui, rect, id.unwrap_or(given));
         response.intrinsic_size = Some(size);
         self.paint_face(ui, palette, &response, words);
         response
@@ -428,6 +460,40 @@ pub(super) fn small_label(ui: &mut egui::Ui, palette: &Palette, text: &str) -> e
         )
         .selectable(false),
     )
+}
+
+/// A bar under the top bar that opens with the warning sign: `message` in
+/// `ink`, and at its right end what `buttons` adds, laid out from the
+/// right. `id` tells the bars apart.
+pub(super) fn warning_bar(
+    ctx: &egui::Context,
+    id: &'static str,
+    palette: &Palette,
+    message: &str,
+    ink: Color32,
+    buttons: impl FnOnce(&mut egui::Ui),
+) {
+    let bar = egui::TopBottomPanel::top(id)
+        .exact_height(STRIP_HEIGHT)
+        .frame(bar_frame(palette));
+    bar.show(ctx, |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add_space(6.0);
+            let (sign, _) =
+                ui.allocate_exact_size(egui::Vec2::splat(ICON_SIDE), egui::Sense::hover());
+            Icon::Warning.paint(ui.painter(), sign, palette.warning);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                buttons(ui);
+                // The message takes what the buttons leave, and is cut
+                // short rather than pushing them out.
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    let message = egui::RichText::new(message).font(label_font()).color(ink);
+                    ui.add(egui::Label::new(message).truncate());
+                });
+            });
+        });
+    });
 }
 
 /// What stands at the right end of a menu row.

@@ -220,10 +220,9 @@ fn middle_clicking_a_tab_closes_it() {
 #[test]
 fn a_tab_under_the_pointer_has_a_close_button() {
     let mut reader = three_tabs();
-    assert_eq!(reader.count("Close tab"), 0);
 
     reader.hover("tab:Beta");
-    reader.click("Close tab");
+    reader.click("Close Beta");
 
     assert_eq!(reader.count("tab:Beta"), 0);
     assert_eq!(reader.count("tab:Alpha"), 1);

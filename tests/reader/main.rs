@@ -18,6 +18,8 @@ mod diagrams;
 #[cfg(test)]
 mod dialogs;
 #[cfg(test)]
+mod disk_change;
+#[cfg(test)]
 mod docs;
 #[cfg(test)]
 mod editing;
@@ -50,7 +52,11 @@ mod inline_code;
 #[cfg(test)]
 mod keyboard;
 #[cfg(test)]
+mod keyboard_focus;
+#[cfg(test)]
 mod lightbox;
+#[cfg(test)]
+mod line_breaks;
 #[cfg(test)]
 mod links;
 #[cfg(test)]
@@ -67,6 +73,8 @@ mod menu_room;
 mod opening;
 #[cfg(test)]
 mod opening_depth;
+#[cfg(test)]
+mod overwrite;
 #[cfg(test)]
 mod pages;
 #[cfg(test)]

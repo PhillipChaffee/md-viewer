@@ -10,7 +10,7 @@ const EDITED: &str = "# Draft\n\nFirst thoughts. Mine.";
 const ASKS_DRAFT: &str = "Save changes to “Draft” (draft.md)?";
 
 /// Put the document in front in edit mode and type `text` at its end.
-fn edit(reader: &mut Reader, text: &str) {
+pub(super) fn edit(reader: &mut Reader, text: &str) {
     reader.press("Ctrl+E");
     reader.click_text_field(0);
     reader.press("Ctrl+End");
@@ -146,6 +146,28 @@ fn enter_saves_because_the_keyboard_starts_on_save() {
 }
 
 #[test]
+fn keys_typed_in_one_frame_answer_in_the_order_they_were_pressed() {
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.press("Tab");
+    assert_eq!(reader.focused().as_deref(), Some("Discard"));
+    reader.tap_in_turn(&["Shift+Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "back on Save");
+    assert_eq!(reader.title(), "Markdown Viewer", "Save closes");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Tab", "Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "around to Save");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), SOURCE, "Discard");
+    assert_eq!(reader.title(), "Markdown Viewer", "Discard closes");
+}
+
+#[test]
 fn tab_moves_the_keyboard_from_save_to_discard_to_cancel() {
     let mut reader = unsaved_draft();
     reader.press("Ctrl+W");
@@ -198,7 +220,7 @@ fn a_tab_whose_edits_are_saved_closes_without_a_question() {
 #[test]
 fn every_way_to_close_a_tab_asks() {
     type Close = fn(&mut Reader);
-    let ways: [(&str, Close); 5] = [
+    let ways: [(&str, Close); 7] = [
         ("the shortcut", |reader| reader.press("Ctrl+W")),
         ("the menu", |reader| {
             reader.click("More");
@@ -206,7 +228,17 @@ fn every_way_to_close_a_tab_asks() {
         }),
         ("the tab's close button", |reader| {
             reader.hover("tab:Alpha");
-            reader.click("Close tab");
+            reader.click("Close Alpha");
+        }),
+        ("Enter on the tab's close button", |reader| {
+            reader.click("tab:Beta");
+            reader.tab_to("Close Alpha");
+            reader.press("Enter");
+        }),
+        ("Space on the tab's close button", |reader| {
+            reader.click("tab:Beta");
+            reader.tab_to("Close Alpha");
+            reader.press("Space");
         }),
         ("a middle click on the tab", |reader| {
             reader.middle_click("tab:Alpha");

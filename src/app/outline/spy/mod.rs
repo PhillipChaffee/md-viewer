@@ -90,7 +90,7 @@ impl HeadingSpy {
     /// is another heading than at the last look.
     pub(super) fn look(&mut self, tab: &Tab) -> (Option<usize>, bool) {
         let sighting = Sighting {
-            tab: tab.id,
+            tab: tab.document_id,
             content_version: tab.content_version,
             view: View {
                 top: tab.scroll_offset,

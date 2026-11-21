@@ -143,6 +143,12 @@ impl Reader {
         focused.pop().map(|element| element.name)
     }
 
+    /// Whether the keyboard is in the one thing named `label`, a tab
+    /// where the name starts with `tab:`.
+    pub(crate) fn keyboard_is_on(&self, label: &str) -> bool {
+        self.all(label).iter().any(|element| element.focused)
+    }
+
     /// The names of the tabs in the top row, from left to right.
     pub(crate) fn tabs(&self) -> Vec<String> {
         let mut tabs = self.elements();

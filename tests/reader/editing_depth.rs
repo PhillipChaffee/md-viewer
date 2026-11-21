@@ -162,6 +162,17 @@ fn the_arrow_keys_step_over_an_emoji_written_as_several_characters() {
 }
 
 #[test]
+fn a_held_arrow_moves_the_caret_by_every_repeat_of_a_slow_frame() {
+    let mut reader = editing("one\ntwo\nthree\nfour\nfive\nsix");
+    reader.press("Ctrl+Home");
+
+    reader.hold("Down", &[3]);
+    reader.type_text(">");
+
+    assert_eq!(saved(&mut reader), "one\ntwo\nthree\nfour\n>five\nsix");
+}
+
+#[test]
 fn backspace_and_delete_remove_all_of_an_emoji_written_as_several_characters() {
     let mut reader = editing(SOURCE);
     append(&mut reader, &format!(" {FAMILY}{FAMILY}!"));
@@ -389,7 +400,9 @@ fn a_save_onto_a_name_a_folder_has_taken_fails_and_leaves_nothing_behind() {
     reader.delete_file("draft.md");
     reader.write_file("draft.md/inside.md", "# In the way");
 
+    // What is there now cannot be read, so the save asks before it tries.
     reader.press("Ctrl+S");
+    reader.click("Overwrite");
 
     reader.assert_sees("Unable to save");
     reader.assert_sees("Save failed");
@@ -411,13 +424,15 @@ fn unsaved_edits_are_kept_when_the_file_changes_on_disk() {
 }
 
 #[test]
-fn saving_after_the_file_changed_on_disk_writes_what_was_typed() {
+fn saving_after_the_file_changed_on_disk_asks_and_then_writes_what_was_typed() {
     let mut reader = editing(SOURCE);
     append(&mut reader, " Mine.");
     reader.write_file("draft.md", "# Draft\n\nTheirs.");
     reader.idle_for(NO_RELOAD);
 
     reader.press("Ctrl+S");
+    assert_eq!(reader.read_file("draft.md"), "# Draft\n\nTheirs.");
+    reader.click("Overwrite");
 
     assert_eq!(reader.read_file("draft.md"), format!("{SOURCE} Mine."));
     assert_eq!(reader.count("Unsaved changes"), 0);

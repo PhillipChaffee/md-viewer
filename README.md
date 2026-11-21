@@ -92,6 +92,9 @@ tab leads back.
 - Code in a line of prose has no box. It is a little smaller than the text
   around it and in a tint of its own, warm or on Sepia a muted olive,
   which keeps the same 7:1 contrast as body text on all four themes.
+- A line ends only where prose can break. A bracket, a comma, a full stop
+  or a letter written against a piece of code, a link or bold text stays
+  on the line with it.
 - A `file-name · N min read` line above the title.
 
 **Rendering**
@@ -146,6 +149,12 @@ tab leads back.
   button, and **Quit** in the menu bar and in the Dock. Logging out with
   unsaved edits asks too, and the log-out stops there, as it does for any
   Mac app that has a question: log out again once the app has closed.
+- A file that another program changes while its document has unsaved
+  edits is neither reloaded nor overwritten. A bar on the document says
+  the file changed on disk, with **Reload** (take the file, drop the
+  edits) and **Keep mine**. A save then asks before it replaces what the
+  other program wrote: **Overwrite** or **Cancel**. With live reload off
+  the question still comes at the save.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
@@ -258,6 +267,12 @@ there: `⌘D`, `⌘F`, ⌘-click on a link. The one exception is the tab switch,
 which is the Control key on a Mac too, because ⌘ with Tab switches apps.
 The menus and tooltips show the Mac's own signs. Control with a letter and
 Option with an arrow are left to the text you are editing.
+
+Without the mouse: `Tab` and `Shift+Tab` step through the buttons, the tabs,
+the rows of the sidebars and the documents of the home page, and a ring in
+the theme's accent shows which one the keyboard is on. `Enter` or `Space` presses it. Each tab's close
+button comes right after its tab, so `Enter` there closes that tab, and
+asks first when it has unsaved edits.
 
 ## How it is built
 
@@ -376,6 +391,10 @@ Three things in `docs/` follow the rest of the repository by hand:
   of a keycap: `a*️⃣b*️⃣c` sets the `b` in italics. Write `\*️⃣` there.
 - While the find bar marks part of an emoji written as several characters,
   such as the `1` of 1️⃣, that emoji is drawn as its parts.
+- In a table cell a line can still end between a piece of code, a link or
+  bold text and the bracket or comma written against it. Anywhere, it can
+  end between a formula, a picture or a footnote mark in a line of prose
+  and what is written against that.
 - A picture is read when you come within a window's height of it, and
   decoded in the background. Until it is there its place is empty, with a
   spinner while it is in view. An animated GIF or WebP is decoded whole:

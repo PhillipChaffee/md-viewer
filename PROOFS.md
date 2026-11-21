@@ -56,9 +56,17 @@ about, and the harness in its place takes 25 s; the other is
 `run-proofs.sh` fails when a harness does not verify, when a
 `kani::cover!` check is not reached, or when the number of harnesses
 verified differs from the number of `#[kani::proof]` attributes in `src/`.
-CI runs it in the `proofs` job. It is not in `run-gates.sh`: it needs a
-second build of the dependency graph and several minutes of solver time,
-which is more than the other gates together.
+It is not in `run-gates.sh`: it needs a second build of the dependency
+graph and several minutes of solver time, which is more than the other
+gates together.
+
+CI runs it in the `proofs` job as three shares, each on its own runner:
+`PROOF_SHARD=1/3`, `2/3` and `3/3`. A share is every third `proofs.rs` in
+path order, so the three together are all of them, and each share's count
+is checked against the attributes in its own files. The job runs on every
+push to `main`, and on a pull request that touches something Kani compiles
+or the proof machinery; [GATES.md](GATES.md#what-ci-runs-for-which-change)
+has the list.
 
 The proofs live in `proofs.rs` beside the code, declared
 `#[cfg(kani)] mod proofs;`. No ordinary build, test run or coverage run
