@@ -323,9 +323,16 @@ impl MarkdownApp {
         let reloaded = tab.reload();
         let path = tab.path.clone();
         match reloaded {
-            // What the find bar found was in the text the reload replaced.
-            Ok(()) if self.search.is_open => self.search.invalidate(),
-            Ok(()) => {}
+            Ok(()) => {
+                // The file may have another first heading than the edits
+                // had, which names the tab.
+                self.tab_names_changed();
+                // What the find bar found was in the text the reload
+                // replaced.
+                if self.search.is_open {
+                    self.search.invalidate();
+                }
+            }
             Err(error) => self.error_message = Some(reload_failed(&path, &error)),
         }
     }

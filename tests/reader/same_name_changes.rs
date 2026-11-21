@@ -39,6 +39,17 @@ fn plan_renamed_on_disk_under_edits() -> Reader {
 }
 
 #[test]
+fn a_file_renamed_on_disk_under_edits_keeps_its_tab_name_until_it_is_reloaded() {
+    let mut reader = plan_renamed_on_disk_under_edits();
+    assert_eq!(reader.tabs(), ["Notes", "Plan"]);
+
+    reader.click("Reload");
+
+    assert_eq!(reader.tabs(), ["Notes · guides", "Notes · drafts"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Notes · drafts"));
+}
+
+#[test]
 fn keep_mine_and_a_save_over_the_other_version_keep_the_name_of_my_text() {
     let mut reader = plan_renamed_on_disk_under_edits();
 
