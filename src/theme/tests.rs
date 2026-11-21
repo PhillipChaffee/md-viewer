@@ -78,9 +78,9 @@ fn inline_code_is_a_tint_that_reads_as_well_as_body_text() {
         // Found or selected code has to stay text, as body text does.
         let marked = contrast(palette.inline_code, palette.selection);
         assert!(marked >= 4.5, "{theme:?}: marked code is {marked:.2}:1");
-        // The tint is the code's own. A link is told from code by its
-        // underline and code by its face whatever the two colors are,
-        // which `tests/reader/inline_code.rs` reads.
+        // The tint is the code's own. Whatever the two colors are, a link is
+        // told by its underline and code by its face, which
+        // `tests/reader/inline_code.rs` reads.
         assert_ne!(palette.inline_code, palette.text, "{theme:?}");
     }
 }
