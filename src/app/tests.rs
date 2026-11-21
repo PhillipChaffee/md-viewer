@@ -343,14 +343,8 @@ fn ctrl_s_writes_unsaved_edits_and_nothing_else() {
 #[test]
 fn ctrl_q_asks_the_window_to_close() {
     let mut harness = Harness::with_three_docs();
-    let close_requested = |output: &egui::FullOutput| {
-        output.viewport_output.values().any(|viewport| {
-            viewport
-                .commands
-                .iter()
-                .any(|command| matches!(command, egui::ViewportCommand::Close))
-        })
-    };
+    let close_requested =
+        |output: &egui::FullOutput| super::ui_harness::sent(output, &egui::ViewportCommand::Close);
 
     assert!(!close_requested(&harness.idle()));
     assert!(close_requested(&harness.press(Modifiers::CTRL, Key::Q)));

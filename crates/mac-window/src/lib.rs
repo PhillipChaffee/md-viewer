@@ -1,8 +1,11 @@
 //! What md-viewer asks of macOS about its own window.
 //!
-//! [`center_window_buttons`] and [`hand_quit_key_to_app`] do nothing on
-//! every other system, so the app calls them without asking where it
-//! runs. [`placement`] is plain arithmetic, the same everywhere.
+//! [`center_window_buttons`], [`hand_quit_key_to_app`] and
+//! [`ask_before_quit`] reach nothing on every other system, so the app
+//! calls them without asking where it runs. [`placement`] is plain
+//! arithmetic and [`quit_answer`] a plain value, the same everywhere.
+
+use std::sync::OnceLock;
 
 #[cfg(not(target_os = "macos"))]
 mod elsewhere;
@@ -12,9 +15,56 @@ mod mac;
 mod tests;
 
 #[cfg(not(target_os = "macos"))]
+use elsewhere::answer_quit_requests;
+#[cfg(not(target_os = "macos"))]
 pub use elsewhere::{center_window_buttons, hand_quit_key_to_app};
 #[cfg(target_os = "macos")]
+use mac::answer_quit_requests;
+#[cfg(target_os = "macos")]
 pub use mac::{center_window_buttons, hand_quit_key_to_app};
+
+/// What the app says when the system asks whether it may quit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuitAnswer {
+    /// Quit: nothing would be lost.
+    Now,
+    /// Do not quit: the app has something to ask its reader first, and
+    /// closes on its own once it has the answers.
+    NotYet,
+}
+
+/// The app's answer to a request to quit, once it has given one to ask.
+type Asker = Box<dyn Fn() -> QuitAnswer + Send + Sync>;
+
+/// The answer [`ask_before_quit`] was given. A static, because macOS asks
+/// through a plain function that carries nothing with it.
+static ASKER: OnceLock<Asker> = OnceLock::new();
+
+/// Have macOS ask `asker` before it quits the app.
+///
+/// That covers Quit in the menu bar and in the Dock, and logging out,
+/// restarting and shutting down. Without this macOS quits at once, and
+/// the window is never asked to close.
+///
+/// `asker` runs on the main thread, inside the request. When it says
+/// [`QuitAnswer::NotYet`] the request is refused, which also stops a
+/// log-out; it is then for the app to ask its reader and to close.
+///
+/// The first `asker` given is the one kept. On any system but macOS it is
+/// kept and never asked.
+pub fn ask_before_quit(asker: impl Fn() -> QuitAnswer + Send + Sync + 'static) {
+    if ASKER.set(Box::new(asker)).is_ok() {
+        answer_quit_requests();
+    }
+}
+
+/// What the app answers a request to quit with at this moment:
+/// [`QuitAnswer::Now`] until [`ask_before_quit`] has been given an asker,
+/// and from then on what that asker says.
+#[must_use]
+pub fn quit_answer() -> QuitAnswer {
+    ASKER.get().map_or(QuitAnswer::Now, |asker| asker())
+}
 
 /// How far apart two lengths are before they count as different: macOS
 /// rounds what it is given to whole pixels.

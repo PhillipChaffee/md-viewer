@@ -42,6 +42,7 @@ mod settings;
 mod shortcuts;
 mod sidebar;
 mod startup;
+mod system_quit;
 mod tab_bar;
 mod tabs;
 #[cfg(test)]
@@ -156,6 +157,8 @@ pub(crate) struct MarkdownApp {
     /// A close that waits for the reader to say what becomes of unsaved
     /// edits, and the quit that follows their last answer.
     closing: close_prompt::CloseState,
+    /// Word left for the system of whether it may quit the app unasked.
+    system_quit: system_quit::SystemQuit,
     // Find-bar state (current-document search)
     search: SearchState,
     // Recently opened files (most-recent first), shown on the home page

@@ -142,9 +142,10 @@ tab leads back.
   **Cancel** at any question leaves every tab open with its edits. A
   link, a file in the sidebar, Back or Forward asks the same before it
   shows another document in a tab with unsaved edits.
-  On a Mac quitting covers `⌘Q`, **⋯ > Quit** and the window's close
-  button. **Quit** picked with the mouse from the menu bar or from the
-  Dock is macOS's own and still quits without asking.
+  On a Mac quitting covers `⌘Q`, **⋯ > Quit**, the window's close
+  button, and **Quit** in the menu bar and in the Dock. Logging out with
+  unsaved edits asks too, and the log-out stops there, as it does for any
+  Mac app that has a question: log out again once the app has closed.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
@@ -280,7 +281,7 @@ flowchart LR
 | `src/system_fonts/` | Font discovery and the bundled faces |
 | `vendor/egui_commonmark/` | A fork of [egui_commonmark](https://github.com/lampsitter/egui_commonmark) that does the Markdown layout, math and diagrams |
 | `vendor/epaint/` | A patched copy of egui's painter |
-| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, and `⌘Q` handed to the app. Does nothing elsewhere. Holds the one unsafe function ([GATES.md](GATES.md)) |
+| `crates/mac-window/` | What the window asks of macOS: the window's buttons on the top row's centre line, `⌘Q` handed to the app, and the app asked before macOS quits it. Does nothing elsewhere. Holds the two unsafe functions ([GATES.md](GATES.md)) |
 
 ## Development
 

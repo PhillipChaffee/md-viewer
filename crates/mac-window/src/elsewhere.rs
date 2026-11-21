@@ -9,3 +9,6 @@ pub const fn center_window_buttons(_window: &impl HasWindowHandle, _row_height: 
 
 /// Does nothing: only on macOS does a menu bar take the quit key.
 pub const fn hand_quit_key_to_app() {}
+
+/// Does nothing: only macOS asks an app whether it may quit.
+pub(crate) const fn answer_quit_requests() {}

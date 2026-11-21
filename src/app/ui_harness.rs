@@ -75,6 +75,24 @@ pub(crate) fn frame_with(harness: &mut Harness, mut input: egui::RawInput) -> eg
     harness.ctx.run(input, |ctx| app.update(ctx, frame))
 }
 
+/// Run one frame of the key-driven harness in which the window asks to
+/// close.
+pub(crate) fn frame_asked_to_close(harness: &mut Harness) -> egui::FullOutput {
+    let mut input = egui::RawInput::default();
+    let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();
+    window.events.push(egui::ViewportEvent::Close);
+    frame_with(harness, input)
+}
+
+/// Whether the frame behind `output` sent `wanted` to a window.
+pub(crate) fn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool {
+    let mut commands = output
+        .viewport_output
+        .values()
+        .flat_map(|viewport| &viewport.commands);
+    commands.any(|command| command == wanted)
+}
+
 /// Run one frame of the key-driven harness on `events`.
 pub(crate) fn frame_on(harness: &mut Harness, events: Vec<egui::Event>) -> egui::FullOutput {
     let input = egui::RawInput {
