@@ -52,6 +52,12 @@ file-length cap or the coverage gate: `parsers/pulldown.rs` is over 6,000
 lines. Bringing the fork under the gates is the largest piece of retrofit
 work left, and it is not done.
 
+`vendor/epaint` is a patched copy of egui's painter. The same CI job, and
+nothing in `run-gates.sh`, runs its text tests (`cargo test --manifest-path
+vendor/epaint/Cargo.toml --lib text::`, 23 pass): they pin the row rule
+that the renderer's line breaking rests on. The rest of the copy is
+upstream's code and is neither linted nor tested here.
+
 ## The one unsafe function: the Mac's window buttons
 
 On a Mac the window has no title strip of its own: the close, minimize and
