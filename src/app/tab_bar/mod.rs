@@ -93,7 +93,7 @@ impl MarkdownApp {
         // A tab that came to the front is scrolled into view once. After
         // that the tabs are the reader's to scroll.
         let front = self.front();
-        let front = front.and_then(|front| Some((front, self.tabs.get(front)?.id)));
+        let front = front.and_then(|front| Some((front, self.tabs.get(front)?.document_id)));
         let reveal = self.revealed_tab != front;
         self.revealed_tab = front;
         let landing = self.keyboard_landing();

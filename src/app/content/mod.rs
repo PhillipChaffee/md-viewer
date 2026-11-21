@@ -165,7 +165,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
     let pending_edit = tab.pending_edit_scroll.take();
     let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
-        .id_salt(tab.id.with("edit-scroll"))
+        .id_salt(tab.document_id.with("edit-scroll"))
         .auto_shrink(false)
         .max_width(column.pane.width())
         .show(ui, |ui| {
@@ -257,7 +257,7 @@ fn preview_pane(
             drag: false,
             mouse_wheel: true,
         })
-        .show_scrollable(tab.id, ui, &mut tab.cache, &tab.content);
+        .show_scrollable(tab.document_id, ui, &mut tab.cache, &tab.content);
 
     tab.measured(&output);
     output
