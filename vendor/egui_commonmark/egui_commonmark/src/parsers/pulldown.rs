@@ -11,7 +11,7 @@ use egui::{self, Id, Pos2, TextStyle, Ui};
 use crate::List;
 use egui_commonmark_backend_extended::elements::{
     blockquote, body_font_size, footnote, footnote_label, footnote_start, heading_end_spacing,
-    heading_start_spacing, inline_code_label, newline, paragraph_end_spacing, row_is_fresh,
+    heading_start_spacing, newline, paragraph_end_spacing, row_is_fresh,
     rule_styled, soft_break, start_row_below, ImmutableCheckbox,
 };
 use egui_commonmark_backend_extended::misc::*;
@@ -3598,31 +3598,7 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
     ) {
         let bg = hl.background_color(ui);
-        let mut rich_text = if bg.is_some() && self.text_style.code {
-            // egui's RichText renderer overrides `background_color` with the theme's
-            // `code_bg_color` whenever `.code()` is set (widget_text.rs:421). To make
-            // our search highlight visible inside inline code, build the RichText
-            // manually with a monospace font instead of calling `.code()` — that gives
-            // the visual effect of code (monospace + slightly larger weight) while
-            // letting our background_color survive.
-            let mut t = egui::RichText::new(text.as_ref())
-                .text_style(egui::TextStyle::Monospace);
-            if self.text_style.strong {
-                t = t.strong();
-            }
-            if self.text_style.emphasis {
-                t = t.italics();
-            }
-            if self.text_style.strikethrough {
-                t = t.strikethrough();
-            }
-            if self.text_style.quote {
-                t = t.weak();
-            }
-            t
-        } else {
-            self.text_style.to_richtext_with_options(ui, &text, options)
-        };
+        let mut rich_text = self.text_style.to_richtext_with_options(ui, &text, options);
         if let Some(bg) = bg {
             rich_text = rich_text.background_color(bg);
         }
@@ -3641,10 +3617,7 @@ impl CommonMarkViewerInternal {
             self.current_heading_pieces
                 .push(HeadingPiece::Text(rich_text));
         } else if self.is_table {
-            match self.code_chip_radius(bg, options) {
-                Some(radius) => inline_code_label(ui, rich_text, radius, true),
-                None => ui.add(egui::Label::new(rich_text).wrap()),
-            };
+            ui.add(egui::Label::new(rich_text).wrap());
         } else {
             // The item's first text decides where its deferred marker paints:
             // mirror exactly the job `ui.label` is about to build (same format,
@@ -3659,25 +3632,8 @@ impl CommonMarkViewerInternal {
             );
             let format = job.sections.first().map(|section| section.format.clone());
             self.list.flush_pending_markers(ui, format);
-            match self.code_chip_radius(bg, options) {
-                Some(radius) => inline_code_label(ui, rich_text, radius, false),
-                None => ui.label(rich_text),
-            };
+            ui.label(rich_text);
         }
-    }
-
-    /// The corner radius to paint the text being emitted on a chip with:
-    /// inline code, when the style asks for chips. A search highlight keeps
-    /// its own background.
-    fn code_chip_radius(
-        &self,
-        highlight: Option<egui::Color32>,
-        options: &CommonMarkOptions,
-    ) -> Option<f32> {
-        options
-            .block_style
-            .inline_code_radius
-            .filter(|_| self.text_style.code && highlight.is_none())
     }
 
     /// Render source-literal text while preserving fine-grained search highlighting.

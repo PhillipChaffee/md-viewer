@@ -2,7 +2,7 @@
 
 use eframe::egui;
 
-use crate::app::sidebar::{self, Chevron, Row, Side};
+use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
 use crate::tab::Tab;
@@ -236,6 +236,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
         indent: f32::from(row.header.level.saturating_sub(2)) * sidebar::INDENT,
         current: outline.current == Some(row.index),
         chevron: row.chevron,
+        end: End::Nothing,
     };
     let laid_out = sidebar::row(ui, outline.palette, &shown);
 

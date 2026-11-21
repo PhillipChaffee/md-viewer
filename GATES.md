@@ -38,6 +38,7 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | `ci.yml`, `run-gates.sh` license list | The shared full-lint list, unchanged, plus `Zlib`, `BSL-1.0`, `CDLA-Permissive-2.0`, `OFL-1.1`, `Ubuntu-font-1.0`. |
 | `Cargo.toml` cargo-shear | `image` is ignored: used for its features only. |
 | `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/` and build output are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
+| `lychee.toml` | The two font license files, `assets/fonts/SourceSerif4-LICENSE.txt` and `assets/fonts/SourceCodePro-LICENSE.txt`, are skipped too. They are legal text kept verbatim, and their one URL (adobe.com) answers 403 to automated clients. |
 | `.gitleaks.toml` | `target/` is skipped in the working-tree scan. |
 
 ## Caveat: the renderer fork is first-party code outside the gates

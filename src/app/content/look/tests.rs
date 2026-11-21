@@ -110,7 +110,7 @@ fn the_document_is_a_centered_column_with_reader_block_styling() {
 }
 
 #[test]
-fn tables_lists_and_code_chips_are_drawn_in_the_themes_colors() {
+fn tables_lists_and_inline_code_are_drawn_in_the_themes_colors() {
     for theme in ThemeId::ALL {
         let palette = theme.palette();
         let blocks = look(theme, FontPreset::Reader).blocks;
@@ -126,7 +126,6 @@ fn tables_lists_and_code_chips_are_drawn_in_the_themes_colors() {
         assert!(table.cell_padding >= 8.0);
 
         assert_eq!(blocks.list.unwrap().marker, palette.muted);
-        assert_eq!(blocks.inline_code_radius, Some(4.0));
     }
 }
 
