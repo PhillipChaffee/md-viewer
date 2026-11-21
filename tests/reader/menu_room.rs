@@ -110,11 +110,16 @@ fn shift_tab_walks_back_to_the_first_row_and_brings_it_into_view() {
 
 #[test]
 fn a_menu_the_window_has_room_for_does_not_scroll() {
-    for steps in [0, 1] {
+    for (steps, height) in [(0, 800.0), (1, 900.0), (2, 1100.0)] {
         let mut reader = zoomed_in(steps);
+        reader.resize_window(1200.0, height);
         reader.click("More");
-        let rows = ["Open File\u{2026}", "Theme", "Zoom In", "Quit"];
+        let rows = ["New Tab", "Theme", "Zoom In", "Quit"];
         let before = rows.map(|row| reader.area_of(row));
+        assert!(
+            reader.is_within_window("New Tab"),
+            "zoomed in {steps} times"
+        );
         assert!(reader.is_within_window("Quit"), "zoomed in {steps} times");
 
         wheel_down_on(&mut reader, "Theme", 300.0);
@@ -142,7 +147,7 @@ fn a_menu_stops_scrolling_once_the_window_is_tall_enough_for_it() {
 fn a_menu_that_scrolls_stands_clear_of_the_top_and_the_bottom_of_the_window() {
     let mut reader = zoomed_in(2);
     reader.click("More");
-    let first = reader.area_of("Open File\u{2026}");
+    let first = reader.area_of("New Tab");
     assert!(first.top > 8.0 && first.top < 40.0, "{first:?}");
 
     wheel_down_on(&mut reader, "Open Folder\u{2026}", TO_THE_END);

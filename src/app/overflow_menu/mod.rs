@@ -101,6 +101,8 @@ impl MarkdownApp {
     }
 
     fn file_rows(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) {
+        let new_tab = MenuRow::new("New Tab").shortcut(self.hints.of(AppAction::NewTab));
+        self.item(ui, new_tab, AppAction::NewTab, picked);
         let open = MenuRow::new("Open File…").shortcut(self.hints.of(AppAction::OpenFile));
         self.item(ui, open, AppAction::OpenFile, picked);
         self.item(

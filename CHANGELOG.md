@@ -22,6 +22,8 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 - **A home page you can go to without closing anything.** A Home button in the top row, **⋯ > Home Page** and `Ctrl+Shift+H` show the home page over the open tabs, which stay open with none marked as in front. The Home button again, Back (`Alt+←`), `Ctrl+Tab` or a click on the tab leads back to the document that was in front; another tab or `Ctrl+1`..`9` shows that one. While the home page shows, the window is called Markdown Viewer, there are no contents and no edit switch, find finds nothing, and `Ctrl+W`, `Ctrl+S` and `Ctrl+E` do nothing: no document is on screen to close, save or edit. Open tabs go on following their files. A restart shows the document that was in front.
 
+- **New Tab is in the ⋯ menu,** first, with its shortcut beside it. It does what **+** and `Ctrl+T` do: it shows the home page, where a document picked opens in a new tab.
+
 - **+ and `Ctrl+T` open a new tab on the home page.** They used to open the file chooser, under a label that said `Ctrl+T` where the README said `Ctrl+O`. Now **+** and `Ctrl+T` show the home page, and a document picked there (a recent one, **Open File…**, a file in the sidebar, a dropped file) opens in a new tab, or comes to the front if it already has one. `Ctrl+O` and **⋯ > Open File…** go straight to the file chooser.
 
 - **Diagrams and formulas follow the page.** Mermaid diagrams are redrawn in the theme's colors on a transparent ground, and LaTeX formulas are transparent ink, so neither sits in a white or page-colored box. A diagram wider than the column may use the room beside it instead of shrinking until its labels cannot be read.

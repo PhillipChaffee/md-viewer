@@ -63,9 +63,10 @@ click and can be resized.
 
 The home page lists recent documents with their title, folder, reading
 time and opening lines. It shows with no document open, and over the open
-tabs when you press the Home button, **+** or `Ctrl+T`: the tabs stay, and
-a document picked there opens in a new tab, or comes to the front if it
-has one. The Home button again, Back, or a click on a tab leads back.
+tabs when you press the Home button, **+**, `Ctrl+T` or **⋯ > New Tab**:
+the tabs stay, and a document picked there opens in a new tab, or comes
+to the front if it has one. The Home button again, Back, or a click on a
+tab leads back.
 
 ![The home page listing recently read documents](screenshots/reader/home.png)
 
