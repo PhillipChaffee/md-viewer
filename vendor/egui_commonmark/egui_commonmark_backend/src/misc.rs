@@ -323,7 +323,7 @@ impl Style {
         if self.strong {
             // Always keep egui's strong styling hint. Only md-viewer opts into
             // the named bold font after registering it; inline code keeps the
-            // monospace family applied later by `RichText::code()`.
+            // monospace family applied later.
             rich_text = rich_text.strong();
             // A heading family is already the heading's bold face.
             if use_strong_font_family && !self.code && heading_family.is_none() {
@@ -348,22 +348,24 @@ impl Style {
         }
 
         if self.code {
-            // `RichText::code()` sets the Monospace text style, which carries its
-            // own (smaller, 14px) size — so inline code rendered smaller than the
-            // surrounding 16px body text and sat raised off the shared baseline
-            // (issue #46). Pin the size to the current context (body, or the
-            // heading size when code is inside a heading) so code keeps the
-            // monospace family + code background but aligns with adjacent text.
+            // The Monospace text style carries its own (smaller, 14px) size,
+            // so inline code rendered smaller than the surrounding 16px body
+            // text and sat raised off the shared baseline (issue #46). Pin the
+            // size to the current context (body, or the heading size when
+            // code is inside a heading) so code aligns with adjacent text.
             let scale = block_style
                 .and_then(|style| style.inline_code_scale)
                 .unwrap_or(1.0);
-            let size = selected_font_size * scale;
-            // md-viewer patch: code in an ink of its own is the code face
-            // without `code()`, which would lay the code background behind
-            // it. A link colors its text after this, so its color wins.
+            rich_text = rich_text
+                .text_style(TextStyle::Monospace)
+                .size(selected_font_size * scale);
+            // md-viewer patch: never `RichText::code()`, whose background
+            // no caller can replace: a search highlight sets its own over
+            // this one. A link colors its text after this, so its color
+            // wins over the ink.
             rich_text = match block_style.and_then(|style| style.inline_code_color) {
-                Some(ink) => rich_text.text_style(TextStyle::Monospace).size(size).color(ink),
-                None => rich_text.code().size(size),
+                Some(ink) => rich_text.color(ink),
+                None => rich_text.background_color(ui.visuals().code_bg_color),
             };
             // md-viewer patch: the bold code face, where the text around
             // the code is bold.

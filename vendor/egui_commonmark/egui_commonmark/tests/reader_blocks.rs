@@ -1034,35 +1034,68 @@ fn every_level_of_a_nested_list_steps_in_by_one_slot() {
 
 // --- inline code ----------------------------------------------------------
 
-#[test]
-fn a_found_match_in_inline_code_is_marked_in_the_match_color() {
-    let ctx = context();
-    let fill = ctx.style().visuals.code_bg_color;
-    let markdown = "Find `needle` here.\n";
-    let mut cache = CommonMarkCache::default();
-    cache.set_search_ranges(vec![6..12]);
-    ctx.begin_pass(egui::RawInput::default());
-    egui::CentralPanel::default().show(&ctx, |ui| {
-        viewer(&BlockStyle::default()).show(ui, &mut cache, markdown);
-    });
-    let mut frame = Frame::default();
-    for clipped in ctx.end_pass().shapes {
-        frame.collect(&clipped.shape, clipped.clip_rect);
-    }
-    let found = frame.text("needle").background;
-    assert!(found != Color32::TRANSPARENT && found != fill, "{found:?}");
-}
-
-// --- inline code in an ink of its own -------------------------------------
-
-const CODE_INK: Color32 = Color32::from_rgb(122, 74, 34);
-
 fn scaled() -> BlockStyle {
     BlockStyle {
         inline_code_scale: Some(0.5),
         ..Default::default()
     }
 }
+
+/// The frame of `markdown` with the bytes of `found` marked as a search
+/// match.
+fn show_found(
+    ctx: &Context,
+    markdown: &str,
+    found: std::ops::Range<usize>,
+    style: &BlockStyle,
+) -> Frame {
+    let mut cache = CommonMarkCache::default();
+    cache.set_search_ranges(vec![found]);
+    ctx.begin_pass(egui::RawInput::default());
+    egui::CentralPanel::default().show(ctx, |ui| {
+        viewer(style).show(ui, &mut cache, markdown);
+    });
+    let mut frame = Frame::default();
+    for clipped in ctx.end_pass().shapes {
+        frame.collect(&clipped.shape, clipped.clip_rect);
+    }
+    frame
+}
+
+#[test]
+fn a_found_match_in_code_on_the_code_background_keeps_its_scale_and_bold_face() {
+    // Stand in a proportional face for the bold code one: its letters are
+    // not as wide as the code face's.
+    let ctx = context();
+    let mut fonts = egui::FontDefinitions::default();
+    let proportional = fonts.families[&egui::FontFamily::Proportional].clone();
+    let bold_code = egui::FontFamily::Name("CodeBold".into());
+    fonts.families.insert(bold_code.clone(), proportional);
+    ctx.set_fonts(fonts);
+    let style = BlockStyle {
+        strong_code_font_family: Some(bold_code),
+        ..scaled()
+    };
+    let fill = ctx.style().visuals.code_bg_color;
+    let (plain, strong) = ("Find `needle` here.\n", "**Find `needle` here.**\n");
+    let width_at_rest = |markdown| {
+        let frame = show_in(&ctx, markdown, &style);
+        assert_eq!(frame.text("needle").background, fill);
+        frame.text("needle").rect.width()
+    };
+    assert!((width_at_rest(plain) - width_at_rest(strong)).abs() > 1.0);
+
+    for (markdown, found) in [(plain, 6..12), (strong, 8..14)] {
+        let frame = show_found(&ctx, markdown, found, &style);
+        let code = frame.text("needle");
+        assert!(code.background != fill && code.background != Color32::TRANSPARENT);
+        assert_close(code.rect.width(), width_at_rest(markdown), markdown);
+    }
+}
+
+// --- inline code in an ink of its own -------------------------------------
+
+const CODE_INK: Color32 = Color32::from_rgb(122, 74, 34);
 
 fn tinted() -> BlockStyle {
     BlockStyle {
@@ -1098,16 +1131,7 @@ fn a_found_match_in_tinted_code_keeps_the_codes_ink_and_size() {
     let markdown = "Find `needle` here.\n";
     let ctx = context();
     let at_rest = show_in(&ctx, markdown, &tinted());
-    let mut cache = CommonMarkCache::default();
-    cache.set_search_ranges(vec![6..12]);
-    ctx.begin_pass(egui::RawInput::default());
-    egui::CentralPanel::default().show(&ctx, |ui| {
-        viewer(&tinted()).show(ui, &mut cache, markdown);
-    });
-    let mut frame = Frame::default();
-    for clipped in ctx.end_pass().shapes {
-        frame.collect(&clipped.shape, clipped.clip_rect);
-    }
+    let frame = show_found(&ctx, markdown, 6..12, &tinted());
 
     let found = frame.text("needle");
     assert_ne!(found.background, Color32::TRANSPARENT, "the match is marked");
