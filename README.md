@@ -76,8 +76,13 @@ has one. The Home button again, Back, or a click on a tab leads back.
 - Four themes, a resizable centered column, three line spacings, five text
   sizes and 50% to 300% zoom.
 - Documents are set in the bundled
-  [Source Serif 4](https://github.com/adobe-fonts/source-serif). Other font
-  presets and any installed font family are under **Aa → Fonts…**.
+  [Source Serif 4](https://github.com/adobe-fonts/source-serif), and their
+  code in its companion,
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
+  font presets and any installed font family are under **Aa → Fonts…**.
+- Code in a line of prose has no box. It is a little smaller than the text
+  around it and in a warm tint of its own, which keeps the same 7:1 contrast
+  as body text on all four themes.
 - A `file-name · N min read` line above the title.
 
 **Rendering**
@@ -351,8 +356,9 @@ Two things to know before you rely on those gates:
   [mitex](https://github.com/mitex-rs/mitex) for math.
 - [merman](https://github.com/Latias94/merman) for Mermaid diagrams.
 - [syntect](https://github.com/trishume/syntect) for syntax highlighting.
-- [Source Serif 4](https://github.com/adobe-fonts/source-serif) by Adobe,
-  under the SIL Open Font License.
+- [Source Serif 4](https://github.com/adobe-fonts/source-serif) and
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro) by
+  Adobe, under the SIL Open Font License.
 
 Third-party license texts are in `THIRD_PARTY_NOTICES`.
 
