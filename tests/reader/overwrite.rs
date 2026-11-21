@@ -376,3 +376,20 @@ fn a_second_quit_while_the_overwrite_question_shows_writes_nothing_and_still_ask
     assert_eq!(reader.typed(), [MINE]);
     assert_eq!(reader.read_file("draft.md"), THEIRS);
 }
+
+#[test]
+fn a_file_dropped_while_the_overwrite_question_shows_opens_nothing() {
+    let mut reader = unsaved_draft_beside_another();
+    another_program_writes(&mut reader, THEIRS);
+    reader.press("Ctrl+S");
+    reader.assert_sees(ASKS);
+
+    reader.drop_file("other.md");
+
+    assert_eq!(reader.tabs(), ["Draft"]);
+    assert_eq!(reader.title(), "draft.md - Markdown Viewer");
+    reader.assert_sees(ASKS);
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    reader.click("Cancel");
+    assert_eq!(reader.tabs(), ["Draft"], "the drop was not kept for later");
+}
