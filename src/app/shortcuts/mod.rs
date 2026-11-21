@@ -258,10 +258,11 @@ fn shortcut_actions(
     // The wheel with the command key held, or a pinch, zooms
     // (multiplicative, like browsers). egui decides which key that is and
     // takes ⌘ and Ctrl alike, so on a Mac Control with the wheel zooms too.
-    // The lightbox captures wheel input itself in raw_input_hook, and
-    // nothing zooms under the prompt, so this only runs for the document.
+    // It zooms wherever a document binding is live: the lightbox captures
+    // wheel input itself in raw_input_hook, and nothing zooms under the
+    // prompt.
     let wheel_zoom_factor = input.zoom_delta();
-    let zooms_document = !matches!(focus, Focus::Lightbox | Focus::Prompt);
+    let zooms_document = Scope::Document.covers(focus);
     if zooms_document && (wheel_zoom_factor - 1.0).abs() > f32::EPSILON {
         actions.push(AppAction::ZoomBy(wheel_zoom_factor));
     }
