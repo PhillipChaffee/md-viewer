@@ -362,7 +362,8 @@ Two things to know before you rely on those gates:
 ## Website
 
 The project's page is a static site in [`docs/`](docs/): one page, a page
-for a wrong address, three font files and three screenshots. Nothing builds
+for a wrong address, three font files and ten screenshots, each at up to
+three sizes of window. Nothing builds
 it. GitHub Pages serves the folder as it is from `main`, at
 `https://phillipchaffee.github.io/md-viewer/`, once **Settings > Pages** is
 set to deploy from the `main` branch and its `/docs` folder. A merge to
@@ -378,12 +379,22 @@ Then open `http://localhost:8000`.
 
 Three things in `docs/` follow the rest of the repository by hand:
 
-- The version in the page's top strip, and the numbers and colors it
-  quotes, are written out. They were checked against `Cargo.toml`,
-  `src/theme/` and `src/layout/` when the page was made.
-- The screenshots in `docs/img/` are copies of three in
-  `screenshots/reader/`, saved as lossless WebP. Pages serves only what is
-  in `docs/`.
+- The version in the page's top strip, and the shortcuts, the contrast
+  and the theme colors it quotes, are written out. They were checked
+  against `Cargo.toml`, `src/theme/` and this file when the page was made.
+- The screenshots in `docs/img/` were taken for the page, of the app in
+  windows of three sizes on a screen of twice the usual density, and the
+  page's width picks the size. Above 900 px it is 1280 by 800: a lossless
+  WebP 2560 px wide, and a copy 1280 px wide for screens that need no
+  more. Up to 900 px the seven views are 960 by 600 (`-mid-` in the
+  name), and up to 600 px all ten are 480 by 720 (`-narrow-`), which the
+  seven views have at three times the density as well. The number that
+  ends a name is the picture's width. The narrow window has room for one
+  sidebar and two short tab names, so its tabs are two samples with
+  one-word headings, and its flowchart runs from top to bottom. They are
+  not the ones in `screenshots/reader/`, and a change to how the app
+  looks does not reach them. The social card, `docs/og.png`, is a picture
+  of the top of the page.
 - The social card tags in `docs/index.html` hold the site's whole address,
   which a card needs. Every link to the site's own files is relative, so
   the page works under any address.
