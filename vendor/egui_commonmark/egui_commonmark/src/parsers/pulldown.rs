@@ -1864,6 +1864,16 @@ enum HeadingPiece {
     Link(Link),
 }
 
+/// md-viewer patch: what setting the running text does about the marker
+/// of the list item it is in, which waits for the item's first text.
+#[derive(Clone, Copy)]
+enum ItemMarker {
+    /// The first text decides where the marker is painted.
+    FromFirstText,
+    /// A heading leaves the marker to the end of the item.
+    Leave,
+}
+
 /// md-viewer patch: where a piece of text is set, when it is not kept as
 /// the words of a picture or the content of a code block.
 enum TextSink {
@@ -3664,13 +3674,11 @@ impl CommonMarkViewerInternal {
     /// md-viewer patch: set the running text that waited, each piece
     /// where the one before it ends.
     fn set_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache) {
-        self.show_runs(ui, cache, true);
+        self.show_runs(ui, cache, ItemMarker::FromFirstText);
     }
 
-    /// Set the running text that waited. With `marks_item` its first text
-    /// decides where the marker of its list item is painted; a heading
-    /// leaves that to the end of the item.
-    fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marks_item: bool) {
+    /// Set the running text that waited.
+    fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marker: ItemMarker) {
         if self.runs.is_empty() {
             return;
         }
@@ -3683,7 +3691,7 @@ impl CommonMarkViewerInternal {
             match run.link {
                 Some(destination) => show_link(ui, cache, destination, run.job),
                 None => {
-                    if marks_item {
+                    if matches!(marker, ItemMarker::FromFirstText) {
                         // The item's first text decides where its deferred
                         // marker paints: its format gives the marker's
                         // reference galley the real layout, and the marker
@@ -4105,7 +4113,7 @@ impl CommonMarkViewerInternal {
                                 }
                             }
                         }
-                        self.show_runs(ui, cache, false);
+                        self.show_runs(ui, cache, ItemMarker::Leave);
                     });
                 }
                 // Record under a source-stable key shared with the Outline parser.
