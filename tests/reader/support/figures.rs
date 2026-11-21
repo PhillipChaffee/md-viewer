@@ -105,6 +105,17 @@ impl Reader {
         }
     }
 
+    /// The size, in pixels, of every painted text that reads exactly
+    /// `text`, in the order painted: a row of the sidebar, then the hover
+    /// text that repeats it.
+    pub(crate) fn sizes_of(&self, text: &str) -> Vec<f32> {
+        let painted = self.painted().into_iter();
+        painted
+            .filter(|painted| painted.text == text)
+            .map(|painted| painted.size * self.scale())
+            .collect()
+    }
+
     /// The color laid behind the first painted text that contains `text`,
     /// as find lays one behind a match. `None` when nothing is.
     #[track_caller]

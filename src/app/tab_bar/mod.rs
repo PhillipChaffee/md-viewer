@@ -177,7 +177,6 @@ fn scroll_into_strip(ui: &egui::Ui, tab: egui::Rect) {
 /// The hover text of a tab: where its document is, and whether it is
 /// reloaded when the file changes.
 fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
-    ui.style_mut().override_font_id = Some(chrome::label_font());
     ui.label(label.path.display().to_string());
     if label.live {
         ui.horizontal(|ui| {

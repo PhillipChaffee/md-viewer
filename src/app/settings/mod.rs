@@ -4,6 +4,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use eframe::egui;
 
+use crate::app::chrome;
 use crate::app::MarkdownApp;
 use crate::system_fonts::{scan_pickable_font_families, FontPreset, TextSizeClass};
 
@@ -195,7 +196,9 @@ impl MarkdownApp {
             }
         });
         if self.fonts.family.is_some() {
-            ui.small(
+            chrome::small_label(
+                ui,
+                self.theme.palette(),
                 "A picked family leads the body chain; presets still \
                  set the code font and line heights.",
             );

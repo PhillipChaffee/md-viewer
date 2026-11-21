@@ -32,6 +32,35 @@ fn append(reader: &mut Reader, text: &str) {
     reader.type_text(text);
 }
 
+/// The size the source is set at, in pixels.
+#[track_caller]
+fn source_size(reader: &Reader, source: &str) -> f32 {
+    let sizes = reader.sizes_of(source);
+    assert_eq!(sizes.len(), 1, "the source is painted once");
+    sizes[0]
+}
+
+#[test]
+fn each_larger_text_size_sets_the_source_larger() {
+    let source = "Plain words on one line.";
+    let mut reader = editing(source);
+    reader.click("Appearance");
+    reader.click("Smaller text");
+    assert!(!reader.is_enabled("Smaller text"), "Small is the smallest");
+
+    let mut sizes = vec![source_size(&reader, source)];
+    while reader.is_enabled("Larger text") {
+        reader.click("Larger text");
+        sizes.push(source_size(&reader, source));
+    }
+
+    assert_eq!(sizes.len(), 5, "Small to Huge");
+    assert!(
+        sizes.is_sorted_by(|smaller, larger| smaller < larger),
+        "{sizes:?}"
+    );
+}
+
 #[test]
 fn a_save_writes_exactly_what_was_typed() {
     let cases = [

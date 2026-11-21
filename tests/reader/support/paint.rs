@@ -134,6 +134,8 @@ pub(crate) struct Painted {
     pub(crate) underlined: bool,
     /// The color laid behind its first glyph, when it is marked.
     pub(crate) marker: Option<Rgb>,
+    /// The size its first words are set at, in points.
+    pub(crate) size: f32,
     /// The middle of its first line, where a person would click on it. A
     /// text that wraps has its own middle off its words.
     pub(crate) first_line: Pos2,
@@ -296,6 +298,7 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                     struck_out: sections.iter().any(struck),
                     underlined: sections.iter().any(underlined),
                     marker: marker.map(Rgb::of),
+                    size: section.map_or(0.0, |section| section.format.font_id.size),
                     first_line: first_line(text),
                     first_line_width: first_line_width(text),
                     glyphs: glyphs(text),
