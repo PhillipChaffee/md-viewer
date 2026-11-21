@@ -51,8 +51,7 @@ pub(crate) struct Palette {
     /// Body text.
     pub(crate) text: Color32,
     /// Inline code: a tint of the body text, which with the code face is
-    /// all that tells it from the prose around it. It is warm, but on
-    /// Sepia an olive, because Sepia's links are a warm brown.
+    /// all that tells it from the prose around it.
     pub(crate) inline_code: Color32,
     /// Titles, slightly stronger than body text.
     pub(crate) heading: Color32,
@@ -97,6 +96,7 @@ const SEPIA: Palette = Palette {
     surface: rgb(0xF3_EB_DA),
     raised: rgb(0xF0_E7_D3),
     text: rgb(0x2B_26_22),
+    // An olive, not a warm tint: Sepia's links are a warm brown.
     inline_code: rgb(0x4A_52_30),
     heading: rgb(0x1E_1A_17),
     muted: rgb(0x76_6C_5E),
