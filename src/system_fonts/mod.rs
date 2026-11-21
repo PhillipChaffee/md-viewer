@@ -287,9 +287,9 @@ pub(crate) struct DocumentFonts {
     /// A true italic family, where the document's faces have one. `None`
     /// means emphasis is the body face slanted.
     pub(crate) emphasis: Option<FontFamily>,
-    /// A bold code family, where the document's faces have one. `None`
-    /// means code in bold text is the regular code face.
-    pub(crate) strong_code: Option<FontFamily>,
+    /// The family of code in bold text: a bold code face where the
+    /// document's faces have one, and the code font's own chain where not.
+    pub(crate) strong_code: FontFamily,
 }
 
 /// What the reader chose the document to be set in.
@@ -319,7 +319,7 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
         code: FontId::monospace(body * CODE_SCALE),
         inline_code_scale: bundled.then_some(INLINE_CODE_SCALE),
         emphasis: bundled.then(|| FontFamily::Name(DOCUMENT_EMPHASIS_FAMILY.into())),
-        strong_code: bundled.then(|| FontFamily::Name(DOCUMENT_STRONG_CODE_FAMILY.into())),
+        strong_code: FontFamily::Name(DOCUMENT_STRONG_CODE_FAMILY.into()),
     }
 }
 

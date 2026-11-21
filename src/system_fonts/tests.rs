@@ -439,7 +439,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
     assert_eq!(fonts.inline_code_scale, Some(0.86));
     assert_eq!(
         fonts.strong_code,
-        Some(FontFamily::Name("MarkdownStrongCode".into()))
+        FontFamily::Name("MarkdownStrongCode".into())
     );
 
     // Every size class scales the same way.
@@ -459,15 +459,13 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
         assert_close(fonts.code.size, 18.0 * 0.875);
         assert_eq!(fonts.emphasis, None, "{preset:?}");
         assert_eq!(fonts.inline_code_scale, None, "{preset:?}");
-        assert_eq!(fonts.strong_code, None, "{preset:?}");
 
         // Each keeps its own code stack: the bundled code face is the
-        // Reader's alone.
+        // Reader's alone, and code in bold text is in that same stack.
         let definitions = Fonts::with_sans().definitions(None, preset);
         let code = chain(&definitions, &FontFamily::Monospace);
         assert!(!code.contains(&"ReaderCode".to_owned()), "{preset:?}");
-        let strong_code = FontFamily::Name("MarkdownStrongCode".into());
-        assert_eq!(chain(&definitions, &strong_code), code, "{preset:?}");
+        assert_eq!(chain(&definitions, &fonts.strong_code), code, "{preset:?}");
     }
 }
 
@@ -481,13 +479,16 @@ fn a_picked_family_outranks_the_readers_serif() {
     // The serif's scale stays with the preset; its faces do not lead.
     assert_eq!(fonts.emphasis, None);
     assert_eq!(fonts.inline_code_scale, None);
-    assert_eq!(fonts.strong_code, None);
 
     let mut system = Fonts::with_sans();
     let picked = system.definitions(Some("Fixture Sans"), FontPreset::Reader);
     let body = chain(&picked, &FontFamily::Name("MarkdownBody".into()));
     assert_eq!(body, chain(&picked, &FontFamily::Proportional));
     assert!(!picked.font_data.contains_key("ReaderRegular"));
+    assert_eq!(
+        chain(&picked, &fonts.strong_code),
+        chain(&picked, &FontFamily::Monospace)
+    );
 }
 
 #[test]
