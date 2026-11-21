@@ -435,6 +435,22 @@ impl Pixels {
     }
 }
 
+/// Where the frame drew dots: filled circles, each by the square that
+/// bounds it and the color it is filled with.
+pub(crate) fn dots(shapes: &[Shape]) -> Vec<(Rect, Rgb)> {
+    let mut found = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Vec(members) => found.extend(dots(members)),
+            Shape::Circle(circle) if circle.fill != Color32::TRANSPARENT => {
+                found.push((circle.visual_bounding_rect(), Rgb::of(circle.fill)));
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 /// Where the frame drew lines, boxes and dots: everything that is neither
 /// text nor a picture, each by the rectangle that bounds it.
 pub(crate) fn marks(shapes: &[Shape]) -> Vec<Rect> {

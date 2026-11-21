@@ -57,6 +57,12 @@ A file list on the left and a table of contents on the right. The contents
 list marks the heading you are reading. Both are hidden or shown with one
 click and can be resized.
 
+A click on a file shows it in the tab in front. To give it a tab of its
+own, click the button that appears at the end of its row while you point
+at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
+from its right-click menu. A file that already has a tab comes to the
+front instead. A dot after the name marks the files that have a tab.
+
 ![The files and contents sidebars](screenshots/reader/sidebars.png)
 
 ### A home page of what you read last
@@ -119,6 +125,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
   bar their desktop draws.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
+- A file in the sidebar opens in place too; its row's button, `Ctrl+Click`,
+  a middle click or **Open in New Tab** in its menu opens a new tab.
 - Drag a file onto the window to open it.
 - Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
   is checked while the setting is on, also with nothing open to follow.
@@ -230,6 +238,16 @@ md-viewer notes.md
 | `Ctrl+S` | `⌘S` | Save the edits |
 | `F5` | `F5` | Live reload on or off |
 | `Ctrl+Q` | `⌘Q` | Quit |
+
+With the mouse:
+
+| Linux and Windows | Mac | Action |
+| --- | --- | --- |
+| Click a file in the sidebar | the same | Show it in the tab in front |
+| `Ctrl`-click a file or a link | ⌘-click | Open it in a new tab |
+| Middle-click a file in the sidebar | the same | Open it in a new tab |
+| Right-click a file in the sidebar | the same | **Open**, **Open in New Tab**, and what to copy |
+| Middle-click a tab | the same | Close the tab |
 
 On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘
 there: `⌘D`, `⌘F`, ⌘-click on a link. The one exception is the tab switch,

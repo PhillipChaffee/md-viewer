@@ -14,8 +14,16 @@ mod tests;
 
 impl MarkdownApp {
     /// Open the markdown files dropped on the window. Returns whether
-    /// files hover over it this frame.
+    /// files hover over it this frame and a drop would be taken.
+    ///
+    /// Under a modal overlay a drop is not taken and not kept for later:
+    /// the overlay has the window's input, and a document opened behind
+    /// it would change the tab in front while the prompt asks about
+    /// another. Nothing invites a drop there either.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) -> bool {
+        if self.modal().is_some() {
+            return false;
+        }
         // The files are opened after the input lock is released: opening
         // one reads it from disk.
         let (hovering, dropped) = ctx.input(|input| {
