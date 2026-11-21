@@ -6,7 +6,7 @@ use mac_window::QuitAnswer;
 
 use crate::app::close_prompt::CloseAnswer;
 use crate::app::tests::Harness;
-use crate::app::ui_harness::frame_with;
+use crate::app::ui_harness::{frame_asked_to_close, sent};
 
 const CLOSE: egui::ViewportCommand = egui::ViewportCommand::Close;
 const REFUSE: egui::ViewportCommand = egui::ViewportCommand::CancelClose;
@@ -18,23 +18,14 @@ fn edit(harness: &mut Harness) {
     harness.idle();
 }
 
-fn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool {
-    let mut commands = output
-        .viewport_output
-        .values()
-        .flat_map(|viewport| &viewport.commands);
-    commands.any(|command| command == wanted)
-}
-
 /// Run the next frame the way eframe does after `output`: a window told
 /// to close in one frame asks to close in the next.
 fn next_frame(harness: &mut Harness, output: &egui::FullOutput) -> egui::FullOutput {
-    let mut input = egui::RawInput::default();
     if sent(output, &CLOSE) {
-        let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();
-        window.events.push(egui::ViewportEvent::Close);
+        frame_asked_to_close(harness)
+    } else {
+        harness.idle()
     }
-    frame_with(harness, input)
 }
 
 fn prompt_shows(harness: &Harness) -> bool {
