@@ -31,7 +31,8 @@ cross-platform job always starts and skips its steps, and a last job named
 Four things keep this from hiding a failure:
 
 - **Documentation is still checked.** `hygiene` holds the spelling,
-  Markdown, link, secret and duplication gates, and it has no condition.
+  Markdown, link, secret and duplication gates and the site-facts check,
+  and it has no condition.
 - **Markdown a test reads is code.** `tests/fixtures/` and the renderer's
   examples are compiled into test binaries, so a change there runs
   everything.
@@ -53,6 +54,25 @@ Three more facts about how the jobs are laid out:
 - **The proofs run in three shares,** one runner each, and a job named
   `proofs` reports the three as one result. [PROOFS.md](PROOFS.md) says how
   the harnesses are dealt out and why none can be missed.
+
+## The website states what the code says
+
+`docs/index.html` and `docs/404.html` are written by hand, and the facts
+they quote are copied from the code. `scripts/check-site-facts.sh` reads
+each fact from the file that decides it and fails where a page says
+otherwise: the version, licence, binary name and repository from
+`Cargo.toml`; `make install` and its folder from the `Makefile`; the
+toolchain file; the theme names, order and page colors and the page's own
+CSS tokens from `src/theme/`; the 7:1 contrast from the theme tests; the
+edit, save and theme shortcuts from the binding table in
+`src/app/shortcuts/`; the type-checked platforms from
+`cross-platform.yml`; the bundled faces and their licence; and the README
+headings and package lists the page links to. Each fact on a page carries
+a `data-fact` attribute naming it. The counts ("four themes", "three line
+spacings") and the GitHub and Pages addresses are found without one. It
+runs in `hygiene` and in `./run-gates.sh`, and by hand as
+`scripts/check-site-facts.sh`. What it cannot see is a new fact written
+into the page without a `data-fact`.
 
 ## Where the retrofit left the crate
 
