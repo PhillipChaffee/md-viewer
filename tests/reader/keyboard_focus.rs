@@ -1,6 +1,7 @@
 //! Where the keyboard is: the ring round whatever the Tab key reached, and
 //! the close button of a tab, which the Tab key reaches after its tab.
 
+use super::disk_change::{another_program_writes, unsaved_draft_beside_another, MINE, THEIRS};
 use super::docs::three_linked;
 use super::support::{Area, Reader, Rgb};
 
@@ -437,4 +438,144 @@ fn a_tab_closed_with_the_pointer_moves_the_keyboard_nowhere() {
 
     assert_eq!(reader.tabs(), ["Beta", "Gamma"]);
     assert_eq!(reader.focused(), None);
+}
+
+const ASKS_UNSAVED: &str = "Save changes to “Draft” (draft.md)?";
+const ASKS_OVERWRITE: &str = "“Draft” (draft.md) changed on disk. Overwrite it?";
+/// What a tab is marked with while another program's change to its file
+/// waits behind another tab.
+const CHANGED: &str = "Changed on disk";
+
+/// Draft with an edit that is not saved and a file another program then
+/// wrote to, behind Other, with the pointer off the tabs.
+fn changed_draft_behind_another() -> Reader {
+    let mut reader = unsaved_draft_beside_another();
+    another_program_writes(&mut reader, THEIRS);
+    reader.drop_file("other.md");
+    point_away(&mut reader);
+    reader
+}
+
+/// The same with the close button of Draft pressed from the keyboard and
+/// Save chosen with it, so the question about the other program's text is
+/// up.
+fn asked_to_overwrite_after_a_keyboard_close() -> Reader {
+    let mut reader = changed_draft_behind_another();
+    reader.tab_to(&close("Draft"));
+    reader.press("Enter");
+    reader.assert_sees(ASKS_UNSAVED);
+    assert_eq!(reader.focused().as_deref(), Some("Save"));
+    reader.press("Enter");
+    reader.assert_sees(ASKS_OVERWRITE);
+    reader
+}
+
+#[test]
+fn save_after_a_keyboard_close_of_a_file_that_changed_asks_before_it_overwrites() {
+    let reader = asked_to_overwrite_after_a_keyboard_close();
+
+    assert_eq!(reader.focused().as_deref(), Some("Cancel"));
+    assert_eq!(reader.tabs(), ["Draft", "Other"]);
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+}
+
+#[test]
+fn a_key_held_down_on_the_close_button_of_a_file_that_changed_answers_nothing() {
+    for key in ["Enter", "Space"] {
+        let mut reader = changed_draft_behind_another();
+        reader.tab_to(&close("Draft"));
+
+        reader.hold(key, &[1; 12]);
+
+        reader.assert_sees(ASKS_UNSAVED);
+        assert_eq!(reader.tabs(), ["Draft", "Other"], "{key}");
+        assert_eq!(reader.read_file("draft.md"), THEIRS, "{key}");
+    }
+}
+
+#[test]
+fn overwrite_after_a_keyboard_close_leaves_the_keyboard_on_the_tab_in_front() {
+    let mut reader = asked_to_overwrite_after_a_keyboard_close();
+
+    reader.click("Overwrite");
+
+    assert_eq!(reader.read_file("draft.md"), MINE);
+    assert_eq!(reader.tabs(), ["Other"]);
+    assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+}
+
+#[test]
+fn overwrite_chosen_with_the_keyboard_leaves_it_on_the_tab_in_front_too() {
+    let mut reader = asked_to_overwrite_after_a_keyboard_close();
+
+    reader.press("Shift+Tab");
+    assert_eq!(reader.focused().as_deref(), Some("Overwrite"));
+    reader.press("Enter");
+
+    assert_eq!(reader.read_file("draft.md"), MINE);
+    assert_eq!(reader.tabs(), ["Other"]);
+    assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+}
+
+#[test]
+fn discard_after_a_keyboard_close_of_a_file_that_changed_leaves_it_there_as_well() {
+    let mut reader = changed_draft_behind_another();
+    reader.tab_to(&close("Draft"));
+    reader.press("Enter");
+
+    reader.click("Discard");
+
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    assert_eq!(reader.tabs(), ["Other"]);
+    assert_keyboard_rests_on_the_tab_in_front(&mut reader);
+}
+
+#[test]
+fn cancel_at_the_overwrite_question_after_a_keyboard_close_moves_the_keyboard_nowhere_later() {
+    for cancel in ["Enter", "Escape"] {
+        let mut reader = asked_to_overwrite_after_a_keyboard_close();
+
+        reader.press(cancel);
+
+        reader.assert_hides(ASKS_OVERWRITE);
+        assert_eq!(reader.tabs(), ["Draft", "Other"], "{cancel}");
+        assert_eq!(reader.read_file("draft.md"), THEIRS, "{cancel}");
+        assert!(!reader.keyboard_is_on("tab:Other"), "{cancel}");
+
+        reader.hover("tab:Draft");
+        reader.click(&close("Draft"));
+        reader.click("Discard");
+
+        assert_eq!(reader.tabs(), ["Other"], "{cancel}");
+        assert_eq!(reader.focused(), None, "{cancel}: the pointer closed it");
+    }
+}
+
+/// Whether the cross of Draft's close button is drawn, and whether the dot
+/// that marks its file as changed is.
+fn cross_and_dot(reader: &Reader) -> (bool, bool) {
+    let square = reader.area_of(&close("Draft"));
+    let dots = reader.dots_in(square).len();
+    (reader.marks_in(square).len() > dots, dots > 0)
+}
+
+#[test]
+fn the_mark_of_a_changed_file_and_the_close_button_take_turns_in_one_place() {
+    let mut reader = changed_draft_behind_another();
+    let at_rest = ["tab:Draft", "tab:Other"].map(|tab| reader.area_of(tab));
+    assert_eq!(cross_and_dot(&reader), (false, true), "at rest");
+    assert_eq!(reader.count(CHANGED), 1, "at rest");
+
+    for on in ["tab:Draft", &close("Draft")] {
+        reader.tab_to(on);
+        assert_eq!(cross_and_dot(&reader), (true, false), "keyboard on {on}");
+        assert_eq!(reader.count(CHANGED), 0, "keyboard on {on}");
+        let now = ["tab:Draft", "tab:Other"].map(|tab| reader.area_of(tab));
+        assert_eq!(now, at_rest, "keyboard on {on}");
+    }
+
+    reader.tab_to("tab:Other");
+    assert_eq!(cross_and_dot(&reader), (false, true), "keyboard gone on");
+    reader.hover("tab:Draft");
+    assert_eq!(cross_and_dot(&reader), (true, false), "pointed at");
 }
