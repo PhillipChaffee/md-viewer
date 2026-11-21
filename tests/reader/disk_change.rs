@@ -25,6 +25,17 @@ pub(super) fn unsaved_draft() -> Reader {
     reader
 }
 
+/// `draft.md` open with an edit that is not saved, in a folder that also
+/// holds `other.md`, which no tab shows.
+pub(super) fn unsaved_draft_beside_another() -> Reader {
+    let mut reader = Reader::with_docs(&[
+        ("draft.md", SOURCE),
+        ("other.md", "# Other\n\nSomething else."),
+    ]);
+    edit(&mut reader, " Mine.");
+    reader
+}
+
 /// Have another program write `text` to `draft.md`, and wait for the
 /// notice of it.
 #[track_caller]
@@ -127,11 +138,7 @@ fn a_change_after_keep_mine_is_announced_again() {
 
 #[test]
 fn the_notice_stays_with_its_tab() {
-    let mut reader = Reader::with_docs(&[
-        ("draft.md", SOURCE),
-        ("other.md", "# Other\n\nSomething else."),
-    ]);
-    edit(&mut reader, " Mine.");
+    let mut reader = unsaved_draft_beside_another();
     another_program_writes(&mut reader, THEIRS);
 
     reader.drop_file("other.md");
@@ -145,11 +152,7 @@ fn the_notice_stays_with_its_tab() {
 
 #[test]
 fn pointing_at_a_marked_tab_says_what_became_of_its_file() {
-    let mut reader = Reader::with_docs(&[
-        ("draft.md", SOURCE),
-        ("other.md", "# Other\n\nSomething else."),
-    ]);
-    edit(&mut reader, " Mine.");
+    let mut reader = unsaved_draft_beside_another();
     another_program_writes(&mut reader, THEIRS);
     reader.drop_file("other.md");
     reader.assert_hides(NOTICE);
@@ -161,11 +164,7 @@ fn pointing_at_a_marked_tab_says_what_became_of_its_file() {
 
 #[test]
 fn a_change_to_a_tab_behind_another_marks_it_and_waits_there() {
-    let mut reader = Reader::with_docs(&[
-        ("draft.md", SOURCE),
-        ("other.md", "# Other\n\nSomething else."),
-    ]);
-    edit(&mut reader, " Mine.");
+    let mut reader = unsaved_draft_beside_another();
     reader.drop_file("other.md");
     assert_eq!(reader.count(TAB_MARK), 0);
 

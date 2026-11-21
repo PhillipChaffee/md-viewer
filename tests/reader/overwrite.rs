@@ -3,8 +3,8 @@
 //! what each answer does.
 
 use super::disk_change::{
-    another_program_writes, changed_under_edits, unsaved_draft, GONE, MINE, NOTICE, NO_NOTICE,
-    SOURCE, THEIRS,
+    another_program_writes, changed_under_edits, unsaved_draft, unsaved_draft_beside_another, GONE,
+    MINE, NOTICE, NO_NOTICE, SOURCE, THEIRS,
 };
 use super::support::Reader;
 use super::unsaved::edit;
@@ -190,11 +190,7 @@ fn cancel_in_the_close_prompt_closes_nothing_and_writes_nothing() {
 
 #[test]
 fn after_overwrite_the_prompt_goes_on_to_the_next_unsaved_document() {
-    let mut reader = Reader::with_docs(&[
-        ("draft.md", SOURCE),
-        ("other.md", "# Other\n\nSomething else."),
-    ]);
-    edit(&mut reader, " Mine.");
+    let mut reader = unsaved_draft_beside_another();
     another_program_writes(&mut reader, THEIRS);
     reader.drop_file("other.md");
     edit(&mut reader, " Too.");
