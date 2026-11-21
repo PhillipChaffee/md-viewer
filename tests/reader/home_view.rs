@@ -133,11 +133,15 @@ fn another_tab_or_its_digit_takes_the_place_of_the_home_page() {
 }
 
 #[test]
-fn the_new_tab_button_and_ctrl_t_show_the_home_page_and_stay_there() {
-    for way in ["the button", "Ctrl+T"] {
+fn every_way_to_a_new_tab_shows_the_home_page_and_stays_there() {
+    for way in ["the button", "the menu", "Ctrl+T"] {
         let mut reader = three_tabs();
         let go = |reader: &mut Reader| match way {
             "the button" => reader.click("New tab"),
+            "the menu" => {
+                reader.click("More");
+                reader.click("New Tab");
+            }
             _ => reader.press("Ctrl+T"),
         };
 

@@ -365,7 +365,7 @@ fn a_key_held_down_on_a_close_button_closes_one_tab() {
         point_away(&mut reader);
         reader.tab_to(&close("Alpha"));
 
-        reader.hold(key, 12);
+        reader.hold(key, &[1; 12]);
 
         assert_eq!(reader.tabs(), ["Beta", "Gamma"], "{key}");
         assert_eq!(reader.tab_in_front().as_deref(), Some("Gamma"), "{key}");
@@ -393,7 +393,7 @@ fn a_key_held_down_on_the_close_button_of_unsaved_edits_asks_and_answers_nothing
         let mut reader = on_the_close_button_of_unsaved_edits();
         let written = reader.read_file("a.md");
 
-        reader.hold(key, 12);
+        reader.hold(key, &[1; 12]);
 
         reader.assert_sees("Save changes to “Alpha” (a.md)?");
         assert_eq!(reader.tabs(), ["Alpha", "Beta"], "{key}");

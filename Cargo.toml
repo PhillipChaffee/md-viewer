@@ -85,7 +85,7 @@ default = []
 # every warn level into an error through -D warnings.
 [workspace]
 # `crates/mac-window` holds the AppKit calls the window needs on a Mac,
-# one of them unsafe: this crate forbids unsafe code, so that one cannot
+# two of them unsafe: this crate forbids unsafe code, so they cannot
 # live here. It is gated with this crate; GATES.md says where it differs.
 members = ["crates/mac-window"]
 # The vendored forks keep their own manifests and are not gated here: they

@@ -432,6 +432,21 @@ pub struct TextWrapping {
     ///
     /// If not set, no character will be used (but the text will still be elided).
     pub overflow_character: Option<char>,
+
+    /// md-viewer patch: room to keep free after the end of the text, for
+    /// what follows it with no place to break between: a bracket after a
+    /// word, a word after a piece in another face.
+    ///
+    /// When the last word and this much more do not fit on its row, the
+    /// word starts the next row, as it would had the two been one text.
+    ///
+    /// Meant for left-aligned, unjustified text with no row limit. With
+    /// [`Self::max_rows`], a text that fits but whose room does not is
+    /// moved to a row that may be elided. With another alignment, or with
+    /// justified text, "after" has no one meaning.
+    ///
+    /// Default value: `0.0`.
+    pub room_after: f32,
 }
 
 impl std::hash::Hash for TextWrapping {
@@ -442,11 +457,13 @@ impl std::hash::Hash for TextWrapping {
             max_rows,
             break_anywhere,
             overflow_character,
+            room_after,
         } = self;
         emath::OrderedFloat(*max_width).hash(state);
         max_rows.hash(state);
         break_anywhere.hash(state);
         overflow_character.hash(state);
+        emath::OrderedFloat(*room_after).hash(state);
     }
 }
 
@@ -457,6 +474,7 @@ impl Default for TextWrapping {
             max_rows: usize::MAX,
             break_anywhere: false,
             overflow_character: Some('…'),
+            room_after: 0.0,
         }
     }
 }

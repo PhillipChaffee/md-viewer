@@ -47,6 +47,27 @@ impl Rgb {
         let (a, b) = (self.luminance(), other.luminance());
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
+
+    /// Where the color is on the color wheel, in degrees: red is 0, yellow
+    /// 60, green 120 and blue 240. A gray is nowhere on it.
+    pub(crate) fn hue(self) -> Option<f64> {
+        let Self(red, green, blue) = self;
+        let strongest = red.max(green).max(blue);
+        let weakest = red.min(green).min(blue);
+        if strongest == weakest {
+            return None;
+        }
+        let spread = f64::from(strongest - weakest);
+        let [r, g, b] = [red, green, blue].map(f64::from);
+        let sixths = if strongest == red {
+            ((g - b) / spread).rem_euclid(6.0)
+        } else if strongest == green {
+            (b - r) / spread + 2.0
+        } else {
+            (r - g) / spread + 4.0
+        };
+        Some(sixths * 60.0)
+    }
 }
 
 impl fmt::Debug for Rgb {
@@ -134,6 +155,8 @@ pub(crate) struct Painted {
     pub(crate) underlined: bool,
     /// The color laid behind its first glyph, when it is marked.
     pub(crate) marker: Option<Rgb>,
+    /// The size its first words are set at, in points.
+    pub(crate) size: f32,
     /// The middle of its first line, where a person would click on it. A
     /// text that wraps has its own middle off its words.
     pub(crate) first_line: Pos2,
@@ -143,6 +166,8 @@ pub(crate) struct Painted {
     /// Each character of its first line, with the corners of its picture on
     /// the sheet the frame keeps them on.
     glyphs: Vec<(char, [u16; 4])>,
+    /// Each character of its first line, with where its picture is painted.
+    pub(crate) letters: Vec<(char, Rect)>,
 }
 
 impl Painted {
@@ -223,6 +248,22 @@ fn glyphs(text: &TextShape) -> Vec<(char, [u16; 4])> {
         .collect()
 }
 
+/// Each character on the first line of `text`, with the box its picture is
+/// painted in.
+fn letters(text: &TextShape) -> Vec<(char, Rect)> {
+    let Some(line) = text.galley.rows.first() else {
+        return Vec::new();
+    };
+    let origin = text.pos + line.pos.to_vec2();
+    let glyphs = line.row.glyphs.iter();
+    glyphs
+        .map(|glyph| {
+            let corner = origin + glyph.pos.to_vec2() + glyph.uv_rect.offset;
+            (glyph.chr, Rect::from_min_size(corner, glyph.uv_rect.size))
+        })
+        .collect()
+}
+
 /// The middle of the glyphs on the first line of `text`.
 fn first_line(text: &TextShape) -> Pos2 {
     let line = text.galley.rows.first();
@@ -278,15 +319,55 @@ pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
                     struck_out: sections.iter().any(struck),
                     underlined: sections.iter().any(underlined),
                     marker: marker.map(Rgb::of),
+                    size: section.map_or(0.0, |section| section.format.font_id.size),
                     first_line: first_line(text),
                     first_line_width: first_line_width(text),
                     glyphs: glyphs(text),
+                    letters: letters(text),
                 });
             }
             _ => {}
         }
     }
     texts
+}
+
+/// The characters a painted text has on one of its lines, and the box
+/// around them.
+pub(crate) struct Stretch {
+    pub(crate) text: String,
+    pub(crate) rect: Rect,
+}
+
+/// The lines of every text the frame painted, in paint order: one list for
+/// each text, with a stretch for each of its lines that has characters.
+pub(crate) fn painted_lines(shapes: &[Shape]) -> Vec<Vec<Stretch>> {
+    let mut texts = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Vec(members) => texts.extend(painted_lines(members)),
+            Shape::Text(text) => texts.push(stretches(text)),
+            _ => {}
+        }
+    }
+    texts
+}
+
+/// A stretch for each line of `text` that has characters.
+fn stretches(text: &TextShape) -> Vec<Stretch> {
+    let lines = text.galley.rows.iter();
+    lines
+        .filter_map(|line| {
+            let (first, last) = (line.row.glyphs.first()?, line.row.glyphs.last()?);
+            let origin = text.pos + line.pos.to_vec2();
+            let left_top = origin + egui::vec2(first.pos.x, 0.0);
+            let right = origin.x + last.pos.x + last.advance_width;
+            Some(Stretch {
+                text: line.row.glyphs.iter().map(|glyph| glyph.chr).collect(),
+                rect: Rect::from_min_max(left_top, egui::pos2(right, origin.y + line.row.size.y)),
+            })
+        })
+        .collect()
 }
 
 /// A picture the frame painted: where, and which pixels.

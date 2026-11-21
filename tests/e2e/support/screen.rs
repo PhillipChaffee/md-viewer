@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Write as _};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 use super::{wait_for, Home};
@@ -207,10 +207,9 @@ impl Window<'_> {
         self.screen.xdotool(&["key", key]);
     }
 
-    /// The color of the pixel `x` right and `y` down from the window's top
-    /// left corner, as `RRGGBB`, read from a screenshot saved in `scratch`.
+    /// A screenshot of the window, saved in `scratch`.
     #[track_caller]
-    pub(crate) fn pixel(&self, scratch: &Path, x: u32, y: u32) -> String {
+    fn shot(&self, scratch: &Path) -> PathBuf {
         let shot = scratch.join(format!("window-{}.png", self.id));
         // A window can be titled a moment before it can be photographed.
         let taken = wait_for(|| {
@@ -222,19 +221,35 @@ impl Window<'_> {
             taken.is_ok_and(|status| status.success()).then_some(())
         });
         assert!(taken.is_some(), "no screenshot");
-        let output = self
-            .screen
-            .tool("convert")
-            .arg(&shot)
-            .args(["-depth", "8", "-format"])
-            .arg(format!("%[hex:p{{{x},{y}}}]"))
-            .arg("info:")
-            .output()
-            .unwrap();
-        let hex = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .to_uppercase();
-        hex.chars().take(6).collect()
+        shot
+    }
+
+    /// What `convert <a screenshot of the window> <args> info:` prints.
+    #[track_caller]
+    fn read_shot(&self, scratch: &Path, args: &[&str]) -> String {
+        let mut convert = self.screen.tool("convert");
+        convert.arg(self.shot(scratch)).args(args).arg("info:");
+        let output = convert.output().unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+
+    /// The color of the pixel `x` right and `y` down from the window's top
+    /// left corner, as `RRGGBB`, read from a screenshot saved in `scratch`.
+    #[track_caller]
+    pub(crate) fn pixel(&self, scratch: &Path, x: u32, y: u32) -> String {
+        let at = format!("%[hex:p{{{x},{y}}}]");
+        let hex = self.read_shot(scratch, &["-depth", "8", "-format", &at]);
+        hex.to_uppercase().chars().take(6).collect()
+    }
+
+    /// Whether anything is painted in the square of `side` pixels whose
+    /// top left corner is `x` right and `y` down from the window's:
+    /// whether it holds more than one color.
+    #[track_caller]
+    pub(crate) fn paints_in(&self, scratch: &Path, x: u32, y: u32, side: u32) -> bool {
+        let square = format!("{side}x{side}+{x}+{y}");
+        let colors = self.read_shot(scratch, &["-crop", &square, "-format", "%k"]);
+        colors.parse::<u32>().is_ok_and(|colors| colors > 1)
     }
 
     /// Wait until the pixel at `x`, `y` is `color`. Returns whether it

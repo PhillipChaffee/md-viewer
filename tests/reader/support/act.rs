@@ -166,10 +166,40 @@ impl Reader {
         panic!("the Tab key never reached `{label}`\n{}", self.describe());
     }
 
-    /// Press a key and hold it down while the keyboard repeats it `repeats`
-    /// times, a frame for each, then let it go.
+    /// Press and release a shortcut so fast that the whole of it, the
+    /// modifiers going down and coming up included, lands in one frame, as
+    /// a quick tap does while the app is busy drawing.
     #[track_caller]
-    pub(crate) fn hold(&mut self, shortcut: &str, repeats: usize) {
+    pub(crate) fn tap(&mut self, shortcut: &str) {
+        self.tap_in_turn(&[shortcut]);
+    }
+
+    /// Tap one shortcut after another so fast that all of them land in
+    /// one frame, in the order they were pressed, as quick typing does
+    /// while the app is busy drawing.
+    #[track_caller]
+    pub(crate) fn tap_in_turn(&mut self, shortcuts: &[&str]) {
+        let strokes = shortcuts.iter().flat_map(|shortcut| {
+            let (modifiers, key) = chord(shortcut);
+            [true, false].map(|pressed| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers,
+            })
+        });
+        // By the end of the frame nothing is held any more.
+        self.frame(Modifiers::NONE, strokes.collect());
+        self.settle();
+    }
+
+    /// Press a shortcut and keep it down while frames are drawn, then let
+    /// go. Each number in `repeats` is one frame and says how many times
+    /// the key repeated before it: one at an ordinary pace, more when the
+    /// frame was slow to draw.
+    #[track_caller]
+    pub(crate) fn hold(&mut self, shortcut: &str, repeats: &[usize]) {
         let (modifiers, key) = chord(shortcut);
         let stroke = |pressed, repeat| egui::Event::Key {
             key,
@@ -179,18 +209,17 @@ impl Reader {
             modifiers,
         };
         self.frame(modifiers, vec![stroke(true, false)]);
-        for _ in 0..repeats {
-            self.frame(modifiers, vec![stroke(true, true)]);
+        for &count in repeats {
+            self.frame(modifiers, vec![stroke(true, true); count]);
         }
         self.frame(modifiers, vec![stroke(false, false)]);
         self.settle();
     }
 
-    /// Press and release a shortcut so fast that the whole of it, the
-    /// modifiers going down and coming up included, lands in one frame, as
-    /// a quick tap does while the app is busy drawing.
+    /// Press a shortcut twice so fast that the second press lands in the
+    /// frame that shows what the first one did.
     #[track_caller]
-    pub(crate) fn tap(&mut self, shortcut: &str) {
+    pub(crate) fn press_twice(&mut self, shortcut: &str) {
         let (modifiers, key) = chord(shortcut);
         let stroke = |pressed| egui::Event::Key {
             key,
@@ -199,8 +228,9 @@ impl Reader {
             repeat: false,
             modifiers,
         };
-        // By the end of the frame nothing is held any more.
-        self.frame(Modifiers::NONE, vec![stroke(true), stroke(false)]);
+        self.frame(modifiers, vec![stroke(true)]);
+        self.frame(modifiers, vec![stroke(false), stroke(true)]);
+        self.frame(modifiers, vec![stroke(false)]);
         self.settle();
     }
 

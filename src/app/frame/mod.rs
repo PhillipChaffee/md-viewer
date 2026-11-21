@@ -38,8 +38,62 @@ impl WindowTitle {
     }
 }
 
+/// The keys that move the keyboard from one control to another.
+const MOVES_KEYBOARD: [egui::Key; 5] = [
+    egui::Key::Tab,
+    egui::Key::ArrowLeft,
+    egui::Key::ArrowRight,
+    egui::Key::ArrowUp,
+    egui::Key::ArrowDown,
+];
+
+/// What the reader typed in one frame after a key that moves the keyboard
+/// to another control, held for the next frame.
+///
+/// egui takes one move of the keyboard per frame, so three presses of Tab
+/// in one are a single step, and for Shift+Tab or an arrow it makes the
+/// move a frame late. Every key of the frame goes to whatever has the
+/// keyboard then. A machine slow enough to deliver Shift+Tab and Enter in
+/// one frame would have Enter press the control the reader had just left.
+#[derive(Default)]
+pub(crate) struct TypedAhead(Vec<egui::Event>);
+
+impl TypedAhead {
+    /// End the frame's events at the first key in them that moves the
+    /// keyboard, after putting what an earlier frame held ahead of them.
+    /// What follows that key waits one frame. Returns whether anything
+    /// waits, which needs that frame to be drawn.
+    fn hold(&mut self, events: &mut Vec<egui::Event>) -> bool {
+        if !self.0.is_empty() {
+            events.splice(0..0, self.0.drain(..));
+        }
+        let moves_keyboard = |event: &egui::Event| {
+            let egui::Event::Key {
+                key,
+                pressed,
+                repeat,
+                ..
+            } = event
+            else {
+                return false;
+            };
+            // A key held down is not typing ahead: its repeats all belong
+            // to the frame they arrive in, or they would run on after the
+            // key is let go.
+            *pressed && !*repeat && MOVES_KEYBOARD.contains(key)
+        };
+        if let Some(moved) = events.iter().position(moves_keyboard) {
+            self.0 = events.split_off(moved + 1);
+        }
+        !self.0.is_empty()
+    }
+}
+
 impl eframe::App for MarkdownApp {
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if self.typed_ahead.hold(&mut raw_input.events) {
+            ctx.request_repaint();
+        }
         self.lightbox.capture_wheel(raw_input);
     }
 
@@ -67,6 +121,7 @@ impl eframe::App for MarkdownApp {
         self.render_strips(ctx);
         self.render_panels(ctx, ctrl_held);
         self.render_overlays(ctx, files_hover);
+        self.note_unsaved_edits();
     }
 }
 
@@ -203,9 +258,13 @@ impl MarkdownApp {
         }
     }
 
-    /// The error bar and the find bar.
+    /// The error bar, the notice that the document's file changed on
+    /// disk, and the find bar.
     fn render_strips(&mut self, ctx: &egui::Context) {
         self.render_error_bar(ctx);
+        if let Some(answer) = self.render_disk_notice(ctx) {
+            self.apply_action(ctx, answer);
+        }
 
         // Find bar (conditional, under the error bar)
         let find_actions = self.render_search_bar(ctx);

@@ -3,7 +3,7 @@ name = "mac-window"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-description = "What md-viewer asks of AppKit about its window: where the window buttons sit, and who answers the quit key"
+description = "What md-viewer asks of AppKit about its window: where the window buttons sit, and who answers the quit key and a request to quit"
 license = "MIT"
 repository = "https://github.com/PhillipChaffee/md-viewer"
 readme = "README.md"
@@ -39,12 +39,14 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 
 # The workspace's lint table (the root Cargo.toml gives each entry its
 # reason), copied because a crate inherits that table whole or not at all,
-# and this crate differs from it in one entry.
+# and this crate differs from it in three entries: `unsafe_code` and
+# `undocumented_unsafe_blocks` below, and `unexpected_cfgs`, which is left
+# out because this crate has no proof harness to declare `cfg(kani)` for.
 [lints.rust]
-# The one difference. The workspace forbids unsafe code; this crate exists
-# to hold the single unsafe function the window needs on a Mac, behind an
-# `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an error.
-# GATES.md records the exception.
+# The first difference. The workspace forbids unsafe code; this crate exists
+# to hold the two unsafe functions the window needs on a Mac, each behind
+# an `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an
+# error. GATES.md records both exceptions.
 unsafe_code = "deny"
 missing_docs = "deny"
 missing_debug_implementations = "warn"

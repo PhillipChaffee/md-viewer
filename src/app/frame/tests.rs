@@ -9,9 +9,9 @@ use eframe::{App as _, Storage as _};
 
 use crate::app::action::AppAction;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
+use crate::app::lightbox::LightboxTexture;
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_on, frames_until, launch, MemoryStorage, UiHarness};
+use crate::app::ui_harness::{enlarged, frame_on, frames_until, launch, MemoryStorage, UiHarness};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
@@ -65,13 +65,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     let scrolled = scroll_offset_at_rest(&mut harness);
     assert!(scrolled > 0.0, "the wheel scrolled {scrolled}");
 
-    harness.app.lightbox.open = Some(LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    });
+    harness.app.lightbox.open = Some(enlarged());
     frame_on(&mut harness, vec![wheel(-3.0)]);
 
     assert_close(scroll_offset_at_rest(&mut harness), scrolled);
@@ -555,4 +549,82 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     assert_close(body_size(&harness), 18.0);
     assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);
     assert!(revision(&harness) > settled);
+}
+
+fn key(key: egui::Key, repeat: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat,
+        modifiers: Modifiers::NONE,
+    }
+}
+
+/// What the input hook lets into a frame that `events` arrive in.
+fn let_in(harness: &mut Harness, events: Vec<egui::Event>) -> Vec<egui::Event> {
+    let mut input = egui::RawInput {
+        events,
+        ..Default::default()
+    };
+    harness.app.raw_input_hook(&harness.ctx, &mut input);
+    input.events
+}
+
+#[test]
+fn the_repeats_of_a_held_arrow_all_reach_the_frame_they_arrive_in() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let repeats = vec![key(egui::Key::ArrowDown, true); 3];
+
+    assert_eq!(let_in(&mut harness, repeats.clone()), repeats);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}
+
+#[test]
+fn what_is_typed_after_a_key_that_moves_the_keyboard_waits_a_frame_in_its_order() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let [tab, enter, escape] =
+        [egui::Key::Tab, egui::Key::Enter, egui::Key::Escape].map(|pressed| key(pressed, false));
+
+    let first = let_in(&mut harness, vec![tab.clone(), enter.clone()]);
+    let second = let_in(&mut harness, vec![escape.clone()]);
+
+    assert_eq!(first, [tab]);
+    assert_eq!(second, [enter, escape]);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}
+
+#[test]
+fn a_frame_without_a_key_that_moves_the_keyboard_holds_nothing_back() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let typed = vec![
+        key(egui::Key::Enter, false),
+        egui::Event::Text("a".to_owned()),
+    ];
+
+    assert_eq!(let_in(&mut harness, typed.clone()), typed);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}
+
+#[test]
+fn a_frame_that_holds_keys_back_asks_for_the_next_one() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let window = egui::Context::default();
+    // A window that has been drawn and wants no other frame.
+    for _ in 0..2 {
+        let _ = window.run(egui::RawInput::default(), |_| {});
+    }
+    assert!(!window.has_requested_repaint());
+    let mut arrives = |events: &[egui::Event]| {
+        let mut input = egui::RawInput {
+            events: events.to_vec(),
+            ..Default::default()
+        };
+        harness.app.raw_input_hook(&window, &mut input);
+        window.has_requested_repaint()
+    };
+    let [tab, enter] = [egui::Key::Tab, egui::Key::Enter].map(|pressed| key(pressed, false));
+
+    assert!(!arrives(std::slice::from_ref(&tab)), "nothing was held");
+    assert!(arrives(&[tab, enter]), "Enter waits for a frame");
 }

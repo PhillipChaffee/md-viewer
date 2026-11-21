@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::bundled::{
     install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY,
-    DOCUMENT_HEADING_FAMILY,
+    DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY, INLINE_CODE_SCALE,
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
@@ -36,7 +36,8 @@ mod tests;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum FontPreset {
     /// The reading look: the bundled Source Serif 4 for body text and
-    /// headings, the system sans for everything around the document.
+    /// headings, its companion Source Code Pro for code, the system sans
+    /// for everything around the document.
     #[default]
     Reader,
     /// The app's look before the reader: best installed general-purpose
@@ -72,7 +73,7 @@ impl FontPreset {
     pub(crate) const fn description(self) -> &'static str {
         match self {
             Self::Reader => {
-                "Reading style: bundled Source Serif 4 body and headings, sans everywhere else."
+                "Reading style: bundled Source Serif 4 text and Source Code Pro code, sans everywhere else."
             }
             Self::Current => "Best installed sans + bundled mono code font.",
             Self::Github => {
@@ -84,12 +85,15 @@ impl FontPreset {
         }
     }
 
-    /// Line height of code blocks as a multiple of the code font size. The
-    /// body line height is the user's line-spacing setting, whatever the
-    /// preset. GitHub: `pre{line-height:1.45}`; VS Code preview: 1.357em.
+    /// Line height of code blocks as a multiple of the code face's own
+    /// line. The body line height is the user's line-spacing setting,
+    /// whatever the preset. GitHub: `pre{line-height:1.45}`; VS Code
+    /// preview: 1.357em. The Reader's lines are 1.75 of the code size
+    /// apart: Source Code Pro's own line is 1.257 of its size (ascent 984,
+    /// descent 273 of 1000 units), and 1.39 of that is 1.75.
     pub(crate) const fn code_line_height(self) -> f32 {
         match self {
-            Self::Reader => 1.5,
+            Self::Reader => 1.39,
             Self::Current => 1.3,
             Self::Github => 1.45,
             Self::Vscode => 1.36,
@@ -191,9 +195,10 @@ impl TextSizeClass {
         }
     }
 
-    /// Base text size in px: what the chrome is set in. The document
-    /// scales it by the preset (see [`document_fonts`]), and its headings
-    /// and code cascade from there.
+    /// Base text size in px: what the source in edit mode is set in. The
+    /// document scales it by the preset (see [`document_fonts`]), and its
+    /// headings and code cascade from there. The chrome keeps its own
+    /// fixed sizes.
     pub(crate) const fn px(self) -> f32 {
         match self {
             Self::Small => 14.0,
@@ -260,8 +265,8 @@ const VSCODE: ViewerStack = ViewerStack {
     mono: &["Droid Sans Mono", "Noto Sans Mono", "DejaVu Sans Mono"],
 };
 
-/// Code is set this much smaller than the body text around it: a
-/// monospace face looks larger than a proportional one at the same size.
+/// A code block is set this much smaller than the body text: a monospace
+/// face looks larger than a proportional one at the same size.
 const CODE_SCALE: f32 = 0.875;
 
 /// The fonts the document pane lays out with, as opposed to the chrome
@@ -281,6 +286,9 @@ pub(crate) struct DocumentFonts {
     /// A true italic family, where the document's faces have one. `None`
     /// means emphasis is the body face slanted.
     pub(crate) emphasis: Option<FontFamily>,
+    /// The family of code in bold text: a bold code face where the
+    /// document's faces have one, and the code font's own chain where not.
+    pub(crate) strong_code: FontFamily,
 }
 
 /// What the reader chose the document to be set in.
@@ -308,19 +316,22 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
         body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
         heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
         code: FontId::monospace(body * CODE_SCALE),
-        inline_code_scale: bundled.then_some(CODE_SCALE),
+        inline_code_scale: bundled.then_some(INLINE_CODE_SCALE),
         emphasis: bundled.then(|| FontFamily::Name(DOCUMENT_EMPHASIS_FAMILY.into())),
+        strong_code: FontFamily::Name(DOCUMENT_STRONG_CODE_FAMILY.into()),
     }
 }
 
-/// Apply the shared base text size class to the context styles: the sizes
-/// the chrome is set in.
+/// Set the context's heading and code styles from the text size class.
+/// The document reads neither: `DocumentLook` gives it its own. What still
+/// reads them is egui's title of the Colors and the Fonts window, set in
+/// the heading style at twice the text size. The body size is not among
+/// them: what the context sets in it is the window's own text, hover
+/// texts included, and that keeps the size of the chrome whatever the
+/// document is read at.
 fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     let base = size.px();
     ctx.style_mut(|style| {
-        style
-            .text_styles
-            .insert(TextStyle::Body, FontId::proportional(base));
         style
             .text_styles
             .insert(TextStyle::Heading, FontId::proportional(base * 2.0));

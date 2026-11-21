@@ -327,11 +327,25 @@ fn a_restored_text_size_is_in_force_from_the_first_frame() {
     let app = relaunch(&persisted, None);
 
     let style = app.egui_ctx.style();
-    assert_close(style.text_styles[&egui::TextStyle::Body].size, 18.0);
     assert_close(style.text_styles[&egui::TextStyle::Heading].size, 36.0);
     assert_close(style.text_styles[&egui::TextStyle::Small].size, 13.0);
     let document = &app.document_look.style.text_styles;
     assert_close(document[&egui::TextStyle::Body].size, 18.0 * 1.15);
+}
+
+#[test]
+fn the_windows_own_text_is_13_px_whatever_the_text_size() {
+    for size in [TextSizeClass::Small, TextSizeClass::Huge] {
+        let persisted = PersistedState {
+            text_size_class: Some(size),
+            ..PersistedState::default()
+        };
+
+        let app = relaunch(&persisted, None);
+
+        let style = app.egui_ctx.style();
+        assert_close(style.text_styles[&egui::TextStyle::Body].size, 13.0);
+    }
 }
 
 #[test]

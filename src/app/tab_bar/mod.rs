@@ -10,9 +10,11 @@ use eframe::egui::{self, Rangef};
 
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT, BUTTON_SIDE};
+use crate::app::disk_notice;
 use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
+use crate::tab::DiskChange;
 use crate::theme::Palette;
 
 #[cfg(test)]
@@ -75,6 +77,9 @@ struct TabLabel<'a> {
     live: bool,
     /// Whether the keyboard is put on it this frame.
     takes_keyboard: bool,
+    /// What became of the file under the document's unsaved edits, while
+    /// the notice of it waits for an answer.
+    disk: Option<DiskChange>,
 }
 
 impl MarkdownApp {
@@ -160,6 +165,7 @@ impl MarkdownApp {
                         is_active,
                         live,
                         takes_keyboard: land && is_active,
+                        disk: tab.disk_notice(),
                     };
                     let shown = tab_label(ui, &label, palette, picks);
                     if reveal && label.is_active {
@@ -230,7 +236,6 @@ fn scroll_into_strip(ui: &egui::Ui, tab: egui::Rect) {
 /// The hover text of a tab: where its document is, and whether it is
 /// reloaded when the file changes.
 fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
-    ui.style_mut().override_font_id = Some(chrome::label_font());
     ui.label(label.path.display().to_string());
     if label.live {
         ui.horizontal(|ui| {
@@ -240,6 +245,9 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
                 .circle_filled(dot.center(), LIVE_DOT / 2.0, palette.muted);
             chrome::small_label(ui, palette, "Live: reloads when the file changes");
         });
+    }
+    if let Some(change) = label.disk {
+        chrome::small_label(ui, palette, disk_notice::message(change));
     }
 }
 
@@ -286,7 +294,7 @@ fn tab_label(
     // finds it right after its tab. A button made only once its tab had the
     // focus would come too late: egui has moved on to the next tab by then.
     let close = QuietButton::icon_sized(Icon::Close, CLOSE_ICON, CloseName(label.title));
-    let button = close.place(ui, close_square(rect), response.id.with("close"));
+    let button = close.place(ui, end_square(rect), response.id.with("close"));
 
     // The pointer counts as over the tab while it is over the close button
     // too, which takes the hover for itself.
@@ -308,8 +316,12 @@ fn tab_label(
     // line under the active tab and the edge of the bar.
     let ring = rect.shrink2(egui::vec2(0.0, (BAR_HEIGHT - BUTTON_SIDE) / 2.0));
     chrome::focus_ring(ui, palette, &response, ring);
+    // The close button and the mark of a file that changed share the square
+    // at the tab's end: the mark shows while the button does not.
     if pointed || button.has_focus() {
         close.paint(ui, palette, &button);
+    } else if let Some(change) = label.disk {
+        tab_disk_mark(ui, &response, change, palette);
     }
     // The Tab key reaches the tabs that are scrolled out of the strip too.
     // egui does not scroll to what it focuses, so the tab is brought in
@@ -327,19 +339,36 @@ fn tab_label(
         actions.close_had_keyboard = button.has_focus();
     }
 
-    egui::Popup::context_menu(&response)
-        .style(chrome::popup_style(palette))
-        .show(|ui| tab_context_menu(ui, label, palette, actions));
+    let menu = egui::Popup::context_menu(&response).style(chrome::popup_style(palette));
+    chrome::show_popup(menu, |ui| {
+        tab_context_menu(ui, label, palette, actions);
+    });
     response.on_hover_ui(|ui| tab_hover(ui, label, palette))
 }
 
-/// The square a tab keeps free at its right end for its close button.
-fn close_square(tab: egui::Rect) -> egui::Rect {
-    let center = egui::pos2(
-        tab.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
-        tab.center().y,
-    );
-    egui::Rect::from_center_size(center, egui::Vec2::splat(CLOSE_SIDE))
+/// The square a tab keeps free at its right end.
+fn end_square(tab: egui::Rect) -> egui::Rect {
+    egui::Rect::from_center_size(
+        egui::pos2(
+            tab.right() - TAB_PADDING / 2.0 - CLOSE_SIDE / 2.0,
+            tab.center().y,
+        ),
+        egui::Vec2::splat(CLOSE_SIDE),
+    )
+}
+
+/// The mark of a tab whose file changed under its unsaved edits: a dot in
+/// the warning color where the close button shows while the tab is pointed
+/// at, so the reader sees which tab waits for an answer when another is in
+/// front.
+fn tab_disk_mark(ui: &egui::Ui, tab: &egui::Response, change: DiskChange, palette: &Palette) {
+    let square = end_square(tab.rect);
+    let mark = ui.interact(square, tab.id.with("disk"), egui::Sense::hover());
+    mark.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Label, true, disk_notice::mark(change))
+    });
+    ui.painter()
+        .circle_filled(square.center(), chrome::WARNING_DOT / 2.0, palette.warning);
 }
 
 /// What a screen reader calls the close button of the tab named: every tab
