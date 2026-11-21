@@ -23,6 +23,12 @@ fn led_by(lead: &str, fallbacks: &[String]) -> Vec<String> {
     chain
 }
 
+/// Distance from a face's baseline to the top of its line, in ems.
+fn ascent_em(data: &[u8], index: u32) -> f32 {
+    let face = ttf_parser::Face::parse(data, index).unwrap();
+    f32::from(face.ascender()) / f32::from(face.units_per_em())
+}
+
 /// A registered face, parsed.
 fn face<'a>(definitions: &'a FontDefinitions, key: &str) -> ttf_parser::Face<'a> {
     let data = &definitions.font_data[key];
@@ -163,8 +169,8 @@ fn code_set_smaller_than_the_serif_is_shifted_onto_its_baseline() {
         // the shift, code at `INLINE_CODE_SCALE` of the body size has its
         // baseline at the same height as the serif's.
         let body_size = 20.0;
-        let serif_baseline = ascent_em(READER_REGULAR.1, 0).unwrap() * body_size;
-        let code_ascent = ascent_em(&code.font, code.index).unwrap();
+        let serif_baseline = ascent_em(READER_REGULAR.bytes, 0) * body_size;
+        let code_ascent = ascent_em(&code.font, code.index);
         let code_baseline = (code_ascent + shift) * body_size * INLINE_CODE_SCALE;
         assert!(
             (code_baseline - serif_baseline).abs() < 1e-3,
@@ -182,19 +188,6 @@ fn code_set_smaller_than_the_serif_is_shifted_onto_its_baseline() {
             );
         }
     }
-}
-
-#[test]
-fn an_ascent_is_read_in_ems_and_only_from_a_real_face() {
-    let ascent = ascent_em(READER_REGULAR.1, 0).unwrap();
-    assert!((0.8..1.2).contains(&ascent), "{ascent}");
-    assert_eq!(ascent_em(b"not a font", 0), None);
-}
-
-#[test]
-fn no_shift_is_worked_out_for_a_face_that_cannot_be_read() {
-    assert_eq!(code_baseline_shift(b"not a font"), None);
-    assert!(code_baseline_shift(READER_CODE.1).is_some());
 }
 
 #[test]
