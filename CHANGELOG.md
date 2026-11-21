@@ -38,6 +38,7 @@ The viewer became a reader. The window is one sheet of paper with a centered col
 
 ### Fixes
 
+- **A line could end between a piece of code, a link or bold text and what was written against it,** leaving a `)`, a comma, a full stop or a plural `s` at the start of the next line, or a `(` or a prefix at the end of one. A line of a paragraph, a list item, a quote or a heading now ends only where prose can break, so what touches such a piece stays on its line. The same holds for a match the find bar marks inside a word. Documents with inline code, links or bold text wrap at other places than before. A table cell is as it was.
 - **The last line of a page sat on the window's bottom edge, and the first line of its source sat under the top row.** A page scrolled to its end now has the same room below it as it has above its first line, and the source in edit mode starts that far below the top row.
 - **`Ctrl+Tab` and `Ctrl+Shift+Tab` also moved the keyboard focus,** as a plain Tab does, so the next Enter or Space could press a button the reader never went to.
 - **One `Alt+←` moved two history steps,** and history navigation left the window title, explorer highlight and watched file pointing at the document just left.
