@@ -1864,27 +1864,6 @@ enum HeadingPiece {
     Link(Link),
 }
 
-/// Whether `event` is running text or a mark on it, which waits in
-/// [`CommonMarkViewerInternal::runs`], and not something laid out on the
-/// spot.
-fn is_running_text(event: &pulldown_cmark::Event) -> bool {
-    use pulldown_cmark::{Event, Tag, TagEnd};
-    match event {
-        Event::Text(_) | Event::Code(_) | Event::InlineHtml(_) => true,
-        // A price between two dollar signs is set as the text it is.
-        Event::InlineMath(tex) => is_likely_currency(tex),
-        Event::Start(tag) => matches!(
-            tag,
-            Tag::Emphasis | Tag::Strong | Tag::Strikethrough | Tag::Link { .. }
-        ),
-        Event::End(tag) => matches!(
-            tag,
-            TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link
-        ),
-        _ => false,
-    }
-}
-
 pub struct CommonMarkViewerInternal {
     curr_table: usize,
     curr_code_block: usize,
@@ -2795,18 +2774,7 @@ impl CommonMarkViewerInternal {
             self.line.should_end_newline = false;
             // Required to ensure that the content is aligned with the identation
             ui.horizontal_wrapped(|ui| {
-                while let Some((_, (e, src_span))) = events_iter.next() {
-                    self.process_event(
-                        ui,
-                        &mut events_iter,
-                        e,
-                        src_span,
-                        cache,
-                        options,
-                        max_width,
-                    );
-                }
-                self.set_runs(ui, cache);
+                self.process_to_end(ui, &mut events_iter, cache, options, max_width);
             });
             self.line.should_end_newline = true;
 
@@ -2826,6 +2794,22 @@ impl CommonMarkViewerInternal {
         }
     }
 
+    /// Process what is left of `events`, and set the running text that
+    /// waits at their end: the `ui` they are laid out in ends with them.
+    fn process_to_end<'e>(
+        &mut self,
+        ui: &mut Ui,
+        events: &mut Peekable<impl Iterator<Item = EventIteratorItem<'e>>>,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+    ) {
+        while let Some((_, (e, src_span))) = events.next() {
+            self.process_event(ui, events, e, src_span, cache, options, max_width);
+        }
+        self.set_runs(ui, cache);
+    }
+
     fn item_list_wrapping<'e>(
         &mut self,
         events: &mut impl Iterator<Item = EventIteratorItem<'e>>,
@@ -2843,18 +2827,7 @@ impl CommonMarkViewerInternal {
             // Required to ensure that the content of the list item is aligned with
             // the * or - when wrapping
             ui.horizontal_wrapped(|ui| {
-                while let Some((_, (e, src_span))) = events_iter.next() {
-                    self.process_event(
-                        ui,
-                        &mut events_iter,
-                        e,
-                        src_span,
-                        cache,
-                        options,
-                        max_width,
-                    );
-                }
-                self.set_runs(ui, cache);
+                self.process_to_end(ui, &mut events_iter, cache, options, max_width);
             });
         }
     }
@@ -2949,6 +2922,7 @@ impl CommonMarkViewerInternal {
     /// content of its own container (the text of a tight list item) still
     /// has to start a row of its own.
     fn block_start(&mut self, ui: &mut Ui, options: &CommonMarkOptions, kind: BlockKind) {
+        debug_assert!(self.runs.is_empty(), "a block starts after the text before it is set");
         let continues_row = std::mem::take(&mut self.continues_row);
         match options.block_style.rhythm {
             Some(rhythm) => {
@@ -2982,6 +2956,7 @@ impl CommonMarkViewerInternal {
     /// Continue on a new line inside a block. With a rhythm the line
     /// starts `gap_em` body font sizes below the content so far.
     fn new_line(&mut self, ui: &mut Ui, options: &CommonMarkOptions, gap_em: f32) {
+        debug_assert!(self.runs.is_empty(), "a line starts after the text before it is set");
         if options.block_style.rhythm.is_some() {
             if !row_is_fresh(ui) {
                 start_row_below(ui, (gap_em * body_font_size(ui)).round());
@@ -3436,32 +3411,10 @@ impl CommonMarkViewerInternal {
         options: &CommonMarkOptions,
         max_width: f32,
     ) {
-        // md-viewer patch: only running text waits. Anything else is laid
-        // out after the text before it, and before the text after it.
-        let waits = is_running_text(&event);
-        if !waits {
-            self.set_runs(ui, cache);
-        }
-        self.event_in_place(ui, event, src_span, cache, options, max_width);
-        if !waits {
-            self.set_runs(ui, cache);
-        }
-    }
-
-    fn event_in_place(
-        &mut self,
-        ui: &mut Ui,
-        event: pulldown_cmark::Event,
-        src_span: Range<usize>,
-        cache: &mut CommonMarkCache,
-        options: &CommonMarkOptions,
-        max_width: f32,
-    ) {
+        use pulldown_cmark::{Tag, TagEnd};
         match event {
-            pulldown_cmark::Event::Start(tag) => {
-                self.start_tag(ui, tag, src_span.start, options)
-            }
-            pulldown_cmark::Event::End(tag) => self.end_tag(ui, tag, cache, options, max_width),
+            // md-viewer patch: running text and the marks on it wait in
+            // `self.runs`.
             pulldown_cmark::Event::Text(text) => {
                 // Inside a frontmatter block the text is metadata, not prose:
                 // collect it and paint the whole block at TagEnd instead.
@@ -3531,7 +3484,48 @@ impl CommonMarkViewerInternal {
             pulldown_cmark::Event::InlineHtml(text) => {
                 self.event_text(text, ui, options);
             }
+            // A price between two dollar signs is set as the text it is,
+            // between the two dollar signs the parser took for its
+            // delimiters.
+            pulldown_cmark::Event::InlineMath(tex) if is_likely_currency(&tex) => {
+                self.event_text(format!("${tex}$").into(), ui, options);
+            }
+            pulldown_cmark::Event::Start(
+                tag @ (Tag::Emphasis | Tag::Strong | Tag::Strikethrough | Tag::Link { .. }),
+            ) => self.start_tag(ui, tag, src_span.start, options),
+            pulldown_cmark::Event::End(
+                tag @ (TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link),
+            ) => self.end_tag(ui, tag, cache, options, max_width),
+            // md-viewer patch: anything else is laid out on the spot,
+            // after the text before it.
+            event => {
+                self.set_runs(ui, cache);
+                self.block_event(ui, event, src_span, cache, options, max_width);
+            }
+        }
+    }
 
+    /// An event that is laid out where it comes. [`Self::event`] sets the
+    /// running text before it first.
+    fn block_event(
+        &mut self,
+        ui: &mut Ui,
+        event: pulldown_cmark::Event,
+        src_span: Range<usize>,
+        cache: &mut CommonMarkCache,
+        options: &CommonMarkOptions,
+        max_width: f32,
+    ) {
+        match event {
+            pulldown_cmark::Event::Start(tag) => {
+                self.start_tag(ui, tag, src_span.start, options)
+            }
+            pulldown_cmark::Event::End(tag) => self.end_tag(ui, tag, cache, options, max_width),
+            pulldown_cmark::Event::Text(_)
+            | pulldown_cmark::Event::Code(_)
+            | pulldown_cmark::Event::InlineHtml(_) => {
+                unreachable!("running text waits: `event` takes it")
+            }
             pulldown_cmark::Event::Html(text) => {
                 // Always accumulate HTML blocks for table detection
                 self.html_block.push_str(&text);
@@ -3578,24 +3572,17 @@ impl CommonMarkViewerInternal {
                 }
             }
             pulldown_cmark::Event::InlineMath(tex) => {
-                if is_likely_currency(&tex) {
-                    // Render as plain text instead of math, between the two
-                    // dollar signs the parser took for its delimiters.
-                    let text: CowStr = format!("${tex}$").into();
-                    self.event_text(text, ui, options);
-                } else {
-                    #[cfg(feature = "math")]
-                    {
-                        if self.is_table {
-                            crate::render_math_in_table(ui, cache, &tex, options);
-                        } else {
-                            crate::render_math(ui, cache, &tex, true, options);
-                        }
+                #[cfg(feature = "math")]
+                {
+                    if self.is_table {
+                        crate::render_math_in_table(ui, cache, &tex, options);
+                    } else {
+                        crate::render_math(ui, cache, &tex, true, options);
                     }
-                    #[cfg(not(feature = "math"))]
-                    if let Some(math_fn) = options.math_fn {
-                        math_fn(ui, &tex, true);
-                    }
+                }
+                #[cfg(not(feature = "math"))]
+                if let Some(math_fn) = options.math_fn {
+                    math_fn(ui, &tex, true);
                 }
             }
             pulldown_cmark::Event::DisplayMath(tex) => {
