@@ -7,7 +7,7 @@ use eframe::egui::{self, Key, Modifiers};
 use eframe::App as _;
 
 use super::action::AppAction;
-use super::lightbox::{LightboxState, LightboxTexture};
+use super::ui_harness::enlarged;
 use super::MarkdownApp;
 use crate::layout::ReadingWidth;
 use crate::platform::Platform;
@@ -292,13 +292,7 @@ fn scroll_keys_move_the_document_until_the_find_bar_takes_the_arrows() {
 fn an_open_lightbox_takes_the_zoom_keys_and_blocks_the_rest() {
     let mut harness = Harness::with_three_docs();
     let theme = harness.app.theme;
-    harness.app.lightbox.open = Some(LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    });
+    harness.app.lightbox.open = Some(enlarged());
     let lightbox_zoom = |harness: &Harness| harness.app.lightbox.open.as_ref().unwrap().zoom;
 
     harness.press(Modifiers::CTRL, Key::Plus);
@@ -349,14 +343,8 @@ fn ctrl_s_writes_unsaved_edits_and_nothing_else() {
 #[test]
 fn ctrl_q_asks_the_window_to_close() {
     let mut harness = Harness::with_three_docs();
-    let close_requested = |output: &egui::FullOutput| {
-        output.viewport_output.values().any(|viewport| {
-            viewport
-                .commands
-                .iter()
-                .any(|command| matches!(command, egui::ViewportCommand::Close))
-        })
-    };
+    let close_requested =
+        |output: &egui::FullOutput| super::ui_harness::sent(output, &egui::ViewportCommand::Close);
 
     assert!(!close_requested(&harness.idle()));
     assert!(close_requested(&harness.press(Modifiers::CTRL, Key::Q)));

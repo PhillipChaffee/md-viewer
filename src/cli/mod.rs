@@ -167,13 +167,17 @@ pub(crate) fn native_options(platform: Platform) -> eframe::NativeOptions {
 ///
 /// By then a Mac has its menu bar, whose Quit item takes ⌘Q and quits
 /// without the window being asked to close: unsaved edits would go
-/// unasked about. The key is handed to the app, which asks.
+/// unasked about. The key is handed to the app, which asks, and macOS is
+/// told to ask the app before it quits it for the item, the Dock or a
+/// log-out.
 pub(crate) fn app_creator(args: &Args) -> eframe::AppCreator<'static> {
     let file = args.file.clone();
     let watch = args.watch();
     Box::new(move |cc| {
         mac_window::hand_quit_key_to_app();
-        Ok(Box::new(MarkdownApp::new(cc, file, watch)))
+        let app = MarkdownApp::new(cc, file, watch);
+        mac_window::ask_before_quit(app.quit_asker());
+        Ok(Box::new(app))
     })
 }
 

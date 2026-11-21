@@ -47,6 +47,7 @@ fn the_menu_lists_every_command_the_bar_has_no_button_for() {
     reader.click("More");
 
     for row in [
+        "New Tab",
         "Open File\u{2026}",
         "Open Folder\u{2026}",
         "Close Tab",
@@ -80,6 +81,7 @@ fn the_menu_shows_the_shortcut_of_each_command_that_has_one() {
     reader.click("More");
 
     for shortcut in [
+        "Ctrl+T",
         "Ctrl+W",
         "Ctrl+F",
         "Ctrl+E",
@@ -94,6 +96,35 @@ fn the_menu_shows_the_shortcut_of_each_command_that_has_one() {
     ] {
         reader.assert_sees(shortcut);
     }
+}
+
+#[test]
+fn new_tab_stands_first_in_the_menu_with_the_shortcut_that_does_the_same() {
+    let mut reader = library();
+    reader.assert_hides("Ctrl+T");
+
+    reader.click("More");
+
+    reader.assert_sees("Ctrl+T");
+    let (new_tab, open) = (
+        reader.area_of("New Tab"),
+        reader.area_of("Open File\u{2026}"),
+    );
+    assert!(new_tab.bottom() <= open.top, "{new_tab:?} then {open:?}");
+    assert!(open.top - new_tab.bottom() < 2.0, "right above it");
+    assert!(reader.is_enabled("New Tab"));
+}
+
+#[test]
+fn new_tab_in_the_menu_shows_the_home_page_and_keeps_the_tabs() {
+    let mut reader = library();
+
+    pick(&mut reader, None, "New Tab");
+
+    assert_eq!(reader.title(), "Markdown Viewer");
+    assert_eq!(reader.tabs(), ["First"]);
+    assert_eq!(reader.tab_in_front(), None);
+    assert_eq!(reader.count("Quit"), 0, "the menu closed");
 }
 
 #[test]
@@ -172,6 +203,7 @@ fn rows_that_need_a_document_are_grayed_out_on_the_home_page() {
         assert!(!reader.is_enabled(row), "{row}");
     }
     for row in [
+        "New Tab",
         "Show Explorer",
         "Theme",
         "Colors\u{2026}",

@@ -195,9 +195,10 @@ impl TextSizeClass {
         }
     }
 
-    /// Base text size in px: what the chrome is set in. The document
-    /// scales it by the preset (see [`document_fonts`]), and its headings
-    /// and code cascade from there.
+    /// Base text size in px: what the source in edit mode is set in. The
+    /// document scales it by the preset (see [`document_fonts`]), and its
+    /// headings and code cascade from there. The chrome keeps its own
+    /// fixed sizes.
     pub(crate) const fn px(self) -> f32 {
         match self {
             Self::Small => 14.0,
@@ -321,14 +322,16 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
     }
 }
 
-/// Apply the shared base text size class to the context styles: the sizes
-/// the chrome is set in.
+/// Set the context's heading and code styles from the text size class.
+/// The document reads neither: `DocumentLook` gives it its own. What still
+/// reads them is egui's title of the Colors and the Fonts window, set in
+/// the heading style at twice the text size. The body size is not among
+/// them: what the context sets in it is the window's own text, hover
+/// texts included, and that keeps the size of the chrome whatever the
+/// document is read at.
 fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {
     let base = size.px();
     ctx.style_mut(|style| {
-        style
-            .text_styles
-            .insert(TextStyle::Body, FontId::proportional(base));
         style
             .text_styles
             .insert(TextStyle::Heading, FontId::proportional(base * 2.0));
