@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use crate::app::chrome;
 use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
@@ -269,6 +270,7 @@ fn fold_control(
         let name = format!("{verb} {}", row.header.title);
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name)
     });
+    chrome::focus_ring(ui, outline.palette, &response, rect);
 
     if !outline.is_dragging && response.clicked() {
         outline.click = Some(OutlineClick::ToggleFold(row.index));

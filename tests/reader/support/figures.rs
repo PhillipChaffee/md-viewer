@@ -150,11 +150,20 @@ impl Reader {
     /// and as tall as it is. `None` where the last frame drew no ring.
     #[track_caller]
     pub(crate) fn ring_around(&self, label: &str) -> Option<Rgb> {
+        self.ring_reaching(label, 0.0)
+    }
+
+    /// The same for a ring that may reach `sideways` pixels past the left
+    /// and the right of `label`, as one round a row with room beside it
+    /// does.
+    #[track_caller]
+    pub(crate) fn ring_reaching(&self, label: &str, sideways: f32) -> Option<Rgb> {
         let area = self.area_of(label);
+        let reach = sideways + SAME_PLACE;
         let room = Area {
-            left: area.left - SAME_PLACE,
+            left: area.left - reach,
             top: area.top - SAME_PLACE,
-            width: 2.0_f32.mul_add(SAME_PLACE, area.width),
+            width: 2.0_f32.mul_add(reach, area.width),
             height: 2.0_f32.mul_add(SAME_PLACE, area.height),
         };
         let scale = self.scale();

@@ -56,17 +56,32 @@ fn closes_drawn(reader: &Reader) -> [bool; 3] {
 /// top-row button then, and none at rest or under the pointer.
 #[track_caller]
 fn assert_ring_follows_the_keyboard(reader: &mut Reader, label: &str) {
+    assert_ring_follows_the_keyboard_within(reader, label, 0.0);
+}
+
+/// The same for a ring that may reach `sideways` pixels past each side of
+/// `label`, as the wash under a pointed-at row of the home page does.
+#[track_caller]
+fn assert_ring_follows_the_keyboard_within(reader: &mut Reader, label: &str, sideways: f32) {
     let ring = button_ring(reader);
-    assert_eq!(reader.ring_around(label), None, "{label}, at rest");
+    let drawn = |reader: &Reader| reader.ring_reaching(label, sideways);
+    assert_eq!(drawn(reader), None, "{label}, at rest");
     reader.hover(label);
-    assert_eq!(reader.ring_around(label), None, "{label}, pointed at");
+    assert_eq!(drawn(reader), None, "{label}, pointed at");
     point_away(reader);
 
     reader.tab_to(label);
 
-    assert_eq!(reader.ring_around(label), Some(ring), "{label}, focused");
+    assert_eq!(drawn(reader), Some(ring), "{label}, focused");
     reader.press("Tab");
-    assert_eq!(reader.ring_around(label), None, "{label}, left behind");
+    assert_eq!(drawn(reader), None, "{label}, left behind");
+}
+
+/// The home page after `story.md` was read and closed.
+fn home_after_a_story() -> Reader {
+    let mut reader = Reader::with_docs(&[("story.md", "# Story\n\nOnce upon a time.")]);
+    reader.press("Ctrl+W");
+    reader
 }
 
 #[test]
@@ -89,6 +104,40 @@ fn the_menu_button_of_each_sidebar_has_the_ring_while_the_keyboard_is_on_it() {
 
     assert_ring_follows_the_keyboard(&mut reader, "Explorer options");
     assert_ring_follows_the_keyboard(&mut reader, "Outline options");
+}
+
+#[test]
+fn the_fold_control_of_a_heading_has_the_ring_while_the_keyboard_is_on_it() {
+    let text = "# Guide\n\n## Setup\n\n### Install\n\nWords.";
+    let mut reader = Reader::with_docs(&[("guide.md", text)]);
+
+    assert_ring_follows_the_keyboard(&mut reader, "Collapse Setup");
+    reader.tab_to("Collapse Setup");
+    reader.press("Enter");
+    assert_ring_follows_the_keyboard(&mut reader, "Expand Setup");
+}
+
+#[test]
+fn the_buttons_of_the_home_page_have_the_ring_while_the_keyboard_is_on_them() {
+    let mut reader = home_after_a_story();
+
+    assert_ring_follows_the_keyboard(&mut reader, "Open File…");
+    assert_ring_follows_the_keyboard(&mut reader, "Open Folder…");
+}
+
+#[test]
+fn a_document_of_the_home_page_has_the_ring_while_the_keyboard_is_on_it() {
+    let mut reader = home_after_a_story();
+
+    assert_ring_follows_the_keyboard_within(&mut reader, "Story", 20.0);
+}
+
+#[test]
+fn an_edge_of_the_text_column_has_the_ring_while_the_keyboard_is_on_it() {
+    let mut reader = desk();
+
+    assert_ring_follows_the_keyboard(&mut reader, "Resize text column, left edge");
+    assert_ring_follows_the_keyboard(&mut reader, "Resize text column, right edge");
 }
 
 #[test]

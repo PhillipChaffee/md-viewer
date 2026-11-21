@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::chrome;
 use crate::layout::{centered_column_left, ReadingWidth, READING_COLUMN_MARGIN};
 use crate::theme::Palette;
 
@@ -113,6 +114,7 @@ pub(super) fn resize_strips(
         response
             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, edge.label()));
         requested = edge_request(ui, &response, column, edge, grab).or(requested);
+        chrome::focus_ring(ui, palette, &response, response.rect);
         if grab.is_none() && response.hovered() {
             paint_hairline(ui, column, edge, palette);
         }
