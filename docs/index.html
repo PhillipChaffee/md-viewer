@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>md-viewer: a desktop reader for Markdown</title>
 <meta name="description" content="md-viewer is a desktop reader for Markdown, set in Source Serif 4, with four themes, LaTeX math, Mermaid diagrams and live reload.">
 <meta name="theme-color" content="#FDFDFB">
@@ -12,27 +12,27 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="md-viewer">
 <meta property="og:title" content="md-viewer: a desktop reader for Markdown">
-<meta property="og:description" content="One sheet of paper, a centered column of serif text, and nothing else. Four themes, LaTeX math, Mermaid diagrams and live reload.">
+<meta property="og:description" content="It opens a .md file and shows it the way a good read-later app shows an article. Four themes, LaTeX math, Mermaid diagrams and live reload.">
 <meta property="og:url" content="https://phillipchaffee.github.io/md-viewer/">
 <meta property="og:image" content="https://phillipchaffee.github.io/md-viewer/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The md-viewer headline in Source Serif 4: One sheet of paper, a centered column of serif text, and nothing else.">
+<meta property="og:image:alt" content="The heading A desktop reader for Markdown, above the md-viewer window showing an essay in a centered column of serif text on the Sepia theme.">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="preload" href="fonts/SourceSerif4-Italic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/SourceSerif4-Roman.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-/* A specimen sheet: a wide sheet ruled into labelled bands (label rail left, matter right),
-   ink on the app's Paper palette, tracked mono labels, figure-numbered plates.
-   The fonts are the Google Fonts builds of the two families the app bundles, served from fonts/. */
+/* One window of the app under a plain heading, and a row of words that change what is in it.
+   Ink on the app's Paper palette. The fonts are the Google Fonts builds of the two families
+   the app bundles, served from fonts/. */
 @font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceSerif4-Roman.woff2) format("woff2"); }
 @font-face { font-family: "Source Serif 4"; font-style: italic; font-weight: 200 900; font-display: swap; src: url(fonts/SourceSerif4-Italic.woff2) format("woff2"); }
 @font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceCodePro.woff2) format("woff2"); }
 :root {
-  --paper:#FDFDFB; --surface:#F6F6F3; --raised:#F0F0EC; --ink:#1F1F1F; --head:#111111;
-  --muted:#6B6B68; --rule:#E3E3DE; --link:#1A5FB4; --code:#6F4220;
+  --paper:#FDFDFB; --ink:#1F1F1F; --head:#111111; --soft:#4A4A47;
+  --muted:#6B6B68; --rule:#E3E3DE; --edge:#C9C7BF; --link:#1A5FB4; --code:#6F4220; --accent:#B25E28;
   --serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
   --mono: "Source Code Pro", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --gut: max(16px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -41,168 +41,114 @@ html { scroll-padding-top: 20px; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 400 18px/1.6 var(--serif); font-optical-sizing: auto; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-.skip { position: absolute; left: 16px; top: -60px; z-index: 1; padding: 10px 16px; background: var(--ink); color: var(--paper); font: 500 13px/1 var(--mono); }
+code { font: 400 .86em var(--mono); color: var(--code); }
+.skip { position: absolute; left: 16px; top: -60px; z-index: 5; padding: 10px 16px; background: var(--ink); color: var(--paper); font: 500 13px/1 var(--mono); }
 .skip:focus { top: 12px; outline-color: var(--paper); outline-offset: -5px; }
-.sheet { max-width: 1240px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 72px max(16px, env(safe-area-inset-left, 0px)); }
-@media (min-width: 900px) { .sheet { padding-left: 40px; padding-right: 40px; } }
+.label, .bar { font: 500 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: var(--gut); padding-right: var(--gut); }
+@media (min-width: 900px) { .wrap { padding-left: 40px; padding-right: 40px; } }
 
-.label, .strip, figcaption, .pf, .specs, .face span {
-  font: 500 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
-}
-.strip { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 18px 0 14px; border-bottom: 1px solid var(--ink); }
-.strip b { color: var(--head); font-weight: 600; }
-.strip .sp { flex: 1; }
-.strip a { color: var(--muted); text-decoration: none; }
-.strip a:hover, .strip a:focus-visible { color: var(--head); text-decoration: underline; }
+/* The bar: the name on the left, a few places on the right. */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; padding-top: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--ink); }
+.bar b { color: var(--head); font-weight: 600; }
+.bar .sp { flex: 1; }
+.bar a { color: var(--muted); text-decoration: none; }
+.bar a:hover, .bar a:focus-visible { color: var(--head); text-decoration: underline; }
 
-/* Hero: the headline is the specimen. */
-.hero { padding: clamp(36px, 7vw, 92px) 0 clamp(30px, 5vw, 60px); }
-.hero h1 {
-  margin: 0; font: italic 300 clamp(40px, 9.3vw, 124px)/.98 var(--serif); letter-spacing: -.028em; color: var(--head);
-  text-wrap: balance; max-width: 12.5em;
-}
-.hero h1 em { font-style: normal; font-weight: 700; letter-spacing: -.03em; }
-.intro { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 40px 72px; padding: 28px 0 56px; border-top: 1px solid var(--rule); }
-.intro p { margin: 0 0 1em; font-size: 21px; line-height: 1.52; max-width: 31em; }
+/* One idea: a label, a heading, a sentence or two, all centred. */
+.idea { display: grid; justify-items: center; text-align: center; gap: 12px; }
+.idea h2, h1 { margin: 0; font: 600 clamp(27px, 3.1vw, 36px)/1.18 var(--serif); letter-spacing: -.012em; color: var(--head); text-wrap: balance; }
+.idea p { margin: 0; max-width: 33em; font-size: 19px; line-height: 1.55; color: var(--soft); text-wrap: pretty; }
+.top { padding: clamp(40px, 6vw, 76px) 0 clamp(26px, 3.4vw, 40px); }
+.top h1 { font-size: clamp(30px, 3.4vw, 40px); }
+.acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 26px; margin-top: 12px; font-size: 17px; }
 .cmd { display: inline-block; font: 500 15px/1 var(--mono); color: var(--head); border: 1px solid var(--ink); padding: 13px 18px; white-space: nowrap; }
 .cmd i { font-style: normal; color: var(--muted); }
-.acts { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; margin-top: 8px; font-size: 17px; }
-.specs { margin: 0; display: grid; grid-template-columns: auto 1fr; align-content: start; }
-.specs dt, .specs dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--rule); }
-.specs dt { padding-right: 28px; }
-.specs dd { color: var(--head); text-align: right; letter-spacing: .04em; text-transform: none; font-size: 12.5px; font-weight: 400; }
 
-/* Bands */
-.band { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px 40px; padding: 18px 0 64px; border-top: 1px solid var(--ink); }
-.band > .label { padding-top: 3px; color: var(--head); }
-.label h2 { margin: 0; font: inherit; letter-spacing: inherit; }
-.label small { display: block; font: inherit; color: var(--muted); margin-top: 4px; }
-.band > div { min-width: 0; }
-.band p { margin: 0 0 1em; max-width: 36em; overflow-wrap: break-word; }
-code { font: 400 .86em var(--mono); color: var(--code); }
+/* A window: the screenshot in a thin frame with a soft shadow. */
+.frame { display: block; border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; background: var(--bgc, #F8F1E3); box-shadow: 0 1px 2px rgba(31,31,31,.05), 0 30px 70px -30px rgba(31,31,31,.30), 0 10px 24px -14px rgba(31,31,31,.12); }
+.frame img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: var(--pos, 50% 0); }
 
-/* Faces */
-.faces { display: grid; }
-.face { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: baseline; gap: 4px 20px; padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
-.face:first-child { padding-top: 0; }
-.face p { margin: 0; max-width: none; font-size: clamp(25px, 3.7vw, 44px); line-height: 1.14; color: var(--head); letter-spacing: -.012em; }
-.face.m p { font: 400 clamp(15px, 2.1vw, 24px)/1.4 var(--mono); letter-spacing: 0; overflow-wrap: anywhere; }
+/* The seven views. Seven radio buttons, drawn as a row of words, each show one picture and
+   one sentence. All seven pictures and sentences share one grid cell, so the cell is as tall
+   as the tallest and nothing below it moves. */
+.stage { display: grid; justify-items: center; }
+.stage > input { position: absolute; opacity: 0; pointer-events: none; }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; }
+.chips label { padding: 11px 12px 9px; border-bottom: 2px solid transparent; cursor: pointer; letter-spacing: .1em; }
+.chips label:hover { color: var(--head); }
+#v-reading:checked ~ .chips [for=v-reading], #v-math:checked ~ .chips [for=v-math], #v-sidebars:checked ~ .chips [for=v-sidebars], #v-tabs:checked ~ .chips [for=v-tabs], #v-aa:checked ~ .chips [for=v-aa], #v-home:checked ~ .chips [for=v-home], #v-edit:checked ~ .chips [for=v-edit] { color: var(--head); border-bottom-color: var(--accent); }
+#v-reading:focus-visible ~ .chips [for=v-reading], #v-math:focus-visible ~ .chips [for=v-math], #v-sidebars:focus-visible ~ .chips [for=v-sidebars], #v-tabs:focus-visible ~ .chips [for=v-tabs], #v-aa:focus-visible ~ .chips [for=v-aa], #v-home:focus-visible ~ .chips [for=v-home], #v-edit:focus-visible ~ .chips [for=v-edit] { outline: 2px solid var(--link); outline-offset: 2px; }
+/* The window is as wide as the page allows, and no taller than what is left of the screen. */
+.views { width: max(min(100%, 640px), min(100%, 1040px, calc((100vh - 260px) * 1.6))); margin-top: 22px; display: grid; }
+.views img { grid-area: 1 / 1; display: none; }
+#v-reading:checked ~ .views .i-reading, #v-math:checked ~ .views .i-math, #v-sidebars:checked ~ .views .i-sidebars, #v-tabs:checked ~ .views .i-tabs, #v-aa:checked ~ .views .i-aa, #v-home:checked ~ .views .i-home, #v-edit:checked ~ .views .i-edit { display: block; }
+.caps { display: grid; margin-top: 20px; max-width: 34em; text-align: center; color: var(--soft); text-wrap: balance; }
+.caps p { grid-area: 1 / 1; margin: 0; visibility: hidden; }
+#v-reading:checked ~ .caps .c-reading, #v-math:checked ~ .caps .c-math, #v-sidebars:checked ~ .caps .c-sidebars, #v-tabs:checked ~ .caps .c-tabs, #v-aa:checked ~ .caps .c-aa, #v-home:checked ~ .caps .c-home, #v-edit:checked ~ .caps .c-edit { visibility: visible; }
+@media (prefers-reduced-motion: no-preference) {
+  .views img { animation: show .22s ease-out; }
+  @keyframes show { from { opacity: 0; } to { opacity: 1; } }
+}
+/* Where the system picks the colors, a clear border is drawn, so only the chosen word keeps one. */
+@media (forced-colors: active) {
+  .chips label { border-bottom-color: Canvas; }
+  #v-reading:checked ~ .chips [for=v-reading], #v-math:checked ~ .chips [for=v-math], #v-sidebars:checked ~ .chips [for=v-sidebars], #v-tabs:checked ~ .chips [for=v-tabs], #v-aa:checked ~ .chips [for=v-aa], #v-home:checked ~ .chips [for=v-home], #v-edit:checked ~ .chips [for=v-edit] { border-bottom-color: Highlight; }
+}
 
-/* Four themes, one paragraph each */
-.themes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--ink); }
-.theme { background: var(--p); color: var(--t); padding: 20px 20px 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.theme + .theme { border-left: 1px solid var(--ink); }
-.theme .th { display: flex; justify-content: space-between; align-items: baseline; }
-.theme h3 { margin: 0; font: 700 26px/1 var(--serif); color: var(--h); }
-.theme .th span { font: 500 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--m); }
-.theme p { margin: 0; font-size: 16px; line-height: 1.6; max-width: none; }
-.theme p code { color: var(--c); }
-.theme p u { color: var(--l); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.theme ul { list-style: none; margin: auto 0 0; padding: 12px 0 0; border-top: 1px solid var(--r); display: grid; gap: 5px; font: 400 11px/1.4 var(--mono); color: var(--m); }
-.theme li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
-.theme li i { width: 12px; height: 12px; border-radius: 50%; background: var(--x); box-shadow: 0 0 0 1px var(--m); }
+/* Four windows, one over the next, each showing its top edge. */
+.sect { padding: clamp(72px, 10vw, 128px) 0 0; }
+.stack { position: relative; width: 100%; max-width: 860px; margin: clamp(32px, 4.4vw, 56px) auto 0; aspect-ratio: 1000 / 739; }
+.stack .frame { position: absolute; width: 88%; border-radius: 8px; box-shadow: 0 1px 2px rgba(31,31,31,.06), 0 -10px 30px -18px rgba(31,31,31,.30), 0 24px 60px -30px rgba(31,31,31,.30); }
+.stack .frame:nth-child(1) { left: 0; top: 0; }
+.stack .frame:nth-child(2) { left: 4%; top: 8.53%; }
+.stack .frame:nth-child(3) { left: 8%; top: 17.06%; }
+.stack .frame:nth-child(4) { left: 12%; top: 25.59%; }
+.stack .frame:focus-visible { outline-offset: 3px; z-index: 1; }
+.names { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 26px; margin: 26px 0 0; padding: 0; list-style: none; }
+.names li { display: inline-flex; align-items: center; gap: 9px; color: var(--head); }
+.names i { width: 14px; height: 14px; border-radius: 50%; background: var(--p); box-shadow: 0 0 0 1px #9A9A95; }
 
-/* Measure */
-.measure { display: grid; gap: 10px; margin-top: 6px; }
-.measure div { height: 30px; margin: 0 auto; background: var(--raised); border-left: 1px solid var(--ink); border-right: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; font: 500 11px/1 var(--mono); letter-spacing: .08em; color: var(--head); white-space: nowrap; }
-.measure .d { background: var(--ink); color: var(--paper); }
-
-/* Plates */
-.plates { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
-.plate { margin: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink); display: flex; flex-direction: column; min-width: 0; }
-.plate .ph, .plate .pf { display: flex; justify-content: space-between; gap: 16px; margin: 0; padding: 10px 16px; }
-.plate .ph { border-bottom: 1px solid var(--rule); color: var(--head); }
-.plate .pf { border-top: 1px solid var(--rule); text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; overflow-wrap: anywhere; }
-.plate .body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 30px 20px; min-height: 230px; min-width: 0; }
-.s5 { grid-column: span 5; } .s7 { grid-column: span 7; }
-
-.math { font-size: clamp(26px, 3.2vw, 38px); white-space: nowrap; color: var(--head); }
-.math sub, .math sup { font-size: .66em; line-height: 0; }
-.frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 .2em; }
-.frac > span { padding: 0 .35em; }
-.frac > span:first-child { border-bottom: 1px solid currentColor; padding-bottom: .1em; }
-.frac > span:last-child { padding-top: .14em; }
-.sum { font-size: 1.25em; vertical-align: -.06em; }
-
-.scrollx { overflow-x: auto; width: 100%; }
-.diagram svg { display: block; width: 100%; min-width: 470px; height: auto; }
-.diagram rect.n { fill: var(--raised); stroke: #9A9A95; }
-.diagram rect.l { fill: var(--paper); }
-.diagram text { font: 400 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink); text-anchor: middle; }
-.diagram text.s { font-size: 11.5px; fill: var(--muted); }
-.diagram path { fill: none; stroke: var(--muted); }
-.diagram marker path { fill: var(--muted); stroke: none; }
-
-table { border-collapse: collapse; width: 100%; font-size: 16px; }
-th { text-align: left; font-weight: 700; color: var(--head); padding: 6px 18px 9px 0; border-bottom: 1px solid var(--muted); }
-td { padding: 9px 18px 9px 0; border-bottom: 1px solid var(--rule); }
-tr:last-child td { border-bottom: 0; }
-th:last-child, td:last-child { padding-right: 0; }
-td.h, th.h { text-align: right; }
-td.h { font: 400 13px var(--mono); color: var(--ink); white-space: nowrap; }
-td.h i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--x); box-shadow: 0 0 0 1px #9A9A95; margin-right: 7px; }
-
-pre { margin: 0; font: 400 13.5px/1.7 var(--mono); color: var(--ink); overflow-x: auto; max-width: 100%; }
-.codebody { align-items: stretch !important; justify-content: flex-start !important; background: var(--raised); }
-.codebody pre { align-self: center; }
-.k { color: var(--link); } .t { color: #A84B10; } .c { color: var(--muted); }
-
-/* Workspace */
-.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 36px; margin-bottom: 30px; }
-.three h3, .faq h3 { margin: 0 0 4px; font: 600 19px/1.3 var(--serif); color: var(--head); }
-.three p, .faq p { margin: 0; font-size: 16.5px; }
-.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 24px; }
-.shots figure { margin: 0; }
-.shots figure.full { grid-column: 1 / -1; }
-.shots img { display: block; width: 100%; height: auto; border: 1px solid var(--ink); }
-figcaption { margin-top: 9px; display: flex; gap: 14px; }
-figcaption b { color: var(--head); font-weight: 600; white-space: nowrap; }
-figcaption span { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 12px; }
-
+/* Questions and install: a label in the left rail, the matter on the right. */
+.block { margin-top: clamp(72px, 10vw, 128px); border-top: 1px solid var(--ink); padding: 18px 0 0; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px 40px; }
+.block > .label { color: var(--head); padding-top: 3px; }
+.block > .label h2 { margin: 0; font: inherit; letter-spacing: inherit; }
+.block > .label small { display: block; font: inherit; color: var(--muted); margin-top: 4px; }
+.block > div { min-width: 0; }
+.block p { margin: 0 0 1em; max-width: 36em; overflow-wrap: break-word; }
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 56px; }
 .faq div { padding: 16px 0 18px; border-bottom: 1px solid var(--rule); }
-.faq h3 { font-style: italic; font-weight: 400; font-size: 21px; }
-
+.faq div:nth-child(-n+2) { padding-top: 0; }
+.faq h3 { margin: 0 0 4px; font: 600 19px/1.3 var(--serif); color: var(--head); }
+.faq p { margin: 0; font-size: 16.5px; }
 .install { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 28px 56px; }
-.install pre { align-self: start; border: 1px solid var(--ink); padding: 18px 20px; font-size: 14px; line-height: 1.9; }
-.install pre i { font-style: normal; color: var(--muted); user-select: none; }
-.colophon { border-top: 1px solid var(--ink); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 28px; font: 400 12px/1.6 var(--mono); color: var(--muted); }
+.install p { font-size: 16.5px; }
+pre { margin: 0; font: 400 14px/1.9 var(--mono); color: var(--ink); overflow-x: auto; max-width: 100%; align-self: start; border: 1px solid var(--ink); padding: 18px 20px; }
+pre i { font-style: normal; color: var(--muted); user-select: none; }
+.end { padding-bottom: 64px; }
+.colophon { border-top: 1px solid var(--ink); padding: 16px 0 64px; display: flex; flex-wrap: wrap; gap: 8px 28px; font: 400 12px/1.6 var(--mono); color: var(--muted); }
 .colophon .sp { flex: 1; }
 
-@media (max-width: 980px) {
-  .themes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .theme:nth-child(3) { border-left: 0; }
-  .theme:nth-child(n+3) { border-top: 1px solid var(--ink); }
-  .s5, .s7 { grid-column: 1 / -1; }
-}
 @media (max-width: 760px) {
-  body { font-size: 17px; }
-  .intro, .band, .install, .faq, .three { grid-template-columns: minmax(0, 1fr); }
-  .intro { gap: 30px; padding-bottom: 44px; }
-  .intro p { font-size: 19px; }
-  .band { gap: 16px; padding-bottom: 48px; }
-  .face { grid-template-columns: minmax(0, 1fr); }
-  .shots { grid-template-columns: minmax(0, 1fr); }
-  .strip .hide { display: none; }
-  .plate .body { padding: 24px 14px; min-height: 180px; }
-  .measure .mn { font-size: 9.5px; letter-spacing: 0; }
+  .block, .faq, .install { grid-template-columns: minmax(0, 1fr); }
+  .faq div:nth-child(2) { padding-top: 16px; }
+  .hide { display: none; }
 }
-@media (max-width: 460px) {
-  .themes { grid-template-columns: minmax(0, 1fr); }
-  .theme + .theme { border-left: 0; border-top: 1px solid var(--ink); }
-  .cmd { flex: 1 0 100%; }
-  table { font-size: 15px; }
-  th, td { padding-right: 10px; }
-  td.h { font-size: 12px; }
-  td.h i { margin-right: 5px; }
+@media (max-width: 600px) {
+  .idea p { font-size: 18px; }
+  .brk { flex: 0 0 100%; height: 0; margin-top: -8px; }
+  .chips { gap: 0 2px; }
+  .chips label { padding: 11px 9px 9px; letter-spacing: .06em; }
+  /* A whole window is too small to read on a phone, so the frame shows the part that matters at twice the size. */
+  .views { width: 100%; margin-top: 16px; }
+  .views img { aspect-ratio: 8 / 9; }
 }
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to the content</a>
-<div class="sheet">
-
-  <header class="strip">
+<div class="wrap">
+  <header class="bar">
     <b>md-viewer</b>
     <span class="hide">A Markdown reader for the desktop</span>
     <span class="sp"></span>
@@ -210,219 +156,113 @@ figcaption span { text-transform: none; letter-spacing: 0; font-weight: 400; fon
     <span class="hide">MIT licence</span>
     <a href="https://github.com/PhillipChaffee/md-viewer">GitHub</a>
   </header>
-
-  <main id="main">
-  <div class="hero">
-    <h1>One sheet of paper, a centered column of <em>serif</em> text, and nothing else.</h1>
-  </div>
-
-  <div class="intro">
-    <div>
-      <p>md-viewer is a desktop reader for Markdown. It opens a <code>.md</code> file and shows it the way a good read-later app shows an article. It renders LaTeX math, Mermaid diagrams, tables and syntax-highlighted code, and reloads the page when the file changes on disk.</p>
+</div>
+<main id="main">
+  <div class="wrap">
+    <div class="top idea">
+      <h1>A desktop reader for Markdown</h1>
+      <p>md-viewer opens a <code>.md</code> file and shows it the way a good read-later app shows an article.</p>
       <div class="acts">
         <code class="cmd"><i aria-hidden="true">$</i> md-viewer notes.md</code>
+        <span class="brk"></span>
         <a href="#install">Install</a>
         <a href="https://github.com/PhillipChaffee/md-viewer">Source</a>
       </div>
     </div>
-    <dl class="specs">
-      <dt>Text face</dt><dd>Source Serif 4, bundled</dd>
-      <dt>Code face</dt><dd>Source Code Pro, bundled</dd>
-      <dt>Line height</dt><dd>1.6; also 1.45 and 1.8</dd>
-      <dt>Column</dt><dd>280 px to the whole window</dd>
-      <dt>Text sizes</dt><dd>Five, and 50% to 300% zoom</dd>
-      <dt>Themes</dt><dd>Paper, Sepia, Dusk, Night</dd>
-      <dt>Contrast</dt><dd>7:1 or better for body text</dd>
-      <dt>Built with</dt><dd>Rust and egui</dd>
-    </dl>
-  </div>
 
-  <section class="band" id="faces" aria-labelledby="faces-h">
-    <div class="label"><h2 id="faces-h">Faces</h2><small>The weights the app bundles</small></div>
-    <div class="faces">
-      <div class="face"><span>Regular</span><p>A map is a set of decisions about what to leave out.</p></div>
-      <div class="face"><span>Italic</span><p style="font-style:italic">A map is a set of decisions about what to leave out.</p></div>
-      <div class="face"><span>Semibold</span><p style="font-weight:600">A map is a set of decisions about what to leave out.</p></div>
-      <div class="face"><span>Bold</span><p style="font-weight:700">A map is a set of decisions about what to leave out.</p></div>
-      <div class="face m"><span>Code, regular</span><p>md-viewer notes.md --no-watch</p></div>
-    </div>
-  </section>
-
-  <section class="band" id="themes" aria-labelledby="themes-h">
-    <div class="label"><h2 id="themes-h">Four themes</h2><small>Ctrl+D steps through them</small></div>
-    <div>
-      <p>Each theme is a single palette that every part of the window draws from. The same paragraph, four times, in each theme's real colors.</p>
-      <div class="themes">
-        <div class="theme" style="--p:#FDFDFB;--t:#1F1F1F;--h:#111111;--m:#6B6B68;--r:#E3E3DE;--l:#1A5FB4;--c:#6F4220">
-          <div class="th"><h3>Paper</h3><span>Light</span></div>
-          <p>It opens a <code>.md</code> file and shows it the way a good read-later app shows an article: one sheet of paper, a centered column of serif text, and <u>nothing else on screen</u> until you ask for it.</p>
-          <ul><li><i aria-hidden="true" style="--x:#FDFDFB"></i>Page<span>#FDFDFB</span></li><li><i aria-hidden="true" style="--x:#1F1F1F"></i>Text<span>#1F1F1F</span></li><li><i aria-hidden="true" style="--x:#1A5FB4"></i>Link<span>#1A5FB4</span></li><li><i aria-hidden="true" style="--x:#1A5FB4"></i>Accent<span>#1A5FB4</span></li></ul>
-        </div>
-        <div class="theme" style="--p:#F8F1E3;--t:#2B2622;--h:#1E1A17;--m:#766C5E;--r:#E6DCC8;--l:#9A4A1F;--c:#4A5230">
-          <div class="th"><h3>Sepia</h3><span>Default</span></div>
-          <p>It opens a <code>.md</code> file and shows it the way a good read-later app shows an article: one sheet of paper, a centered column of serif text, and <u>nothing else on screen</u> until you ask for it.</p>
-          <ul><li><i aria-hidden="true" style="--x:#F8F1E3"></i>Page<span>#F8F1E3</span></li><li><i aria-hidden="true" style="--x:#2B2622"></i>Text<span>#2B2622</span></li><li><i aria-hidden="true" style="--x:#9A4A1F"></i>Link<span>#9A4A1F</span></li><li><i aria-hidden="true" style="--x:#B25E28"></i>Accent<span>#B25E28</span></li></ul>
-        </div>
-        <div class="theme" style="--p:#2C2C2E;--t:#DAD7D0;--h:#EEEBE4;--m:#9C9991;--r:#404044;--l:#9DC1F5;--c:#E6C8A4">
-          <div class="th"><h3>Dusk</h3><span>Dim room</span></div>
-          <p>It opens a <code>.md</code> file and shows it the way a good read-later app shows an article: one sheet of paper, a centered column of serif text, and <u>nothing else on screen</u> until you ask for it.</p>
-          <ul><li><i aria-hidden="true" style="--x:#2C2C2E"></i>Page<span>#2C2C2E</span></li><li><i aria-hidden="true" style="--x:#DAD7D0"></i>Text<span>#DAD7D0</span></li><li><i aria-hidden="true" style="--x:#9DC1F5"></i>Link<span>#9DC1F5</span></li><li><i aria-hidden="true" style="--x:#E0A458"></i>Accent<span>#E0A458</span></li></ul>
-        </div>
-        <div class="theme" style="--p:#000000;--t:#C8C6C1;--h:#E2E0DB;--m:#8C8A84;--r:#262626;--l:#8AB0EE;--c:#D9B48A">
-          <div class="th"><h3>Night</h3><span>The dark</span></div>
-          <p>It opens a <code>.md</code> file and shows it the way a good read-later app shows an article: one sheet of paper, a centered column of serif text, and <u>nothing else on screen</u> until you ask for it.</p>
-          <ul><li><i aria-hidden="true" style="--x:#000000"></i>Page<span>#000000</span></li><li><i aria-hidden="true" style="--x:#C8C6C1"></i>Text<span>#C8C6C1</span></li><li><i aria-hidden="true" style="--x:#8AB0EE"></i>Link<span>#8AB0EE</span></li><li><i aria-hidden="true" style="--x:#D09A52"></i>Accent<span>#D09A52</span></li></ul>
-        </div>
+    <div class="stage" role="group" aria-label="Seven views of the app">
+      <input type="radio" name="view" id="v-reading" aria-describedby="c-reading" checked>
+      <input type="radio" name="view" id="v-math" aria-describedby="c-math">
+      <input type="radio" name="view" id="v-sidebars" aria-describedby="c-sidebars">
+      <input type="radio" name="view" id="v-tabs" aria-describedby="c-tabs">
+      <input type="radio" name="view" id="v-aa" aria-describedby="c-aa">
+      <input type="radio" name="view" id="v-home" aria-describedby="c-home">
+      <input type="radio" name="view" id="v-edit" aria-describedby="c-edit">
+      <div class="chips label">
+        <label for="v-reading">Reading</label>
+        <label for="v-math">Math &amp; diagrams</label>
+        <label for="v-sidebars">Sidebars</label>
+        <label for="v-tabs">Tabs</label>
+        <label for="v-aa">Appearance</label>
+        <label for="v-home">Home</label>
+        <label for="v-edit">Edit mode</label>
+      </div>
+      <div class="views frame">
+        <img style="--pos:50% 0" class="i-reading" src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" fetchpriority="high" decoding="async" alt="md-viewer on the Sepia theme. An essay, What Maps Leave Out, is set in a centered column of serif text on warm paper, under a single row that holds one tab and a few buttons.">
+        <img style="--pos:50% 0" class="i-math" src="img/rendering-1280.webp" srcset="img/rendering-1280.webp 1280w, img/rendering.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="An essay, The Measure of a Line, showing a displayed formula, a table with right-aligned numbers and a Mermaid flowchart, all in the Sepia theme's colors.">
+        <img style="--pos:0 0" class="i-sidebars" src="img/sidebars-1280.webp" srcset="img/sidebars-1280.webp 1280w, img/sidebars.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with both sidebars open. A list of three Markdown files is on the left, the essay is in the middle, and the outline of its headings is on the right.">
+        <img style="--pos:0 0" class="i-tabs" src="img/tabs-1280.webp" srcset="img/tabs-1280.webp 1280w, img/tabs.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with four documents open as tabs in the top row, each named by its first heading. The last one, What Maps Leave Out, is in front.">
+        <img style="--pos:85% 0" class="i-aa" src="img/popover-1280.webp" srcset="img/popover-1280.webp 1280w, img/popover.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The Aa popover open over a document. It holds four theme swatches with Sepia chosen, the text size at Normal, a width slider at 680 px with Fit window and Reset, three line spacings with Comfortable chosen, and Fonts.">
+        <img style="--pos:50% 0" class="i-home" src="img/home-1280.webp" srcset="img/home-1280.webp 1280w, img/home.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The md-viewer home page. Under the heading Recently read are four documents, each with its title, folder, reading time and opening lines. Open File and Open Folder are at the top right.">
+        <img style="--pos:50% 0" class="i-edit" src="img/edit-1280.webp" srcset="img/edit-1280.webp 1280w, img/edit.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="Edit mode. The essay's Markdown source is shown as plain text in the same column, with the Edit half of the Preview and Edit switch chosen.">
+      </div>
+      <div class="caps">
+        <p class="c-reading" id="c-reading">A centered column of serif text on one sheet of paper, and nothing else on screen until you ask for it.</p>
+        <p class="c-math" id="c-math">LaTeX formulas and Mermaid diagrams are drawn as ink on the page in the theme's own colors.</p>
+        <p class="c-sidebars" id="c-sidebars">A file list on the left and a table of contents on the right, which marks the heading you are reading.</p>
+        <p class="c-tabs" id="c-tabs">Tabs sit in the top row, each named by its document's first heading, with back and forward history in each.</p>
+        <p class="c-aa" id="c-aa">The <b>Aa</b> button holds the theme swatches, the text size, a width slider and three line spacings.</p>
+        <p class="c-home" id="c-home">The home page lists recent documents with their title, folder, reading time and opening lines.</p>
+        <p class="c-edit" id="c-edit"><code>Ctrl+E</code> shows the source as plain text and <code>Ctrl+S</code> saves; it is for the typo you just noticed.</p>
       </div>
     </div>
-  </section>
 
-  <section class="band" id="measure" aria-labelledby="measure-h">
-    <div class="label"><h2 id="measure-h">Measure</h2><small>Drawn against a 1200 px window</small></div>
-    <div>
-      <p>Drag either edge of the text and the column follows. It stays centered, and a small pill shows the width while you drag. Double-click an edge to go back to the default.</p>
-      <div class="measure" role="img" aria-label="The column at its narrowest, 280 pixels; at its default, 680 pixels; and at the width of the whole window">
-        <div class="mn" style="width:23.33%">280 px</div>
-        <div class="d" style="width:56.67%">680 px, the default</div>
-        <div style="width:100%">The whole window</div>
+    <section class="sect" id="themes" aria-labelledby="themes-h">
+      <div class="idea">
+        <span class="label">Ctrl+D steps through them</span>
+        <h2 id="themes-h">Four themes</h2>
+        <p>Paper, Sepia, Dusk and Night. Each one is a single palette that every part of the window draws from, and body text keeps at least 7:1 contrast on all four.</p>
       </div>
-    </div>
-  </section>
-
-  <section class="band" id="plates" aria-labelledby="plates-h">
-    <div class="label"><h2 id="plates-h">Rendering</h2><small>Plates 1 to 4 are drawn in HTML and SVG, not by the app</small></div>
-    <div>
-      <p>Formulas and diagrams are drawn as ink on the page in the theme's own colors, so they never sit in a white box. Tables have hairlines between rows and honor the alignment the Markdown asks for.</p>
-      <div class="plates">
-        <figure class="plate s5">
-          <figcaption class="ph"><span>Fig. 1</span><span>Formula</span></figcaption>
-          <div class="body">
-            <div class="math" role="img" aria-label="p sub k equals e to the z sub k over T, divided by the sum over j of e to the z sub j over T">
-              <i>p</i><sub><i>k</i></sub> &nbsp;=&nbsp;
-              <span class="frac"><span><i>e</i><sup><i>z</i><sub><i>k</i></sub>/<i>T</i></sup></span><span><span class="sum">&sum;</span><sub><i>j</i></sub> <i>e</i><sup><i>z</i><sub><i>j</i></sub>/<i>T</i></sup></span></span>
-            </div>
-          </div>
-          <div class="pf"><span>$$ p_k = \frac{e^{z_k/T}}{\sum_j e^{z_j/T}} $$</span></div>
-        </figure>
-        <figure class="plate s7">
-          <figcaption class="ph"><span>Fig. 2</span><span>Diagram</span></figcaption>
-          <div class="body">
-            <div class="scrollx diagram" tabindex="0" role="group" aria-label="Diagram">
-              <svg viewBox="0 0 680 232" role="img" aria-label="Flowchart: a Markdown file becomes a tab, which the vendored renderer draws into the window using the theme palette and column width; the file watcher reloads the tab when the file changes">
-                <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L10 5 L0 9 z"/></marker></defs>
-                <path d="M112 116 H170" marker-end="url(#ah)"/>
-                <path d="M342 116 H400" marker-end="url(#ah)"/>
-                <path d="M544 116 H602" marker-end="url(#ah)"/>
-                <path d="M352 26 C410 26 440 58 452 94" marker-end="url(#ah)"/>
-                <path d="M352 206 C410 206 440 174 452 138" marker-end="url(#ah)"/>
-                <path d="M112 206 C160 206 200 182 215 144" marker-end="url(#ah)"/>
-                <rect class="l" x="136" y="178" width="80" height="20"/>
-                <text class="s" x="176" y="192">file changed</text>
-                <rect class="n" x=".5" y="96" width="112" height="40"/><text x="56" y="120.5">Markdown file</text>
-                <rect class="n" x="172" y="90" width="170" height="52"/><text x="257" y="112">Tab</text><text class="s" x="257" y="129">text, headings, links</text>
-                <rect class="n" x="402" y="96" width="142" height="40"/><text x="473" y="120.5">Vendored renderer</text>
-                <rect class="n" x="604" y="96" width="75.5" height="40"/><text x="641.5" y="120.5">Window</text>
-                <rect class="n" x="232" y="8" width="120" height="36"/><text x="292" y="30.5">Theme palette</text>
-                <rect class="n" x="232" y="188" width="120" height="36"/><text x="292" y="210.5">Column width</text>
-                <rect class="n" x=".5" y="188" width="112" height="36"/><text x="56" y="210.5">File watcher</text>
-              </svg>
-            </div>
-          </div>
-          <div class="pf"><span>```mermaid &middot; flowchart LR &middot; how the app is built, from its README</span></div>
-        </figure>
-        <figure class="plate s7">
-          <figcaption class="ph"><span>Fig. 3</span><span>Table</span></figcaption>
-          <div class="body">
-            <div class="scrollx" tabindex="0" role="group" aria-label="Table">
-              <table>
-                <thead><tr><th>Theme</th><th class="h">Page</th><th class="h">Text</th><th class="h">Accent</th></tr></thead>
-                <tbody>
-                  <tr><td>Paper</td><td class="h"><i aria-hidden="true" style="--x:#FDFDFB"></i>#FDFDFB</td><td class="h"><i aria-hidden="true" style="--x:#1F1F1F"></i>#1F1F1F</td><td class="h"><i aria-hidden="true" style="--x:#1A5FB4"></i>#1A5FB4</td></tr>
-                  <tr><td>Sepia</td><td class="h"><i aria-hidden="true" style="--x:#F8F1E3"></i>#F8F1E3</td><td class="h"><i aria-hidden="true" style="--x:#2B2622"></i>#2B2622</td><td class="h"><i aria-hidden="true" style="--x:#B25E28"></i>#B25E28</td></tr>
-                  <tr><td>Dusk</td><td class="h"><i aria-hidden="true" style="--x:#2C2C2E"></i>#2C2C2E</td><td class="h"><i aria-hidden="true" style="--x:#DAD7D0"></i>#DAD7D0</td><td class="h"><i aria-hidden="true" style="--x:#E0A458"></i>#E0A458</td></tr>
-                  <tr><td>Night</td><td class="h"><i aria-hidden="true" style="--x:#000000"></i>#000000</td><td class="h"><i aria-hidden="true" style="--x:#C8C6C1"></i>#C8C6C1</td><td class="h"><i aria-hidden="true" style="--x:#D09A52"></i>#D09A52</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="pf"><span>| Theme | Page | Text | Accent | &middot; | --- | ---: | ---: | ---: |</span></div>
-        </figure>
-        <figure class="plate s5">
-          <figcaption class="ph"><span>Fig. 4</span><span>Code</span></figcaption>
-          <div class="body codebody">
-<pre tabindex="0" role="group" aria-label="Code"><span class="c">/// The theme after this one.</span>
-<span class="k">const fn</span> next(<span class="k">self</span>) -&gt; <span class="t">Self</span> {
-    <span class="k">match</span> <span class="k">self</span> {
-        <span class="t">Self</span>::Paper =&gt; <span class="t">Self</span>::Sepia,
-        <span class="t">Self</span>::Sepia =&gt; <span class="t">Self</span>::Dusk,
-        <span class="t">Self</span>::Dusk =&gt; <span class="t">Self</span>::Night,
-        <span class="t">Self</span>::Night =&gt; <span class="t">Self</span>::Paper,
-    }
-}</pre>
-          </div>
-          <div class="pf"><span>```rust &middot; abridged from src/theme/mod.rs</span></div>
-        </figure>
+      <div class="stack">
+        <a class="frame" href="img/night.webp" style="--bgc:#000000"><img src="img/night-1280.webp" srcset="img/night-1280.webp 1280w, img/night.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Night theme: gray text on black."></a>
+        <a class="frame" href="img/dusk.webp" style="--bgc:#2C2C2E"><img src="img/dusk-1280.webp" srcset="img/dusk-1280.webp 1280w, img/dusk.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Dusk theme: light text on dark gray."></a>
+        <a class="frame" href="img/paper.webp" style="--bgc:#FDFDFB"><img src="img/paper-1280.webp" srcset="img/paper-1280.webp 1280w, img/paper.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Paper theme: near-black ink on off-white."></a>
+        <a class="frame" href="img/sepia.webp" style="--bgc:#F8F1E3"><img src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Sepia theme: dark brown ink on warm paper."></a>
       </div>
-    </div>
-  </section>
+      <ul class="names label" aria-label="The four themes"><li><i style="--p:#FDFDFB" aria-hidden="true"></i>Paper</li><li><i style="--p:#F8F1E3" aria-hidden="true"></i>Sepia</li><li><i style="--p:#2C2C2E" aria-hidden="true"></i>Dusk</li><li><i style="--p:#000000" aria-hidden="true"></i>Night</li></ul>
+    </section>
 
-  <section class="band" id="workspace" aria-labelledby="workspace-h">
-    <div class="label"><h2 id="workspace-h">Workspace</h2><small>Figures 5 to 7 are the app itself</small></div>
-    <div>
-      <div class="three">
-        <div><h3>Tabs</h3><p>In the top row, each named by its document's first heading, with back and forward history in each. The session is remembered.</p></div>
-        <div><h3>Sidebars</h3><p>A file list on the left and a table of contents on the right. The contents list marks the heading you are reading.</p></div>
-        <div><h3>Live reload</h3><p>The page reloads when the file changes on disk. <code>F5</code> turns it off and on, and <code>--no-watch</code> opens without it.</p></div>
+    <section class="block" id="questions" aria-labelledby="questions-h">
+      <div class="label"><h2 id="questions-h">Questions</h2></div>
+      <div class="faq">
+        <div><h3>Is it an editor?</h3><p>No. There is an edit mode (<code>Ctrl+E</code>) that shows the source as plain text and saves with <code>Ctrl+S</code>. It is for the typo you just noticed.</p></div>
+        <div><h3>Does it run on a Mac?</h3><p>CI type-checks the code for macOS and Windows. The reader has not been run on either. Linux on X11 is built and run for every change.</p></div>
+        <div><h3>Is there a package?</h3><p>Not of this reader. Build it from source. The md-viewer on crates.io, the Snap Store and the AUR is the upstream project.</p></div>
+        <div><h3>Can I use my own font?</h3><p>Yes. Other presets and any installed font family are under <strong>Aa</strong>, then <strong>Fonts&hellip;</strong></p></div>
+        <div><h3>Does it follow the file while I write?</h3><p>Yes. Live reload is on unless you turn it off.</p></div>
+        <div><h3>How long a document can it take?</h3><p>Tens of thousands of lines scroll less smoothly. The README lists this under <a href="https://github.com/PhillipChaffee/md-viewer#known-limits">known limits</a>, with the others.</p></div>
       </div>
-      <div class="shots">
-        <figure class="full">
-          <img src="img/sidebars.webp" width="1600" height="1000" loading="lazy" decoding="async" alt="md-viewer on the Sepia theme. An essay, What Maps Leave Out, is set in a centered column of serif text. A list of three Markdown files is on the left and the outline of the essay's headings is on the right.">
-          <figcaption><b>Fig. 5</b><span>The files and contents sidebars, on Sepia.</span></figcaption>
-        </figure>
-        <figure>
-          <img src="img/home.webp" width="1600" height="944" loading="lazy" decoding="async" alt="The md-viewer home page. Under the heading Recently read are five documents, each with its title, folder, reading time and opening lines. Open File and Open Folder are at the top right.">
-          <figcaption><b>Fig. 6</b><span>The home page: what you read last, with title, folder, reading time and opening lines.</span></figcaption>
-        </figure>
-        <figure>
-          <img src="img/appearance-popover.webp" width="1600" height="944" loading="lazy" decoding="async" alt="The Aa popover open over a document in a narrow column. It holds four theme swatches with Sepia chosen, the text size at Normal, a width slider at 308 px with Fit window and Reset, three line spacings with Comfortable chosen, and Fonts.">
-          <figcaption><b>Fig. 7</b><span>The Aa popover: theme, text size, width and line spacing. The column here is 308 px.</span></figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="band" id="questions" aria-labelledby="questions-h">
-    <div class="label"><h2 id="questions-h">Questions</h2></div>
-    <div class="faq">
-      <div><h3>Is it an editor?</h3><p>No. There is an edit mode (<code>Ctrl+E</code>) that shows the source as plain text and saves with <code>Ctrl+S</code>. It is for the typo you just noticed.</p></div>
-      <div><h3>Does it run on a Mac?</h3><p>CI type-checks the code for macOS and Windows. The reader has not been run on either. Linux on X11 is built and run for every change.</p></div>
-      <div><h3>Is there a package?</h3><p>Not of this reader. Build it from source. The md-viewer on crates.io, the Snap Store and the AUR is the upstream project.</p></div>
-      <div><h3>Can I use my own font?</h3><p>Yes. Other presets and any installed font family are under <strong>Aa</strong>, then <strong>Fonts&hellip;</strong></p></div>
-      <div><h3>Does it follow the file while I write?</h3><p>Yes. Live reload is on unless you turn it off.</p></div>
-      <div><h3>How long a document can it take?</h3><p>Tens of thousands of lines scroll less smoothly. The README lists this under <a href="https://github.com/PhillipChaffee/md-viewer#known-limits">known limits</a>, with the others.</p></div>
-    </div>
-  </section>
-
-  <section class="band" id="install" aria-labelledby="install-h">
-    <div class="label"><h2 id="install-h">Install</h2><small>From source</small></div>
-    <div class="install">
+    <section class="block end" id="install" aria-labelledby="install-h">
+      <div class="label"><h2 id="install-h">Install</h2><small>From source</small></div>
+      <div class="install">
 <pre tabindex="0" role="group" aria-label="Install commands"><i aria-hidden="true">$ </i>git clone https://github.com/PhillipChaffee/md-viewer
 <i aria-hidden="true">$ </i>cd md-viewer
 <i aria-hidden="true">$ </i>cargo build --release
 <i aria-hidden="true">$ </i>make install</pre>
-      <div>
-        <p>You need a Rust toolchain. The version is pinned in <code>rust-toolchain.toml</code>, and <code>rustup</code> installs it on the first build. <code>make install</code> copies the binary to <code>~/.local/bin</code>.</p>
-        <p>The system packages for Debian, Ubuntu and Arch Linux are in the <a href="https://github.com/PhillipChaffee/md-viewer#system-packages">README</a>. The source is at <a href="https://github.com/PhillipChaffee/md-viewer">github.com/PhillipChaffee/md-viewer</a>, under the MIT licence.</p>
+        <div>
+          <p>You need a Rust toolchain. The version is pinned in <code>rust-toolchain.toml</code>, and <code>rustup</code> installs it on the first build. <code>make install</code> copies the binary to <code>~/.local/bin</code>.</p>
+          <p>The system packages for Debian, Ubuntu and Arch Linux are in the <a href="https://github.com/PhillipChaffee/md-viewer#system-packages">README</a>. The source is at <a href="https://github.com/PhillipChaffee/md-viewer">github.com/PhillipChaffee/md-viewer</a>, under the MIT licence.</p>
+        </div>
       </div>
-    </div>
-  </section>
-  </main>
-
+    </section>
+  </div>
+</main>
+<div class="wrap">
   <footer class="colophon">
     <span>Set in Source Serif 4 and Source Code Pro, the faces the app bundles. Both are by Adobe, under the SIL Open Font License.</span>
     <span class="sp"></span>
     <a href="https://github.com/PhillipChaffee/md-viewer">Source on GitHub</a>
   </footer>
 </div>
+<script>
+// The page works without this. It fetches the other six views once the page has loaded, so that
+// a word swaps the window at once, unless the browser has been asked to save data.
+addEventListener("load", function () {
+  if (navigator.connection && navigator.connection.saveData) return;
+  document.querySelectorAll(".views img[loading=lazy]").forEach(function (i) { i.loading = "eager"; });
+});
+</script>
 </body>
 </html>
