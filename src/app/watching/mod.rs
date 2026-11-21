@@ -1,6 +1,7 @@
 //! Live reload: watcher lifecycle, change polling, and tab reloads.
 
 use std::collections::HashSet;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
@@ -16,6 +17,11 @@ use crate::watcher::{
 
 #[cfg(test)]
 mod tests;
+
+/// What the error bar says of a reload of `path` that failed.
+fn reload_failed(path: &Path, error: &io::Error) -> String {
+    format!("Unable to reload {}: {error}", path.display())
+}
 
 /// Live reload: the reader's setting, and the watcher while one runs.
 ///
@@ -281,10 +287,7 @@ impl MarkdownApp {
                 Ok(Followed::KeptEdits) => {
                     log::info!("Kept the unsaved edits of {}", path.display());
                 }
-                Err(error) => {
-                    self.error_message =
-                        Some(format!("Unable to reload {}: {error}", path.display()));
-                }
+                Err(error) => self.error_message = Some(reload_failed(path, &error)),
             }
         }
         reloaded && active_shows_path
@@ -302,9 +305,7 @@ impl MarkdownApp {
             // What the find bar found was in the text the reload replaced.
             Ok(()) if self.search.is_open => self.search.invalidate(),
             Ok(()) => {}
-            Err(error) => {
-                self.error_message = Some(format!("Unable to reload {}: {error}", path.display()));
-            }
+            Err(error) => self.error_message = Some(reload_failed(&path, &error)),
         }
     }
 }
