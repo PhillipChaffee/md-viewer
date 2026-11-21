@@ -314,7 +314,14 @@ fn rows_from_paragraphs(
             });
         } else {
             let paragraph_max_x = paragraph.glyphs.last().unwrap().max_x();
-            if paragraph_max_x <= job.effective_wrap_width() {
+            // md-viewer patch: what follows the text needs its room on
+            // the row the text ends on.
+            let room_after = if is_last_paragraph {
+                job.wrap.room_after
+            } else {
+                0.0
+            };
+            if paragraph_max_x + room_after <= job.effective_wrap_width() {
                 // Early-out optimization: the whole paragraph fits on one row.
                 rows.push(PlacedRow {
                     pos: pos2(0.0, f32::NAN),
@@ -327,7 +334,7 @@ fn rows_from_paragraphs(
                     }),
                 });
             } else {
-                line_break(&paragraph, job, &mut rows, elided);
+                line_break(&paragraph, job, room_after, &mut rows, elided);
                 let placed_row = rows.last_mut().unwrap();
                 let row = Arc::make_mut(&mut placed_row.row);
                 row.ends_with_newline = !is_last_paragraph;
@@ -341,10 +348,15 @@ fn rows_from_paragraphs(
 fn line_break(
     paragraph: &Paragraph,
     job: &LayoutJob,
+    room_after: f32,
     out_rows: &mut Vec<PlacedRow>,
     elided: &mut bool,
 ) {
     let wrap_width = job.effective_wrap_width();
+
+    // md-viewer patch: the last word, which stays with what follows the text.
+    let last_word = (room_after > 0.0).then(|| last_word_start(&paragraph.glyphs));
+    let paragraph_max_x = paragraph.glyphs.last().map_or(0.0, |glyph| glyph.max_x());
 
     // Keeps track of good places to insert row break if we exceed `wrap_width`.
     let mut row_break_candidates = RowBreakCandidates::default();
@@ -361,7 +373,16 @@ fn line_break(
 
         let potential_row_width = paragraph.glyphs[i].max_x() - row_start_x;
 
-        if wrap_width < potential_row_width {
+        // md-viewer patch: the last word and what follows the text do not
+        // both fit on this row, and would on a row of their own. When not
+        // even that holds them, the word is part of something longer than
+        // a row, which fills its rows as far as each goes.
+        let word_and_room = paragraph_max_x - paragraph.glyphs[i].pos.x + room_after;
+        let no_room_after = last_word == Some(i)
+            && wrap_width < paragraph_max_x - row_start_x + room_after
+            && word_and_room <= wrap_width;
+
+        if wrap_width < potential_row_width || no_room_after {
             // Row break:
 
             if first_row_indentation > 0.0
@@ -964,19 +985,59 @@ fn add_row_hline(
 
 // ----------------------------------------------------------------------------
 
+/// md-viewer patch: where the last word of `glyphs` starts: after the last
+/// place a row prefers to break. The end of the text is not such a place:
+/// what follows it is part of the word.
+fn last_word_start(glyphs: &[Glyph]) -> usize {
+    let mut candidates = RowBreakCandidates::default();
+    for i in 0..glyphs.len().saturating_sub(1) {
+        candidates.add(i, &glyphs[i..]);
+    }
+    candidates.word_boundary().map_or(0, |index| index + 1)
+}
+
+/// md-viewer patch: whether a row prefers to break after `chr` when `next`
+/// follows it: after a space, and around a CJK character. The one rule
+/// for it: [`RowBreakCandidates::add`] asks here.
+///
+/// Logograms (single character representing a whole word) and kana
+/// (Japanese hiragana and katakana) are good places to break, and so is
+/// anywhere before a CJK character.
+pub fn is_word_boundary(chr: char, next: Option<char>) -> bool {
+    const NON_BREAKING_SPACE: char = '\u{A0}';
+    if chr.is_whitespace() && chr != NON_BREAKING_SPACE {
+        true
+    } else if is_cjk(chr) && next.is_none_or(is_cjk_break_allowed) {
+        true
+    } else {
+        chr != '-' && !chr.is_ascii_punctuation() && next.is_some_and(is_cjk)
+    }
+}
+
+/// md-viewer patch: the start of `text` that a row keeps whole, through
+/// the first place a row prefers to break, and whether there is such a
+/// place. Without one the text is part of a word that goes on after it.
+pub fn first_word(text: &str) -> (&str, bool) {
+    let mut chars = text.char_indices().peekable();
+    while let Some((at, chr)) = chars.next() {
+        let next = chars.peek().map(|(_, next)| *next);
+        if is_word_boundary(chr, next) {
+            return (&text[..at + chr.len_utf8()], true);
+        }
+    }
+    (text, false)
+}
+
 /// Keeps track of good places to break a long row of text.
 /// Will focus primarily on spaces, secondarily on things like `-`
 #[derive(Clone, Copy, Default)]
 struct RowBreakCandidates {
-    /// Breaking at ` ` or other whitespace
-    /// is always the primary candidate.
-    space: Option<usize>,
-
-    /// Logograms (single character representing a whole word) or kana (Japanese hiragana and katakana) are good candidates for line break.
-    cjk: Option<usize>,
-
-    /// Breaking anywhere before a CJK character is acceptable too.
-    pre_cjk: Option<usize>,
+    /// Breaking at ` ` or other whitespace, or around a CJK character,
+    /// is always the primary candidate. See [`is_word_boundary`].
+    ///
+    /// md-viewer patch: one field, where upstream keeps `space`, `cjk` and
+    /// `pre_cjk` and only ever reads the latest of the three.
+    word: Option<usize>,
 
     /// Breaking at a dash is a super-
     /// good idea.
@@ -994,26 +1055,19 @@ struct RowBreakCandidates {
 impl RowBreakCandidates {
     fn add(&mut self, index: usize, glyphs: &[Glyph]) {
         let chr = glyphs[0].chr;
-        const NON_BREAKING_SPACE: char = '\u{A0}';
-        if chr.is_whitespace() && chr != NON_BREAKING_SPACE {
-            self.space = Some(index);
-        } else if is_cjk(chr) && (glyphs.len() == 1 || is_cjk_break_allowed(glyphs[1].chr)) {
-            self.cjk = Some(index);
+        let next = glyphs.get(1).map(|glyph| glyph.chr);
+        if is_word_boundary(chr, next) {
+            self.word = Some(index);
         } else if chr == '-' {
             self.dash = Some(index);
         } else if chr.is_ascii_punctuation() {
             self.punctuation = Some(index);
-        } else if glyphs.len() > 1 && is_cjk(glyphs[1].chr) {
-            self.pre_cjk = Some(index);
         }
         self.any = Some(index);
     }
 
     fn word_boundary(&self) -> Option<usize> {
-        [self.space, self.cjk, self.pre_cjk]
-            .into_iter()
-            .max()
-            .flatten()
+        self.word
     }
 
     fn has_good_candidate(&self, break_anywhere: bool) -> bool {
@@ -1037,21 +1091,13 @@ impl RowBreakCandidates {
 
     fn forget_before_idx(&mut self, index: usize) {
         let Self {
-            space,
-            cjk,
-            pre_cjk,
+            word,
             dash,
             punctuation,
             any,
         } = self;
-        if space.is_some_and(|s| s < index) {
-            *space = None;
-        }
-        if cjk.is_some_and(|s| s < index) {
-            *cjk = None;
-        }
-        if pre_cjk.is_some_and(|s| s < index) {
-            *pre_cjk = None;
+        if word.is_some_and(|s| s < index) {
+            *word = None;
         }
         if dash.is_some_and(|s| s < index) {
             *dash = None;
@@ -1485,5 +1531,117 @@ mod tests {
         assert_eq!(windows.cluster_at(1), 1..2);
         assert_eq!(windows.cluster_at(2), 2..3);
         assert_eq!(left(&windows, 3).index, 2);
+    }
+
+    /// md-viewer patch: `text` at the default size, wrapped at `width`
+    /// after `indent` of its first row is taken, keeping `room_after`.
+    fn rows_with_room_after(text: &str, width: f32, indent: f32, room_after: f32) -> Vec<String> {
+        let mut fonts = FontsImpl::new(
+            1024,
+            AlphaFromCoverage::default(),
+            FontDefinitions::default(),
+        );
+        let mut job = LayoutJob::single_section(text.into(), TextFormat::default());
+        job.sections[0].leading_space = indent;
+        job.wrap.max_width = width;
+        job.wrap.room_after = room_after;
+        let galley = layout(&mut fonts, 1.0, job.into());
+        galley.rows.iter().map(|row| row.text()).collect()
+    }
+
+    /// md-viewer patch: how wide `text` is on one row.
+    fn width_of(text: &str) -> f32 {
+        let mut fonts = FontsImpl::new(
+            1024,
+            AlphaFromCoverage::default(),
+            FontDefinitions::default(),
+        );
+        let job = LayoutJob::single_section(text.into(), TextFormat::default());
+        layout(&mut fonts, 1.0, job.into()).rect.width()
+    }
+
+    /// md-viewer patch: the last word starts the next row when it and the
+    /// room kept after the text do not both fit.
+    #[test]
+    fn test_room_after_moves_the_last_word_down() {
+        let width = width_of("one two three") + 4.0;
+
+        assert_eq!(
+            rows_with_room_after("one two three", width, 0.0, 0.0),
+            ["one two three"]
+        );
+        assert_eq!(
+            rows_with_room_after("one two three", width, 0.0, 3.0),
+            ["one two three"],
+            "the room is there"
+        );
+        assert_eq!(
+            rows_with_room_after("one two three", width, 0.0, 12.0),
+            ["one two ", "three"]
+        );
+        // Only the last word waits for what follows: the rows before it
+        // fill as they would without.
+        let narrow = width_of("one two") + 2.0;
+        assert_eq!(
+            rows_with_room_after("one two three four", narrow, 0.0, 40.0),
+            rows_with_room_after("one two three four", narrow, 0.0, 0.0),
+        );
+    }
+
+    /// md-viewer patch: a text that is one word, set after something else
+    /// on its row, starts the next row whole when the room is not there.
+    #[test]
+    fn test_room_after_moves_a_lone_word_to_a_fresh_row() {
+        let width = 40.0 + width_of("word") + 6.0;
+
+        assert_eq!(rows_with_room_after("word", width, 40.0, 3.0), ["word"]);
+        assert_eq!(
+            rows_with_room_after("word", width, 40.0, 12.0),
+            ["", "word"]
+        );
+    }
+
+    /// md-viewer patch: a word already at the start of a row stays there
+    /// however much room is asked for: no row would give it more.
+    #[test]
+    fn test_room_after_never_leaves_a_row_empty_for_nothing() {
+        let word = width_of("word") + 2.0;
+        assert_eq!(rows_with_room_after("word", word, 0.0, 500.0), ["word"]);
+
+        let width = width_of("one two ") + 2.0;
+        assert_eq!(
+            rows_with_room_after("one two three", width, 0.0, 500.0),
+            ["one two ", "three"]
+        );
+    }
+
+    /// md-viewer patch: when the last word and the room after it are more
+    /// than a whole row holds, moving the word down gains nothing, and the
+    /// text fills its row as it would with no room asked for.
+    #[test]
+    fn test_room_after_wider_than_a_row_moves_nothing() {
+        let width = width_of("one two three") + 4.0;
+        assert_eq!(
+            rows_with_room_after("one two three", width, 0.0, width),
+            ["one two three"]
+        );
+
+        let after_something = 40.0 + width_of("word") + 6.0;
+        assert_eq!(
+            rows_with_room_after("word", after_something, 40.0, after_something),
+            ["word"]
+        );
+    }
+
+    /// md-viewer patch: the first word of a text runs through the space
+    /// that ends it; a text with nowhere to break is all one word.
+    #[test]
+    fn test_first_word() {
+        assert_eq!(first_word("), and so on"), ("), ", true));
+        assert_eq!(first_word("s"), ("s", false));
+        assert_eq!(first_word(" next"), (" ", true));
+        assert_eq!(first_word("a\u{A0}b"), ("a\u{A0}b", false));
+        assert_eq!(first_word("\u{4E2D}\u{6587}"), ("\u{4E2D}", true));
+        assert_eq!(first_word(""), ("", false));
     }
 }

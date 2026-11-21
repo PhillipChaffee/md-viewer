@@ -52,6 +52,8 @@ mod keyboard;
 #[cfg(test)]
 mod lightbox;
 #[cfg(test)]
+mod line_breaks;
+#[cfg(test)]
 mod links;
 #[cfg(test)]
 mod live_reload;

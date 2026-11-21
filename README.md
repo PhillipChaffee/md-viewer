@@ -92,6 +92,9 @@ tab leads back.
 - Code in a line of prose has no box. It is a little smaller than the text
   around it and in a tint of its own, warm or on Sepia a muted olive,
   which keeps the same 7:1 contrast as body text on all four themes.
+- A line ends only where prose can break. A bracket, a comma, a full stop
+  or a letter written against a piece of code, a link or bold text stays
+  on the line with it.
 - A `file-name · N min read` line above the title.
 
 **Rendering**
@@ -347,6 +350,10 @@ Two things to know before you rely on those gates:
   of a keycap: `a*️⃣b*️⃣c` sets the `b` in italics. Write `\*️⃣` there.
 - While the find bar marks part of an emoji written as several characters,
   such as the `1` of 1️⃣, that emoji is drawn as its parts.
+- In a table cell a line can still end between a piece of code, a link or
+  bold text and the bracket or comma written against it. Anywhere, it can
+  end between a formula, a picture or a footnote mark in a line of prose
+  and what is written against that.
 - A picture is read when you come within a window's height of it, and
   decoded in the background. Until it is there its place is empty, with a
   spinner while it is in view. An animated GIF or WebP is decoded whole:

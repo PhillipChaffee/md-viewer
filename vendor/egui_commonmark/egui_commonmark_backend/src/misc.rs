@@ -693,6 +693,14 @@ pub struct Link {
 
 impl Link {
     pub fn end(self, ui: &mut Ui, cache: &mut CommonMarkCache) {
+        let (destination, layout_job) = self.into_job(ui);
+        show_link(ui, cache, destination, layout_job);
+    }
+
+    /// md-viewer patch: where the link leads and its words as they are
+    /// set, for [`show_link`]. The two are apart so that a caller can
+    /// measure the words, or say how they wrap, before they are shown.
+    pub fn into_job(self, ui: &Ui) -> (String, LayoutJob) {
         let Self { destination, text } = self;
 
         let mut layout_job = LayoutJob::default();
@@ -714,53 +722,64 @@ impl Link {
             section.format.line_height = None;
         }
 
-        // Use clickable label to preserve our custom underline styling
-        let response = ui.add(
-            egui::Label::new(layout_job)
-                .selectable(false)
-                .sense(egui::Sense::click()),
-        );
+        (destination, layout_job)
+    }
+}
 
-        let is_hook = cache.link_hooks().contains_key(&destination);
+/// md-viewer patch: show the words of a link to `destination`, as
+/// [`Link::into_job`] set them, and follow the link when it is clicked.
+pub fn show_link(
+    ui: &mut Ui,
+    cache: &mut CommonMarkCache,
+    destination: String,
+    layout_job: LayoutJob,
+) {
+    // Use clickable label to preserve our custom underline styling
+    let response = ui.add(
+        egui::Label::new(layout_job)
+            .selectable(false)
+            .sense(egui::Sense::click()),
+    );
 
-        // Right-click copies the destination (issue #169). Clicking a link
-        // hands it to the desktop's URL handler, which may open a browser
-        // instance without the reader's session — so the address has to be
-        // obtainable without following it.
-        //
-        // Both link kinds get the item, and both copy `destination` exactly as
-        // the document spells it. For an external link that is the URL. For a
-        // link this viewer resolves itself, the source spelling is the honest
-        // answer: the resolved path depends on which document is open, so
-        // copying it would hand out something the author never wrote and that
-        // means nothing pasted elsewhere.
-        //
-        // The label is deliberately the browser wording, since that is where
-        // the gesture is learned.
-        {
-            let destination = destination.clone();
-            response.context_menu(|ui| {
-                if ui.button("Copy Link Address").clicked() {
-                    ui.ctx().copy_text(destination.clone());
-                    ui.close();
-                }
-            });
-        }
+    let is_hook = cache.link_hooks().contains_key(&destination);
 
-        if response.clicked() || response.middle_clicked() {
-            if is_hook {
-                cache.link_hooks_mut().insert(destination.clone(), true);
-            } else {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(&destination));
+    // Right-click copies the destination (issue #169). Clicking a link
+    // hands it to the desktop's URL handler, which may open a browser
+    // instance without the reader's session — so the address has to be
+    // obtainable without following it.
+    //
+    // Both link kinds get the item, and both copy `destination` exactly as
+    // the document spells it. For an external link that is the URL. For a
+    // link this viewer resolves itself, the source spelling is the honest
+    // answer: the resolved path depends on which document is open, so
+    // copying it would hand out something the author never wrote and that
+    // means nothing pasted elsewhere.
+    //
+    // The label is deliberately the browser wording, since that is where
+    // the gesture is learned.
+    {
+        let destination = destination.clone();
+        response.context_menu(|ui| {
+            if ui.button("Copy Link Address").clicked() {
+                ui.ctx().copy_text(destination.clone());
+                ui.close();
             }
-        }
+        });
+    }
 
-        // Show pointer cursor and URL on hover
-        if response.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            if !is_hook {
-                response.on_hover_text(&destination);
-            }
+    if response.clicked() || response.middle_clicked() {
+        if is_hook {
+            cache.link_hooks_mut().insert(destination.clone(), true);
+        } else {
+            ui.ctx().open_url(egui::OpenUrl::new_tab(&destination));
+        }
+    }
+
+    // Show pointer cursor and URL on hover
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        if !is_hook {
+            response.on_hover_text(&destination);
         }
     }
 }
