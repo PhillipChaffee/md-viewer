@@ -27,7 +27,8 @@ pub(crate) enum AppAction {
     OpenFolder,
     /// Close the active tab, asking first if it has unsaved edits.
     CloseTab,
-    /// What the reader answered when asked about unsaved edits.
+    /// What the reader answered when asked about unsaved edits, or about
+    /// saving over what another program wrote.
     AnswerClosePrompt(CloseAnswer),
     NextTab,
     PreviousTab,
@@ -42,7 +43,8 @@ pub(crate) enum AppAction {
     NextMatch,
     PreviousMatch,
     CloseSearch,
-    /// Write the active tab's unsaved edits to disk.
+    /// Write the active tab's unsaved edits to disk, asking first if that
+    /// would replace what another program wrote there.
     Save,
     /// Show the active tab's file as it is on disk now, in place of its
     /// unsaved edits.
@@ -197,13 +199,15 @@ impl MarkdownApp {
     /// reports the outcome.
     fn save_active_tab(&mut self) {
         if let Some(front) = self.front() {
-            self.save_tab(front);
+            self.request_save(front);
         }
     }
 
-    /// Write the unsaved edits of the tab at `index` to its file, and say
-    /// in the error bar why where that failed. Returns whether the tab is
-    /// left with nothing unsaved.
+    /// Write the unsaved edits of the tab at `index` to its file, whatever
+    /// the file holds now, and say in the error bar why where that failed.
+    /// Returns whether the tab is left with nothing unsaved. What the
+    /// reader asks for goes through `request_save`, which asks before it
+    /// replaces what another program wrote.
     pub(crate) fn save_tab(&mut self, index: usize) -> bool {
         let Some(tab) = self.tabs.get_mut(index) else {
             return true;

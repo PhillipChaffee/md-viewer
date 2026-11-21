@@ -64,6 +64,8 @@ mod opening;
 #[cfg(test)]
 mod opening_depth;
 #[cfg(test)]
+mod overwrite;
+#[cfg(test)]
 mod pages;
 #[cfg(test)]
 mod pictures;

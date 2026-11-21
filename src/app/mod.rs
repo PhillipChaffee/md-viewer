@@ -153,8 +153,9 @@ pub(crate) struct MarkdownApp {
     hints: Hints,
     /// Whether the fonts changed since `hints` were written.
     hints_stale: bool,
-    /// A close that waits for the reader to say what becomes of unsaved
-    /// edits, and the quit that follows their last answer.
+    /// A close or a save that waits for the reader to say what becomes of
+    /// unsaved edits or of what another program wrote, and the quit that
+    /// follows their last answer.
     closing: close_prompt::CloseState,
     // Find-bar state (current-document search)
     search: SearchState,

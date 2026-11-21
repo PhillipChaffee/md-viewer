@@ -2,6 +2,10 @@
 //! their document or by showing another in its tab: Save, Discard or
 //! Cancel, for one unsaved document at a time.
 //!
+//! It asks a second question before a save replaces what another program
+//! wrote to the file while it was edited here: Overwrite or Cancel. That
+//! one follows Save in the first, and is all a plain save asks.
+//!
 //! A request that would lose nothing never comes here in any way the
 //! reader can see: it is carried out in the frame it was asked for. One
 //! that would waits in [`CloseState::Asking`] until every unsaved document
@@ -26,7 +30,7 @@ mod tests;
 /// Width of the prompt's sheet, which its question wraps in.
 const WIDTH: f32 = 340.0;
 const PADDING: i8 = 18;
-/// The least width of an answer, so the three read as a row of buttons.
+/// The least width of an answer, so they read as a row of buttons.
 const ANSWER_WIDTH: f32 = 76.0;
 /// The most characters of a document's heading the question quotes: two
 /// lines of the sheet. The tab shortens the same name to its own width.
@@ -47,6 +51,8 @@ enum Goal {
     /// Show another document in the tab at this place: the one the route
     /// leads to.
     Leave(usize, Route),
+    /// Write the document the prompt asks about, which stays in its tab.
+    Save,
 }
 
 impl Goal {
@@ -59,6 +65,59 @@ impl Goal {
             Self::OtherTabs(kept) => index != *kept,
             Self::Quit => true,
             Self::Leave(left, route) => index == *left && tab.leads_away(route),
+            Self::Save => false,
+        }
+    }
+}
+
+/// What the prompt asks about a document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Question {
+    /// Whether to save its unsaved edits before they are lost.
+    Unsaved,
+    /// Whether to save them over what another program wrote to its file.
+    Overwrite,
+}
+
+impl Question {
+    /// The question as it is put about `tab`.
+    fn put_to(self, tab: &Tab) -> String {
+        let document = named(tab);
+        match self {
+            Self::Unsaved => format!("Save changes to {document}?"),
+            Self::Overwrite => format!("{document} changed on disk. Overwrite it?"),
+        }
+    }
+
+    /// What an answer costs, under the question.
+    const fn warning(self) -> &'static str {
+        match self {
+            Self::Unsaved => "Edits that are not saved will be lost.",
+            Self::Overwrite => "Saving replaces what another program wrote there.",
+        }
+    }
+
+    /// The answers the reader can give, in the order of their buttons.
+    const fn answers(self) -> &'static [(&'static str, CloseAnswer)] {
+        match self {
+            Self::Unsaved => &[
+                ("Save", CloseAnswer::Save),
+                ("Discard", CloseAnswer::Discard),
+                ("Cancel", CloseAnswer::Cancel),
+            ],
+            Self::Overwrite => &[
+                ("Overwrite", CloseAnswer::Overwrite),
+                ("Cancel", CloseAnswer::Cancel),
+            ],
+        }
+    }
+
+    /// The answer the keyboard starts on: the one that loses no text, so
+    /// Enter pressed too soon does no harm.
+    const fn safe_answer(self) -> CloseAnswer {
+        match self {
+            Self::Unsaved => CloseAnswer::Save,
+            Self::Overwrite => CloseAnswer::Cancel,
         }
     }
 }
@@ -70,9 +129,12 @@ pub(super) struct PendingClose {
     /// The unsaved tab the prompt asks about now. Those before it that
     /// the goal replaces have been answered for.
     asked: usize,
+    /// What it asks about that tab.
+    about: Question,
     /// The question, written when the prompt turned to this tab.
     question: String,
-    /// Whether the keyboard has still to be put on Save for this question.
+    /// Whether the keyboard has still to be put on the safe answer to
+    /// this question.
     focus_due: bool,
 }
 
@@ -93,26 +155,29 @@ impl CloseState {
     }
 }
 
-/// One of the prompt's three answers.
+/// One of the prompt's answers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CloseAnswer {
-    /// Write the document, then go on closing.
+    /// Write the document, then go on closing. If that would replace what
+    /// another program wrote, ask about that first.
     Save,
+    /// Write the document over what another program wrote, then go on.
+    Overwrite,
     /// Go on closing without writing it.
     Discard,
     /// Close nothing after all.
     Cancel,
 }
 
-/// What the prompt asks about `tab`. It names the document as its tab
-/// does, by its first heading, and by its file, which tells two documents
-/// with one heading apart. A tab named by its file is named once.
-fn question(tab: &Tab) -> String {
+/// The document of `tab` as a question names it: as its tab does, by its
+/// first heading, and by its file, which tells two documents with one
+/// heading apart. A tab named by its file is named once.
+fn named(tab: &Tab) -> String {
     let (name, file) = (tab.name(), tab.title());
     if name == file {
-        format!("Save changes to {file}?")
+        file.to_owned()
     } else {
-        format!("Save changes to “{}” ({file})?", shortened(name))
+        format!("“{}” ({file})", shortened(name))
     }
 }
 
@@ -148,6 +213,12 @@ impl MarkdownApp {
         }
     }
 
+    /// Save the tab at `index`, asking first when that would replace what
+    /// another program wrote to its file.
+    pub(crate) fn request_save(&mut self, index: usize) {
+        self.save_for(Goal::Save, index);
+    }
+
     /// Reach `goal`: now if that loses no unsaved edits, and otherwise
     /// once the reader has answered for them.
     fn request(&mut self, goal: Goal) {
@@ -178,16 +249,41 @@ impl MarkdownApp {
         let Some((asked, tab)) = unsaved else {
             return Err(goal);
         };
-        let question = question(tab);
+        let question = Question::Unsaved.put_to(tab);
+        self.ask(goal, asked, Question::Unsaved, question);
+        Ok(())
+    }
+
+    /// Turn the prompt to the tab at `asked`, with what it asks `about`
+    /// that tab and the `question` as it is put.
+    fn ask(&mut self, goal: Goal, asked: usize, about: Question, question: String) {
         // The prompt has to be seen, and the lightbox draws over it.
         self.lightbox.open = None;
         self.closing = CloseState::Asking(PendingClose {
             goal,
             asked,
+            about,
             question,
             focus_due: true,
         });
-        Ok(())
+    }
+
+    /// Write the tab at `asked` on the way to `goal`, unless that would
+    /// replace what another program wrote to its file: the prompt then
+    /// asks about that, and nothing is written yet. Returns the goal once
+    /// the tab has nothing unsaved and the way to it is free.
+    fn save_for(&mut self, goal: Goal, asked: usize) -> Option<Goal> {
+        let about = Question::Overwrite;
+        let tab = self.tabs.get_mut(asked);
+        let overwrites = tab.and_then(|tab| {
+            let overwrites = tab.save_would_overwrite();
+            overwrites.then(|| about.put_to(tab))
+        });
+        if let Some(question) = overwrites {
+            self.ask(goal, asked, about, question);
+            return None;
+        }
+        self.save_tab(asked).then_some(goal)
     }
 
     /// Carry out the reader's answer to the prompt.
@@ -195,15 +291,17 @@ impl MarkdownApp {
         let CloseState::Asking(pending) = std::mem::take(&mut self.closing) else {
             return;
         };
-        let go_on = match answer {
-            CloseAnswer::Save => self.save_tab(pending.asked),
-            CloseAnswer::Discard => true,
-            CloseAnswer::Cancel => false,
+        let PendingClose { goal, asked, .. } = pending;
+        let free = match answer {
+            CloseAnswer::Save => self.save_for(goal, asked),
+            CloseAnswer::Overwrite => self.save_tab(asked).then_some(goal),
+            CloseAnswer::Discard => Some(goal),
+            CloseAnswer::Cancel => None,
         };
-        if !go_on {
+        let Some(goal) = free else {
             return;
-        }
-        if let Err(goal) = self.ask_from(pending.goal, pending.asked + 1) {
+        };
+        if let Err(goal) = self.ask_from(goal, asked + 1) {
             self.reach(goal);
         }
     }
@@ -219,6 +317,8 @@ impl MarkdownApp {
                 self.egui_ctx.send_viewport_cmd(window);
             }
             Goal::Leave(index, route) => self.take_route(index, &route),
+            // The answer wrote it.
+            Goal::Save => {}
         }
     }
 
@@ -229,7 +329,8 @@ impl MarkdownApp {
             return None;
         };
         let palette = self.theme.palette();
-        let focus_save = std::mem::take(&mut pending.focus_due);
+        let focus_due = std::mem::take(&mut pending.focus_due);
+        let about = pending.about;
         let frame = egui::Frame::popup(&ctx.style())
             .fill(palette.surface)
             .stroke(egui::Stroke::new(1.0_f32, palette.rule))
@@ -247,19 +348,14 @@ impl MarkdownApp {
                         .font(chrome::label_font())
                         .color(palette.text),
                 );
-                chrome::small_label(ui, palette, "Edits that are not saved will be lost.");
+                chrome::small_label(ui, palette, about.warning());
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    let answers = [
-                        ("Save", CloseAnswer::Save),
-                        ("Discard", CloseAnswer::Discard),
-                        ("Cancel", CloseAnswer::Cancel),
-                    ];
-                    for (label, given) in answers {
+                    for &(label, given) in about.answers() {
                         let button = QuietButton::text(label)
                             .min_width(ANSWER_WIDTH)
                             .show(ui, palette);
-                        if focus_save && given == CloseAnswer::Save {
+                        if focus_due && given == about.safe_answer() {
                             button.request_focus();
                         }
                         if button.clicked() {

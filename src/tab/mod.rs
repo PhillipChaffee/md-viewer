@@ -95,6 +95,10 @@ pub(crate) enum DiskChange {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Unfollowed {
     change: DiskChange,
+    /// Whether `saved_content` is text another program wrote, which the
+    /// reader has not taken: a file that goes and comes back with it is
+    /// still not theirs to save over unasked.
+    holds_theirs: bool,
     /// Whether the notice of it is up: it is until the reader keeps their
     /// own text.
     notice_shows: bool,
@@ -271,39 +275,39 @@ impl Tab {
 
     /// Set the unsaved edits against the file as it is now. Other text in
     /// it is what the edits are measured against from here on, so taking
-    /// them out by hand does not make the tab look saved. A file that
-    /// stays gone or unreadable is not announced a second time.
+    /// them out by hand does not make the tab look saved. The notice goes
+    /// up for other text and for another kind of change, not for a file
+    /// that stays as it was last found.
     fn look_at_disk(&mut self) {
-        match read_document(&self.path) {
-            Ok(theirs) if theirs == self.saved_content => {
-                // The file is as the tab knew it. One that was gone is back.
-                self.unfollowed
-                    .take_if(|unfollowed| unfollowed.change == DiskChange::Gone);
+        let before = self.unfollowed;
+        let held_theirs = before.is_some_and(|before| before.holds_theirs);
+        let (change, holds_theirs, other_text) = match read_document(&self.path) {
+            Ok(text) if text == self.saved_content && !held_theirs => {
+                // The file is as the tab read or wrote it: one that was
+                // gone is back, and a save replaces nothing.
+                self.unfollowed = None;
+                return;
             }
-            Ok(theirs) => {
-                self.saved_content = theirs;
-                self.note_disk_change(DiskChange::Changed);
+            Ok(text) if text == self.saved_content => (DiskChange::Changed, true, false),
+            Ok(text) => {
+                self.saved_content = text;
+                (DiskChange::Changed, true, true)
             }
-            Err(error) => {
-                let change = if error.kind() == io::ErrorKind::NotFound {
-                    DiskChange::Gone
-                } else {
-                    DiskChange::Changed
-                };
-                let noted = self.unfollowed.map(|unfollowed| unfollowed.change);
-                if noted != Some(change) {
-                    self.note_disk_change(change);
-                }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                (DiskChange::Gone, held_theirs, false)
             }
-        }
-    }
-
-    /// Put the notice of `change` up, unless the other program wrote just
-    /// what was typed here and nothing is unsaved any more.
-    fn note_disk_change(&mut self, change: DiskChange) {
+            Err(_) => (DiskChange::Changed, held_theirs, false),
+        };
+        let notice_shows = match before {
+            Some(before) if before.change == change && !other_text => before.notice_shows,
+            _ => true,
+        };
+        // The other program may have written just what was typed here,
+        // and then nothing is unsaved.
         self.unfollowed = self.is_dirty().then_some(Unfollowed {
             change,
-            notice_shows: true,
+            holds_theirs,
+            notice_shows,
         });
     }
 
@@ -318,6 +322,19 @@ impl Tab {
         if let Some(unfollowed) = &mut self.unfollowed {
             unfollowed.notice_shows = false;
         }
+    }
+
+    /// Whether a save now would replace text another program wrote and the
+    /// reader has not taken. The file is read to find out, so a change no
+    /// watcher reported counts too. A file that is gone has no text to
+    /// replace.
+    pub(crate) fn save_would_overwrite(&mut self) -> bool {
+        if !self.is_dirty() {
+            return false;
+        }
+        self.look_at_disk();
+        let unfollowed = self.unfollowed.map(|unfollowed| unfollowed.change);
+        unfollowed == Some(DiskChange::Changed)
     }
 
     pub(crate) fn title(&self) -> &str {

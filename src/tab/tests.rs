@@ -395,6 +395,47 @@ mod disk {
         tab.follow_disk().unwrap();
         assert_eq!(tab.disk_notice(), None);
     }
+
+    #[test]
+    fn text_the_reader_has_not_taken_is_not_theirs_after_the_file_went_and_came_back() {
+        let (dir, mut tab) = edited_tab();
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+        tab.keep_mine();
+
+        fs::remove_file(&tab.path).unwrap();
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Gone));
+        assert!(!tab.save_would_overwrite(), "nothing is there to replace");
+
+        dir.file("notes.md", "# Theirs");
+        tab.follow_disk().unwrap();
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        assert!(tab.save_would_overwrite());
+    }
+
+    #[test]
+    fn a_save_would_overwrite_only_text_the_reader_has_not_taken() {
+        let (dir, mut tab) = tab_with("# Notes");
+        dir.file("notes.md", "# Theirs");
+        assert!(!tab.save_would_overwrite(), "nothing is unsaved");
+
+        tab.content.push('!');
+        assert!(tab.save_would_overwrite(), "no watcher said so");
+        assert_eq!(tab.disk_notice(), Some(DiskChange::Changed));
+        tab.keep_mine();
+        assert!(tab.save_would_overwrite(), "kept is not saved over");
+
+        tab.save().unwrap();
+        tab.content.push('!');
+        assert!(!tab.save_would_overwrite(), "the file holds what was saved");
+
+        fs::remove_file(&tab.path).unwrap();
+        assert!(
+            !tab.save_would_overwrite(),
+            "a file that is gone has no text"
+        );
+    }
 }
 
 mod navigation {
