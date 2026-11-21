@@ -1,8 +1,9 @@
 # Nightly mutation testing: a mutant run multiplies the test suite by the
-# mutant count, so it stays off the PR path — this workflow runs on a cron
-# and fails the scheduled run only when the mutation score drops below the
-# floor. Command, pin, floor, and reason: see the README's mutation-testing
-# section.
+# mutant count, so it stays off the PR path. This workflow runs on a cron,
+# deals the mutants out to 48 shards, and fails only when a shard errors or
+# the merged mutation score drops below the floor. What runs, the pin, the
+# floor and its reason: README.md, section "Mutation testing". What is
+# mutated and which tests run: .cargo/mutants.toml.
 permissions:
   contents: read  # least privilege: no step in this workflow writes to the repo (GitHub secure-use reference)
 name: mutation
@@ -13,37 +14,98 @@ on:
   workflow_dispatch:  # manual trigger to verify the gate without waiting for the schedule
 
 jobs:
-  mutation:
+  shard:
+    name: mutation (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # bounds a hung network gate; GitHub's default is 360
+    # Measured on a shared 4-core machine: the cold build and the baseline
+    # tests took 5 to 11 minutes, and a mutant 41 s on average (5 s when it
+    # does not compile, 38 s when a unit test catches it, 165 s when only
+    # tests/reader can or nothing does). 2282 mutants over 48 shards is 48
+    # a shard, at most about 44 minutes there; GitHub's runner ran the same
+    # suites about twice as fast in ci.yml's `test` job.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false  # a failure in one shard says nothing about the others
+      max-parallel: 16  # leaves the account's other runners to pull requests
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      # eframe links the GTK, xcb and fontconfig stacks; the build needs
+      # them. The window tools from ci.yml's `test` job are left out on
+      # purpose: tests/e2e is not run here (.cargo/mutants.toml).
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang pkg-config libxcb1-dev libxcb-render0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev \
+            libgtk-3-dev libfontconfig1-dev libdbus-1-dev
       # rustup reads rust-toolchain.toml (pinned channel) on the first
-      # cargo call; no toolchain step needed.
+      # cargo call; no toolchain step needed. cargo-mutants builds in a copy
+      # of the tree, so the cache holds the downloaded crates, not a build.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
+        with:
+          save-if: ${{ matrix.shard == 0 }}
       - name: Install cargo-mutants v27.1.0
         run: |
           mkdir /tmp/mutx && curl --connect-timeout 10 --max-time 300 -sSfL "https://github.com/sourcefrog/cargo-mutants/releases/download/v27.1.0/cargo-mutants-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/mutants.tar.gz
           echo "dfe6dc37d0342c891d2829b5a695aa57c2d0edecef7e7d0399a30cc6e206411e  /tmp/mutants.tar.gz" | sha256sum --check --status
           mkdir -p /tmp/mutx && tar xz -C /tmp/mutx -f /tmp/mutants.tar.gz
           sudo mv /tmp/mutx/cargo-mutants /usr/local/bin/
-      # The run's own zero-missed CI mode exits 2 on ANY surviving mutant, and
-      # the template fixture provably carries equivalent mutants (clamp's
-      # boundary comparisons return the same bound either way) that no test
-      # can kill. The floor step below is the gate. Internal errors exit 1+ —
-      # those must stay red, and outcomes.json is written incrementally, so a
-      # mid-run crash with partial data could otherwise read as green: the
-      # wrapper tolerates ONLY exit 2 and fails on every other code.
-      - name: Run cargo-mutants (survivors tolerated, errors fail)
+      # cargo-mutants exits 2 when a mutant survived and 3 when one timed
+      # out. Some mutants are equivalent (they change nothing a test could
+      # see), so the merged floor in the `mutation` job is the gate, and it
+      # counts a timeout as not caught. Every other code is an error and
+      # stays red: 4 is a failing baseline, which is how every run failed
+      # before the window tests were taken out of the per-mutant suite.
+      # outcomes.json is written as the run goes, so a crash must not reach
+      # the floor with part of a shard.
+      - name: Mutants of this shard (survivors tolerated, errors fail)
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
-          cargo mutants || code=$?
-          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+          code=0
+          cargo mutants --workspace --shard "$SHARD" || code=$?
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ] && [ "$code" -ne 3 ]; then
             echo "cargo mutants failed with exit $code"
             exit "$code"
           fi
-      - name: Mutation score floor (85, reason in the README)
+      - name: Missed and timed-out mutants of this shard
+        run: cat mutants.out/missed.txt mutants.out/timeout.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out/
+          if-no-files-found: error
+          retention-days: 14
+
+  # One check named `mutation` whatever the number of shards, because the
+  # branch rules name it: green only when every shard ran to the end and the
+  # merged score is at or above the floor.
+  mutation:
+    name: mutation
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every shard ran to the end
+        env:
+          RESULT: ${{ needs.shard.result }}
         run: |
-          python3 -c "import json, sys; s = json.load(open('mutants.out/outcomes.json')); score = 100 * s['caught'] // s['total_mutants']; print('mutation score %d%% (caught %d/%d, floor 85)' % (score, s['caught'], s['total_mutants'])); sys.exit(0 if score >= 85 else 1)"
+          echo "shards: $RESULT"
+          [ "$RESULT" = success ]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          pattern: mutants-shard-*
+          path: shards
+      # 48 is the matrix's length: a shard whose outcomes are missing fails.
+      - name: Mutation score floor (85, reason in the README)
+        run: python3 scripts/mutation-score.py 48 shards/*/outcomes.json
+      - name: Every missed and timed-out mutant
+        if: always()
+        run: cat shards/*/missed.txt shards/*/timeout.txt 2>/dev/null | sort || true
