@@ -110,6 +110,17 @@ fn the_target_of_a_link_is_as_large_as_a_sidebar_row() {
 }
 
 #[test]
+fn the_place_of_a_tabs_file_is_as_large_as_a_sidebar_row() {
+    let mut reader = desk();
+    let place = reader.path("page.md").display().to_string();
+
+    reader.hover("tab:Desk");
+
+    assert_eq!(in_hover_text(&mut reader, &place), in_a_row(&reader));
+    reader.assert_sees("Live: reloads when the file changes");
+}
+
+#[test]
 fn the_place_of_a_recent_document_is_as_large_as_a_sidebar_row() {
     let mut reader = desk();
     let place = reader.path("page.md").display().to_string();
