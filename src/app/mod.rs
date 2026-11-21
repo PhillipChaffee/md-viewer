@@ -142,6 +142,9 @@ pub(crate) struct MarkdownApp {
     // Last zoom level handed to set_zoom_factor; skips redundant writes
     last_applied_zoom_level: Option<f32>,
     window_title: frame::WindowTitle,
+    /// What the reader typed in one frame after a key that moves the
+    /// keyboard to another control.
+    typed_ahead: frame::TypedAhead,
     /// Cached set of open tab paths for file explorer highlighting (avoids per-frame syscalls).
     open_tab_paths: HashSet<PathBuf>,
     /// The overlay that shows a clicked diagram or image enlarged.

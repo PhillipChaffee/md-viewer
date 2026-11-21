@@ -38,8 +38,51 @@ impl WindowTitle {
     }
 }
 
+/// The keys that move the keyboard from one control to another.
+const MOVES_KEYBOARD: [egui::Key; 5] = [
+    egui::Key::Tab,
+    egui::Key::ArrowLeft,
+    egui::Key::ArrowRight,
+    egui::Key::ArrowUp,
+    egui::Key::ArrowDown,
+];
+
+/// What the reader typed in one frame after a key that moves the keyboard
+/// to another control, held for the next frame.
+///
+/// egui moves the keyboard a frame after Shift+Tab or an arrow asks it
+/// to, and gives every key of a frame to whatever has the keyboard then.
+/// A machine slow enough to deliver Shift+Tab and Enter in one frame
+/// would have Enter press the control the reader had just left.
+#[derive(Default)]
+pub(crate) struct TypedAhead(Vec<egui::Event>);
+
+impl TypedAhead {
+    /// End the frame's events at the first key in them that moves the
+    /// keyboard, after putting what an earlier frame held ahead of them.
+    /// What follows that key waits one frame, which is asked for.
+    fn hold(&mut self, ctx: &egui::Context, events: &mut Vec<egui::Event>) {
+        if !self.0.is_empty() {
+            events.splice(0..0, self.0.drain(..));
+        }
+        let moves_keyboard = |event: &egui::Event| {
+            let egui::Event::Key { key, pressed, .. } = event else {
+                return false;
+            };
+            *pressed && MOVES_KEYBOARD.contains(key)
+        };
+        if let Some(moved) = events.iter().position(moves_keyboard) {
+            self.0 = events.split_off(moved + 1);
+            if !self.0.is_empty() {
+                ctx.request_repaint();
+            }
+        }
+    }
+}
+
 impl eframe::App for MarkdownApp {
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.typed_ahead.hold(ctx, &mut raw_input.events);
         self.lightbox.capture_wheel(raw_input);
     }
 

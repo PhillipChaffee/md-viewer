@@ -146,6 +146,28 @@ fn enter_saves_because_the_keyboard_starts_on_save() {
 }
 
 #[test]
+fn keys_typed_in_one_frame_answer_in_the_order_they_were_pressed() {
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.press("Tab");
+    assert_eq!(reader.focused().as_deref(), Some("Discard"));
+    reader.tap_in_turn(&["Shift+Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "back on Save");
+    assert_eq!(reader.title(), "Markdown Viewer", "Save closes");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Tab", "Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), EDITED, "around to Save");
+
+    let mut reader = unsaved_draft();
+    reader.press("Ctrl+W");
+    reader.tap_in_turn(&["Tab", "Enter"]);
+    assert_eq!(reader.read_file("draft.md"), SOURCE, "Discard");
+    assert_eq!(reader.title(), "Markdown Viewer", "Discard closes");
+}
+
+#[test]
 fn tab_moves_the_keyboard_from_save_to_discard_to_cancel() {
     let mut reader = unsaved_draft();
     reader.press("Ctrl+W");

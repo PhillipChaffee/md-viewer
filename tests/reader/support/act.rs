@@ -158,16 +158,26 @@ impl Reader {
     /// a quick tap does while the app is busy drawing.
     #[track_caller]
     pub(crate) fn tap(&mut self, shortcut: &str) {
-        let (modifiers, key) = chord(shortcut);
-        let stroke = |pressed| egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed,
-            repeat: false,
-            modifiers,
-        };
+        self.tap_in_turn(&[shortcut]);
+    }
+
+    /// Tap one shortcut after another so fast that all of them land in
+    /// one frame, in the order they were pressed, as quick typing does
+    /// while the app is busy drawing.
+    #[track_caller]
+    pub(crate) fn tap_in_turn(&mut self, shortcuts: &[&str]) {
+        let strokes = shortcuts.iter().flat_map(|shortcut| {
+            let (modifiers, key) = chord(shortcut);
+            [true, false].map(|pressed| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers,
+            })
+        });
         // By the end of the frame nothing is held any more.
-        self.frame(Modifiers::NONE, vec![stroke(true), stroke(false)]);
+        self.frame(Modifiers::NONE, strokes.collect());
         self.settle();
     }
 

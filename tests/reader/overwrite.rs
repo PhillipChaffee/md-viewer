@@ -101,6 +101,19 @@ fn enter_does_not_overwrite_because_the_keyboard_starts_on_cancel() {
 }
 
 #[test]
+fn a_move_to_overwrite_and_enter_typed_in_one_frame_overwrite() {
+    for to_overwrite in ["Shift+Tab", "Left"] {
+        let mut reader = changed_under_edits();
+        reader.press("Ctrl+S");
+
+        reader.tap_in_turn(&[to_overwrite, "Enter"]);
+
+        assert_eq!(reader.read_file("draft.md"), MINE, "{to_overwrite}");
+        reader.assert_hides(ASKS);
+    }
+}
+
+#[test]
 fn the_shortcuts_wait_while_the_overwrite_question_is_up() {
     let mut reader = changed_under_edits();
     reader.press("Ctrl+S");
