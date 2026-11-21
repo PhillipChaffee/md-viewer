@@ -103,3 +103,16 @@ fn the_drop_target_dims_the_window_with_the_scrim() {
     let prompt = crate::test_support::painted_text_starting(&output, "Drop markdown file");
     assert_eq!(prompt.fallback_color, theme::ON_SCRIM);
 }
+
+#[test]
+fn under_the_prompt_a_dropped_file_is_neither_opened_nor_refused() {
+    let mut harness = Harness::with_three_docs();
+    harness.app.tabs[0].content.push_str(" edited");
+    harness.app.request_close_tab(0);
+    let (b, picture) = (harness.path("b.md"), harness.path("picture.png"));
+
+    frame_with(&mut harness, dropping(vec![Some(b), Some(picture)]));
+
+    assert_eq!(harness.app.tabs.len(), 1);
+    assert_eq!(harness.app.error_message, None);
+}
