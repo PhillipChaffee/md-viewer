@@ -1864,6 +1864,18 @@ enum HeadingPiece {
     Link(Link),
 }
 
+/// md-viewer patch: where a piece of text is set, when it is not kept as
+/// the words of a picture or the content of a code block.
+enum TextSink {
+    /// A heading collects its pieces and sets them at its end.
+    Heading,
+    /// A table cell sets each piece as it comes.
+    TableCell,
+    /// The running text of a paragraph, a list item or a quote: it waits
+    /// in [`CommonMarkViewerInternal::runs`].
+    Runs,
+}
+
 pub struct CommonMarkViewerInternal {
     curr_table: usize,
     curr_code_block: usize,
@@ -3620,24 +3632,33 @@ impl CommonMarkViewerInternal {
     /// among the heading's pieces.
     fn end_link(&mut self, link: Link, ui: &mut Ui, cache: &mut CommonMarkCache) {
         let active = std::mem::take(&mut self.link_is_active);
-        if self.text_style.heading.is_some() {
-            self.current_heading_pieces.push(HeadingPiece::Link(link));
-        } else if self.is_table {
-            link.end(ui, cache);
-        } else {
-            let (destination, job) = link.into_job(ui);
-            self.runs.push(job, Some(destination), active);
+        match self.text_sink() {
+            TextSink::Heading => self.current_heading_pieces.push(HeadingPiece::Link(link)),
+            TextSink::TableCell => link.end(ui, cache),
+            TextSink::Runs => {
+                let (destination, job) = link.into_job(ui);
+                self.runs.push(job, Some(destination), active);
+            }
         }
     }
 
-    /// md-viewer patch: whether text emitted now waits in [`Self::runs`]:
-    /// the running text of a paragraph, a list item or a quote. A heading
-    /// collects its own pieces, and a table cell sets each as it comes.
+    /// md-viewer patch: where a piece of text emitted now is set.
+    fn text_sink(&self) -> TextSink {
+        if self.text_style.heading.is_some() {
+            TextSink::Heading
+        } else if self.is_table {
+            TextSink::TableCell
+        } else {
+            TextSink::Runs
+        }
+    }
+
+    /// md-viewer patch: whether text emitted now waits in [`Self::runs`],
+    /// so that the row it is set on is not known yet.
     fn text_waits(&self) -> bool {
         self.image.is_none()
             && self.code_block.is_none()
-            && self.text_style.heading.is_none()
-            && !self.is_table
+            && matches!(self.text_sink(), TextSink::Runs)
     }
 
     /// md-viewer patch: set the running text that waited, each piece
@@ -3706,26 +3727,32 @@ impl CommonMarkViewerInternal {
         } else if let Some(link) = &mut self.link {
             link.text.push(rich_text);
             self.link_is_active |= hl == HighlightKind::Active;
-        } else if self.text_style.heading.is_some() {
-            self.current_heading_text
-                .push_str(raw_heading_text.unwrap_or(&text));
-            // Accumulate RichText - will render all at once in end_tag(Heading)
-            self.current_heading_pieces
-                .push(HeadingPiece::Text(rich_text));
-        } else if self.is_table {
-            ui.add(egui::Label::new(rich_text).wrap());
         } else {
-            // md-viewer patch: the job `ui.label` would build of the text
-            // (same format, same valign), kept until what follows the text
-            // is known. See `Runs`.
-            let mut job = egui::text::LayoutJob::default();
-            rich_text.append_to(
-                &mut job,
-                ui.style(),
-                egui::FontSelection::Default,
-                ui.text_valign(),
-            );
-            self.runs.push(job, None, hl == HighlightKind::Active);
+            match self.text_sink() {
+                TextSink::Heading => {
+                    self.current_heading_text
+                        .push_str(raw_heading_text.unwrap_or(&text));
+                    // Accumulate RichText - will render all at once in end_tag(Heading)
+                    self.current_heading_pieces
+                        .push(HeadingPiece::Text(rich_text));
+                }
+                TextSink::TableCell => {
+                    ui.add(egui::Label::new(rich_text).wrap());
+                }
+                TextSink::Runs => {
+                    // md-viewer patch: the job `ui.label` would build of the
+                    // text (same format, same valign), kept until what
+                    // follows the text is known. See `Runs`.
+                    let mut job = egui::text::LayoutJob::default();
+                    rich_text.append_to(
+                        &mut job,
+                        ui.style(),
+                        egui::FontSelection::Default,
+                        ui.text_valign(),
+                    );
+                    self.runs.push(job, None, hl == HighlightKind::Active);
+                }
+            }
         }
     }
 
