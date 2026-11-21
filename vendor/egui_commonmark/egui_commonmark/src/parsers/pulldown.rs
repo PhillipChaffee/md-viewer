@@ -8,6 +8,7 @@ use crate::{CommonMarkCache, CommonMarkOptions};
 
 use egui::{self, Id, Pos2, TextStyle, Ui};
 
+use super::runs::Runs;
 use crate::List;
 use egui_commonmark_backend_extended::elements::{
     blockquote, body_font_size, footnote, footnote_label, footnote_start, heading_end_spacing,
@@ -1863,66 +1864,6 @@ enum HeadingPiece {
     Link(Link),
 }
 
-/// md-viewer patch: a piece of running text, kept until what follows it is
-/// known. A row may end between two pieces only where it could end inside
-/// one: a piece that touches the next, with no place to break between
-/// them, keeps room for the start of that one on its row.
-struct Run {
-    job: egui::text::LayoutJob,
-    /// Where it leads, when it is a link.
-    link: Option<String>,
-    /// It holds find's current match: where it is set is where find
-    /// scrolls to.
-    active: bool,
-    /// No row may end between the run before it and this one.
-    touches: bool,
-}
-
-/// The widths of pieces are measured apart from the row they are set on,
-/// each rounded to the pixel on its own: the room kept for a piece is this
-/// much more than its measure.
-const RUN_ROUNDING: f32 = 1.0;
-
-/// How wide the first `len` bytes of `job` are on one row.
-fn width_of_start(ui: &Ui, job: &egui::text::LayoutJob, len: usize) -> f32 {
-    if len == 0 {
-        return 0.0;
-    }
-    let sections = job
-        .sections
-        .iter()
-        .filter(|section| section.byte_range.start < len);
-    let start = egui::text::LayoutJob {
-        text: job.text[..len].to_owned(),
-        sections: sections
-            .map(|section| egui::text::LayoutSection {
-                leading_space: 0.0,
-                byte_range: section.byte_range.start..section.byte_range.end.min(len),
-                format: section.format.clone(),
-            })
-            .collect(),
-        round_output_to_gui: false,
-        ..Default::default()
-    };
-    ui.fonts_mut(|fonts| fonts.layout_job(start)).rect.width()
-}
-
-/// Give each of `runs` the room that the runs touching it need after it:
-/// what they hold up to the first place a row may break.
-fn keep_room_for_touching_runs(ui: &Ui, runs: &mut [Run]) {
-    let mut room = 0.0;
-    for run in runs.iter_mut().rev() {
-        run.job.wrap.room_after = room;
-        room = if run.touches {
-            let (word, ends) = egui::epaint::text::first_word(&run.job.text);
-            let width = width_of_start(ui, &run.job, word.len()) + RUN_ROUNDING;
-            if ends { width } else { width + room }
-        } else {
-            0.0
-        };
-    }
-}
-
 /// Whether `event` is running text or a mark on it, which waits in
 /// [`CommonMarkViewerInternal::runs`], and not something laid out on the
 /// spot.
@@ -1988,8 +1929,8 @@ pub struct CommonMarkViewerInternal {
     /// The next block continues the row it starts on: the text of a
     /// footnote after the footnote's label.
     continues_row: bool,
-    /// md-viewer patch: the running text not set yet. See [`Run`].
-    runs: Vec<Run>,
+    /// md-viewer patch: the running text not set yet.
+    runs: Runs,
     /// md-viewer patch: the link being collected holds find's current match.
     link_is_active: bool,
 }
@@ -2022,7 +1963,7 @@ impl CommonMarkViewerInternal {
             upcoming: None,
             column: None,
             continues_row: false,
-            runs: Vec::new(),
+            runs: Runs::default(),
             link_is_active: false,
             current_heading_y: None,
             current_heading_source_start: None,
@@ -3698,7 +3639,7 @@ impl CommonMarkViewerInternal {
             link.end(ui, cache);
         } else {
             let (destination, job) = link.into_job(ui);
-            self.join_run(job, Some(destination), active);
+            self.runs.push(job, Some(destination), active);
         }
     }
 
@@ -3710,23 +3651,6 @@ impl CommonMarkViewerInternal {
             && self.code_block.is_none()
             && self.text_style.heading.is_none()
             && !self.is_table
-    }
-
-    /// md-viewer patch: add a piece to the running text that waits to be
-    /// set. It touches the piece before it when no row may end between the
-    /// last character of that one and its first.
-    fn join_run(&mut self, job: egui::text::LayoutJob, link: Option<String>, active: bool) {
-        let end = self.runs.last().and_then(|run| run.job.text.chars().next_back());
-        let touches = match (end, job.text.chars().next()) {
-            (Some(end), Some(start)) => !egui::epaint::text::is_word_boundary(end, Some(start)),
-            _ => false,
-        };
-        self.runs.push(Run {
-            job,
-            link,
-            active,
-            touches,
-        });
     }
 
     /// md-viewer patch: set the running text that waited, each piece
@@ -3743,8 +3667,7 @@ impl CommonMarkViewerInternal {
             return;
         }
         let mut runs = std::mem::take(&mut self.runs);
-        keep_room_for_touching_runs(ui, &mut runs);
-        for run in runs.drain(..) {
+        for run in runs.drain_with_room(ui) {
             if run.active {
                 let top = ui.cursor().top();
                 record_active_search_content_y(cache, top, self.render_origin_y, self.slice_start_y);
@@ -3807,7 +3730,7 @@ impl CommonMarkViewerInternal {
         } else {
             // md-viewer patch: the job `ui.label` would build of the text
             // (same format, same valign), kept until what follows the text
-            // is known. See `Run`.
+            // is known. See `Runs`.
             let mut job = egui::text::LayoutJob::default();
             rich_text.append_to(
                 &mut job,
@@ -3815,7 +3738,7 @@ impl CommonMarkViewerInternal {
                 egui::FontSelection::Default,
                 ui.text_valign(),
             );
-            self.join_run(job, None, hl == HighlightKind::Active);
+            self.runs.push(job, None, hl == HighlightKind::Active);
         }
     }
 
@@ -4160,11 +4083,11 @@ impl CommonMarkViewerInternal {
                                         egui::FontSelection::Default,
                                         ui.text_valign(),
                                     );
-                                    self.join_run(job, None, false);
+                                    self.runs.push(job, None, false);
                                 }
                                 HeadingPiece::Link(link) => {
                                     let (destination, job) = link.into_job(ui);
-                                    self.join_run(job, Some(destination), false);
+                                    self.runs.push(job, Some(destination), false);
                                 }
                             }
                         }
