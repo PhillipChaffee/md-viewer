@@ -1,6 +1,6 @@
 //! The opt-in block styling a reader view asks for: a rhythm of gaps
 //! between blocks, typeset tables, list markers that hang in a slot, and
-//! inline code on chips. Every test reads what a frame painted.
+//! inline code in an ink of its own. Every test reads what a frame painted.
 
 use egui::{Color32, Context, Pos2, Rect, Shape, Stroke, TextStyle};
 use egui_commonmark_extended::{
@@ -451,7 +451,6 @@ fn scrolled_frame(
         list: Some(list_style()),
         table: Some(table_style()),
         center_content: true,
-        inline_code_radius: Some(4.0),
         ..Default::default()
     };
     let mut frame = Frame::default();
@@ -1035,100 +1034,23 @@ fn every_level_of_a_nested_list_steps_in_by_one_slot() {
 
 // --- inline code ----------------------------------------------------------
 
-fn chips() -> BlockStyle {
-    BlockStyle {
-        inline_code_radius: Some(4.0),
-        ..Default::default()
-    }
-}
-
 #[test]
-fn inline_code_sits_on_a_rounded_chip_and_no_line_moves() {
-    let markdown = "Some text with `inline code` in the middle of a line.\n";
-    let ctx = context();
-    let plain = show_in(&ctx, markdown, &BlockStyle::default());
-    let chipped = show_in(&ctx, markdown, &chips());
-    let fill = ctx.style().visuals.code_bg_color;
-
-    // The same labels at the same places.
-    assert_eq!(plain.texts.len(), chipped.texts.len());
-    for (before, after) in plain.texts.iter().zip(&chipped.texts) {
-        assert_eq!((before.text.as_str(), before.rect), (after.text.as_str(), after.rect));
-    }
-    // The code's own square background makes way for the chip.
-    assert_eq!(plain.text("inline code").background, fill);
-    let code = chipped.text("inline code");
-    assert_eq!(code.background, Color32::TRANSPARENT);
-    let chip = chipped
-        .rects
-        .iter()
-        .find(|rect| rect.fill == fill)
-        .expect("a chip in the code background color");
-    assert_close(chip.radius, 4.0, "chip radius");
-    assert!(chip.rect.left() < code.left && chip.rect.right() > code.rect.right());
-    assert!(chip.rect.left() > code.left - 4.0, "the chip hugs the code");
-    assert!(
-        chip.rect.height() < code.rect.height() && chip.rect.height() > EM,
-        "shorter than the line, taller than the letters: {}",
-        chip.rect.height()
-    );
-    assert!(code.rect.y_range().contains(chip.rect.center().y));
-}
-
-#[test]
-fn code_that_wraps_gets_a_chip_on_every_line() {
-    let ctx = context();
-    let markdown = "Lead `fifty characters of code that will not fit a line` tail.\n";
-    let mut cache = CommonMarkCache::default();
-    let mut frame = Frame::default();
-    for _ in 0..3 {
-        ctx.begin_pass(egui::RawInput::default());
-        egui::CentralPanel::default().show(&ctx, |ui| {
-            ui.set_width(260.0);
-            CommonMarkViewer::new()
-                .default_width(Some(260))
-                .block_style(chips())
-                .show(ui, &mut cache, markdown);
-        });
-        frame = Frame::default();
-        for clipped in ctx.end_pass().shapes {
-            frame.collect(&clipped.shape, clipped.clip_rect);
-        }
-    }
-    let fill = ctx.style().visuals.code_bg_color;
-    let chips: Vec<&Filled> = frame.rects.iter().filter(|rect| rect.fill == fill).collect();
-
-    assert!(chips.len() >= 2, "one chip per line of code: {chips:#?}");
-    assert!(chips
-        .windows(2)
-        .all(|pair| pair[0].rect.bottom() <= pair[1].rect.top() + 0.6));
-    let code = frame.text("fifty characters").rect;
-    assert!(chips.iter().all(|chip| code.expand(4.0).contains_rect(chip.rect)));
-}
-
-#[test]
-fn code_in_a_table_cell_gets_a_chip_and_a_found_match_keeps_its_highlight() {
+fn a_found_match_in_inline_code_is_marked_in_the_match_color() {
     let ctx = context();
     let fill = ctx.style().visuals.code_bg_color;
-    let table = "| a header |\n|---|\n| `code` |\n";
-    let frame = show_in(&ctx, table, &chips());
-    let cell_chips: Vec<&Filled> = frame.rects.iter().filter(|rect| rect.fill == fill).collect();
-    assert_eq!(cell_chips.len(), 1, "{cell_chips:#?}");
-
-    // A search match in inline code is painted in the match color instead.
     let markdown = "Find `needle` here.\n";
     let mut cache = CommonMarkCache::default();
     cache.set_search_ranges(vec![6..12]);
     ctx.begin_pass(egui::RawInput::default());
     egui::CentralPanel::default().show(&ctx, |ui| {
-        viewer(&chips()).show(ui, &mut cache, markdown);
+        viewer(&BlockStyle::default()).show(ui, &mut cache, markdown);
     });
     let mut frame = Frame::default();
     for clipped in ctx.end_pass().shapes {
         frame.collect(&clipped.shape, clipped.clip_rect);
     }
-    assert!(frame.rects.iter().all(|rect| rect.fill != fill));
-    assert_ne!(frame.text("needle").background, Color32::TRANSPARENT);
+    let found = frame.text("needle").background;
+    assert!(found != Color32::TRANSPARENT && found != fill, "{found:?}");
 }
 
 // --- inline code in an ink of its own -------------------------------------

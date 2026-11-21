@@ -131,7 +131,6 @@ fn tables_lists_and_inline_code_are_drawn_in_the_themes_colors() {
         assert_eq!(blocks.list.unwrap().marker, palette.muted);
         // Inline code is its tint and its face: no chip behind it.
         assert_eq!(blocks.inline_code_color, Some(palette.code));
-        assert_eq!(blocks.inline_code_radius, None);
     }
 }
 

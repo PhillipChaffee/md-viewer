@@ -293,13 +293,10 @@ pub struct BlockStyle {
     /// centered on the column, before it is scaled down. `None` keeps
     /// diagrams inside the column.
     pub figure_max_width: Option<f32>,
-    /// Corner radius of the background of inline code. `None` keeps the
-    /// square background as tall as the line.
-    pub inline_code_radius: Option<f32>,
     /// The ink of inline code. Set, the code is told apart by this color
-    /// and its face alone: nothing is painted behind it, and
-    /// `inline_code_radius` has no say. Code in a link is in the link's
-    /// color. `None` keeps the text color on the code background.
+    /// and its face alone: nothing is painted behind it. Code in a link
+    /// is in the link's color. `None` keeps the text color on the square
+    /// code background, as tall as the line.
     /// md-viewer patch.
     pub inline_code_color: Option<egui::Color32>,
     /// A bold code face, for inline code in strong text and in the
