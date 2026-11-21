@@ -9,6 +9,51 @@ module's tests are in a sibling `tests.rs`, and its proofs, where it has
 any, in a sibling `proofs.rs`. [PROOFS.md](PROOFS.md) says what is proven
 and what is not.
 
+## What CI runs for which change
+
+Every gate runs on every change that could affect it, and on every push to
+`main`. A pull request skips a job only when none of the paths it changes
+can reach that job. `scripts/ci-changes.sh` holds the rule and can be run
+by hand: `scripts/ci-changes.sh <base> <head>`.
+
+| The pull request changes | `hygiene`, `version-sync` | `lint`, `test`, `doc-comments`, `renderer`, cross-platform `cargo check` | `proofs` |
+| --- | --- | --- | --- |
+| Something Kani compiles or the proof machinery: `src/`, `crates/`, `vendor/`, `assets/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, a workflow, `run-proofs.sh`, `scripts/*proof*`, `scripts/ci-changes.sh` | Run | Run | Run |
+| Other code and configuration only: `tests/`, `data/`, the other scripts, lint and tool configuration, and any path not named in this table | Run | Run | Skipped |
+| Documentation only: `docs/`, `screenshots/`, `LICENSE`, `THIRD_PARTY_NOTICES`, and Markdown outside `src/`, `crates/`, `vendor/`, `assets/`, `tests/`, `data/`, `scripts/` and `.github/` | Run | Skipped | Skipped |
+
+A skipped job reports as skipped, which the branch rules accept. The
+cross-platform check and `proofs` are matrix jobs, and a matrix job skipped
+as a whole would never report the names the rules wait for. So the
+cross-platform job always starts and skips its steps, and a last job named
+`proofs` reports for the shares.
+
+Four things keep this from hiding a failure:
+
+- **Documentation is still checked.** `hygiene` holds the spelling,
+  Markdown, link, secret and duplication gates, and it has no condition.
+- **Markdown a test reads is code.** `tests/fixtures/` and the renderer's
+  examples are compiled into test binaries, so a change there runs
+  everything.
+- **Doubt runs the job.** A path the script does not know counts as code.
+  A job is skipped only when the script answers the word `false`, so an
+  empty answer, a failed diff or a failed `changes` job runs everything.
+- **`main` is never narrowed.** A push to `main` runs every job, whatever
+  the pull request before it skipped.
+
+Three more facts about how the jobs are laid out:
+
+- **The tests run once.** `test` runs the suite under `cargo llvm-cov`,
+  which is both the test run and the coverage gate. It builds the same five
+  test binaries as `cargo test --workspace`. It does not run doctests, and
+  the workspace has none; the first one needs `cargo test --workspace
+  --doc` added beside it.
+- **`lint` is its own job.** `cargo fmt --check` and clippy run beside the
+  tests, not before them.
+- **The proofs run in three shares,** one runner each, and a job named
+  `proofs` reports the three as one result. [PROOFS.md](PROOFS.md) says how
+  the harnesses are dealt out and why none can be missed.
+
 ## Where the retrofit left the crate
 
 | Gate | Before | After |
