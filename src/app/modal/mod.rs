@@ -1,10 +1,16 @@
-//! The one answer to "is the page taking input right now?".
+//! Which overlay has the window's key bindings, wheel zoom and dropped
+//! files.
 //!
-//! Two things the app shows are modal: while either is up, nothing under
-//! it is clicked, typed into or scrolled, and none of the app's own
-//! shortcuts run but the few that are its own. The keyboard, the wheel
-//! that zooms and files dropped on the window all ask here, so an overlay
-//! that takes one of them takes all of them.
+//! Two things the app shows are modal: the prompt about unsaved edits and
+//! a picture enlarged in the lightbox. While either is up, the shortcuts,
+//! the wheel or pinch that zooms the document and files dropped on the
+//! window all ask here, so those three cannot disagree.
+//!
+//! Clicks, typing and the wheel that scrolls do not ask here. Each
+//! overlay keeps those from the page itself: the prompt through egui's
+//! modal layer, the lightbox through a sink that covers the window and by
+//! taking the wheel before egui reads it. A third overlay has to do the
+//! same for itself.
 //!
 //! The Colors and Fonts dialogs are not modal. They float over a page
 //! that goes on taking clicks, keys and drops.
@@ -25,8 +31,8 @@ pub(crate) enum Modal {
 
 impl MarkdownApp {
     /// The overlay that has the window's input, if one does. The prompt
-    /// comes first: it draws over everything and closes the lightbox when
-    /// it starts to ask.
+    /// comes first: it closes the lightbox when it starts to ask, so the
+    /// two are not up together.
     pub(crate) const fn modal(&self) -> Option<Modal> {
         if self.closing.is_asking() {
             Some(Modal::Prompt)

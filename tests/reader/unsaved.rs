@@ -599,6 +599,29 @@ fn nothing_under_the_prompt_takes_a_click_or_typing() {
     assert_eq!(reader.typed(), [EDITED]);
 }
 
+#[test]
+fn the_wheel_does_not_scroll_the_page_under_the_prompt() {
+    let mut reader = Reader::with_docs(&[("long.md", &long_document(14))]);
+    edit_and_read(&mut reader, " Mine.");
+    reader.wheel_up_at(600.0, 400.0, 100_000.0);
+    assert!(reader.in_view("Long read"));
+    reader.press("Ctrl+W");
+    reader.assert_sees("Save changes to “Long read” (long.md)?");
+
+    // Once with the pointer on the prompt, in the middle of the window,
+    // and once beside it.
+    reader.wheel_down_at(600.0, 400.0, 300.0);
+    reader.wheel_down_at(60.0, 700.0, 300.0);
+
+    reader.click("Cancel");
+    assert!(reader.in_view("Long read"), "the page moved");
+    reader.wheel_down_at(60.0, 700.0, 300.0);
+    assert!(
+        !reader.in_view("Long read"),
+        "the wheel moves the page again"
+    );
+}
+
 /// What the window shows while a file that can be dropped is held over it.
 const INVITES_A_DROP: &str = "Drop markdown file here";
 
