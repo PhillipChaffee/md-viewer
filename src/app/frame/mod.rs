@@ -60,8 +60,9 @@ pub(crate) struct TypedAhead(Vec<egui::Event>);
 impl TypedAhead {
     /// End the frame's events at the first key in them that moves the
     /// keyboard, after putting what an earlier frame held ahead of them.
-    /// What follows that key waits one frame, which is asked for.
-    fn hold(&mut self, ctx: &egui::Context, events: &mut Vec<egui::Event>) {
+    /// What follows that key waits one frame. Returns whether anything
+    /// waits, which needs that frame to be drawn.
+    fn hold(&mut self, events: &mut Vec<egui::Event>) -> bool {
         if !self.0.is_empty() {
             events.splice(0..0, self.0.drain(..));
         }
@@ -82,16 +83,16 @@ impl TypedAhead {
         };
         if let Some(moved) = events.iter().position(moves_keyboard) {
             self.0 = events.split_off(moved + 1);
-            if !self.0.is_empty() {
-                ctx.request_repaint();
-            }
         }
+        !self.0.is_empty()
     }
 }
 
 impl eframe::App for MarkdownApp {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        self.typed_ahead.hold(ctx, &mut raw_input.events);
+        if self.typed_ahead.hold(&mut raw_input.events) {
+            ctx.request_repaint();
+        }
         self.lightbox.capture_wheel(raw_input);
     }
 

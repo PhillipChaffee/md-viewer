@@ -587,3 +587,52 @@ fn the_repeats_of_a_held_arrow_all_reach_the_frame_they_arrive_in() {
     assert_eq!(let_in(&mut harness, repeats.clone()), repeats);
     assert_eq!(let_in(&mut harness, Vec::new()), []);
 }
+
+#[test]
+fn what_is_typed_after_a_key_that_moves_the_keyboard_waits_a_frame_in_its_order() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let [tab, enter, escape] =
+        [egui::Key::Tab, egui::Key::Enter, egui::Key::Escape].map(|pressed| key(pressed, false));
+
+    let first = let_in(&mut harness, vec![tab.clone(), enter.clone()]);
+    let second = let_in(&mut harness, vec![escape.clone()]);
+
+    assert_eq!(first, [tab]);
+    assert_eq!(second, [enter, escape]);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}
+
+#[test]
+fn a_frame_without_a_key_that_moves_the_keyboard_holds_nothing_back() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let typed = vec![
+        key(egui::Key::Enter, false),
+        egui::Event::Text("a".to_owned()),
+    ];
+
+    assert_eq!(let_in(&mut harness, typed.clone()), typed);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}
+
+#[test]
+fn a_frame_that_holds_keys_back_asks_for_the_next_one() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let window = egui::Context::default();
+    // A window that has been drawn and wants no other frame.
+    for _ in 0..2 {
+        let _ = window.run(egui::RawInput::default(), |_| {});
+    }
+    assert!(!window.has_requested_repaint());
+    let mut arrives = |events: &[egui::Event]| {
+        let mut input = egui::RawInput {
+            events: events.to_vec(),
+            ..Default::default()
+        };
+        harness.app.raw_input_hook(&window, &mut input);
+        window.has_requested_repaint()
+    };
+    let [tab, enter] = [egui::Key::Tab, egui::Key::Enter].map(|pressed| key(pressed, false));
+
+    assert!(!arrives(std::slice::from_ref(&tab)), "nothing was held");
+    assert!(arrives(&[tab, enter]), "Enter waits for a frame");
+}
