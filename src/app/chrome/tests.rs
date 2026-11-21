@@ -594,6 +594,12 @@ fn a_popup_is_a_rounded_sheet_of_the_surface_color_set_in_the_chrome_text_size()
 }
 
 #[test]
+fn a_popup_has_the_height_of_the_window_less_its_frame_and_the_air_around_it() {
+    assert_close(popup_room(800.0, 14.0), 778.0);
+    assert_close(popup_room(100.0, 0.0), 92.0);
+}
+
+#[test]
 fn a_button_can_tell_that_the_popup_it_is_about_to_anchor_is_open() {
     let stage = Stage::new();
     let show = |ui: &mut egui::Ui| {

@@ -344,6 +344,17 @@ impl Reader {
         })
     }
 
+    /// Whether the one control `label` lies wholly inside the window, so
+    /// a pointer can get to all of it.
+    #[track_caller]
+    pub(crate) fn is_within_window(&self, label: &str) -> bool {
+        let area = self.area_of(label);
+        area.left >= 0.0
+            && area.top >= 0.0
+            && area.right() <= self.window.0
+            && area.bottom() <= self.window.1
+    }
+
     /// What the text fields hold, in reading order: the find bar's query,
     /// the source in edit mode.
     pub(crate) fn typed(&self) -> Vec<String> {

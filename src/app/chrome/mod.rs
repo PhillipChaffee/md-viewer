@@ -87,6 +87,57 @@ pub(super) fn popup_style(
 /// a button and the first control of the popup it opened.
 pub(super) const POPUP_SENSE: egui::Sense = egui::Sense::CLICK;
 
+/// Space kept between a popup that scrolls and the window's top and
+/// bottom edges.
+const POPUP_CLEARANCE: f32 = 4.0;
+
+/// The height the contents of a popup can take before they have to
+/// scroll: the window's, less the sheet's own margins and outline
+/// (`frame`) and a little air above and below.
+fn popup_room(window: f32, frame: f32) -> f32 {
+    2.0_f32.mul_add(-POPUP_CLEARANCE, window - frame)
+}
+
+/// Lay out the contents of a menu or popover, behind a scroll bar while
+/// they are taller than the window. Contents that fit are laid out as if
+/// this were not here, and egui puts the sheet where it did.
+///
+/// The Tab key walks the controls of a popup; the one it lands on is
+/// scrolled into view.
+pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let style = ui.style();
+    let frame = 2.0_f32.mul_add(
+        style.visuals.window_stroke.width,
+        style.spacing.menu_margin.sum().y,
+    );
+    let room = popup_room(ui.ctx().content_rect().height(), frame);
+    // The sheet is as tall as it was last frame, and a scroll area takes
+    // no more than its `Ui` has: say how far it may grow.
+    ui.set_max_height(room);
+    // The bar shows that there is more, with the pointer anywhere.
+    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
+    egui::ScrollArea::vertical()
+        .max_height(room)
+        .min_scrolled_height(0.0)
+        .show(ui, |ui| {
+            let returned = add_contents(ui);
+            show_what_gained_the_keyboard(ui);
+            returned
+        })
+        .inner
+}
+
+/// Scroll to the control of `ui`'s sheet the keyboard moved to this frame.
+fn show_what_gained_the_keyboard(ui: &egui::Ui) {
+    let focused = ui.memory(egui::Memory::focused);
+    let Some(control) = focused.and_then(|id| ui.ctx().read_response(id)) else {
+        return;
+    };
+    if control.layer_id == ui.layer_id() && control.gained_focus() {
+        control.scroll_to_me(None);
+    }
+}
+
 /// Whether the popup anchored to the widget `ui` lays out next is open, so
 /// that widget can be drawn lit.
 pub(super) fn next_widget_popup_is_open(ui: &egui::Ui) -> bool {

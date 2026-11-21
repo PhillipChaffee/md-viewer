@@ -75,6 +75,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
 
 - Four themes, a resizable centered column, three line spacings, five text
   sizes and 50% to 300% zoom.
+- A menu taller than the window, as **⋯** is at a high zoom, scrolls:
+  with the wheel, or with `Tab`, which brings each row into view.
 - Documents are set in the bundled
   [Source Serif 4](https://github.com/adobe-fonts/source-serif). Other font
   presets and any installed font family are under **Aa → Fonts…**.

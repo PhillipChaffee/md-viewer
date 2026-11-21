@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::chrome;
 use crate::app::sidebar::{self, Chevron, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{FileTreeNode, SortOrder};
@@ -110,7 +111,10 @@ impl MarkdownApp {
 
         let sort_order = self.file_explorer.sort_order();
         let picked = more
-            .and_then(|more| egui::Popup::menu(&more).show(|ui| explorer_menu(ui, sort_order)))
+            .and_then(|more| {
+                egui::Popup::menu(&more)
+                    .show(|ui| chrome::scrolled(ui, |ui| explorer_menu(ui, sort_order)))
+            })
             .and_then(|menu| menu.inner);
         match picked {
             Some(MenuPick::ExpandAll) => {

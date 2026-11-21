@@ -254,7 +254,7 @@ fn tab_label(
 
     egui::Popup::context_menu(&response)
         .style(chrome::popup_style(palette))
-        .show(|ui| tab_context_menu(ui, label, palette, actions));
+        .show(|ui| chrome::scrolled(ui, |ui| tab_context_menu(ui, label, palette, actions)));
     response.on_hover_ui(|ui| tab_hover(ui, label, palette))
 }
 
