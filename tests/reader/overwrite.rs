@@ -370,9 +370,69 @@ fn a_second_quit_while_the_overwrite_question_shows_writes_nothing_and_still_ask
 
     assert!(!reader.has_quit());
     assert_eq!(reader.read_file("draft.md"), THEIRS);
-    assert_eq!(reader.count("Cancel"), 1, "a question is still up");
+    reader.assert_sees(ASKS);
+    reader.assert_hides(ASKS_UNSAVED);
+    assert!(reader.keyboard_is_on("Cancel"));
     reader.click("Cancel");
     assert!(!reader.has_quit());
+    assert_eq!(reader.typed(), [MINE]);
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+}
+
+#[test]
+fn a_second_quit_leaves_the_keyboard_where_the_reader_put_it() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+    reader.click("Save");
+    reader.press("Shift+Tab");
+    assert!(reader.keyboard_is_on("Overwrite"));
+
+    reader.close_window();
+
+    reader.assert_sees(ASKS);
+    assert!(reader.keyboard_is_on("Overwrite"));
+    reader.press("Enter");
+    assert_eq!(reader.read_file("draft.md"), MINE);
+    assert!(reader.has_quit());
+}
+
+#[test]
+fn a_quit_while_a_save_asks_keeps_the_question() {
+    let mut reader = changed_under_edits();
+    reader.press("Ctrl+S");
+    reader.assert_sees(ASKS);
+
+    reader.close_window();
+
+    reader.assert_sees(ASKS);
+    reader.assert_hides(ASKS_UNSAVED);
+    assert!(reader.keyboard_is_on("Cancel"));
+    assert!(!reader.has_quit());
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+}
+
+#[test]
+fn overwrite_after_a_quit_while_a_save_asks_writes_and_quits() {
+    let mut reader = changed_under_edits();
+    reader.press("Ctrl+S");
+    reader.close_window();
+
+    reader.click("Overwrite");
+
+    assert_eq!(reader.read_file("draft.md"), MINE);
+    assert!(reader.has_quit(), "the reader asked to quit");
+}
+
+#[test]
+fn cancel_after_a_quit_while_a_save_asks_keeps_the_app() {
+    let mut reader = changed_under_edits();
+    reader.press("Ctrl+S");
+    reader.close_window();
+
+    reader.click("Cancel");
+
+    assert!(!reader.has_quit());
+    reader.assert_hides(ASKS);
     assert_eq!(reader.typed(), [MINE]);
     assert_eq!(reader.read_file("draft.md"), THEIRS);
 }

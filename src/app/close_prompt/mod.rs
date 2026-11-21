@@ -139,11 +139,14 @@ impl Question {
 #[derive(Debug)]
 pub(super) struct PendingClose {
     /// What the answers lead to. A plain save leads to nothing more: its
-    /// document stays in its tab.
+    /// document stays in its tab. A request to quit while the prompt asks
+    /// makes it a quit, and leaves the question as it is.
     goal: Option<Goal>,
-    /// The unsaved tab the prompt asks about now. Those before it that
-    /// the goal replaces have been answered for.
+    /// The unsaved tab the prompt asks about now.
     asked: usize,
+    /// The tabs the reader answered Discard for: still unsaved, and not
+    /// asked about again, whatever the goal has become since.
+    discarded: Vec<usize>,
     /// What it asks about that tab.
     about: Question,
     /// The question, written when the prompt turned to this tab.
@@ -283,27 +286,36 @@ impl MarkdownApp {
     /// another program wrote to its file.
     pub(crate) fn request_save(&mut self, index: usize) {
         if self.save_tab(index, Theirs::Ask) == Some(Saved::WouldOverwrite) {
-            self.ask(None, index, Question::Overwrite);
+            self.ask(None, index, Question::Overwrite, Vec::new());
         }
     }
 
     /// Reach `goal`: now if that loses no unsaved edits, and otherwise
     /// once the reader has answered for them.
     fn request(&mut self, goal: Goal) {
-        if let Err(goal) = self.ask_from(goal, 0) {
+        if let Err(goal) = self.ask_next(goal, Vec::new()) {
             self.reach(goal);
         }
     }
 
-    /// Answer the window when it asks to close, whether its close button
-    /// or the app's own Quit sent the request: with unsaved edits open the
-    /// close is refused and the prompt asks about them.
+    /// Answer the window when it asks to close, whether its close button,
+    /// the app's own Quit or the system sent the request: with unsaved
+    /// edits open the close is refused and the prompt asks about them. A
+    /// question already up stays as it is, and once it is answered the
+    /// app goes on to quit.
     pub(crate) fn answer_close_request(&mut self, ctx: &egui::Context) {
-        let requested = ctx.input(|input| input.viewport().close_requested());
-        if !requested || matches!(self.closing, CloseState::Quitting) {
+        if !ctx.input(|input| input.viewport().close_requested()) {
             return;
         }
-        if self.ask_from(Goal::Quit, 0).is_ok() {
+        let asking = match &mut self.closing {
+            CloseState::Quitting => false,
+            CloseState::Asking(pending) => {
+                pending.goal = Some(Goal::Quit);
+                true
+            }
+            CloseState::Idle => self.ask_next(Goal::Quit, Vec::new()).is_ok(),
+        };
+        if asking {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
     }
@@ -315,22 +327,24 @@ impl MarkdownApp {
         !matches!(self.closing, CloseState::Quitting) && self.tabs.iter().any(Tab::is_dirty)
     }
 
-    /// Turn the prompt to the first unsaved tab at or after the place
-    /// `from` that `goal` would take its document out of. With no such
-    /// tab the goal comes back, for nothing stands in its way.
-    fn ask_from(&mut self, goal: Goal, from: usize) -> Result<(), Goal> {
-        let mut tabs = self.tabs.iter().enumerate().skip(from);
-        let unsaved = tabs.find(|(index, tab)| tab.is_dirty() && goal.replaces(*index, tab));
+    /// Turn the prompt to the first unsaved tab that `goal` would take its
+    /// document out of and that is not one of the `discarded`. With no
+    /// such tab the goal comes back, for nothing stands in its way.
+    fn ask_next(&mut self, goal: Goal, discarded: Vec<usize>) -> Result<(), Goal> {
+        let mut tabs = self.tabs.iter().enumerate();
+        let unsaved = tabs.find(|(index, tab)| {
+            tab.is_dirty() && goal.replaces(*index, tab) && !discarded.contains(index)
+        });
         let Some((asked, _)) = unsaved else {
             return Err(goal);
         };
-        self.ask(Some(goal), asked, Question::Unsaved);
+        self.ask(Some(goal), asked, Question::Unsaved, discarded);
         Ok(())
     }
 
     /// Turn the prompt to the tab at `asked`, with what it asks `about`
     /// that tab.
-    fn ask(&mut self, goal: Option<Goal>, asked: usize, about: Question) {
+    fn ask(&mut self, goal: Option<Goal>, asked: usize, about: Question, discarded: Vec<usize>) {
         let Some(tab) = self.tabs.get(asked) else {
             return;
         };
@@ -340,6 +354,7 @@ impl MarkdownApp {
         self.closing = CloseState::Asking(PendingClose {
             goal,
             asked,
+            discarded,
             about,
             question,
             focus_due: true,
@@ -367,25 +382,29 @@ impl MarkdownApp {
             return;
         };
         let PendingClose {
-            goal, asked, about, ..
+            goal,
+            asked,
+            mut discarded,
+            about,
+            ..
         } = pending;
         match answer {
             CloseAnswer::Save => match self.save_tab(asked, about.theirs()) {
                 Some(Saved::Written) => {}
                 Some(Saved::WouldOverwrite) => {
-                    self.ask(goal, asked, Question::Overwrite);
+                    self.ask(goal, asked, Question::Overwrite, discarded);
                     return;
                 }
                 None => return,
             },
-            CloseAnswer::Discard => {}
+            CloseAnswer::Discard => discarded.push(asked),
             CloseAnswer::Cancel => return,
         }
         // A plain save is done once its document is written.
         let Some(goal) = goal else {
             return;
         };
-        if let Err(goal) = self.ask_from(goal, asked + 1) {
+        if let Err(goal) = self.ask_next(goal, discarded) {
             self.reach(goal);
         }
     }
