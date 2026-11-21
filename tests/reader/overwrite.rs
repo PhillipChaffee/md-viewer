@@ -10,6 +10,7 @@ use super::support::Reader;
 use super::unsaved::edit;
 
 const ASKS: &str = "“Draft” (draft.md) changed on disk. Overwrite it?";
+const ASKS_UNSAVED: &str = "Save changes to “Draft” (draft.md)?";
 
 /// `draft.md` opened without live reload, edited, and then changed by
 /// another program, which nothing told the app about.
@@ -196,7 +197,7 @@ fn after_overwrite_the_prompt_goes_on_to_the_next_unsaved_document() {
     edit(&mut reader, " Too.");
 
     reader.close_window();
-    reader.assert_sees("Save changes to “Draft” (draft.md)?");
+    reader.assert_sees(ASKS_UNSAVED);
     reader.click("Save");
     reader.assert_sees(ASKS);
     reader.click("Overwrite");
@@ -304,4 +305,74 @@ fn a_save_over_a_file_that_cannot_be_read_asks_and_then_says_why_it_failed() {
     reader.assert_sees("Unable to save");
     assert_eq!(reader.typed(), [MINE]);
     assert_eq!(reader.count("Unsaved changes"), 1);
+}
+
+#[test]
+fn save_while_quitting_asks_the_overwrite_question_and_does_not_quit() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+
+    reader.click("Save");
+
+    reader.assert_sees(ASKS);
+    assert!(!reader.has_quit());
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+}
+
+#[test]
+fn cancel_at_the_overwrite_question_while_quitting_keeps_the_app_and_its_edits() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+    reader.click("Save");
+
+    reader.click("Cancel");
+
+    assert!(!reader.has_quit());
+    reader.assert_hides(ASKS);
+    assert_eq!(reader.typed(), [MINE]);
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    reader.close_window();
+    reader.assert_sees(ASKS_UNSAVED);
+    assert!(!reader.has_quit(), "a later quit asks again");
+}
+
+#[test]
+fn overwrite_while_quitting_writes_my_text_and_quits() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+    reader.click("Save");
+
+    reader.click("Overwrite");
+
+    assert!(reader.has_quit());
+    assert_eq!(reader.read_file("draft.md"), MINE);
+}
+
+#[test]
+fn discard_while_quitting_quits_and_leaves_the_other_programs_text() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+
+    reader.click("Discard");
+
+    assert!(reader.has_quit());
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+}
+
+#[test]
+fn a_second_quit_while_the_overwrite_question_shows_writes_nothing_and_still_asks() {
+    let mut reader = changed_under_edits();
+    reader.close_window();
+    reader.click("Save");
+    reader.assert_sees(ASKS);
+
+    reader.close_window();
+
+    assert!(!reader.has_quit());
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
+    assert_eq!(reader.count("Cancel"), 1, "a question is still up");
+    reader.click("Cancel");
+    assert!(!reader.has_quit());
+    assert_eq!(reader.typed(), [MINE]);
+    assert_eq!(reader.read_file("draft.md"), THEIRS);
 }
