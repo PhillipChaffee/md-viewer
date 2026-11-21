@@ -4,6 +4,7 @@ use eframe::egui;
 
 use crate::app::close_prompt::CloseAnswer;
 use crate::app::MarkdownApp;
+use crate::app_icon::AppIcon;
 use crate::layout::{zoomed, KeyboardScrollAction, LineSpacing, ReadingWidth};
 use crate::system_fonts::TextSizeClass;
 use crate::theme::ThemeId;
@@ -126,8 +127,8 @@ impl MarkdownApp {
                 }
             }
             AppAction::ToggleWatch => self.toggle_watching(),
-            AppAction::NextTheme => self.theme = self.theme.next(),
-            AppAction::SetTheme(theme) => self.theme = theme,
+            AppAction::NextTheme => self.set_theme(ctx, self.theme.next()),
+            AppAction::SetTheme(theme) => self.set_theme(ctx, theme),
             AppAction::ToggleExplorer => self.show_explorer = !self.show_explorer,
             AppAction::ToggleOutline => self.toggle_outline(),
             AppAction::ToggleFullWidth => self.toggle_full_width(),
@@ -164,6 +165,21 @@ impl MarkdownApp {
             }
             AppAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
+    }
+
+    /// Switch the reading theme, and have the window's icon follow it
+    /// from a light theme to a dark one or back.
+    ///
+    /// The window is asked only when the icon differs. An X11 window
+    /// takes the new icon at once. A Mac's Dock and a Wayland desktop do
+    /// not: winit has nothing to set there, and the Dock shows the icon
+    /// of the saved theme from the next launch.
+    fn set_theme(&mut self, ctx: &egui::Context, theme: ThemeId) {
+        let icon = AppIcon::for_theme(theme);
+        if icon != AppIcon::for_theme(self.theme) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon.image())));
+        }
+        self.theme = theme;
     }
 
     fn toggle_full_width(&mut self) {

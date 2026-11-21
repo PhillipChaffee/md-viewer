@@ -2,7 +2,7 @@
 Name=Markdown Viewer
 Comment=View markdown files with live reload
 Exec=md-viewer %f
-Icon=text-markdown
+Icon=md-viewer
 Terminal=false
 Type=Application
 Categories=Utility;TextEditor;Viewer;
