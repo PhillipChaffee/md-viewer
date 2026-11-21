@@ -4,8 +4,6 @@
 
 use super::support::{Area, Reader, Rgb};
 
-/// What the button at the end of a document's row is called.
-const BUTTON: &str = "Open in new tab";
 const LONG_NAME: &str = "a-document-whose-name-is-far-too-long-to-fit-in-the-width-of-a-sidebar.md";
 
 /// A folder of documents, open on `readme.md` with the files sidebar
@@ -24,6 +22,18 @@ fn desk() -> Reader {
         reader.count("changes.md") == 1
     });
     reader
+}
+
+/// What the button at the end of the row of `name` is called.
+fn button(name: &str) -> String {
+    format!("Open {name} in new tab")
+}
+
+/// Whether the button on the row of `name` is drawn: more is painted where
+/// it is than the dot of a document that has a tab.
+fn button_shows(reader: &Reader, name: &str) -> bool {
+    let place = reader.area_of(&button(name));
+    reader.marks_in(place).len() > reader.dots_in(place).len()
 }
 
 /// Take the pointer off the sidebar.
@@ -136,23 +146,60 @@ fn the_named_click_does_open_a_new_tab() {
 }
 
 #[test]
-fn the_button_is_on_a_documents_row_only_while_the_pointer_is() {
+fn the_button_is_drawn_on_a_documents_row_only_while_the_pointer_is() {
     let mut reader = desk();
-    assert_eq!(reader.count(BUTTON), 0);
+    let rows = ["changes.md", "notes.md", "readme.md"];
+    let shown = |reader: &Reader| rows.map(|name| button_shows(reader, name));
+    point_away(&mut reader);
+    assert_eq!(shown(&reader), [false, false, false]);
 
     reader.hover("changes.md");
-    assert_eq!(reader.count(BUTTON), 1);
-    let (row, button) = (reader.area_of("changes.md"), reader.area_of(BUTTON));
-    assert!(button.top >= row.top && button.bottom() <= row.bottom());
-    assert!(button.left > row.left + row.width / 2.0, "at the right end");
-    assert!(button.right() <= row.right());
+    assert_eq!(shown(&reader), [true, false, false]);
+    let row = reader.area_of("changes.md");
+    let place = reader.area_of(&button("changes.md"));
+    assert!(place.top >= row.top && place.bottom() <= row.bottom());
+    assert!(place.left > row.left + row.width / 2.0, "at the right end");
+    assert!(place.right() <= row.right());
 
     reader.hover("notes.md");
-    assert_eq!(reader.count(BUTTON), 1, "one row is pointed at");
-    assert!(reader.area_of(BUTTON).top >= reader.area_of("notes.md").top);
+    assert_eq!(shown(&reader), [false, true, false], "on the pointed row");
 
     point_away(&mut reader);
-    assert_eq!(reader.count(BUTTON), 0);
+    assert_eq!(shown(&reader), [false, false, false]);
+}
+
+#[test]
+fn the_keyboard_reaches_the_button_after_its_row_and_opens_the_tab_with_it() {
+    let mut reader = desk();
+    point_away(&mut reader);
+    for _ in 0..40 {
+        if reader.focused().as_deref() == Some("changes.md") {
+            break;
+        }
+        reader.press("Tab");
+    }
+    assert_eq!(reader.focused().as_deref(), Some("changes.md"));
+    assert!(button_shows(&reader, "changes.md"), "for the keyboard");
+    assert!(!button_shows(&reader, "notes.md"));
+
+    reader.press("Tab");
+    assert_eq!(reader.focused(), Some(button("changes.md")));
+    assert!(button_shows(&reader, "changes.md"));
+    reader.press("Enter");
+
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
+    assert_eq!(reader.tab_in_front().as_deref(), Some("Changes"));
+}
+
+#[test]
+fn a_screen_reader_is_told_which_document_each_button_opens() {
+    let mut reader = desk();
+    point_away(&mut reader);
+
+    for name in ["changes.md", "notes.md", "readme.md", LONG_NAME] {
+        assert_eq!(reader.count(&button(name)), 1, "{name}");
+    }
+    assert_eq!(reader.count("Open in new tab"), 0, "none is nameless");
 }
 
 #[test]
@@ -160,7 +207,7 @@ fn the_button_opens_a_new_tab_and_leaves_the_tab_in_front_as_it_was() {
     let mut reader = desk();
 
     reader.hover("changes.md");
-    reader.click(BUTTON);
+    reader.click(&button("changes.md"));
 
     assert_eq!(reader.tabs(), ["Read me", "Changes"]);
     assert_eq!(reader.tab_in_front().as_deref(), Some("Changes"));
@@ -177,7 +224,7 @@ fn the_button_shows_the_tab_a_document_already_has() {
     reader.click("tab:Read me");
 
     reader.hover("changes.md");
-    reader.click(BUTTON);
+    reader.click(&button("changes.md"));
 
     assert_eq!(reader.tabs(), ["Read me", "Changes"], "no second tab");
     assert_eq!(reader.tab_in_front().as_deref(), Some("Changes"));
@@ -188,7 +235,7 @@ fn clicking_the_name_beside_the_button_still_opens_in_place() {
     let mut reader = desk();
 
     reader.hover("changes.md");
-    assert_eq!(reader.count(BUTTON), 1);
+    assert!(button_shows(&reader, "changes.md"));
     reader.click("changes.md");
 
     assert_eq!(reader.tabs(), ["Changes"]);
@@ -200,7 +247,7 @@ fn the_button_says_what_it_does_and_which_click_does_the_same() {
     let mut reader = desk();
     reader.hover("changes.md");
 
-    reader.hover(BUTTON);
+    reader.hover(&button("changes.md"));
     reader.wait_for("the button's tooltip", |reader| {
         reader.sees("Open in new tab (")
     });
@@ -280,13 +327,15 @@ fn the_button_takes_the_dots_place_while_the_row_is_pointed_at() {
     let mut reader = desk();
     point_away(&mut reader);
     let dot = dots(&reader, "readme.md")[0];
+    assert!(!button_shows(&reader, "readme.md"), "the dot alone at rest");
 
     reader.hover("readme.md");
 
     assert!(dots(&reader, "readme.md").is_empty(), "the dot gives way");
-    let button = reader.area_of(BUTTON);
-    assert!(button.left <= dot.left && button.right() >= dot.right());
-    assert!(button.top <= dot.top && button.bottom() >= dot.bottom());
+    assert!(button_shows(&reader, "readme.md"));
+    let place = reader.area_of(&button("readme.md"));
+    assert!(place.left <= dot.left && place.right() >= dot.right());
+    assert!(place.top <= dot.top && place.bottom() >= dot.bottom());
 }
 
 #[test]
@@ -298,12 +347,13 @@ fn a_long_name_is_cut_short_of_the_button_and_of_the_dot() {
     assert!(at_rest <= row.right(), "cut to the row: {at_rest}");
 
     reader.hover(LONG_NAME);
-    let button = reader.area_of(BUTTON);
-    assert!(at_rest > button.left, "long enough to reach the button");
+    assert!(button_shows(&reader, LONG_NAME));
+    let place = reader.area_of(&button(LONG_NAME));
+    assert!(at_rest > place.left, "long enough to reach the button");
     let pointed = reader.end_of(LONG_NAME);
-    assert!(pointed <= button.left, "{pointed} runs under {button:?}");
+    assert!(pointed <= place.left, "{pointed} runs under {place:?}");
 
-    reader.click(BUTTON);
+    reader.click(&button(LONG_NAME));
     point_away(&mut reader);
     let dot = dots(&reader, LONG_NAME)[0];
     let marked = reader.end_of(LONG_NAME);
@@ -317,7 +367,8 @@ fn a_folder_has_no_button_no_dot_and_no_rows_to_open_it() {
     reader.ctrl_click("setup.md");
 
     reader.hover("guides");
-    assert_eq!(reader.count(BUTTON), 0);
+    assert_eq!(reader.count(&button("guides")), 0);
+    assert_eq!(reader.count(&button("setup.md")), 1, "the file in it has");
     assert!(dots(&reader, "guides").is_empty());
 
     reader.right_click("guides");

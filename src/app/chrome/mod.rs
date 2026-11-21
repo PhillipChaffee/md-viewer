@@ -238,22 +238,10 @@ impl<'a> QuietButton<'a> {
         response
     }
 
-    /// Draw it in `rect`, which the caller has kept for it, under `id`.
-    pub(super) fn put(
-        self,
-        ui: &egui::Ui,
-        palette: &Palette,
-        rect: egui::Rect,
-        id: egui::Id,
-    ) -> egui::Response {
-        let response = self.place(ui, rect, id);
-        self.paint(ui, palette, &response);
-        response
-    }
-
-    /// Make `rect` the button, under `id`, and paint nothing: it takes
-    /// clicks and the keyboard, and a screen reader finds it. For a button
-    /// that is not always drawn; [`Self::paint`] draws it.
+    /// Make `rect`, which the caller has kept for it, the button under
+    /// `id`, and paint nothing: it takes clicks and the keyboard, and a
+    /// screen reader finds it. [`Self::paint`] draws it, which a caller may
+    /// leave out while the button is not to show.
     pub(super) fn place(self, ui: &egui::Ui, rect: egui::Rect, id: egui::Id) -> egui::Response {
         let response = ui.interact(rect, id, sense(self.enabled));
         response.widget_info(|| {

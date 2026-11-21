@@ -48,13 +48,15 @@ fn show_files(reader: &mut Reader) {
 }
 
 /// What the files sidebar lists, top to bottom: everything a screen reader
-/// reads between its header and the contents sidebar's.
+/// reads between its header and the contents sidebar's, but for the button
+/// each document has to open it in a new tab.
 fn listing(reader: &Reader) -> Vec<String> {
     let names = reader.names().into_iter();
     names
         .skip_while(|name| !name.starts_with("FILES"))
         .skip(1)
         .take_while(|name| name != "CONTENTS")
+        .filter(|name| !(name.starts_with("Open ") && name.ends_with(" in new tab")))
         .collect()
 }
 

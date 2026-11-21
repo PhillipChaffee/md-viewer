@@ -93,17 +93,7 @@ fn solid(color: &egui::epaint::ColorMode) -> Color32 {
 /// Run frames of `contents` in a bare panel, the pointer resting at
 /// `pointer`, and return what the last frame painted. Hover shows a frame
 /// after the pointer arrives.
-fn paint(pointer: Option<Pos2>, contents: impl FnMut(&mut egui::Ui)) -> Painted {
-    paint_after(1, pointer, contents)
-}
-
-/// As [`paint`], with `settling` frames after the pointer arrives. What a
-/// frame lays out under the pointer is hovered in the frame after it.
-fn paint_after(
-    settling: usize,
-    pointer: Option<Pos2>,
-    mut contents: impl FnMut(&mut egui::Ui),
-) -> Painted {
+fn paint(pointer: Option<Pos2>, mut contents: impl FnMut(&mut egui::Ui)) -> Painted {
     let ctx = egui::Context::default();
     let mut frame = |events| {
         let input = egui::RawInput {
@@ -118,9 +108,6 @@ fn paint_after(
         })
     };
     frame(pointer.map(egui::Event::PointerMoved).into_iter().collect());
-    for _ in 1..settling {
-        frame(Vec::new());
-    }
     Painted {
         shapes: painted_shapes(&frame(Vec::new())),
     }
@@ -619,7 +606,7 @@ fn a_marked_row_has_an_accent_dot_at_its_end_and_an_unmarked_one_nothing() {
         paint(None, |ui| {
             let shown = row_with_button("open.md", marked);
             let laid_out = row(ui, PALETTE, &shown);
-            assert!(laid_out.button.is_none(), "nothing points at the row");
+            assert!(laid_out.button.is_some(), "there, though not drawn");
             rect.set(laid_out.response.rect);
         })
     };
@@ -633,7 +620,7 @@ fn a_marked_row_has_an_accent_dot_at_its_end_and_an_unmarked_one_nothing() {
     let dot = dot.unwrap();
     assert_close(dot.y, rect.get().center().y);
     assert!(dot.x > rect.get().right() - 28.0 && dot.x < rect.get().right());
-    assert!(marked.paths().is_empty(), "no button at rest");
+    assert!(marked.paths().is_empty(), "no button drawn at rest");
 
     let unmarked = draw(false);
     assert!(unmarked.circles().is_empty());
@@ -642,29 +629,29 @@ fn a_marked_row_has_an_accent_dot_at_its_end_and_an_unmarked_one_nothing() {
 
 #[test]
 fn the_button_takes_the_dots_place_while_the_row_is_pointed_at() {
-    let laid_out = Cell::new((Rect::NOTHING, None));
+    let laid_out = Cell::new((Rect::NOTHING, Rect::NOTHING));
     let draw = |ui: &mut egui::Ui| {
         let drawn = row(ui, PALETTE, &row_with_button("open.md", true));
-        laid_out.set((drawn.response.rect, drawn.button.map(|button| button.rect)));
+        laid_out.set((drawn.response.rect, drawn.button.unwrap().rect));
     };
     let at_rest = paint(None, draw);
-    let (rect, _) = laid_out.get();
+    let (rect, button) = laid_out.get();
     let dot = at_rest.shapes.iter().find_map(|shape| match shape {
         Shape::Circle(circle) => Some(circle.center),
         _ => None,
     });
+    assert!(at_rest.paths().is_empty(), "only the dot at rest");
 
     let pointed = paint(Some(rect.left_center() + egui::vec2(20.0, 0.0)), draw);
 
-    let button = laid_out.get().1.expect("a pointed row has its button");
+    assert_eq!(laid_out.get().1, button, "the button stays where it is");
     assert!(pointed.circles().is_empty(), "the dot gives way");
     assert!(button.contains(dot.unwrap()), "in the dot's place");
     assert!(rect.contains_rect(button));
     // The icon is muted until the button itself is pointed at.
     assert_eq!(stroke_ink(&pointed), PALETTE.muted);
 
-    // The button is laid out a frame after its row is pointed at.
-    let on_button = paint_after(2, Some(button.center()), draw);
+    let on_button = paint(Some(button.center()), draw);
     assert_eq!(stroke_ink(&on_button), PALETTE.text);
     assert_eq!(on_button.fills()[0], (rect, PALETTE.raised), "still lit");
 }
@@ -672,29 +659,55 @@ fn the_button_takes_the_dots_place_while_the_row_is_pointed_at() {
 #[test]
 fn a_long_name_stops_short_of_the_dot_and_of_the_button() {
     let name = "a-file-with-a-very-long-name-that-cannot-fit-in-a-sidebar.md";
-    let button = Cell::new(None);
+    let button = Cell::new(Rect::NOTHING);
     let seen = &button;
     let draw = |marked| {
         move |ui: &mut egui::Ui| {
             let drawn = row(ui, PALETTE, &row_with_button(name, marked));
-            seen.set(drawn.button.map(|button| button.rect));
+            seen.set(drawn.button.unwrap().rect);
         }
     };
-    let slot_left = SCREEN.right() - END_INSET - END_SLOT;
 
     let (unmarked_end, elided) = text_end(&paint(None, draw(false)));
+    let slot_left = button.get().left();
     assert!(elided);
     assert!(unmarked_end > slot_left, "nothing at the end to stop for");
 
-    let (marked_end, elided) = text_end(&paint(None, draw(true)));
+    let dotted = paint(None, draw(true));
+    let (marked_end, elided) = text_end(&dotted);
     assert!(elided);
+    assert_eq!(dotted.circles().len(), 1);
     assert!(marked_end <= slot_left, "{marked_end} runs under the dot");
 
     let pointer = Pos2::new(20.0, ROW_HEIGHT / 2.0);
     let (pointed_end, elided) = text_end(&paint(Some(pointer), draw(false)));
     assert!(elided);
-    let button = button.get().expect("a pointed row has its button");
-    assert!(pointed_end <= button.left(), "{pointed_end} runs under it");
+    assert!(pointed_end <= slot_left, "{pointed_end} runs under it");
+}
+
+/// What the keyboard can be on in a row.
+#[derive(Clone, Copy, Debug)]
+enum On {
+    Row,
+    Button,
+}
+
+#[test]
+fn the_button_is_drawn_while_the_keyboard_is_on_its_row_or_on_it() {
+    for (on, ink) in [(On::Row, PALETTE.muted), (On::Button, PALETTE.text)] {
+        let focused = paint(None, |ui| {
+            let drawn = row(ui, PALETTE, &row_with_button("open.md", true));
+            let button = drawn.button.unwrap();
+            match on {
+                On::Row => drawn.response.request_focus(),
+                On::Button => button.request_focus(),
+            }
+            assert!(drawn.response.rect.contains_rect(button.rect));
+        });
+
+        assert_eq!(stroke_ink(&focused), ink, "{on:?}");
+        assert!(focused.circles().is_empty(), "{on:?}: the dot gives way");
+    }
 }
 
 #[test]

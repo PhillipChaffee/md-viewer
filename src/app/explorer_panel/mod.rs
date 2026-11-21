@@ -24,7 +24,7 @@ mod tests;
 
 /// Width of a file's menu: room for its longest row and the hint beside it.
 const FILE_MENU_WIDTH: f32 = 200.0;
-/// What the button at the end of a file's row is called.
+/// What the button at the end of a file's row does, as its tooltip says it.
 const NEW_TAB_BUTTON: &str = "Open in new tab";
 
 /// Where a file picked from the listing is shown.
@@ -198,6 +198,7 @@ impl MarkdownApp {
         listing: &Listing<'_>,
         clicks: &mut TreeClicks,
     ) {
+        let new_tab = new_tab_label(row.name);
         let shown = Row {
             text: row.name,
             indent: row.indent(),
@@ -207,7 +208,7 @@ impl MarkdownApp {
             // The dot of a file that has a tab gives way to the button.
             end: End::Button {
                 icon: Icon::NewTab,
-                label: NEW_TAB_BUTTON,
+                label: &new_tab,
                 marked: listing.open_paths.contains(row.path),
             },
         };
@@ -330,6 +331,12 @@ fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
         ui.close();
     }
     picked
+}
+
+/// What a screen reader calls the button at the end of the row of the file
+/// `name`: every file in view has one, so each says whose it is.
+fn new_tab_label(name: &str) -> String {
+    format!("Open {name} in new tab")
 }
 
 /// Whether the button at the end of a file's row was clicked. Its tooltip

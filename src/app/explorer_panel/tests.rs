@@ -164,13 +164,25 @@ fn point_at(harness: &mut LabelHarness, name: &str) {
     harness.frames(2);
 }
 
+/// Whether the button at the end of the explorer row `name` is drawn: its
+/// icon is stroked where the button is.
+fn button_shows(harness: &LabelHarness, name: &str) -> bool {
+    let button = harness.get_by_label(&new_tab_label(name)).rect();
+    painted_shapes(harness.output()).iter().any(|shape| {
+        matches!(shape, egui::Shape::Path(path)
+            if button.contains_rect(path.visual_bounding_rect()))
+    })
+}
+
 #[test]
 fn the_button_on_a_pointed_file_row_opens_the_file_in_a_new_tab() {
     let mut harness = explorer();
-    assert!(!is_listed(&harness, NEW_TAB_BUTTON));
+    assert!(!button_shows(&harness, "b.md"), "nothing points at it");
 
     point_at(&mut harness, "b.md");
-    harness.click(NEW_TAB_BUTTON);
+    assert!(button_shows(&harness, "b.md"));
+    assert!(!button_shows(&harness, "a.md"), "on the pointed row only");
+    harness.click("Open b.md in new tab");
 
     assert_eq!(
         open_paths(&harness),
@@ -184,7 +196,8 @@ fn a_folder_row_has_no_button_and_no_dot() {
     let mut harness = explorer();
 
     point_at(&mut harness, "sub");
-    assert!(!is_listed(&harness, NEW_TAB_BUTTON));
+    assert!(is_listed(&harness, "Open b.md in new tab"));
+    assert!(!is_listed(&harness, "Open sub in new tab"));
 
     point_at(&mut harness, "b.md");
     assert!(!has_dot(&harness, "sub"));
@@ -196,14 +209,12 @@ fn the_keyboard_reaches_the_button_from_its_row() {
 
     explorer_row(&harness, "b.md").focus();
     harness.frames(2);
-    assert!(
-        is_listed(&harness, NEW_TAB_BUTTON),
-        "shown for the keyboard"
-    );
+    assert!(button_shows(&harness, "b.md"), "shown for the keyboard");
     harness.key_press(Key::Tab);
     harness.frames(2);
-    let button = harness.get_by_label(NEW_TAB_BUTTON);
+    let button = harness.get_by_label("Open b.md in new tab");
     assert!(button.accesskit_node().is_focused(), "next after its row");
+    assert!(button_shows(&harness, "b.md"), "and on the button");
     harness.key_press(Key::Enter);
     harness.frames(2);
 
@@ -242,7 +253,7 @@ fn the_buttons_tooltip_names_the_click_of_the_platform() {
         assert!(clicks.contains(&click.as_str()), "{platform:?}: {click}");
 
         point_at(&mut harness, "b.md");
-        harness.get_by_label(NEW_TAB_BUTTON).hover();
+        harness.get_by_label("Open b.md in new tab").hover();
         // Past the wait before a tooltip shows.
         harness.frames(6);
 

@@ -277,12 +277,15 @@ pub(super) enum Chevron {
 pub(super) enum End<'a> {
     /// Nothing: the text runs to the row's edge.
     Nothing,
-    /// A button, there while the row is pointed at or the keyboard is on
-    /// it. A `marked` row has a dot in the button's place the rest of the
-    /// time. The text stops short of whichever shows.
+    /// A button, which takes clicks and the keyboard whenever the row is
+    /// in view and is drawn while the row is pointed at or the keyboard is
+    /// on the row or on the button. A `marked` row has a dot in the
+    /// button's place the rest of the time. The text stops short of
+    /// whichever shows.
     Button {
         icon: Icon,
-        /// What a screen reader calls the button.
+        /// What a screen reader calls the button. It is listed with the
+        /// button of every other row in view, so it says which row it is on.
         label: &'a str,
         marked: bool,
     },
@@ -306,7 +309,8 @@ pub(super) struct RowResponse {
     /// Where the chevron is, for a sidebar that makes it a control of its
     /// own.
     pub(super) chevron: egui::Rect,
-    /// The button at the row's end, while it shows.
+    /// The button at the row's end, drawn or not, for a row in view that
+    /// has one.
     pub(super) button: Option<egui::Response>,
 }
 
@@ -331,18 +335,7 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     if lit {
         ui.painter().rect_filled(rect, RADIUS, palette.raised);
     }
-    let button = end_button(ui, palette, &response, row.end);
-    let marked = matches!(row.end, End::Button { marked: true, .. });
-    let slot = end_slot(rect);
-    if marked && button.is_none() {
-        ui.painter()
-            .circle_filled(slot.center(), DOT_RADIUS, palette.accent);
-    }
-    let text_right = if marked || button.is_some() {
-        slot.left() - CHEVRON_GAP
-    } else {
-        rect.right() - ROW_INSET
-    };
+    let (button, text_right) = end(ui, palette, &response, row.end);
     let ink = if lit || row.current {
         palette.text
     } else {
@@ -380,32 +373,40 @@ fn end_slot(row: egui::Rect) -> egui::Rect {
     egui::Rect::from_center_size(center, egui::Vec2::splat(END_SLOT))
 }
 
-/// The button at the end of `row`, a quiet one, laid out and painted only
-/// while the row is pointed at or the keyboard is on the row or on the
-/// button.
-fn end_button(
+/// Lay out what `row` keeps its end for and paint what shows of it: the
+/// button, a quiet one, while the row is pointed at or the keyboard is on
+/// the row or on the button, and else the dot of a marked row. Returns the
+/// button and where the row's text has to stop.
+fn end(
     ui: &egui::Ui,
     palette: &Palette,
     row: &egui::Response,
     end: End<'_>,
-) -> Option<egui::Response> {
-    let End::Button { icon, label, .. } = end else {
-        return None;
+) -> (Option<egui::Response>, f32) {
+    let End::Button {
+        icon,
+        label,
+        marked,
+    } = end
+    else {
+        return (None, row.rect.right() - ROW_INSET);
     };
-    let id = row.id.with("end");
-    let on_button = ui.memory(|memory| memory.has_focus(id));
-    // Tab takes the focus off the row before the next widget is laid out,
-    // and the button has to be that widget.
-    let leaving = row.lost_focus();
-    if leaving {
-        // For the frame that takes the button away again.
-        ui.ctx().request_repaint();
+    let slot = end_slot(row.rect);
+    let quiet = QuietButton::icon_sized(icon, END_ICON, label);
+    let button = quiet.place(ui, slot, row.id.with("end"));
+    let shown = row.contains_pointer() || row.has_focus() || button.has_focus();
+    if shown {
+        quiet.paint(ui, palette, &button);
+    } else if marked {
+        ui.painter()
+            .circle_filled(slot.center(), DOT_RADIUS, palette.accent);
     }
-    if !(row.contains_pointer() || row.has_focus() || leaving || on_button) {
-        return None;
-    }
-    let button = QuietButton::icon_sized(icon, END_ICON, label);
-    Some(button.put(ui, palette, end_slot(row.rect), id))
+    let text_right = if shown || marked {
+        slot.left() - CHEVRON_GAP
+    } else {
+        row.rect.right() - ROW_INSET
+    };
+    (Some(button), text_right)
 }
 
 /// A thin chevron centered on `center`: pointing right for a folded row,
