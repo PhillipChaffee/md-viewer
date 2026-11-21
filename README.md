@@ -129,6 +129,12 @@ has one. The Home button again, Back, or a click on a tab leads back.
   On a Mac quitting covers `⌘Q`, **⋯ > Quit** and the window's close
   button. **Quit** picked with the mouse from the menu bar or from the
   Dock is macOS's own and still quits without asking.
+- A file that another program changes while its document has unsaved
+  edits is neither reloaded nor overwritten. A bar on the document says
+  the file changed on disk, with **Reload** (take the file, drop the
+  edits) and **Keep mine**. A save then asks before it replaces what the
+  other program wrote: **Overwrite** or **Cancel**. With live reload off
+  the question still comes at the save.
 - The session is remembered: open tabs, theme, column width, sidebars.
 
 ## Install
