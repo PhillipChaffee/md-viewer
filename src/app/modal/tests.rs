@@ -1,20 +1,7 @@
-use eframe::egui;
-
 use super::Modal;
 use crate::app::close_prompt::CloseAnswer;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-
-/// A picture as the lightbox holds one that is enlarged.
-fn enlarged() -> LightboxState {
-    LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    }
-}
+use crate::app::ui_harness::enlarged;
 
 /// One document open with an edit that is not saved.
 fn unsaved() -> Harness {

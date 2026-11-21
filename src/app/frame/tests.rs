@@ -9,9 +9,9 @@ use eframe::{App as _, Storage as _};
 
 use crate::app::action::AppAction;
 use crate::app::explorer_panel::FLASH_DURATION_MS;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
+use crate::app::lightbox::LightboxTexture;
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_on, frames_until, launch, MemoryStorage, UiHarness};
+use crate::app::ui_harness::{enlarged, frame_on, frames_until, launch, MemoryStorage, UiHarness};
 use crate::app::MarkdownApp;
 use crate::explorer::SortOrder;
 use crate::layout::{LineSpacing, ReadingWidth};
@@ -65,13 +65,7 @@ fn the_wheel_scrolls_the_document_until_a_lightbox_takes_it() {
     let scrolled = scroll_offset_at_rest(&mut harness);
     assert!(scrolled > 0.0, "the wheel scrolled {scrolled}");
 
-    harness.app.lightbox.open = Some(LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    });
+    harness.app.lightbox.open = Some(enlarged());
     frame_on(&mut harness, vec![wheel(-3.0)]);
 
     assert_close(scroll_offset_at_rest(&mut harness), scrolled);

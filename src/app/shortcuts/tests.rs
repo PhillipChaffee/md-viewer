@@ -2,9 +2,8 @@ use eframe::egui::Modifiers;
 use egui_kittest::kittest::Queryable as _;
 
 use super::*;
-use crate::app::lightbox::{LightboxState, LightboxTexture};
 use crate::app::tests::Harness;
-use crate::app::ui_harness::{frame_on, frame_with, UiHarness};
+use crate::app::ui_harness::{enlarged, frame_on, frame_with, UiHarness};
 use crate::test_support::assert_close;
 
 const CTRL_SHIFT: Modifiers = Modifiers {
@@ -255,13 +254,7 @@ fn a_pinch_zooms_the_document_but_not_under_a_lightbox() {
     frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
     assert_close(harness.app.zoom_level, 1.5);
 
-    harness.app.lightbox.open = Some(LightboxState {
-        texture: LightboxTexture::Loaded(egui::TextureId::default()),
-        base_size: egui::vec2(100.0, 100.0),
-        zoom: 1.0,
-        open_id: 1,
-        scroll_offset: egui::Vec2::ZERO,
-    });
+    harness.app.lightbox.open = Some(enlarged());
     frame_on(&mut harness, vec![egui::Event::Zoom(1.5)]);
     assert_close(harness.app.zoom_level, 1.5);
 }
