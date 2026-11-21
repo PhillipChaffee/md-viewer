@@ -84,7 +84,17 @@ fn solid(color: &egui::epaint::ColorMode) -> Color32 {
 /// Run frames of `contents` in a bare panel, the pointer resting at
 /// `pointer`, and return what the last frame painted. Hover shows a frame
 /// after the pointer arrives.
-fn paint(pointer: Option<Pos2>, mut contents: impl FnMut(&mut egui::Ui)) -> Painted {
+fn paint(pointer: Option<Pos2>, contents: impl FnMut(&mut egui::Ui)) -> Painted {
+    paint_after(1, pointer, contents)
+}
+
+/// As [`paint`], with `settling` frames after the pointer arrives. What a
+/// frame lays out under the pointer is hovered in the frame after it.
+fn paint_after(
+    settling: usize,
+    pointer: Option<Pos2>,
+    mut contents: impl FnMut(&mut egui::Ui),
+) -> Painted {
     let ctx = egui::Context::default();
     let mut frame = |events| {
         let input = egui::RawInput {
@@ -99,6 +109,9 @@ fn paint(pointer: Option<Pos2>, mut contents: impl FnMut(&mut egui::Ui)) -> Pain
         })
     };
     frame(pointer.map(egui::Event::PointerMoved).into_iter().collect());
+    for _ in 1..settling {
+        frame(Vec::new());
+    }
     Painted {
         shapes: painted_shapes(&frame(Vec::new())),
     }
@@ -273,6 +286,7 @@ fn plain_row(text: &str, current: bool) -> Row<'_> {
         indent: 0.0,
         current,
         chevron: Chevron::None,
+        end: End::Nothing,
     }
 }
 
@@ -455,10 +469,8 @@ fn rows_have_one_height_and_span_the_sidebar() {
 #[test]
 fn a_fold_column_holds_a_chevron_or_keeps_its_place_empty() {
     let with = |chevron| Row {
-        text: "name",
-        indent: 0.0,
-        current: false,
         chevron,
+        ..plain_row("name", false)
     };
     let left_of = |chevron| {
         let painted = paint(None, |ui| {
@@ -494,10 +506,9 @@ fn a_row_reports_where_its_chevron_is() {
     let mut laid_out = None;
     let painted = paint(None, |ui| {
         let shown = Row {
-            text: "folder",
             indent: 28.0,
-            current: false,
             chevron: Chevron::Closed,
+            ..plain_row("folder", false)
         };
         laid_out = Some(row(ui, PALETTE, &shown));
     });
@@ -568,4 +579,124 @@ fn a_row_scrolled_out_of_view_is_laid_out_but_not_painted() {
     let texts = painted.texts();
     assert!(texts.iter().any(|(text, _, _)| text == "file-0.md"));
     assert!(texts.iter().all(|(text, _, _)| text != "file-39.md"));
+}
+
+/// A row that keeps its end for a button, with a dot there if `marked`.
+fn row_with_button(text: &str, marked: bool) -> Row<'_> {
+    Row {
+        end: End::Button {
+            icon: Icon::NewTab,
+            label: "Open in new tab",
+            marked,
+        },
+        ..plain_row(text, false)
+    }
+}
+
+/// Where the one painted text ends, and whether it was cut short.
+fn text_end(painted: &Painted) -> (f32, bool) {
+    let text = painted.shapes.iter().find_map(|shape| match shape {
+        Shape::Text(text) => Some(text),
+        _ => None,
+    });
+    let text = text.unwrap();
+    (text.pos.x + text.galley.size().x, text.galley.elided)
+}
+
+#[test]
+fn a_marked_row_has_an_accent_dot_at_its_end_and_an_unmarked_one_nothing() {
+    let rect = Cell::new(Rect::NOTHING);
+    let draw = |marked| {
+        paint(None, |ui| {
+            let shown = row_with_button("open.md", marked);
+            let laid_out = row(ui, PALETTE, &shown);
+            assert!(laid_out.button.is_none(), "nothing points at the row");
+            rect.set(laid_out.response.rect);
+        })
+    };
+
+    let marked = draw(true);
+    assert_eq!(marked.circles(), [PALETTE.accent]);
+    let dot = marked.shapes.iter().find_map(|shape| match shape {
+        Shape::Circle(circle) => Some(circle.center),
+        _ => None,
+    });
+    let dot = dot.unwrap();
+    assert_close(dot.y, rect.get().center().y);
+    assert!(dot.x > rect.get().right() - 28.0 && dot.x < rect.get().right());
+    assert!(marked.paths().is_empty(), "no button at rest");
+
+    let unmarked = draw(false);
+    assert!(unmarked.circles().is_empty());
+    assert!(unmarked.paths().is_empty());
+}
+
+#[test]
+fn the_button_takes_the_dots_place_while_the_row_is_pointed_at() {
+    let laid_out = Cell::new((Rect::NOTHING, None));
+    let draw = |ui: &mut egui::Ui| {
+        let drawn = row(ui, PALETTE, &row_with_button("open.md", true));
+        laid_out.set((drawn.response.rect, drawn.button.map(|button| button.rect)));
+    };
+    let at_rest = paint(None, draw);
+    let (rect, _) = laid_out.get();
+    let dot = at_rest.shapes.iter().find_map(|shape| match shape {
+        Shape::Circle(circle) => Some(circle.center),
+        _ => None,
+    });
+
+    let pointed = paint(Some(rect.left_center() + egui::vec2(20.0, 0.0)), draw);
+
+    let button = laid_out.get().1.expect("a pointed row has its button");
+    assert!(pointed.circles().is_empty(), "the dot gives way");
+    assert!(button.contains(dot.unwrap()), "in the dot's place");
+    assert!(rect.contains_rect(button));
+    // The icon's three strokes, muted until the button itself is pointed at.
+    let inks: Vec<_> = pointed.paths().into_iter().map(|(_, ink)| ink).collect();
+    assert_eq!(inks, [PALETTE.muted; 3]);
+
+    // The button is laid out a frame after its row is pointed at.
+    let on_button = paint_after(2, Some(button.center()), draw);
+    let inks: Vec<_> = on_button.paths().into_iter().map(|(_, ink)| ink).collect();
+    assert_eq!(inks, [PALETTE.text; 3]);
+    assert_eq!(on_button.fills()[0], (rect, PALETTE.raised), "still lit");
+}
+
+#[test]
+fn a_long_name_stops_short_of_the_dot_and_of_the_button() {
+    let name = "a-file-with-a-very-long-name-that-cannot-fit-in-a-sidebar.md";
+    let button = Cell::new(None);
+    let seen = &button;
+    let draw = |marked| {
+        move |ui: &mut egui::Ui| {
+            let drawn = row(ui, PALETTE, &row_with_button(name, marked));
+            seen.set(drawn.button.map(|button| button.rect));
+        }
+    };
+    let slot_left = SCREEN.right() - END_INSET - END_SLOT;
+
+    let (unmarked_end, elided) = text_end(&paint(None, draw(false)));
+    assert!(elided);
+    assert!(unmarked_end > slot_left, "nothing at the end to stop for");
+
+    let (marked_end, elided) = text_end(&paint(None, draw(true)));
+    assert!(elided);
+    assert!(marked_end <= slot_left, "{marked_end} runs under the dot");
+
+    let pointer = Pos2::new(20.0, ROW_HEIGHT / 2.0);
+    let (pointed_end, elided) = text_end(&paint(Some(pointer), draw(false)));
+    assert!(elided);
+    let button = button.get().expect("a pointed row has its button");
+    assert!(pointed_end <= button.left(), "{pointed_end} runs under it");
+}
+
+#[test]
+fn a_row_with_nothing_at_its_end_never_has_a_button() {
+    let button = Cell::new(false);
+    paint(Some(Pos2::new(20.0, ROW_HEIGHT / 2.0)), |ui| {
+        let drawn = row(ui, PALETTE, &plain_row("folder", false));
+        button.set(drawn.button.is_some());
+    });
+
+    assert!(!button.get());
 }

@@ -106,7 +106,11 @@ impl Notation {
 
 /// The hint of every binding the platform has, written once.
 #[derive(Debug)]
-pub(crate) struct Hints(Vec<(AppAction, String)>);
+pub(crate) struct Hints {
+    keys: Vec<(AppAction, String)>,
+    /// A click with the command key held: "Ctrl-click", or "⌘-click".
+    command_click: String,
+}
 
 impl Hints {
     /// The hints in `notation`, one for each row of the binding table its
@@ -116,13 +120,23 @@ impl Hints {
         let hinted = rows
             .filter(|(chord, ..)| chord.exists_on(notation.platform()))
             .map(|&(chord, key, _, action)| (action, notation.hint(chord, key)));
-        Self(hinted.collect())
+        let command: String = notation.modifiers(Chord::Cmd).collect();
+        Self {
+            keys: hinted.collect(),
+            command_click: format!("{command}-click"),
+        }
+    }
+
+    /// The click that gives what it opens a tab of its own, as a hint: one
+    /// with the platform's command key held.
+    pub(crate) fn command_click(&self) -> &str {
+        &self.command_click
     }
 
     /// Every way to ask for `action` from the keyboard, the first in the
     /// table first.
     pub(crate) fn all(&self, action: AppAction) -> impl Iterator<Item = &str> {
-        let hints = self.0.iter();
+        let hints = self.keys.iter();
         hints
             .filter(move |(bound, _)| *bound == action)
             .map(|(_, hint)| hint.as_str())

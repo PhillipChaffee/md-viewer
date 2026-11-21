@@ -5,6 +5,8 @@
 use eframe::egui;
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 
+use crate::app::chrome;
+use crate::icons::Icon;
 use crate::layout::SIDEBAR_MIN_WIDTH;
 use crate::theme::Palette;
 
@@ -25,6 +27,14 @@ pub(super) const INDENT: f32 = 14.0;
 const CHEVRON_SLOT: f32 = 16.0;
 /// Space between a chevron and the row's text.
 const CHEVRON_GAP: f32 = 4.0;
+/// Side of the square a row keeps at its right end for a button or a dot.
+const END_SLOT: f32 = 22.0;
+/// Space between a row's right edge and that square.
+const END_INSET: f32 = 3.0;
+/// How far the icon of a row's button stands inside the square.
+const END_ICON_INSET: f32 = 4.0;
+/// Radius of the dot that marks a row.
+const DOT_RADIUS: f32 = 2.5;
 const HEADER_HEIGHT: f32 = 30.0;
 const CAPTION_SIZE: f32 = 11.0;
 /// Extra space between a caption's letters, so capitals this small read.
@@ -262,6 +272,22 @@ pub(super) enum Chevron {
     Open,
 }
 
+/// What a row keeps its right end for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum End<'a> {
+    /// Nothing: the text runs to the row's edge.
+    Nothing,
+    /// A button, there while the row is pointed at or the keyboard is on
+    /// it. A `marked` row has a dot in the button's place the rest of the
+    /// time. The text stops short of whichever shows.
+    Button {
+        icon: Icon,
+        /// What a screen reader calls the button.
+        label: &'a str,
+        marked: bool,
+    },
+}
+
 /// One line of a sidebar.
 pub(super) struct Row<'a> {
     pub(super) text: &'a str,
@@ -270,6 +296,7 @@ pub(super) struct Row<'a> {
     /// The row is where the reader is: the open file, the heading in view.
     pub(super) current: bool,
     pub(super) chevron: Chevron,
+    pub(super) end: End<'a>,
 }
 
 /// A row as laid out.
@@ -279,6 +306,8 @@ pub(super) struct RowResponse {
     /// Where the chevron is, for a sidebar that makes it a control of its
     /// own.
     pub(super) chevron: egui::Rect,
+    /// The button at the row's end, while it shows.
+    pub(super) button: Option<egui::Response>,
 }
 
 /// Lay one row across the sidebar and paint it. The current row is inked
@@ -291,13 +320,29 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     let slot_left = rect.left() + ROW_INSET + row.indent;
     let chevron = egui::Rect::from_x_y_ranges(slot_left..=slot_left + CHEVRON_SLOT, rect.y_range());
     if !ui.is_rect_visible(rect) {
-        return RowResponse { response, chevron };
+        return RowResponse {
+            response,
+            chevron,
+            button: None,
+        };
     }
 
     let lit = response.contains_pointer();
     if lit {
         ui.painter().rect_filled(rect, RADIUS, palette.raised);
     }
+    let button = end_button(ui, palette, &response, row.end);
+    let marked = matches!(row.end, End::Button { marked: true, .. });
+    let slot = end_slot(rect);
+    if marked && button.is_none() {
+        ui.painter()
+            .circle_filled(slot.center(), DOT_RADIUS, palette.accent);
+    }
+    let text_right = if marked || button.is_some() {
+        slot.left() - CHEVRON_GAP
+    } else {
+        rect.right() - ROW_INSET
+    };
     let ink = if lit || row.current {
         palette.text
     } else {
@@ -313,7 +358,7 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     };
     let font = egui::FontId::proportional(ROW_TEXT_SIZE);
     let mut job = LayoutJob::single_section(row.text.to_owned(), TextFormat::simple(font, ink));
-    job.wrap = one_line(rect.right() - ROW_INSET - text_left);
+    job.wrap = one_line(text_right - text_left);
     let galley = ui.painter().layout_job(job);
     let elided = galley.elided;
     let origin = egui::pos2(text_left, rect.center().y - galley.size().y / 2.0);
@@ -322,7 +367,51 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
         // The whole text, for a row too narrow to show it.
         response = response.on_hover_text(row.text);
     }
-    RowResponse { response, chevron }
+    RowResponse {
+        response,
+        chevron,
+        button,
+    }
+}
+
+/// The square at the right end of `row` that its button or its dot takes.
+fn end_slot(row: egui::Rect) -> egui::Rect {
+    let center = egui::pos2(row.right() - END_INSET - END_SLOT / 2.0, row.center().y);
+    egui::Rect::from_center_size(center, egui::Vec2::splat(END_SLOT))
+}
+
+/// The button at the end of `row`, laid out and painted only while the row
+/// is pointed at or the keyboard is on the row or on the button. It is
+/// inked like a quiet button.
+fn end_button(
+    ui: &egui::Ui,
+    palette: &Palette,
+    row: &egui::Response,
+    end: End<'_>,
+) -> Option<egui::Response> {
+    let End::Button { icon, label, .. } = end else {
+        return None;
+    };
+    let id = row.id.with("end");
+    let on_button = ui.memory(|memory| memory.has_focus(id));
+    // Tab takes the focus off the row before the next widget is laid out,
+    // and the button has to be that widget.
+    let leaving = row.lost_focus();
+    if leaving {
+        // For the frame that takes the button away again.
+        ui.ctx().request_repaint();
+    }
+    if !(row.contains_pointer() || row.has_focus() || leaving || on_button) {
+        return None;
+    }
+    let slot = end_slot(row.rect);
+    let button = ui.interact(slot, id, egui::Sense::click());
+    button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    chrome::paint_feedback(ui, &button, palette);
+    let strong = button.hovered() || button.has_focus();
+    let ink = chrome::ink(palette, true, strong);
+    icon.paint(ui.painter(), slot.shrink(END_ICON_INSET), ink);
+    Some(button)
 }
 
 /// A thin chevron centered on `center`: pointing right for a folded row,

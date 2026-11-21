@@ -232,7 +232,7 @@ fn every_way_to_close_a_tab_asks() {
 }
 
 #[test]
-fn a_middle_click_in_the_files_sidebar_asks_too() {
+fn a_middle_click_in_the_files_sidebar_closes_nothing_and_asks_nothing() {
     let mut reader = unsaved_draft();
     reader.press("Ctrl+Shift+E");
     reader.wait_for("the folder to be listed", |reader| {
@@ -242,8 +242,9 @@ fn a_middle_click_in_the_files_sidebar_asks_too() {
 
     reader.middle_click_nth("draft.md", rows - 1);
 
-    reader.assert_sees(ASKS_DRAFT);
-    assert_eq!(reader.title(), "draft.md - Markdown Viewer");
+    reader.assert_hides(ASKS_DRAFT);
+    assert_eq!(reader.tabs(), ["Draft"]);
+    assert_eq!(reader.typed(), [EDITED], "the edit is still there");
 }
 
 #[test]

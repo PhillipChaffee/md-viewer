@@ -6,6 +6,7 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::*;
 use crate::app::content::tests::label_harness::LabelHarness;
+use crate::platform::Platform;
 use crate::test_support::{assert_close, painted_shapes};
 use crate::theme::ThemeId;
 
@@ -142,20 +143,209 @@ fn ctrl_clicking_a_file_opens_it_in_a_new_tab() {
 }
 
 #[test]
-fn middle_clicking_an_open_file_closes_its_tab() {
+fn middle_clicking_a_file_opens_it_in_a_new_tab_or_shows_the_tab_it_has() {
     let mut harness = explorer();
+    let both = [harness.path("a.md"), harness.path("b.md")];
 
     explorer_row(&harness, "b.md").click_button(PointerButton::Middle);
     harness.frames(2);
-    assert_eq!(
-        open_paths(&harness),
-        [harness.path("a.md")],
-        "b.md is not open, so there is nothing to close"
-    );
+    assert_eq!(open_paths(&harness), both);
+    assert_eq!(harness.state().active_tab, 1);
 
     explorer_row(&harness, "a.md").click_button(PointerButton::Middle);
     harness.frames(2);
-    assert!(open_paths(&harness).is_empty());
+    assert_eq!(open_paths(&harness), both, "a.md keeps its one tab");
+    assert_eq!(harness.state().active_tab, 0);
+}
+
+/// Rest the pointer on the explorer row `name`.
+fn point_at(harness: &mut LabelHarness, name: &str) {
+    explorer_row(harness, name).hover();
+    harness.frames(2);
+}
+
+#[test]
+fn the_button_on_a_pointed_file_row_opens_the_file_in_a_new_tab() {
+    let mut harness = explorer();
+    assert!(!is_listed(&harness, NEW_TAB_BUTTON));
+
+    point_at(&mut harness, "b.md");
+    harness.click(NEW_TAB_BUTTON);
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("a.md"), harness.path("b.md")]
+    );
+    assert_eq!(harness.state().active_tab, 1);
+}
+
+#[test]
+fn a_folder_row_has_no_button_and_no_dot() {
+    let mut harness = explorer();
+
+    point_at(&mut harness, "sub");
+    assert!(!is_listed(&harness, NEW_TAB_BUTTON));
+
+    point_at(&mut harness, "b.md");
+    assert!(!has_dot(&harness, "sub"));
+}
+
+#[test]
+fn the_keyboard_reaches_the_button_from_its_row() {
+    let mut harness = explorer();
+
+    explorer_row(&harness, "b.md").focus();
+    harness.frames(2);
+    assert!(
+        is_listed(&harness, NEW_TAB_BUTTON),
+        "shown for the keyboard"
+    );
+    harness.key_press(Key::Tab);
+    harness.frames(2);
+    let button = harness.get_by_label(NEW_TAB_BUTTON);
+    assert!(button.accesskit_node().is_focused(), "next after its row");
+    harness.key_press(Key::Enter);
+    harness.frames(2);
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("a.md"), harness.path("b.md")]
+    );
+}
+
+/// The words of every tooltip and menu hint on screen.
+fn painted_texts(harness: &LabelHarness) -> Vec<String> {
+    let shapes = painted_shapes(harness.output());
+    let texts = shapes.iter().filter_map(|shape| match shape {
+        egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+        _ => None,
+    });
+    texts.collect()
+}
+
+/// The click that opens a new tab, as the app's hints write it now.
+fn command_click(harness: &LabelHarness) -> String {
+    harness.state().hints.command_click().to_owned()
+}
+
+#[test]
+fn the_buttons_tooltip_names_the_click_of_the_platform() {
+    for (platform, clicks) in [
+        (Platform::Other, ["Ctrl-click"].as_slice()),
+        (Platform::Mac, ["⌘-click", "Cmd-click"].as_slice()),
+    ] {
+        let mut harness = explorer();
+        harness.state_mut().platform = platform;
+        harness.state_mut().hints_stale = true;
+        harness.frames(2);
+        let click = command_click(&harness);
+        assert!(clicks.contains(&click.as_str()), "{platform:?}: {click}");
+
+        point_at(&mut harness, "b.md");
+        harness.get_by_label(NEW_TAB_BUTTON).hover();
+        // Past the wait before a tooltip shows.
+        harness.frames(6);
+
+        let tip = format!("Open in new tab ({click})");
+        assert!(painted_texts(&harness).contains(&tip), "{platform:?}");
+    }
+}
+
+/// Whether a dot in the accent color is painted on the explorer row `name`.
+fn has_dot(harness: &LabelHarness, name: &str) -> bool {
+    let row = explorer_row(harness, name).rect();
+    let accent = harness.state().theme.palette().accent;
+    painted_shapes(harness.output()).iter().any(|shape| {
+        matches!(shape, egui::Shape::Circle(circle)
+            if row.contains(circle.center) && circle.fill == accent)
+    })
+}
+
+#[test]
+fn a_dot_marks_the_files_that_have_a_tab_in_every_theme() {
+    let mut harness = explorer();
+    let b = harness.path("b.md");
+    harness.state_mut().open_in_new_tab(b);
+
+    for theme in ThemeId::ALL {
+        harness.state_mut().theme = theme;
+        harness.frames(2);
+
+        assert!(has_dot(&harness, "a.md"), "{theme:?}");
+        assert!(has_dot(&harness, "b.md"), "{theme:?}");
+        assert!(!has_dot(&harness, "sub"), "{theme:?}");
+    }
+
+    harness.state_mut().request_close_tab(1);
+    harness.frames(2);
+    assert!(has_dot(&harness, "a.md"));
+    assert!(!has_dot(&harness, "b.md"), "its tab is closed");
+
+    point_at(&mut harness, "a.md");
+    assert!(!has_dot(&harness, "a.md"), "the button takes its place");
+}
+
+/// Pick `item` from the context menu of the explorer row `file`.
+fn pick_from_context_menu(harness: &mut LabelHarness, file: &str, item: &str) {
+    explorer_row(harness, file).click_secondary();
+    harness.frames(2);
+    harness.click(item);
+}
+
+#[test]
+fn the_context_menu_opens_a_file_here_or_in_a_new_tab() {
+    let mut harness = explorer();
+    let (a, b) = (harness.path("a.md"), harness.path("b.md"));
+
+    pick_from_context_menu(&mut harness, "b.md", "Open in New Tab");
+    assert_eq!(open_paths(&harness), [a, b.clone()]);
+    assert!(!is_listed(&harness, "Open in New Tab"), "a pick closes it");
+
+    harness.state_mut().request_close_tab(1);
+    harness.frames(2);
+    pick_from_context_menu(&mut harness, "b.md", "Open");
+    assert_eq!(open_paths(&harness), [b], "in place of a.md");
+}
+
+#[test]
+fn the_context_menu_names_the_click_of_the_platform_beside_open_in_new_tab() {
+    for platform in [Platform::Other, Platform::Mac] {
+        let mut harness = explorer();
+        harness.state_mut().platform = platform;
+        harness.state_mut().hints_stale = true;
+        harness.frames(2);
+        let click = command_click(&harness);
+
+        explorer_row(&harness, "b.md").click_secondary();
+        harness.frames(2);
+
+        let row = harness.get_by_label("Open in New Tab").rect();
+        let shapes = painted_shapes(harness.output());
+        let beside = shapes.iter().any(|shape| {
+            matches!(shape, egui::Shape::Text(text)
+                if text.galley.text() == click && row.contains(text.pos))
+        });
+        assert!(beside, "{platform:?}: {click} is not on the row");
+        let copy = harness.get_by_label("Copy Contents").rect();
+        assert!(row.bottom() < copy.top(), "the open rows come first");
+    }
+}
+
+#[test]
+fn a_click_with_the_command_key_held_opens_a_tab_from_the_menu_too() {
+    let mut harness = explorer();
+
+    explorer_row(&harness, "b.md").click_secondary();
+    harness.frames(2);
+    harness
+        .get_by_label("Open")
+        .click_modifiers(Modifiers::CTRL);
+    harness.frames(2);
+
+    assert_eq!(
+        open_paths(&harness),
+        [harness.path("a.md"), harness.path("b.md")]
+    );
 }
 
 #[test]

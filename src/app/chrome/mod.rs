@@ -116,7 +116,7 @@ pub(super) fn sense(enabled: bool) -> egui::Sense {
 }
 
 /// The wash under a pressed control and the ring around a focused one.
-fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
+pub(super) fn paint_feedback(ui: &egui::Ui, response: &egui::Response, palette: &Palette) {
     if response.is_pointer_button_down_on() {
         ui.painter()
             .rect_filled(response.rect, CONTROL_RADIUS, palette.raised);

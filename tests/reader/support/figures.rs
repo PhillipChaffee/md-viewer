@@ -1,7 +1,7 @@
 //! What a picture on the page looks like, how a text is set, and what the
 //! app asked of the desktop around it.
 
-use super::paint::{marks, pictures, Drawing, Painted, Picture};
+use super::paint::{dots, marks, pictures, Drawing, Painted, Picture};
 use super::{Area, Reader, Rgb};
 
 /// How far apart, in pixels, two areas may be and still be one picture.
@@ -143,6 +143,41 @@ impl Reader {
             .collect();
         inside.sort_by(|a, b| a.top.total_cmp(&b.top));
         inside
+    }
+
+    /// The dots the last frame drew wholly inside `area`, each with its
+    /// color, left to right: the mark on a file that has a tab.
+    pub(crate) fn dots_in(&self, area: Area) -> Vec<(Area, Rgb)> {
+        let scale = self.scale();
+        let drawn = dots(&self.shapes()).into_iter();
+        let mut inside: Vec<(Area, Rgb)> = drawn
+            .map(|(rect, ink)| (rect * scale, ink))
+            .map(|(rect, ink)| {
+                let dot = Area {
+                    left: rect.left(),
+                    top: rect.top(),
+                    width: rect.width(),
+                    height: rect.height(),
+                };
+                (dot, ink)
+            })
+            .filter(|(dot, _)| {
+                dot.left >= area.left
+                    && dot.top >= area.top
+                    && dot.right() <= area.right()
+                    && dot.bottom() <= area.bottom()
+            })
+            .collect();
+        inside.sort_by(|(a, _), (b, _)| a.left.total_cmp(&b.left));
+        inside
+    }
+
+    /// Where the first line of the first painted text that contains `text`
+    /// ends, in pixels from the left edge of the window.
+    #[track_caller]
+    pub(crate) fn end_of(&self, text: &str) -> f32 {
+        let painted = self.painted_with(text);
+        (painted.first_line.x + painted.first_line_width / 2.0) * self.scale()
     }
 
     /// The addresses the app has asked the desktop to open in a browser,
