@@ -1,0 +1,196 @@
+[
+ {
+  "id": "23-F1",
+  "pr": 23,
+  "also": [],
+  "title": "Where the keyboard lands after a keyboard close is a second pending-close record, settled by polling each frame",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "The five stations are there as cited (TabPicks::close_had_keyboard, MarkdownApp::keyboard_closing, keyboard_landing, Landing, TabLabel::takes_keyboard). The remedy is sound by reading, with one correction: request_close_tab has two production callers (tabs/mod.rs:324, tab_bar/mod.rs:198) and four in tests (explorer_panel/tests.rs:290, :315; close_prompt/tests.rs:137, :155), and close_prompt/tests.rs:57 builds Goal::Tab(1), so keep request_close_tab(index) and add a second entry for the keyboard. Carrying the flag in the goal also survives the overwrite question of PR 21 for free. Not run: the focus request made in the frame the modal is still the top layer.",
+  "observable": "none intended; the ring appears one frame earlier",
+  "file": "src/app/tab_bar/mod.rs",
+  "line": 119,
+  "code": "    fn keyboard_landing(&mut self) -> Option<Landing> {\n        let serial = self.keyboard_closing?;\n        let still_open = self.tabs.iter().any(|tab| tab.serial == serial);\n        if still_open && self.closing.is_asking() {\n            return None;\n        }\n        self.keyboard_closing = None;\n        if still_open {\n            None\n        } else if self.front().is_some() {\n            Some(Landing::FrontTab)\n        } else {\n            Some(Landing::NewTabButton)\n        }\n    }",
+  "diff": "sketch, not compiled\n  // close_prompt\n- Tab(usize),\n+ Tab { index: usize, keyboard_follows: bool },\n+ pub(crate) fn request_close_tab_from_keyboard(&mut self, index: usize) { .. }\n  Goal::Tab { index, keyboard_follows } => {\n      self.close_tab(index);\n+     if keyboard_follows { self.put_keyboard_on_the_front(); }\n  }\n  // tab_bar\n- fn keyboard_landing(&mut self) -> Option<Landing> { .. }\n- enum Landing { .. }\n- takes_keyboard: bool,\n+ pub(crate) fn tab_id(serial: u64) -> egui::Id { egui::Id::new((\"tab\", serial)) }\n  // app/mod.rs, startup/mod.rs\n- keyboard_closing: Option<u64>,",
+  "size": "4 files (tab_bar, close_prompt, app/mod.rs, startup), about 70 lines removed and 30 added; the new-tab button needs a fixed id",
+  "guards": "tests/reader/keyboard_focus.rs (7 tests on closing from the keyboard) name none of the removed items and should pass unchanged; src/app/close_prompt/tests.rs:57 changes to the struct variant. No proof or TSV row. tab_bar/mod.rs changes by more than 100 lines in total, so split it into two commits.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-F3"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "23-F2",
+  "pr": 23,
+  "also": [],
+  "title": "Tab::id names the document and Tab::serial the tab, and revealed_tab still keys on place and document",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "Real: revealed_tab is Option<(usize, egui::Id)> (app/mod.rs:81) built at tab_bar/mod.rs:96, twenty lines from the serial. The review's 'no observable change with (serial, document_id)' is wrong: today the key holds the place, so closing a tab to the left of the front tab moves the front tab's place and scrolls it back into the strip; keyed by serial that reveal is gone. No test pins it. The rename of Tab::id is mechanical (content/mod.rs:168, :260; outline/spy/mod.rs:93; tab_bar/mod.rs:96; tab/mod.rs).",
+  "observable": "With the serial key, the strip no longer scrolls back to the front tab when a tab to its left is closed.",
+  "file": "src/app/tab_bar/mod.rs",
+  "line": 96,
+  "code": "        // A tab that came to the front is scrolled into view once. After\n        // that the tabs are the reader's to scroll.\n        let front = self.front();\n        let front = front.and_then(|front| Some((front, self.tabs.get(front)?.id)));\n        let reveal = self.revealed_tab != front;\n        self.revealed_tab = front;",
+  "diff": "sketch, not compiled\n- pub(crate) id: egui::Id,\n+ pub(crate) document_id: egui::Id,\n- revealed_tab: Option<(usize, egui::Id)>,\n+ revealed_tab: Option<(u64, egui::Id)>,   // only with the behaviour change accepted",
+  "size": "rename: 4 files, about 8 mentions. Key change: 2 files, 3 lines",
+  "guards": "src/app/tab_bar/tests.rs a_tab_that_comes_to_the_front, a_tab_that_takes_the_place_of_a_closed_one, a_second_tab_on_the_same_document, the_strip_stays_where_the_reader_scrolled_it pass under either key. PR 27 conflicts textually with PR 23 in src/tab/mod.rs and tab_bar/mod.rs.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Rename Tab id to document_id and leave the key",
+    "cost": "About 8 mentions in 4 files, no behaviour change, no test change.",
+    "suggested": true
+   },
+   {
+    "name": "Rename and key revealed_tab by serial and document",
+    "cost": "3 more lines; the front tab is no longer scrolled back when a tab left of it closes; add a test for whichever is wanted."
+   },
+   {
+    "name": "Add a TabSerial newtype as well",
+    "cost": "About 15 more lines across tab, tab_bar and app; no behaviour change; conflicts with 23-F1 if done in parallel."
+   }
+  ]
+ },
+ {
+  "id": "23-F3",
+  "pr": 23,
+  "also": [],
+  "title": "The home page's buttons and the contents sidebar's fold control take the keyboard and draw no focus ring",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Both are laid out with ui.interact(.., Sense::click()), which is focusable, and neither calls chrome::focus_ring (welcome/mod.rs:232-244, outline/mod.rs:251-265). The Tab key reaches each of them and no ring is painted. The 'same ten lines' claim is loose: more_button and quiet_button share the interact, the name and the hover wash but paint different things, so one call to focus_ring at each site is the smaller fix.",
+  "observable": "The Tab key stops on Open File…, Open Folder… and on each fold chevron with nothing on screen showing where the keyboard is.",
+  "file": "src/app/welcome/mod.rs",
+  "line": 232,
+  "code": "fn quiet_button(ui: &egui::Ui, palette: &Palette, rect: egui::Rect, text: &str) -> egui::Response {\n    let response = ui.interact(rect, ui.id().with(text), egui::Sense::click());\n    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text));\n    let ink = if response.hovered() {\n        ui.painter()\n            .rect_filled(rect, sidebar::RADIUS, palette.raised);\n        palette.text\n    } else {\n        palette.muted\n    };\n    let label = ui.painter().layout_job(sans(text, BUTTON_TEXT_SIZE, ink));\n    ui.painter().galley(rect.min + BUTTON_PADDING, label, ink);\n    response.on_hover_cursor(egui::CursorIcon::PointingHand)",
+  "diff": "sketch, not compiled\n  // welcome::quiet_button, before the return\n+ chrome::focus_ring(ui, palette, &response, rect);\n  // outline::fold_control\n+ chrome::focus_ring(ui, outline.palette, &response, rect);",
+  "size": "2 files, 2 lines, plus 2 reader tests in tests/reader/keyboard_focus.rs",
+  "guards": "No test pins the lack of a ring. tests/reader/keyboard_focus.rs has assert_ring_follows_the_keyboard to reuse.",
+  "repro": "reproduced: `assertion left == right failed: Open File…, focused  left: None  right: Some(#B25E28)` and the same for `fold, focused`; tab_to reached both controls",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Draw the ring on the home buttons and the fold control",
+    "cost": "2 lines and 2 tests; a ring appears where none was.",
+    "suggested": true
+   },
+   {
+    "name": "Ring on the home buttons and take the fold control out of the Tab order",
+    "cost": "About 4 lines; the fold can then be reached by pointer only, which is worse for keyboard readers."
+   },
+   {
+    "name": "Leave both for a later item",
+    "cost": "Nothing; the helper's doc comment that focus looks the same everywhere stays untrue."
+   }
+  ]
+ },
+ {
+  "id": "23-N1",
+  "pr": 23,
+  "also": [],
+  "title": "New: recent rows on the home page and the reading column's edge handles are Tab stops with no ring either",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Not in the review. recent_row senses clicks for a file that exists and reacts to hover only (welcome/mod.rs:397-413); the column edges use Sense::click_and_drag (content/column/mod.rs:106-111). Neither reads has_focus. The theme swatches do react to focus (appearance/mod.rs:54), with a darker edge and no ring.",
+  "observable": "The Tab key stops on each recent document and on both edges of the reading column with nothing drawn.",
+  "file": "src/app/welcome/mod.rs",
+  "line": 397,
+  "code": "fn recent_row(ui: &mut egui::Ui, row: &HomeRow, style: &HomeStyle<'_>) -> bool {\n    let width = ui.available_width();\n    let text = RowText::lay_out(ui, row, style, width);\n    let sense = if row.exists {\n        egui::Sense::click()\n    } else {\n        egui::Sense::hover()\n    };\n    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, text.height()), sense);\n    response.widget_info(|| {\n        egui::WidgetInfo::labeled(egui::WidgetType::Button, row.exists, &row.title)",
+  "diff": "sketch, not compiled\n+ chrome::focus_ring(ui, palette, &response, rect);   // recent_row\n  // column edges: draw the ring, or sense drags only",
+  "size": "2 files, 2 to 6 lines, 1 or 2 tests",
+  "guards": "None today.",
+  "repro": "read from the code only",
+  "needs": [
+   "23-F3"
+  ],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Do it with 23-F3 in the same commit",
+    "cost": "2 to 6 more lines and one more test; rings on recent rows and the column edges.",
+    "suggested": true
+   },
+   {
+    "name": "Ring on recent rows and make the column edges pointer-only",
+    "cost": "About 4 lines; the column width keeps its slider in the Aa popover for the keyboard."
+   },
+   {
+    "name": "Leave for a later item",
+    "cost": "Nothing now."
+   }
+  ]
+ },
+ {
+  "id": "23-F4",
+  "pr": 23,
+  "also": [],
+  "title": "A held key is defended against twice, once by where the keyboard lands and once by deleting repeats in the prompt",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "The filter is at close_prompt/mod.rs:249. The remedy (give Save the keyboard only once the key is up, delete the filter) is unsafe next to PR 21: while the key is held the focus stays on the first button, and on the overwrite question the first button is Overwrite, so every repeat presses it (see 21-N1, which shows the same mechanism in one frame). The filter is what protects the second question from repeats once both PRs are merged.",
+  "observable": "With the remedy, Save takes the keyboard on key release, not on press.",
+  "file": "src/app/close_prompt/mod.rs",
+  "line": 245,
+  "code": "        let focus_save = std::mem::take(&mut pending.focus_due);\n        // A key held down repeats, and egui takes each repeat for a press.\n        // Enter or Space held on the button that asked to close would press\n        // Save, which has the keyboard, before the question could be read.\n        ctx.input_mut(|input| input.events.retain(|event| !is_repeated_press(event)));",
+  "diff": "sketch, not compiled\n- let focus_save = std::mem::take(&mut pending.focus_due);\n- ctx.input_mut(|input| input.events.retain(|event| !is_repeated_press(event)));\n+ let held = ctx.input(|i| i.key_down(egui::Key::Enter) || i.key_down(egui::Key::Space));\n+ let focus_save = !held && std::mem::take(&mut pending.focus_due);",
+  "size": "1 file, about 15 lines removed",
+  "guards": "tests/reader/keyboard_focus.rs a_key_held_down_on_the_close_button_of_unsaved_edits_asks_and_answers_nothing. PR 21 renames focus_save to focus_due on the same line: a textual conflict either way.",
+  "repro": "read from the code only",
+  "needs": [
+   "21-N1"
+  ],
+  "conflicts": [
+   "21-N1"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Keep the repeat filter as it is",
+    "cost": "Nothing; 13 lines and a queue edit in a render function stay, and they also cover the overwrite question.",
+    "suggested": true
+   },
+   {
+    "name": "Replace it with focus on key release",
+    "cost": "15 lines fewer, but only safe after 21-N1 is fixed; Save takes the keyboard later; one test to re-check by running."
+   }
+  ]
+ },
+ {
+  "id": "23-F5",
+  "pr": 23,
+  "also": [],
+  "title": "tab_label is about 85 lines doing layout, naming, close button, paint, ring, scroll, picks, menu and hover text",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Lines 250-334 as cited, under the complexity cap. PR 21 (disk mark in the end square) and PR 27 (two galleys for name and folder) both rewrite the same function and conflict with PR 23 there, so a split is only worth doing once the three are merged.",
+  "observable": "none",
+  "file": "src/app/tab_bar/mod.rs",
+  "line": 250,
+  "code": "fn tab_label(\n    ui: &mut egui::Ui,\n    label: &TabLabel<'_>,\n    palette: &'static Palette,\n    actions: &mut TabPicks,\n) -> egui::Response {\n    let mut job = egui::text::LayoutJob::simple_singleline(",
+  "diff": "sketch, not compiled\n+ fn paint_tab(ui, rect, galley, label, palette, pointed) { /* title, underline, ring */ }\n  fn tab_label(..) -> egui::Response { /* layout and interaction */ }",
+  "size": "1 file, about 40 lines moved",
+  "guards": "src/app/tab_bar/tests.rs and tests/reader/keyboard_focus.rs read what is painted and stay. Do it after 23-F1, which removes a branch here.",
+  "repro": "read from the code only",
+  "needs": [
+   "23-F1"
+  ],
+  "conflicts": [
+   "27-F1"
+  ],
+  "resolves": []
+ }
+]

@@ -1,0 +1,268 @@
+[
+ {
+  "id": "26-F1",
+  "pr": 26,
+  "also": [],
+  "title": "Ten scattered flushes keep 'no runs wait when anything but running text touches the ui', and is_running_text shadows the dispatch",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "The ten sites are exactly as listed (nine set_runs, one show_runs). Two claims need correcting. Tag::Superscript and Tag::Subscript cut no seam today: the fork's parser_options enables tables, task lists, strikethrough, footnotes and definition lists only (egui_commonmark_backend/src/pulldown.rs:268-273), plus math and YAML metadata (latex_delimiters.rs:149-152), so those events never arrive. And the three drain loops are not identical: the two inside horizontal_wrapped (2857-2868, 2905-2916) are, the third (2990-3002) also intercepts block quotes and sets self.upcoming. By grep, the only emitters outside the running arms are the heading end (4163-4171) and the HTML fallback (4299-4318), both of which flush, so the second flush at 3506 does look redundant; that needs the debug_assert and a run.",
+  "observable": "none",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 3500,
+  "code": "        // md-viewer patch: only running text waits. Anything else is laid\n        // out after the text before it, and before the text after it.\n        let waits = is_running_text(&event);\n        if !waits {\n            self.set_runs(ui, cache);\n        }\n        self.event_in_place(ui, event, src_span, cache, options, max_width);\n        if !waits {\n            self.set_runs(ui, cache);\n        }\n    }",
+  "diff": "sketch, not compiled\n- let waits = is_running_text(&event);\n- if !waits { self.set_runs(ui, cache); }\n- self.event_in_place(..);\n- if !waits { self.set_runs(ui, cache); }\n+ match event {\n+     event @ (Event::Text(_) | Event::Code(_) | Event::InlineHtml(_)\n+     | Event::Start(Tag::Emphasis | Tag::Strong | Tag::Strikethrough | Tag::Link { .. })\n+     | Event::End(TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link)) => self.inline_event(..),\n+     Event::InlineMath(tex) if is_likely_currency(&tex) => self.event_text(format!(\"${tex}$\").into(), ui, options),\n+     event => { self.set_runs(ui, cache); self.block_event(..); }\n+ }\n- fn is_running_text(..) -> bool { .. }\n+ debug_assert!(self.runs.is_empty());   // in block_start and new_line, first",
+  "size": "1 file, about 60 lines; one helper for the two identical loops",
+  "guards": "tests/reader/line_breaks.rs (16), vendor/.../tests/touching_runs.rs (5) and the reader suite for paint order. No app-crate gate reads vendor/. Put the debug_assert in first and run both suites before dropping the flush at 3506.",
+  "repro": "read from the code only",
+  "needs": [
+   "26-F4"
+  ],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "26-F2",
+  "pr": 26,
+  "also": [],
+  "title": "Where text goes is decided by three if-chains over the same four fields, and link_is_active shadows self.link",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "text_waits (3708-3713), emit_text (3790-3819) and end_link (3693-3703) test image, code block, heading and table in the same order and must agree; the three highlight closures at 3839, 3939 and 3953 repeat && !self.text_waits(). I checked the link cases: a match in a link in a table or a heading is recorded where it is emitted, one in a paragraph link through link_is_active, so a TextSink enum keeps all of them. Moving the capture into emit_text is the uncertain half and can be left out.",
+  "observable": "none",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 3708,
+  "code": "\n    /// md-viewer patch: whether text emitted now waits in [`Self::runs`]:\n    /// the running text of a paragraph, a list item or a quote. A heading\n    /// collects its own pieces, and a table cell sets each as it comes.\n    fn text_waits(&self) -> bool {\n        self.image.is_none()\n            && self.code_block.is_none()\n            && self.text_style.heading.is_none()\n            && !self.is_table\n    }",
+  "diff": "sketch, not compiled\n+ enum TextSink { ImageAlt, CodeBlock, Heading, TableCell, Runs }\n+ fn text_sink(&self) -> TextSink { /* the one chain */ }\n- fn text_waits(&self) -> bool { .. }\n- if hl == HighlightKind::Active && !self.text_waits() {\n+ if hl == HighlightKind::Active && !matches!(self.text_sink(), TextSink::Runs) {",
+  "size": "1 file, about 40 lines, 5 use sites",
+  "guards": "In-file test a_match_in_running_text_is_recorded_on_the_row_it_is_set_on (6351), tests/reader/find.rs stepping_to_a_match_in_a_link_brings_it_into_view, tests/reader/find_depth.rs.",
+  "repro": "read from the code only",
+  "needs": [
+   "26-F1"
+  ],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "26-F3",
+  "pr": 26,
+  "also": [
+   "26-T1"
+  ],
+  "title": "epaint holds the word-boundary rule twice and a test keeps the copies equal",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "is_word_boundary (text_layout.rs:1002-1011) and RowBreakCandidates::add (1055-1070) state the same three conditions. I checked the proposed single-field form arm by arm, the non-breaking space and a CJK character before closing punctuation included: it is equivalent, and word_boundary only ever reads the three fields as their maximum. The cost is a larger difference from upstream in a patched copy, and the painter's own tests run in no CI job (26-F7b).",
+  "observable": "none",
+  "file": "vendor/epaint/src/text/text_layout.rs",
+  "line": 1055,
+  "code": "    fn add(&mut self, index: usize, glyphs: &[Glyph]) {\n        let chr = glyphs[0].chr;\n        const NON_BREAKING_SPACE: char = '\\u{A0}';\n        if chr.is_whitespace() && chr != NON_BREAKING_SPACE {\n            self.space = Some(index);\n        } else if is_cjk(chr) && (glyphs.len() == 1 || is_cjk_break_allowed(glyphs[1].chr)) {\n            self.cjk = Some(index);\n        } else if chr == '-' {\n            self.dash = Some(index);\n        } else if chr.is_ascii_punctuation() {\n            self.punctuation = Some(index);\n        } else if glyphs.len() > 1 && is_cjk(glyphs[1].chr) {\n            self.pre_cjk = Some(index);\n        }\n        self.any = Some(index);\n    }",
+  "diff": "sketch, not compiled\n  fn add(&mut self, index: usize, glyphs: &[Glyph]) {\n      let chr = glyphs[0].chr;\n+     let next = glyphs.get(1).map(|glyph| glyph.chr);\n-     if chr.is_whitespace() && chr != NON_BREAKING_SPACE { self.space = Some(index); }\n-     else if is_cjk(chr) && (..) { self.cjk = Some(index); }\n+     if is_word_boundary(chr, next) { self.word = Some(index); }\n      else if chr == '-' { self.dash = Some(index); }\n      else if chr.is_ascii_punctuation() { self.punctuation = Some(index); }\n-     else if glyphs.len() > 1 && is_cjk(glyphs[1].chr) { self.pre_cjk = Some(index); }\n- test_word_boundary_agrees_with_the_row_breaker",
+  "size": "1 file, about 35 lines, one test of 45 lines deleted",
+  "guards": "test_room_after_* (4), test_first_word and upstream's wrapping tests in the same file, none run by CI; every reader test that wraps prose.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [
+   "26-T1"
+  ],
+  "options": [
+   {
+    "name": "One field and one rule in add",
+    "cost": "About 35 lines changed in upstream's struct, so a later epaint update conflicts there; the agreement test goes; no behaviour change.",
+    "suggested": true
+   },
+   {
+    "name": "Keep three fields and share a BreakKind function",
+    "cost": "About 25 lines; smaller difference from upstream; still one rule."
+   },
+   {
+    "name": "Keep both copies and the test",
+    "cost": "Nothing; agreement is proven on 13 sample characters by a test no gate runs."
+   }
+  ]
+ },
+ {
+  "id": "26-F4",
+  "pr": 26,
+  "also": [],
+  "title": "The run code is a self-contained unit added to a 6,400-line file",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "Run, RUN_ROUNDING, width_of_start, keep_room_for_touching_runs and the touches rule in join_run are about 110 lines with one dependency on the viewer (pulldown.rs:1866-1924, 3715-3730). One change to the sketch: show_runs takes the Vec, drains it and puts it back to keep its capacity ('Emptied, and kept for the room it has', 3766-3767), so a take_with_room that returns a fresh Vec would allocate per paragraph per frame. Hand out a draining iterator or a slice instead.",
+  "observable": "none",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 1870,
+  "code": "/// md-viewer patch: a piece of running text, kept until what follows it is\n/// known. A row may end between two pieces only where it could end inside\n/// one: a piece that touches the next, with no place to break between\n/// them, keeps room for the start of that one on its row.\nstruct Run {\n    job: egui::text::LayoutJob,\n    /// Where it leads, when it is a link.\n    link: Option<String>,\n    /// It holds find's current match: where it is set is where find\n    /// scrolls to.\n    active: bool,\n    /// No row may end between the run before it and this one.\n    touches: bool,\n}\n",
+  "diff": "sketch, not compiled\n+ // parsers/runs.rs\n+ pub(super) struct Run { pub job: LayoutJob, pub link: Option<String>, pub active: bool, touches: bool }\n+ #[derive(Default)] pub(super) struct Runs(Vec<Run>);\n+ impl Runs { pub fn push(..); pub fn is_empty(&self) -> bool;\n+     /// Give each run its room, then hand them out, keeping the buffer.\n+     pub fn drain_with_room(&mut self, ui: &Ui) -> std::vec::Drain<'_, Run> }",
+  "size": "2 files (new parsers/runs.rs, pulldown.rs) and mod.rs; about 110 lines moved",
+  "guards": "Same tests as 26-F1. More than 100 lines leave pulldown.rs in one commit: it is a move, so make it a commit of its own (refactoring rules).",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "26-F5",
+  "pr": 26,
+  "also": [],
+  "title": "HeadingPiece is Run under another name, and set_runs wraps a one-off boolean",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "The heading end converts each HeadingPiece to a Run and calls show_runs(ui, cache, false) (4149-4171); set_runs only passes true (3734-3736). Merging the two changes what is painted when a formula or picture sits in a heading, and where a find match in a multi-row heading is recorded, as the review says; the in-file test at 6091 reads current_heading_pieces.",
+  "observable": "If merged: a formula or picture in a heading would be painted after the text before it, not before the whole heading; a find match in a long heading would scroll to its own row.",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 3734,
+  "code": "    fn set_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache) {\n        self.show_runs(ui, cache, true);\n    }\n\n    /// Set the running text that waited. With `marks_item` its first text\n    /// decides where the marker of its list item is painted; a heading\n    /// leaves that to the end of the item.\n    fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marks_item: bool) {",
+  "diff": "sketch, not compiled\n- fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marks_item: bool) {\n+ enum Marker { FromFirstText, Leave }\n+ fn show_runs(&mut self, ui: &mut Ui, cache: &mut CommonMarkCache, marker: Marker) {",
+  "size": "naming only: 1 file, about 8 lines. Merge: about 50 lines and one in-file test rewritten",
+  "guards": "tests/reader/line_breaks.rs list_items_quotes_and_headings_keep_them_together_too; heading and outline reader tests; in-file heading_display (6088-6098).",
+  "repro": "read from the code only",
+  "needs": [
+   "26-F1"
+  ],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Name the boolean now and leave the heading alone",
+    "cost": "About 8 lines, no behaviour change.",
+    "suggested": true
+   },
+   {
+    "name": "Fold heading text into the runs in a follow-up PR",
+    "cost": "About 50 lines; two reader-visible changes to decide and test; one in-file test rewritten."
+   },
+   {
+    "name": "Leave both",
+    "cost": "Nothing; true and false stay at the call sites."
+   }
+  ]
+ },
+ {
+  "id": "26-F6",
+  "pr": 26,
+  "also": [],
+  "title": "Each touching seam is measured again every frame",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "width_of_start allocates the prefix String, clones the section formats and looks the job up in the galley cache (1887-1908), once per touching seam in view per frame, from keep_room_for_touching_runs. It is the class of work every label does each frame, but it is new per-frame work in a file outside the gates, and the only number is a debug-build worst case.",
+  "observable": "none",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 1887,
+  "code": "fn width_of_start(ui: &Ui, job: &egui::text::LayoutJob, len: usize) -> f32 {\n    if len == 0 {\n        return 0.0;\n    }\n    let sections = job\n        .sections\n        .iter()\n        .filter(|section| section.byte_range.start < len);\n    let start = egui::text::LayoutJob {\n        text: job.text[..len].to_owned(),\n        sections: sections\n            .map(|section| egui::text::LayoutSection {\n                leading_space: 0.0,\n                byte_range: section.byte_range.start..section.byte_range.end.min(len),\n                format: section.format.clone(),\n            })\n            .collect(),\n        round_output_to_gui: false,\n        ..Default::default()\n    };",
+  "diff": "no change proposed; measure first:\n+ a release-build number for scroll CPU on a page with ten seams a paragraph",
+  "size": "none, or a painter patch far larger than room_after",
+  "guards": "Rule 5 (never per frame) is the app crate's; vendor/ is outside the gates (GATES.md caveat).",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Leave the code and take a release-build measurement",
+    "cost": "One measurement; the cost stays, and is known.",
+    "suggested": true
+   },
+   {
+    "name": "Cache seam widths in CommonMarkCache",
+    "cost": "A cache to invalidate on font, zoom and theme changes; more state than a hash lookup saves."
+   },
+   {
+    "name": "Give the painter the next word as text",
+    "cost": "A much larger epaint patch touching selection, cursors and row text."
+   }
+  ]
+ },
+ {
+  "id": "26-F7",
+  "pr": 26,
+  "also": [],
+  "title": "room_after does not say what it means with a row limit, centred or justified text",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The doc comment (text_layout_types.rs:436-444) states the default and the effect and nothing about max_rows, alignment or justify. No caller combines them today.",
+  "observable": "none",
+  "file": "vendor/epaint/src/text/text_layout_types.rs",
+  "line": 444,
+  "code": "    /// md-viewer patch: room to keep free after the end of the text, for\n    /// what follows it with no place to break between: a bracket after a\n    /// word, a word after a piece in another face.\n    ///\n    /// When the last word and this much more do not fit on its row, the\n    /// word starts the next row, as it would had the two been one text.\n    ///\n    /// Default value: `0.0`.\n    pub room_after: f32,",
+  "diff": "+ /// Meant for left-aligned, unjustified text with no row limit: with\n+ /// `max_rows` a text that fits but whose room does not is moved to a\n+ /// row that may be elided, and with other alignments 'after' has no\n+ /// one meaning.",
+  "size": "1 file, 4 lines",
+  "guards": "Comment only.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "26-F7b",
+  "pr": 26,
+  "also": [],
+  "title": "The painter's tests, the only direct pin on the new row rule, run in no gate",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "ci.yml lints and tests the three egui_commonmark crates under vendor/egui_commonmark/Cargo.toml (lines 275-284) and never vendor/epaint; run-gates.sh names vendor only to skip it. The hole is older than the PR, which now depends on it.",
+  "observable": "none",
+  "file": "vendor/epaint/src/text/text_layout.rs",
+  "line": 1580,
+  "code": "    fn test_room_after_moves_the_last_word_down() {\n        let width = width_of(\"one two three\") + 4.0;\n\n        assert_eq!(\n            rows_with_room_after(\"one two three\", width, 0.0, 0.0),",
+  "diff": "  # .github/workflows/ci.yml, fork job\n+ cargo test --manifest-path vendor/epaint/Cargo.toml text_layout",
+  "size": "1 CI step and a GATES.md line",
+  "guards": "Adds a gate; GATES.md's vendor caveat should name it. Build time of the fork job grows.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Run epaint's text tests in the fork's CI job",
+    "cost": "One step and a few minutes of CI; the five new tests then count.",
+    "suggested": true
+   },
+   {
+    "name": "Leave epaint untested in CI and say so in GATES.md",
+    "cost": "One line; the rule is pinned only through reader tests."
+   }
+  ]
+ },
+ {
+  "id": "26-F8",
+  "pr": 26,
+  "also": [],
+  "title": "A code span over 56 characters still ends its row after the last segment",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "inline_code_wrap_segments cuts at 56 characters (343-366) and the Code arm flushes and ends the row after every segment, the last included (3583-3586), which the PR had to add a flush for. The other two limits (widget neighbours, table cells) are principled and listed in the README.",
+  "observable": "Text that touches the end of a long code span starts on a new row.",
+  "file": "vendor/egui_commonmark/egui_commonmark/src/parsers/pulldown.rs",
+  "line": 3583,
+  "code": "                    if auto_link.is_some() {\n                        if let Some(link) = self.link.take() {\n                            self.end_link(link, ui, cache);\n                        }\n                    }\n                    if wrap {\n                        self.set_runs(ui, cache);\n                        ui.end_row();\n                    }\n                }",
+  "diff": "sketch, not compiled\n- if wrap {\n+ if wrap && !is_last_segment {",
+  "size": "1 file, about 4 lines, plus tests",
+  "guards": "tests/reader/code.rs and the cell-height predictor (cell_visual_lines) that mirrors per-piece wrapping in tables.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Leave it for a follow-up PR",
+    "cost": "Nothing now; the limit stays in the README.",
+    "suggested": true
+   },
+   {
+    "name": "Stop ending the row after the last segment",
+    "cost": "About 4 lines; changes how long code spans wrap everywhere, tables included, where the height predictor must change with it."
+   }
+  ]
+ }
+]

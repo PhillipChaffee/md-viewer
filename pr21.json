@@ -1,0 +1,378 @@
+[
+ {
+  "id": "21-F1",
+  "pr": 21,
+  "also": [
+   "21-T1"
+  ],
+  "title": "Three functions in two layers decide whether a save may write, behind a predicate that changes the tab",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The quoted code is at the head as cited. save_tab has exactly two callers, both in close_prompt (mod.rs:286, :297), and save_would_overwrite one (mod.rs:279); the dirty guard is written twice (tab/mod.rs:332, action/mod.rs:215). The proposed Tab::save(Theirs) keeps every transition I traced, including a file that is gone (written without a question) and one that cannot be read (asked about). No proof or TSV row names any of this text.",
+  "observable": "none",
+  "file": "src/tab/mod.rs",
+  "line": 331,
+  "code": "    pub(crate) fn save_would_overwrite(&mut self) -> bool {\n        if !self.is_dirty() {\n            return false;\n        }\n        self.look_at_disk();\n        let unfollowed = self.unfollowed.map(|unfollowed| unfollowed.change);\n        unfollowed == Some(DiskChange::Changed)\n    }",
+  "diff": "sketch, not compiled\n- pub(crate) fn save_would_overwrite(&mut self) -> bool { .. }\n- pub(crate) fn save(&mut self) -> io::Result<()> { .. }\n+ pub(crate) enum Theirs { Ask, Replace }\n+ pub(crate) enum Saved { Written, WouldOverwrite }\n+ pub(crate) fn save(&mut self, theirs: Theirs) -> io::Result<Saved> {\n+     if !self.is_dirty() { return Ok(Saved::Written); }\n+     if theirs == Theirs::Ask && self.finds_theirs() { return Ok(Saved::WouldOverwrite); }\n+     /* the write and save_flash, as now */\n+ }\n  // src/app/action/mod.rs\n- pub(crate) fn save_tab(&mut self, index: usize) -> bool { .. }\n  // src/app/close_prompt/mod.rs: save_for(goal, asked, theirs) matches on tab.save(theirs)",
+  "size": "3 files (src/tab/mod.rs, src/app/action/mod.rs, src/app/close_prompt/mod.rs), about 60 lines; 3 production call sites; src/tab/tests.rs: 4 tab.save() calls and 7 save_would_overwrite assertions rewritten",
+  "guards": "tests/reader/overwrite.rs (all), tests/reader/editing_depth.rs, tests/e2e/window.rs stay as they are. src/tab/tests.rs mod disk: the last two tests and a_save_notes_how_it_went change mechanically (line 429 becomes save(Theirs::Replace)). No proofs.rs or proof-mutants.tsv row touched. Complexity: save_for stays under 15.",
+  "repro": "read from the code only",
+  "needs": [
+   "21-F4"
+  ],
+  "conflicts": [
+   "27-F4"
+  ],
+  "resolves": [
+   "21-T1"
+  ]
+ },
+ {
+  "id": "21-F2",
+  "pr": 21,
+  "also": [],
+  "title": "look_at_disk classifies the file, moves the baseline and decides the notice through a nameless 3-tuple",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "I checked the review's sketch against the five arms of the current match (as known, as known but theirs held, other text, gone, unreadable) and the notice rule: every arm gives the same change, holds_theirs, notice_shows and saved_content. The reset sites are as cited (unfollowed = None at 288, 385, 414, 435); only two of them (385, 414) pair it with saved_content, so the proposed setter serves two sites, not four.",
+  "observable": "none",
+  "file": "src/tab/mod.rs",
+  "line": 281,
+  "code": "    fn look_at_disk(&mut self) {\n        let before = self.unfollowed;\n        let held_theirs = before.is_some_and(|before| before.holds_theirs);\n        let (change, holds_theirs, other_text) = match read_document(&self.path) {\n            Ok(text) if text == self.saved_content && !held_theirs => {\n                // The file is as the tab read or wrote it: one that was\n                // gone is back, and a save replaces nothing.\n                self.unfollowed = None;\n                return;\n            }\n            Ok(text) if text == self.saved_content => (DiskChange::Changed, true, false),\n            Ok(text) => {\n                self.saved_content = text;\n                (DiskChange::Changed, true, true)\n            }\n            Err(error) if error.kind() == io::ErrorKind::NotFound => {\n                (DiskChange::Gone, held_theirs, false)\n            }\n            Err(_) => (DiskChange::Changed, held_theirs, false),\n        };",
+  "diff": "sketch, not compiled\n+ enum Seen { AsKnown, Other(String), Gone, Unreadable }\n+ fn see(&self) -> Seen { /* the one read_document and compare */ }\n  fn look_at_disk(&mut self) {\n      let before = self.unfollowed;\n-     let (change, holds_theirs, other_text) = match read_document(&self.path) { .. };\n+     let seen = self.see();\n+     let news = matches!(seen, Seen::Other(_));\n+     let holds_theirs = news || before.is_some_and(|b| b.holds_theirs);\n+     if matches!(seen, Seen::AsKnown) && !holds_theirs { self.unfollowed = None; return; }\n+     let change = if matches!(seen, Seen::Gone) { DiskChange::Gone } else { DiskChange::Changed };\n+     let notice_shows = news || before.is_none_or(|b| b.change != change || b.notice_shows);\n+     if let Seen::Other(text) = seen { self.saved_content = text; }",
+  "size": "1 file, about 40 lines in one function plus a 10-line helper",
+  "guards": "src/tab/tests.rs mod disk (7 tests) and tests/reader/disk_change.rs pin every transition and need no change. No proof or TSV row. PR 27 and PR 23 also edit src/tab/mod.rs (other regions).",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-F3",
+  "pr": 21,
+  "also": [],
+  "title": "The close prompt's types are named for closing but now also carry a save, and the answer type admits Overwrite under the wrong question",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "Real: Goal::Save is false in replaces (mod.rs:68) and empty in reach (:321), and answer_close_prompt never reads pending.about, so AnswerClosePrompt(Overwrite) under the Unsaved question writes unasked (only a harness can send it). One claim is wrong: a plain Ctrl+S does not run the ask_from scan, because request_save drops save_for's result (mod.rs:218-220); the scan runs only after the Overwrite answer. The rename has to change: the proposed name Prompt collides with Modal::Prompt and Focus::Prompt of PR 22, and PRs 22, 23, 24 and 27 all name closing, CloseState or CloseAnswer, so a rename inside PR 21 breaks them at merge without a textual conflict.",
+  "observable": "none",
+  "file": "src/app/close_prompt/mod.rs",
+  "line": 44,
+  "code": "enum Goal {\n    /// Close the tab at this place.\n    Tab(usize),\n    /// Close every tab but the one at this place.\n    OtherTabs(usize),\n    /// Close the app.\n    Quit,\n    /// Show another document in the tab at this place: the one the route\n    /// leads to.\n    Leave(usize, Route),\n    /// Write the document the prompt asks about, which stays in its tab.\n    Save,\n}",
+  "diff": "sketch, not compiled\nstep 1, in PR 21 (needs 21-F1):\n- enum Goal { .., Save }\n+ struct PendingClose { then: Option<Goal>, .. }   // or Goal::Nothing\n- pub(crate) enum CloseAnswer { Save, Overwrite, Discard, Cancel }\n+ pub(crate) enum CloseAnswer { Save, Discard, Cancel }\n+ let theirs = match pending.about { Question::Unsaved => Theirs::Ask, Question::Overwrite => Theirs::Replace };\nstep 2, own PR on main after 21, 22, 23, 24 and 27 are in:\n- mod close_prompt; CloseState; PendingClose; CloseAnswer; closing\n+ mod unsaved_prompt; State; Pending; Answer; asking   // not `Prompt`",
+  "size": "step 1: 2 files, about 30 lines, plus src/app/close_prompt/tests.rs. Step 2: 57 mentions in 6 src files on PR 21, plus src/app/modal/ (PR 22), src/app/system_quit/ (PR 24) and src/app/tab_bar/mod.rs (PR 23)",
+  "guards": "src/app/close_prompt/tests.rs matches CloseState::Asking and reads pending.asked, .goal, .question, .focus_due (lines 24, 94, 157-168, 223, 262). tests/reader/overwrite.rs and unsaved.rs stay. src/app/shortcuts/proofs.rs and the TSV name Focus::Prompt, which a type called Prompt would sit beside.",
+  "repro": "read from the code only",
+  "needs": [
+   "21-F1"
+  ],
+  "conflicts": [
+   "23-F1",
+   "22-F5",
+   "24-F1"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Drop the Overwrite answer and Goal Save in PR 21, rename later in a PR of its own",
+    "cost": "About 30 lines now with no behaviour change; the rename (about 60 mentions, 8 files) waits until the five PRs that name these types are merged, so nothing is redone.",
+    "suggested": true
+   },
+   {
+    "name": "Do both steps inside PR 21 now",
+    "cost": "PRs 22, 23, 24 and 27 stop compiling when merged after it and each needs a rebase; no behaviour change."
+   },
+   {
+    "name": "Leave the types as they are",
+    "cost": "Nothing to do; the harness-only Overwrite-under-Unsaved path and the misnamed Goal Save stay."
+   }
+  ]
+ },
+ {
+  "id": "21-F4",
+  "pr": 21,
+  "also": [],
+  "title": "ask takes the question text as an argument that both callers compute the same way",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Both callers build the text with about.put_to(tab) just before the call (mod.rs:252-253 and :276-284), and nothing else calls ask. Letting ask write it removes the and_then/then dance in save_for and is what 21-F1's sketch already assumes.",
+  "observable": "none",
+  "file": "src/app/close_prompt/mod.rs",
+  "line": 259,
+  "code": "    fn ask(&mut self, goal: Goal, asked: usize, about: Question, question: String) {\n        // The prompt has to be seen, and the lightbox draws over it.\n        self.lightbox.open = None;\n        self.closing = CloseState::Asking(PendingClose {\n            goal,\n            asked,\n            about,\n            question,\n            focus_due: true,\n        });\n    }",
+  "diff": "sketch, not compiled\n- fn ask(&mut self, goal: Goal, asked: usize, about: Question, question: String) {\n+ fn ask(&mut self, goal: Goal, asked: usize, about: Question) {\n+     let Some(tab) = self.tabs.get(asked) else { return };\n+     let question = about.put_to(tab);",
+  "size": "1 file, about 12 lines, 2 call sites",
+  "guards": "src/app/close_prompt/tests.rs:160 reads pending.question and keeps passing. PR 27 changes the text put_to builds (named/question), a textual conflict in the same file.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-F5",
+  "pr": 21,
+  "also": [],
+  "title": "reload_front_tab repeats the reload error message and the find-bar invalidation of the watcher path",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The same format string is at watching/mod.rs:286 and :306, and the find bar is invalidated both in reload_changed_tabs and in reload_front_tab. The shared part is small (one message, one invalidate), so the helper saves a few lines; the review's second point, that Reload acts on the front tab only, is a behaviour question and is left out here.",
+  "observable": "none",
+  "file": "src/app/watching/mod.rs",
+  "line": 295,
+  "code": "    pub(crate) fn reload_front_tab(&mut self) {\n        let Some(tab) = self.front_tab_mut() else {\n            return;\n        };\n        let reloaded = tab.reload();\n        let path = tab.path.clone();\n        match reloaded {\n            // What the find bar found was in the text the reload replaced.\n            Ok(()) if self.search.is_open => self.search.invalidate(),\n            Ok(()) => {}\n            Err(error) => {\n                self.error_message = Some(format!(\"Unable to reload {}: {error}\", path.display()));\n            }\n        }\n    }",
+  "diff": "sketch, not compiled\n+ fn reload_failed(&mut self, path: &Path, error: &io::Error) {\n+     self.error_message = Some(format!(\"Unable to reload {}: {error}\", path.display()));\n+ }\n- self.error_message = Some(format!(\"Unable to reload {}: {error}\", path.display()));   // twice\n+ self.reload_failed(&path, &error);",
+  "size": "1 file, about 10 lines, 2 sites",
+  "guards": "Reader tests reload_brings_the_find_bar_up_to_date and a_file_that_can_no_longer_be_read stay. PR 27 adds a line to reload_changed_tabs in the same file.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "27-F2"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "21-F6",
+  "pr": 21,
+  "also": [],
+  "title": "chrome::warning_bar takes its message and ink as one tuple parameter",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The signature is as quoted (chrome/mod.rs:293-299) and both callers build a nameless pair first (disk_notice/mod.rs:38, error_bar/mod.rs:21). Two named parameters make six in all, under clippy's limit of seven.",
+  "observable": "none",
+  "file": "src/app/chrome/mod.rs",
+  "line": 293,
+  "code": "pub(super) fn warning_bar(\n    ctx: &egui::Context,\n    id: &'static str,\n    palette: &Palette,\n    (message, ink): (&str, Color32),\n    buttons: impl FnOnce(&mut egui::Ui),\n) {",
+  "diff": "sketch, not compiled\n-     (message, ink): (&str, Color32),\n+     message: &str,\n+     ink: Color32,",
+  "size": "3 files, 6 lines, 2 call sites",
+  "guards": "No test names the function. No proof or TSV row.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-F7",
+  "pr": 21,
+  "also": [],
+  "title": "The tab's disk dot and the unsaved dot share a size by comment, not by code",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "There are two warning dots, not three: DISK_DOT (tab_bar/mod.rs:40) and UNSAVED_DOT (edit_controls/mod.rs:22), both 7.0 in palette.warning. The third dot, LIVE_DOT, is 6.0 in palette.muted and is unrelated. One chrome constant is enough; a shared helper is not worth it because the two are laid out differently.",
+  "observable": "none",
+  "file": "src/app/tab_bar/mod.rs",
+  "line": 38,
+  "code": "/// Diameter of the dot on a tab whose file changed under unsaved edits:\n/// that of the unsaved dot beside the mode switch.\nconst DISK_DOT: f32 = 7.0;",
+  "diff": "sketch, not compiled\n  // src/app/chrome/mod.rs\n+ /// Diameter of a dot in the warning color.\n+ pub(super) const WARNING_DOT: f32 = 7.0;\n- const DISK_DOT: f32 = 7.0;      // tab_bar\n- const UNSAVED_DOT: f32 = 7.0;   // edit_controls",
+  "size": "3 files, about 8 lines",
+  "guards": "tests/e2e/window.rs reads a pixel of each dot and keeps passing while the size stays 7.0.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-T2",
+  "pr": 21,
+  "also": [],
+  "title": "Three reader tests in disk_change.rs repeat the same two-document setup",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "the_notice_stays_with_its_tab, pointing_at_a_marked_tab and a_change_to_a_tab_behind_another each start with the same five lines (disk_change.rs:130-135, 148-153, 164-169).",
+  "observable": "none",
+  "file": "tests/reader/disk_change.rs",
+  "line": 130,
+  "code": "#[test]\nfn the_notice_stays_with_its_tab() {\n    let mut reader = Reader::with_docs(&[\n        (\"draft.md\", SOURCE),\n        (\"other.md\", \"# Other\\n\\nSomething else.\"),\n    ]);\n    edit(&mut reader, \" Mine.\");\n    another_program_writes(&mut reader, THEIRS);",
+  "diff": "sketch, not compiled\n+ /// `draft.md` with an unsaved edit, beside `other.md`, which has no tab.\n+ fn unsaved_draft_beside_another() -> Reader { .. }",
+  "size": "1 test file, about 15 lines",
+  "guards": "Test-only.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-N1",
+  "pr": 21,
+  "also": [],
+  "title": "New: Enter still down on Save answers the overwrite question with Overwrite before it can be read",
+  "severity": "high",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Not in the review. The Overwrite button is the first button of the second question and gets the widget id, and so the keyboard focus, that Save had; the safe answer Cancel takes the keyboard only at the end of that frame (mod.rs:358-360). A key repeat, or a second press, that arrives in the first frame of the second question presses Overwrite. In the running app a frame without events normally comes between (egui asks for one after any input), so the window is narrow, but what it loses is the other program's text.",
+  "observable": "Holding Enter on Save while the file changed on disk can write over the other program's text and close the tab, with the question never seen.",
+  "file": "src/app/close_prompt/mod.rs",
+  "line": 353,
+  "code": "                ui.horizontal(|ui| {\n                    for &(label, given) in about.answers() {\n                        let button = QuietButton::text(label)\n                            .min_width(ANSWER_WIDTH)\n                            .show(ui, palette);\n                        if focus_due && given == about.safe_answer() {\n                            button.request_focus();\n                        }\n                        if button.clicked() {\n                            answer = Some(given);\n                        }\n                    }\n                });",
+  "diff": "sketch, not compiled\n  ui.horizontal(|ui| {\n+     // The buttons of one question are not those of the other: the\n+     // keyboard must not pass from Save to Overwrite.\n+     ui.push_id(about, |ui| {\n          for &(label, given) in about.answers() { .. }\n+     });",
+  "size": "1 file, about 4 lines; one new reader test, which needs a `hold` driver method (PR 23 adds one)",
+  "guards": "No test covers it: enter_does_not_overwrite_because_the_keyboard_starts_on_cancel presses Enter after the frames have settled. Question derives no Hash, so push_id needs that derive or a string for each question.",
+  "repro": "reproduced: with one repeat after the press, `repeats=1 focused_before=Some(\"Save\") file_is_mine=true file_is_theirs=false asks_overwrite=false tabs=[]` (with no repeat: file_is_theirs=true asks_overwrite=true)",
+  "needs": [],
+  "conflicts": [
+   "23-F4"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Give the buttons of each question their own ids",
+    "cost": "About 4 lines and one test; the first frame of the second question has no focused button until Cancel takes it. No other behaviour change.",
+    "suggested": true
+   },
+   {
+    "name": "Drop every Enter and Space press in the first frame of a question",
+    "cost": "About 6 lines in the render function; overlaps the repeat filter of PR 23 and adds a second input rule to explain."
+   },
+   {
+    "name": "Rely on the repeat filter of PR 23",
+    "cost": "Nothing to write once PR 23 is merged, but a second quick press (not a repeat) still presses Overwrite, and PR 21 alone stays exposed."
+   }
+  ]
+ },
+ {
+  "id": "21-B1",
+  "pr": 21,
+  "also": [],
+  "title": "A held arrow key is a cut point at every repeat, so its presses queue one per frame and can run on after the key is let go",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Read at d3575c2, not run. The predicate in TypedAhead::hold (src/app/frame/mod.rs:68-73) matches any pressed Tab or arrow and ignores the event's `repeat` field, and egui delivers a key repeat as a pressed event with repeat set (egui-0.33.3 src/data/input.rs:435-442). So each frame lets in the events up to the first such press and holds every later one (:74-75), putting them ahead of the next frame's events (:65-67). When more than one repeat of a held arrow arrives per frame, the held list grows by the surplus each frame and empties at one press per frame after release. That part is certain from the code. Whether repeats outrun frames on a real machine was not measured: an ordinary repeat rate is slower than a 60 Hz frame, so it takes a slow frame or a fast repeat setting, and a slow frame is the very case the fix was written for. The three places named are as cited: the source in edit mode is a multiline TextEdit that takes the arrows itself (its focus-lock filter, egui text_edit/builder.rs:619, is honoured at the top of Focus::begin_pass, memory/mod.rs:530-540), the page scroll and the find bar bind unmodified arrows (src/app/shortcuts/mod.rs:199-207) and queue each kind of action once per frame (:224-226). In none of them does an arrow move the keyboard, so the rule costs there without fixing anything. The fix is otherwise sound by reading: nothing is dropped or duplicated, and the order of events is kept.",
+  "observable": "Not observed, inferred from the code: on a slow frame or with a fast key repeat, a held arrow key keeps moving the caret in edit mode, scrolling the page, or stepping through find matches for a moment after the key is released.",
+  "file": "src/app/frame/mod.rs",
+  "line": 64,
+  "code": "    fn hold(&mut self, ctx: &egui::Context, events: &mut Vec<egui::Event>) {\n        if !self.0.is_empty() {\n            events.splice(0..0, self.0.drain(..));\n        }\n        let moves_keyboard = |event: &egui::Event| {\n            let egui::Event::Key { key, pressed, .. } = event else {\n                return false;\n            };\n            *pressed && MOVES_KEYBOARD.contains(key)\n        };\n        if let Some(moved) = events.iter().position(moves_keyboard) {\n            self.0 = events.split_off(moved + 1);\n            if !self.0.is_empty() {\n                ctx.request_repaint();\n            }\n        }\n    }",
+  "diff": "sketch, not compiled\n  // src/app/frame/mod.rs\n- let egui::Event::Key { key, pressed, .. } = event else {\n+ let egui::Event::Key { key, pressed, repeat, .. } = event else {\n      return false;\n  };\n- *pressed && MOVES_KEYBOARD.contains(key)\n+ // A repeat is not typing ahead: only a fresh press ends the frame.\n+ *pressed && !*repeat && MOVES_KEYBOARD.contains(key)\n  // tests/reader/editing_depth.rs\n+ fn a_held_arrow_moves_the_caret_by_every_repeat_of_a_frame() { .. }",
+  "size": "1 file, 2 lines, and one reader test of about 15 lines; the driver needs a way to send repeats (tap_in_turn sends `repeat: false` only, tests/reader/support/act.rs:168-182)",
+  "guards": "tests/reader/unsaved.rs keys_typed_in_one_frame_answer_in_the_order_they_were_pressed and tests/reader/overwrite.rs a_move_to_overwrite_and_enter_typed_in_one_frame_overwrite send fresh presses only and stay as they are. The new test must fail today: several repeated ArrowDown presses in one frame in edit mode move the caret one line, where they should move it by all of them and leave nothing held.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-B3"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Do not cut on key repeats, and add a test",
+    "cost": "2 lines and one reader test, which needs a driver method for repeats. A held arrow followed by Enter in one frame then behaves as it did before the fix, which is how a held key at a prompt has always behaved.",
+    "suggested": true
+   },
+   {
+    "name": "Cut only while a prompt asks",
+    "cost": "About 4 lines and a test. The rule then names the prompt inside a general input path, and other buttons reached by Shift+Tab or an arrow lose the fix."
+   },
+   {
+    "name": "Leave it as it is",
+    "cost": "Nothing to write. A held arrow can run on after release wherever frames are slow, and the size of the effect is not measured."
+   }
+  ]
+ },
+ {
+  "id": "21-B2",
+  "pr": 21,
+  "also": [],
+  "title": "The end-to-end helper waits for what the app now guarantees, so the real window no longer exercises the fix",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Read at d3575c2, not run. move_to_another_answer (tests/e2e/window.rs:156-174) waits until two pictures of the middle of the window are equal, presses the key, and waits until the picture differs; it is used twice, with Tab at :201 and with shift+Tab at :244, each followed by Return. It fails closed: no picture and no change both end in an assertion. With the fix of fd81b6a in the app, pressing the two keys one after the other is correct whether or not they share a frame, so the wait is no longer what makes the tests pass, and with it in place the two keys can never share a frame in the real window. The helper costs a rectangle tied to the window's opening size (SHEET, :24), a new Window::picture (tests/e2e/support/screen.rs:259, its only caller is this helper) and at least four screenshots per use. Whether the tests pass without the wait was not run here.",
+  "observable": "none",
+  "file": "tests/e2e/window.rs",
+  "line": 156,
+  "code": "/// Press `key` at a prompt to move the keyboard to another answer, and\n/// wait until the ring around the answer it is on is seen somewhere else:\n/// until the sheet, once it has faded in, looks different.\nfn move_to_another_answer(home: &Home, window: &Window<'_>, key: &str) {\n    let sheet = || window.picture(home.root(), SHEET);\n    let mut before = sheet();\n    let at_rest = wait_for(|| {\n        let now = sheet();\n        let unchanged = now == before;\n        before = now;\n        unchanged.then_some(())\n    });\n    assert!(at_rest.is_some(), \"the prompt never stopped changing\");\n\n    window.press(key);\n\n    let moved = wait_for(|| (sheet() != before).then_some(()));\n    assert!(moved.is_some(), \"{key} moved the keyboard nowhere\");\n}",
+  "diff": "sketch, not compiled\n  // tests/e2e/window.rs\n- const SHEET: (u32, u32, u32, u32) = (342, 175, 500, 400);\n- fn move_to_another_answer(home: &Home, window: &Window<'_>, key: &str) { .. }\n- move_to_another_answer(&home, &window, \"Tab\");\n+ window.press(\"Tab\");\n  window.press(\"Return\");\n- move_to_another_answer(&home, &window, \"shift+Tab\");\n+ window.press(\"shift+Tab\");\n  window.press(\"Return\");\n  // tests/e2e/support/screen.rs\n- pub(crate) fn picture(&self, scratch: &Path, area: (u32, u32, u32, u32)) -> String { .. }",
+  "size": "2 test files, about 35 lines out and 2 in",
+  "guards": "tests/e2e/window.rs discard_at_the_quit_prompt_closes_the_window_and_writes_nothing and a_file_changed_under_unsaved_edits_is_announced_and_a_save_asks_before_it_writes are the two tests that change. They are the tests that were red before the fix, so they must be run on CI's virtual display after the change.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Press the keys directly again and delete the helper",
+    "cost": "About 35 lines out. The two tests become the real window's check of the fix; if the fix has a gap, they are the tests that go red again.",
+    "suggested": true
+   },
+   {
+    "name": "Keep the helper and say in its comment that it is not what makes the test pass",
+    "cost": "One comment. The real window never sends the two keys in one frame, so only the in-process tests check the fix."
+   },
+   {
+    "name": "Leave the helper as it is",
+    "cost": "Nothing to write. A later reader will take the wait for the fix."
+   }
+  ]
+ },
+ {
+  "id": "21-B3",
+  "pr": 21,
+  "also": [],
+  "title": "TypedAhead has no test of its own, and its request for another frame is not pinned",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Read at d3575c2, not run. hold takes the context only to call request_repaint (src/app/frame/mod.rs:64, :77). The reader driver's settle always runs at least one more frame (tests/reader/support/mod.rs:443-457), so the two-key cases would pass with the request deleted; in the real window a missing request leaves Enter unanswered until the next event. src/app/frame/tests.rs exists and has no test of hold. The third case of keys_typed_in_one_frame_answer_in_the_order_they_were_pressed (tests/reader/unsaved.rs:163-167, Tab then Enter) is a guard and not evidence for the fix, since plain Tab moves the keyboard inside the frame (egui memory/mod.rs:628-633 delays only the step back).",
+  "observable": "none",
+  "file": "src/app/frame/mod.rs",
+  "line": 61,
+  "code": "    /// End the frame's events at the first key in them that moves the\n    /// keyboard, after putting what an earlier frame held ahead of them.\n    /// What follows that key waits one frame, which is asked for.\n    fn hold(&mut self, ctx: &egui::Context, events: &mut Vec<egui::Event>) {",
+  "diff": "sketch, not compiled\n- fn hold(&mut self, ctx: &egui::Context, events: &mut Vec<egui::Event>) {\n+ /// Returns whether anything waits, which needs another frame.\n+ fn hold(&mut self, events: &mut Vec<egui::Event>) -> bool {\n      ..\n-         if !self.0.is_empty() {\n-             ctx.request_repaint();\n-         }\n      }\n+     !self.0.is_empty()\n  }\n- self.typed_ahead.hold(ctx, &mut raw_input.events);\n+ if self.typed_ahead.hold(&mut raw_input.events) {\n+     ctx.request_repaint();\n+ }\n  // src/app/frame/tests.rs: the order of held events, nothing held without a moving key,\n  // and a frame that held something asks for the next one",
+  "size": "1 source file, about 8 lines; 3 unit tests of about 30 lines in src/app/frame/tests.rs",
+  "guards": "The reader tests in tests/reader/unsaved.rs and tests/reader/overwrite.rs stay as they are. Done after the pick on 21-B1, which edits the same function.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-B1"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "21-B4",
+  "pr": 21,
+  "also": [],
+  "title": "The comment on TypedAhead gives one of its two reasons",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Read at d3575c2. The comment (src/app/frame/mod.rs:50-56) says egui moves the keyboard a frame after Shift+Tab or an arrow asks. That does not explain why plain Tab is in MOVES_KEYBOARD: plain Tab moves within the frame. Tab is there because egui keeps one focus_direction per frame (egui memory/mod.rs:537, :567), so three Tab presses in one frame are one step.",
+  "observable": "none",
+  "file": "src/app/frame/mod.rs",
+  "line": 50,
+  "code": "/// What the reader typed in one frame after a key that moves the keyboard\n/// to another control, held for the next frame.\n///\n/// egui moves the keyboard a frame after Shift+Tab or an arrow asks it\n/// to, and gives every key of a frame to whatever has the keyboard then.\n/// A machine slow enough to deliver Shift+Tab and Enter in one frame\n/// would have Enter press the control the reader had just left.",
+  "diff": "sketch, not compiled\n- /// egui moves the keyboard a frame after Shift+Tab or an arrow asks it\n- /// to, and gives every key of a frame to whatever has the keyboard then.\n+ /// egui takes one move of the keyboard per frame, and for Shift+Tab or\n+ /// an arrow makes it a frame late; every key of the frame goes to\n+ /// whatever has the keyboard then.",
+  "size": "1 file, 3 comment lines",
+  "guards": "none needed",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "21-B5",
+  "pr": 21,
+  "also": [],
+  "title": "A blank line above the new changelog entry splits the list",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Read at d3575c2. CHANGELOG.md:51 is a blank line above the new entry at :52, with none below it, which turns a tight list into a loose one at that point.",
+  "observable": "none",
+  "file": "CHANGELOG.md",
+  "line": 51,
+  "code": "\n- **Keys typed faster than the window drew were answered out of order.** `Shift+Tab` or an arrow key and then `Enter`, arriving in one frame of a slow or busy machine, pressed the button the keyboard had just left. At the prompt about unsaved edits that could be **Discard** with the keyboard already back on **Save**. What is typed after a key that moves the keyboard now waits for the next frame, so each key lands where the one before it left the keyboard.",
+  "diff": "sketch, not compiled\n  - **Another program's change to a file was overwritten without a word ..\n-\n  - **Keys typed faster than the window drew were answered out of order.** ..",
+  "size": "1 file, 1 line",
+  "guards": "none needed",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ }
+]

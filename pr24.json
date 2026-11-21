@@ -1,0 +1,205 @@
+[
+ {
+  "id": "24-F1",
+  "pr": 24,
+  "also": [],
+  "title": "After Discard on a quit, a system quit request is still refused",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "note_unsaved_edits stores tabs.iter().any(Tab::is_dirty) and ignores CloseState::Quitting (system_quit/mod.rs:61-64). After Discard at the last question the tabs stay dirty, so the asker answers NotYet and sends Close again, although the reader has answered; on a Mac that cancels a log-out. I could not compile the proposed predicate here (a source edit was refused), so its diff is a sketch.",
+  "observable": "On a Mac, a log-out or Quit that arrives between Discard and the window closing is refused; the app still closes, and the log-out has to be asked for again.",
+  "file": "src/app/system_quit/mod.rs",
+  "line": 61,
+  "code": "    /// Leave word of whether any tab has unsaved edits, at the end of a\n    /// frame: only a frame changes that. One comparison a tab, which is\n    /// what the tab in front already costs for its unsaved marker.\n    pub(crate) fn note_unsaved_edits(&self) {\n        let unsaved = self.tabs.iter().any(Tab::is_dirty);\n        self.system_quit.unsaved.store(unsaved, Ordering::Relaxed);\n    }",
+  "diff": "sketch, not compiled\n  // src/app/close_prompt/mod.rs\n+ /// Whether a request to quit has to ask the reader first.\n+ pub(crate) fn quit_has_to_ask(&self) -> bool {\n+     !matches!(self.closing, CloseState::Quitting) && self.tabs.iter().any(Tab::is_dirty)\n+ }\n  // src/app/system_quit/mod.rs\n- let unsaved = self.tabs.iter().any(Tab::is_dirty);\n+ let unsaved = self.quit_has_to_ask();",
+  "size": "2 files, about 8 lines, plus one assertion in src/app/system_quit/tests.rs",
+  "guards": "src/app/system_quit/tests.rs: add assert_eq!(ask(), QuitAnswer::Now) after Discard in discard_goes_on_to_close_the_window. Coverage: the new function is one expression, hit by the existing tests. 21-F3's rename would rename CloseState here too.",
+  "repro": "reproduced: `assertion left == right failed: the reader answered Discard  left: NotYet  right: Now` (system_quit/tests.rs, asker called after Discard)",
+  "needs": [],
+  "conflicts": [
+   "21-F3"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Add quit_has_to_ask in close_prompt and use it",
+    "cost": "About 8 lines and one assertion; a system quit after Discard is let through.",
+    "suggested": true
+   },
+   {
+    "name": "Clear the flag where the goal Quit is reached",
+    "cost": "2 lines in reach, but the next frame's note_unsaved_edits sets it again unless it also checks Quitting, so it ends as the first option."
+   },
+   {
+    "name": "Leave it",
+    "cost": "Nothing; the window is narrow and the app still quits, but a log-out is cancelled."
+   }
+  ]
+ },
+ {
+  "id": "24-F2",
+  "pr": 24,
+  "also": [],
+  "title": "system_quit's tests copy the viewport-command scan that three other test files already write",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "sent is identical in close_prompt/tests.rs:38-44 and system_quit/tests.rs:20-26, and app/tests.rs:353 and frame/tests.rs:29 hand-roll the same walk over viewport_output. Only sent is a verbatim copy: edit has another signature and next_frame differs from close_prompt's frame_asked_to_close, so move sent and frame_asked_to_close and keep the rest.",
+  "observable": "none",
+  "file": "src/app/system_quit/tests.rs",
+  "line": 20,
+  "code": "\nfn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool {\n    let mut commands = output\n        .viewport_output\n        .values()\n        .flat_map(|viewport| &viewport.commands);\n    commands.any(|command| command == wanted)\n}\n\n/// Run the next frame the way eframe does after `output`: a window told\n/// to close in one frame asks to close in the next.\nfn next_frame(harness: &mut Harness, output: &egui::FullOutput) -> egui::FullOutput {\n    let mut input = egui::RawInput::default();\n    if sent(output, &CLOSE) {\n        let window = input.viewports.entry(egui::ViewportId::ROOT).or_default();\n        window.events.push(egui::ViewportEvent::Close);\n    }\n    frame_with(harness, input)\n}",
+  "diff": "sketch, not compiled\n  // src/app/ui_harness.rs\n+ pub(crate) fn sent(output: &egui::FullOutput, wanted: &egui::ViewportCommand) -> bool { .. }\n+ pub(crate) fn frame_asked_to_close(harness: &mut Harness) -> egui::FullOutput { .. }\n- fn sent(..) { .. }   // close_prompt/tests.rs, system_quit/tests.rs",
+  "size": "3 or 4 test files, about 25 lines removed",
+  "guards": "Test-only move; ui_harness.rs is cfg(test).",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "24-F3",
+  "pr": 24,
+  "also": [],
+  "title": "Every frame compares the whole text of every clean tab to learn whether anything is unsaved",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "frame/mod.rs:70 calls note_unsaved_edits each frame, and Tab::is_dirty is content != saved_content, a full compare for a clean tab (lengths equal). Before this PR only the front tab paid it (edit_controls/mod.rs:53). It is against rule 5 as written, and small in practice. A cached flag is not a small change: the editor writes tab.content directly (content/mod.rs:183) and 25 lines of unit tests mutate content without calling content_edited.",
+  "observable": "none",
+  "file": "src/app/system_quit/mod.rs",
+  "line": 61,
+  "code": "    /// Leave word of whether any tab has unsaved edits, at the end of a\n    /// frame: only a frame changes that. One comparison a tab, which is\n    /// what the tab in front already costs for its unsaved marker.\n    pub(crate) fn note_unsaved_edits(&self) {\n        let unsaved = self.tabs.iter().any(Tab::is_dirty);\n        self.system_quit.unsaved.store(unsaved, Ordering::Relaxed);\n    }",
+  "diff": "sketch, not compiled\n  option b\n+ /// Deliberately per frame: one compare a tab. GATES.md, 'per-frame costs'.\n  option a\n+ dirty: bool,   // on Tab, set in content_edited, save_to_disk, apply_loaded_content\n- self.content != self.saved_content",
+  "size": "b: 1 comment and a GATES.md line. a: src/tab/mod.rs plus about 25 test lines that set content by hand",
+  "guards": "a changes src/tab/tests.rs, close_prompt/tests.rs, system_quit/tests.rs and modal/tests.rs helpers that push to content. PR 21 adds more writers of saved_content (look_at_disk), each of which would have to refresh the flag.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-F2"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Keep the per-frame compare and record it as a known cost",
+    "cost": "One comment and one GATES.md line; a documented exception to rule 5.",
+    "suggested": true
+   },
+   {
+    "name": "Cache dirtiness on the tab",
+    "cost": "A refactor of its own; about 25 test lines change; every writer of content or saved_content, PR 21's included, must refresh it."
+   },
+   {
+    "name": "Store the flag only when a frame changed something",
+    "cost": "Calls at each edit, save, reload, close and answer; easy to miss one, and a missed one quits with unsaved edits."
+   }
+  ]
+ },
+ {
+  "id": "24-F4",
+  "pr": 24,
+  "also": [],
+  "title": "The unsafe block in add_should_terminate also holds four safe operations",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The block (mac.rs:185-201) holds the transmute and class_addMethod, and also the pointer cast, sel!, as_ptr and as_bool, all safe. Moving them out narrows what the SAFETY comment has to cover. mac.rs is compiled for macOS only, so no gate on Linux checks the edit; CI's cargo check on macos-latest does.",
+  "observable": "none",
+  "file": "crates/mac-window/src/mac.rs",
+  "line": 185,
+  "code": "    unsafe {\n        let method = std::mem::transmute::<\n            extern \"C-unwind\" fn(\n                *mut AnyObject,\n                Sel,\n                *mut AnyObject,\n            ) -> NSApplicationTerminateReply,\n            Imp,\n        >(method);\n        class_addMethod(\n            std::ptr::from_ref(class).cast_mut(),\n            sel!(applicationShouldTerminate:),\n            method,\n            SHOULD_TERMINATE_TYPES.as_ptr(),\n        )\n        .as_bool()\n    }",
+  "diff": "sketch, not compiled\n+ let class = std::ptr::from_ref(class).cast_mut();\n+ let selector = sel!(applicationShouldTerminate:);\n+ let types = SHOULD_TERMINATE_TYPES.as_ptr();\n+ // SAFETY: as now\n+ let added = unsafe {\n+     let method = std::mem::transmute::<_, Imp>(method);\n+     class_addMethod(class, selector, method, types)\n+ };\n+ added.as_bool()",
+  "size": "1 file, about 12 lines",
+  "guards": "No test runs mac.rs. GATES.md's sentence 'The block holds the call ... and the transmute' stays true.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "24-F5",
+  "pr": 24,
+  "also": [],
+  "title": "Stale wording about the unsafe exceptions in three places",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "title_bar's #[expect] reason still says 'the one audited exception' (mac.rs:29) beside a second at :156. crates/mac-window/Cargo.toml:42 says the lint table differs 'in one entry' and GATES.md says two; comparing the two tables gives three: unsafe_code (forbid against deny), clippy::undocumented_unsafe_blocks (added) and unexpected_cfgs (absent).",
+  "observable": "none",
+  "file": "crates/mac-window/src/mac.rs",
+  "line": 27,
+  "code": "#[expect(\n    unsafe_code,\n    reason = \"the one audited exception in GATES.md: macOS hands out the view behind a raw window handle, and the view above another, only through unsafe calls\"\n)]",
+  "diff": "sketch, not compiled\n- reason = \"the one audited exception in GATES.md: ..\"\n+ reason = \"the first audited exception in GATES.md: ..\"\n  # crates/mac-window/Cargo.toml and GATES.md\n- differs from it in one entry / in the two entries named above\n+ differs from it in three entries: unsafe_code, undocumented_unsafe_blocks, unexpected_cfgs",
+  "size": "3 files, 4 lines",
+  "guards": "Text only. scripts/check-workspace-sync.sh may read the tables; run it.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "24-F5b",
+  "pr": 24,
+  "also": [],
+  "title": "GATES.md says the owner accepted 'one unsafe call' while the block also holds a transmute",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "GATES.md on the branch, section 'The second unsafe function', line 88: 'a second exception for this, of one unsafe call', and two lines on it names the transmute in the same block. The text is honest, but the acceptance as worded covers less than the code does.",
+  "observable": "none",
+  "file": "crates/mac-window/src/mac.rs",
+  "line": 186,
+  "code": "    unsafe {\n        let method = std::mem::transmute::<\n            extern \"C-unwind\" fn(\n                *mut AnyObject,\n                Sel,\n                *mut AnyObject,\n            ) -> NSApplicationTerminateReply,\n            Imp,\n        >(method);",
+  "diff": "- The owner accepted a second exception for this, of one unsafe call.\n+ The owner accepted a second exception for this: one unsafe call and the transmute that gives it its argument.",
+  "size": "1 line of GATES.md, after the owner says so",
+  "guards": "Rule 3: an exception goes in GATES.md with the owner's acceptance.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Owner accepts the transmute and GATES.md says so",
+    "cost": "One sentence; the exception is recorded as wide as it is.",
+    "suggested": true
+   },
+   {
+    "name": "Leave the wording",
+    "cost": "Nothing; the next reader finds an acceptance narrower than the block."
+   }
+  ]
+ },
+ {
+  "id": "24-F6",
+  "pr": 24,
+  "also": [],
+  "title": "quit_answer is pub though only the crate and its tests call it",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "True (lib.rs:65; callers mac.rs:145 and tests.rs). But mac.rs is not compiled on Linux, so a pub(crate) quit_answer is unused there outside tests and trips dead_code under -D warnings, and the crate doc links to it (lib.rs:6), which rustdoc refuses for a private item. placement and is_off are pub for the same reason.",
+  "observable": "none",
+  "file": "crates/mac-window/src/lib.rs",
+  "line": 65,
+  "code": "/// What the app answers a request to quit with at this moment:\n/// [`QuitAnswer::Now`] until [`ask_before_quit`] has been given an asker,\n/// and from then on what that asker says.\n#[must_use]\npub fn quit_answer() -> QuitAnswer {\n    ASKER.get().map_or(QuitAnswer::Now, |asker| asker())\n}",
+  "diff": "sketch, not compiled\n- pub fn quit_answer() -> QuitAnswer {\n+ #[cfg(any(target_os = \"macos\", test))]\n+ pub(crate) fn quit_answer() -> QuitAnswer {\n  //! arithmetic and [`quit_answer`] a plain value   <- reword, no link",
+  "size": "1 file, about 4 lines",
+  "guards": "clippy -D warnings (dead_code on Linux), rustdoc (private intra-doc link), missing_docs. crates/mac-window/src/tests.rs calls it six times and stays.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Leave it pub like placement and is_off",
+    "cost": "Nothing; one more public function in an unpublished crate.",
+    "suggested": true
+   },
+   {
+    "name": "Make it pub(crate) behind a cfg",
+    "cost": "4 lines and a cfg attribute that the other two helpers do not have; the doc comment loses its link."
+   }
+  ]
+ }
+]

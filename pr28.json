@@ -1,0 +1,175 @@
+[
+ {
+  "id": "28-F1",
+  "pr": 28,
+  "also": [],
+  "title": "Scrolling a tall menu is opted into site by site, and the contents sidebar's menu was missed",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "At the head (46ca028) six sites wrap their contents in chrome::scrolled and outline/mod.rs:163 does not. A chrome::show_popup helper removes the repetition, but it does not make chrome the only caller of Popup::show: nothing stops a new site calling egui directly, and the lint that would (clippy disallowed-methods) is a new clippy.toml entry, which rule 3 forbids. The outline menu gaining the wrapper is reader-visible in a window too short for it.",
+  "observable": "In a very short window the contents sidebar's menu would scroll instead of running off the window.",
+  "file": "src/app/outline/mod.rs",
+  "line": 163,
+  "code": "    let picked = egui::Popup::menu(&more).show(outline_menu);\n    if let Some(click) = picked.and_then(|menu| menu.inner) {\n        outline.click = Some(click);\n    }",
+  "diff": "sketch, not compiled\n  // src/app/chrome/mod.rs\n+ pub(super) fn show_popup<R>(popup: egui::Popup<'_>, contents: impl FnOnce(&mut egui::Ui) -> R)\n+     -> Option<egui::InnerResponse<R>> { popup.show(|ui| scrolled(ui, contents)) }\n  // outline\n- let picked = egui::Popup::menu(&more).show(outline_menu);\n+ let picked = chrome::show_popup(egui::Popup::menu(&more), outline_menu);",
+  "size": "6 files, about 25 lines, 6 call sites (the SubMenu site keeps calling scrolled)",
+  "guards": "tests/reader/menu_room.rs (POPUPS table: add the contents menu), sidebars::the_menu_shows_and_switches_the_contents_sidebar, popover.rs, tabs*.rs. Popup<'a>'s lifetime in the helper needs a compile.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [
+   "28-F4"
+  ],
+  "options": [
+   {
+    "name": "Add show_popup, use it at every Popup site and wrap the outline menu",
+    "cost": "About 25 lines in 6 files and one more row in the menu_room test; the outline menu scrolls in a short window.",
+    "suggested": true
+   },
+   {
+    "name": "Wrap only the outline menu",
+    "cost": "One line and one test row; the opt-in stays as it is."
+   },
+   {
+    "name": "Leave it",
+    "cost": "Nothing; the two-row outline menu is the one popup that cannot scroll."
+   }
+  ]
+ },
+ {
+  "id": "28-F2",
+  "pr": 28,
+  "also": [],
+  "title": "The zoom row keeps itself in view with its own per-frame memory and a frame-number check",
+  "severity": "medium",
+  "verdict": "adjusted",
+  "pile": "needs-call",
+  "why": "The code is as quoted (overflow_menu/mod.rs:248-264). The reviewer's doubt is settled: a menu scrolled, closed and opened again opens at its old offset, not at its top, so the comment 'a menu opened again at another zoom starts from its top' is false. The frame check is still needed for another reason: without it a menu reopened at another zoom would scroll to the zoom row on opening. So move the rule into chrome as proposed, keep the frame number, and correct the comment.",
+  "observable": "none if moved as it is",
+  "file": "src/app/overflow_menu/mod.rs",
+  "line": 248,
+  "code": "fn keep_in_view_through_a_zoom(ui: &egui::Ui) {\n    let shown_at = ui.id().with(\"shown at\");\n    let now = (\n        ui.ctx().cumulative_frame_nr(),\n        ui.pixels_per_point().to_bits(),\n    );\n    let last: Option<(u64, u32)> = ui.data_mut(|data| {\n        let last = data.get_temp(shown_at);\n        data.insert_temp(shown_at, now);\n        last\n    });\n    // The frame before this one: a menu opened again at another zoom\n    // starts from its top.\n    if last.is_some_and(|(frame, scale)| frame + 1 == now.0 && scale != now.1) {\n        ui.scroll_to_rect(ui.min_rect(), None);\n    }\n}",
+  "diff": "sketch, not compiled\n- fn keep_in_view_through_a_zoom(ui: &egui::Ui) { .. }   // overflow_menu\n+ pub(super) fn stays_in_view_through_a_rescale(ui: &egui::Ui) { .. }   // chrome, beside show_what_gained_the_keyboard\n- // The frame before this one: a menu opened again at another zoom\n- // starts from its top.\n+ // Only while the menu stays open: one opened again keeps the place it\n+ // was scrolled to, and must not jump to this row.",
+  "size": "2 files, about 25 lines moved, 1 comment",
+  "guards": "tests/reader/menu_room.rs the_zoom_row_stays_in_reach_when_zooming_makes_the_menu_scroll, popover.rs the_zoom_row_of_the_menu_stays_open_while_it_is_pressed. No test covers reopening.",
+  "repro": "reproduced: `REOPEN same zoom: top 20.019531 scrolled -218.01758 again -218.01758` (New Tab's top before scrolling, after, and after close and reopen)",
+  "needs": [
+   "28-N1"
+  ],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Move it into chrome, keep the frame check, fix the comment",
+    "cost": "About 25 lines moved, no behaviour change.",
+    "suggested": true
+   },
+   {
+    "name": "Move it and drop the frame check",
+    "cost": "3 lines fewer; a menu reopened after a zoom then jumps to the zoom row."
+   },
+   {
+    "name": "Leave it in overflow_menu and fix only the comment",
+    "cost": "2 lines; the rule stays out of reach of the other popups."
+   }
+  ]
+ },
+ {
+  "id": "28-N1",
+  "pr": 28,
+  "also": [],
+  "title": "New: a menu that was scrolled opens again where it was left, not at its top",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Not in the review, found while settling 28-F2. egui keeps a ScrollArea's offset by id and chrome::scrolled never resets it (chrome/mod.rs:110-131), so the More menu scrolled to Quit, closed with Escape and opened again shows its end, with New Tab out of view. It only shows in a window too short for the menu.",
+  "observable": "A reopened menu starts scrolled to where it was last left.",
+  "file": "src/app/chrome/mod.rs",
+  "line": 110,
+  "code": "pub(super) fn scrolled<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {\n    let style = ui.style();\n    let frame = 2.0_f32.mul_add(\n        style.visuals.window_stroke.width,\n        style.spacing.menu_margin.sum().y,\n    );\n    let room = popup_room(ui.ctx().content_rect().height(), frame);\n    // The sheet is as tall as it was last frame, and a scroll area takes\n    // no more than its `Ui` has: say how far it may grow.\n    ui.set_max_height(room);\n    // The bar shows that there is more, with the pointer anywhere.\n    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;\n    egui::ScrollArea::vertical()\n        .max_height(room)\n        .min_scrolled_height(0.0)\n        .show(ui, |ui| {\n            let returned = add_contents(ui);\n            show_what_gained_the_keyboard(ui);\n            returned\n        })",
+  "diff": "sketch, not compiled\n+ // A popup that was not shown last frame starts from its top.\n+ let opened = /* the frame-adjacency test of 28-F2, kept in chrome */;\n+ let area = egui::ScrollArea::vertical();\n+ let area = if opened { area.vertical_scroll_offset(0.0) } else { area };",
+  "size": "1 file, about 8 lines, one reader test",
+  "guards": "None today ('Nothing tests the reopen-from-top claim', as the review says).",
+  "repro": "reproduced: `REOPEN same zoom: top 20.019531 scrolled -218.01758 again -218.01758`",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Reset the offset when a popup opens",
+    "cost": "About 8 lines and a test; shares the opened-this-frame test with 28-F2.",
+    "suggested": true
+   },
+   {
+    "name": "Keep the offset and say so in the comment",
+    "cost": "A comment; some readers will take a menu that opens at its end for a bug."
+   }
+  ]
+ },
+ {
+  "id": "28-F3",
+  "pr": 28,
+  "also": [],
+  "title": "scrolled states the height limit twice",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "ui.set_max_height(room) (chrome/mod.rs:119) already bounds what the ScrollArea may take: egui's ScrollArea::show sizes itself as available.at_most(max_size) (scroll_area.rs:717-719 of egui 0.33), so .max_height(room) at :123 adds nothing. popup_room has one caller and can fold in.",
+  "observable": "none",
+  "file": "src/app/chrome/mod.rs",
+  "line": 123,
+  "code": "    ui.set_max_height(room);\n    // The bar shows that there is more, with the pointer anywhere.\n    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;\n    egui::ScrollArea::vertical()\n        .max_height(room)\n        .min_scrolled_height(0.0)",
+  "diff": "sketch, not compiled\n  egui::ScrollArea::vertical()\n-     .max_height(room)\n      .min_scrolled_height(0.0)",
+  "size": "1 file, 1 line (and popup_room folded in: about 8 lines, with 28-T1)",
+  "guards": "tests/reader/menu_room.rs, all of it; a_menu_that_scrolls_stands_clear_of_the_top_and_the_bottom_of_the_window pins the room.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "28-F4",
+  "pr": 28,
+  "also": [],
+  "title": "The Aa popover was wrapped by nesting three closures",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "appearance/mod.rs:112-133: show, scrolled and Frame::show each open a closure. Extracting the sections as the More menu's rows were takes one level out; 28-F1's helper takes another.",
+  "observable": "none",
+  "file": "src/app/appearance/mod.rs",
+  "line": 112,
+  "code": "            .show(|ui| {\n                chrome::scrolled(ui, |ui| {\n                    ui.set_width(POPOVER_WIDTH);\n                    egui::Frame::NONE\n                        .inner_margin(egui::Margin::same(POPOVER_PADDING))\n                        .show(ui, |ui| {\n                            self.theme_swatches(ui, picked);\n                            section_break(ui, palette);\n                            self.text_size_row(ui, picked);\n                            section_break(ui, palette);\n                            self.width_section(ui, picked);\n                            section_break(ui, palette);\n                            self.line_spacing_section(ui, picked);\n                        });\n                    chrome::hairline(ui, palette);\n                    let fonts = MenuRow::new(\"Fonts…\").flush().show(ui, palette);\n                    if fonts.clicked() {\n                        *picked = Some(AppAction::OpenFontSettings);\n                        ui.close();\n                    }",
+  "diff": "sketch, not compiled\n+ fn sections(&self, ui: &mut egui::Ui, picked: &mut Option<AppAction>) { .. }\n- .show(|ui| { chrome::scrolled(ui, |ui| { .. }); });\n+ .show(|ui| chrome::scrolled(ui, |ui| self.sections(ui, picked)));",
+  "size": "1 file, about 25 lines moved",
+  "guards": "tests/reader/popover.rs. The TSV row on src/app/appearance/mod.rs replaces other text.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "28-T1",
+  "pr": 28,
+  "also": [],
+  "title": "A unit test restates a private subtraction",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "a_popup_has_the_height_of_the_window_less_its_frame_and_the_air_around_it (chrome/tests.rs:597-600) checks popup_room(800, 14) == 778. The reader test on the menu's clearance from the top and bottom of the window covers the same rule from outside.",
+  "observable": "none",
+  "file": "src/app/chrome/tests.rs",
+  "line": 597,
+  "code": "#[test]\nfn a_popup_has_the_height_of_the_window_less_its_frame_and_the_air_around_it() {\n    assert_close(popup_room(800.0, 14.0), 778.0);\n    assert_close(popup_room(100.0, 0.0), 92.0);\n}",
+  "diff": "- #[test]\n- fn a_popup_has_the_height_of_the_window_less_its_frame_and_the_air_around_it() { .. }",
+  "size": "1 test, 5 lines",
+  "guards": "Check the coverage gate still passes without it and that a mutant of popup_room is caught by tests/reader/menu_room.rs.",
+  "repro": "read from the code only",
+  "needs": [
+   "28-F3"
+  ],
+  "conflicts": [],
+  "resolves": []
+ }
+]

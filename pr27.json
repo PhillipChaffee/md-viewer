@@ -1,0 +1,189 @@
+[
+ {
+  "id": "27-F1",
+  "pr": 27,
+  "also": [],
+  "title": "Two long folders that differ at their end paint the same tab text",
+  "severity": "high",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "title_galleys cuts the place from its tail at 118 px (tab_bar/mod.rs:219-220) and then the name to what is left, so what tells two tabs apart is the first thing lost. The existing test asserts only that each tab starts 'Notes · corr' and ends with an ellipsis (same_name.rs:228-242), which pins the defect. The accessible names do differ.",
+  "observable": "Two tabs read 'Notes · correspondenc…' and nothing on screen tells them apart until one is pointed at.",
+  "file": "src/app/tab_bar/mod.rs",
+  "line": 219,
+  "code": "fn title_galleys(\n    ui: &egui::Ui,\n    title: &ShownName,\n) -> (Arc<egui::Galley>, Option<Arc<egui::Galley>>) {\n    let (name, place) = title.parts();\n    let place = (!place.is_empty()).then(|| cut_short(ui, place, NAME_WIDTH.max - NAME_KEPT));\n    let taken = place.as_ref().map_or(0.0, |place| place.size().x);\n    (cut_short(ui, name, NAME_WIDTH.max - taken), place)\n}",
+  "diff": "sketch, not compiled\n  // src/tab/names: shorten the place when names are worked out, keeping what differs\n+ fn elided(places: &[&str]) -> Vec<String>   // \"…board-1998\", \"…/monday.md\"\n  // tab_bar: the row cuts only the name\n- let place = (!place.is_empty()).then(|| cut_short(ui, place, NAME_WIDTH.max - NAME_KEPT));",
+  "size": "2 files (src/tab/names/mod.rs, src/app/tab_bar/mod.rs), about 60 lines; src/tab/names/tests.rs grows; 1 reader test rewritten",
+  "guards": "tests/reader/same_name.rs a_long_folder_leaves_the_start_of_the_name_in_view must be rewritten to assert the two tabs read differently. Complexity cap 15 on the new function; coverage of its branches. PR 23 conflicts textually in tab_label.",
+  "repro": "reproduced: `assertion left != right failed: both tabs paint the same words  left: \"Notes · correspondenc…\"  right: \"Notes · correspondenc…\"`, for folders ending -1998 and -2004 and for monday.md and tuesday.md in one long folder",
+  "needs": [],
+  "conflicts": [
+   "23-F5"
+  ],
+  "resolves": [
+   "27-F5"
+  ],
+  "options": [
+   {
+    "name": "Elide in names what the clashing places share and keep a pixel cap as the last resort",
+    "cost": "About 60 lines and new unit tests; tabs stay within 200 px; an extreme pair can still read alike.",
+    "suggested": true
+   },
+   {
+    "name": "Elide in names with a character budget and no pixel cap",
+    "cost": "Same size; a pathological folder can push a tab past 200 px."
+   },
+   {
+    "name": "Cut the place from its head in the row",
+    "cost": "About 20 lines, but egui only truncates tails, so it needs a measured loop when names change, and folders that differ in the middle still read alike."
+   }
+  ]
+ },
+ {
+  "id": "27-F2",
+  "pr": 27,
+  "also": [],
+  "title": "Every watcher batch works all tab names out again, reloaded or not",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "watching/mod.rs:248 calls tab_names_changed after the loop unconditionally. A name depends on a tab's first heading and path, which only a reload changes. reload_tabs_showing returns whether the front tab reloaded, so it needs a second signal for 'any tab reloaded'.",
+  "observable": "none",
+  "file": "src/app/watching/mod.rs",
+  "line": 248,
+  "code": "        }\n\n        // A reloaded document may have another first heading, which names\n        // its tab.\n        self.tab_names_changed();\n",
+  "diff": "sketch, not compiled\n+ let mut any_reloaded = false;\n  ..\n- self.tab_names_changed();\n+ if any_reloaded { self.tab_names_changed(); }",
+  "size": "1 file, about 8 lines",
+  "guards": "tests/reader/same_name.rs and live_reload.rs. PR 21 rewrites reload_tabs_showing (follow_disk), a textual conflict.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-F5"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "27-F3",
+  "pr": 27,
+  "also": [],
+  "title": "Every edit works all tab names out again, and every candidate builds all its longer names up front",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "content/mod.rs:132 calls tab_names_changed on each edit, and Candidate::new builds one ShownName for every folder depth of every tab (names/mod.rs:73-80) whether or not the tab clashes. Comparing the tab's name before and after content_edited gates the first; a depth counter built on demand fixes the second.",
+  "observable": "none",
+  "file": "src/tab/names/mod.rs",
+  "line": 73,
+  "code": "    fn new(name: &str, path: &'a Path, beside_namesake: bool) -> Self {\n        let folders: Vec<Component<'_>> = path\n            .parent()\n            .map(|folder| folder.components().collect())\n            .unwrap_or_default();\n        let file = path.file_name().filter(|_| beside_namesake);\n        let mut longer: Vec<ShownName> = (1..=folders.len())\n            .map(|depth| {\n                let nearest = folders.iter().skip(folders.len() - depth);\n                let mut place: PathBuf = nearest.collect();\n                place.extend(file);\n                ShownName::placed(name, &place)\n            })\n            .collect();",
+  "diff": "sketch, not compiled\n  // content/mod.rs\n+ if name_changed { self.tab_names_changed(); }\n  // names/mod.rs\n- longer: std::vec::IntoIter<ShownName>,\n+ depth: usize,   // lengthen() builds the next name when asked",
+  "size": "2 files, about 30 lines",
+  "guards": "src/tab/names/tests.rs (257 lines) pins every output of shown_names and needs no change. Coverage of the new branch in content/mod.rs.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "27-F1"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "27-F4",
+  "pr": 27,
+  "also": [],
+  "title": "A tab stores two names that depend on every other open tab, kept true by convention",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Tab::shown and Tab::shown_file (tab/mod.rs:128-133) are written only by name_tabs, and all five mutation paths call tab_names_changed today (tab_documents_changed, begin_session, the edit, the watcher batch, and through them open and close). Moving the names to the app is the wider refactor the review asks for in a PR of its own.",
+  "observable": "none",
+  "file": "src/tab/mod.rs",
+  "line": 128,
+  "code": "    /// What the tab row calls this tab. `name_tabs` works it out from\n    /// every open tab when one opens, closes or is renamed.\n    shown: ShownName,\n    /// What the window and the unsaved-edits question call this tab's\n    /// file, worked out with `shown`.\n    shown_file: ShownName,",
+  "diff": "sketch, not compiled\n- shown: ShownName,\n- shown_file: ShownName,\n+ // MarkdownApp: tab_names: Vec<TabNames>, rebuilt by tab_names_changed",
+  "size": "about 6 files, 60 lines",
+  "guards": "Every reader test on tab names; src/app/close_prompt (question), frame/mod.rs (title), tab_bar.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-F1"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Leave the fields on Tab for now",
+    "cost": "Nothing; a sixth mutation path that forgets tab_names_changed shows a stale name.",
+    "suggested": true
+   },
+   {
+    "name": "Move the names to the app in a PR of its own",
+    "cost": "About 60 lines in 6 files, no behaviour change; conflicts with PRs 21 and 23 while they are open."
+   }
+  ]
+ },
+ {
+  "id": "27-F4a",
+  "pr": 27,
+  "also": [],
+  "title": "shown_file is a ShownName but only its text is ever read",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Tab::shown_file() returns self.shown_file.as_str() (tab/mod.rs) and nothing calls parts() on it; the window title and the prompt's question take the string.",
+  "observable": "none",
+  "file": "src/tab/mod.rs",
+  "line": 133,
+  "code": "    /// What the window and the unsaved-edits question call this tab's\n    /// file, worked out with `shown`.\n    shown_file: ShownName,",
+  "diff": "sketch, not compiled\n- shown_file: ShownName,\n+ shown_file: String,",
+  "size": "1 file, about 6 lines",
+  "guards": "tests/reader/same_name.rs the_window_names_the_folder and the_unsaved_question_names_the_folder.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "27-F5",
+  "pr": 27,
+  "also": [],
+  "title": "ShownName::parts hides an invariant behind a fallback that cannot run",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "parts() is split_at_checked(name_len).unwrap_or(..) and name_len is always name.len() of the prefix (names/mod.rs:27-40, 49-52), so the fallback is dead and is an uncovered region. Storing two halves alone does not work: as_str() must return the whole as one &str for the accessible name and for the clash map. Keep whole and store the place's start, or store all three.",
+  "observable": "none",
+  "file": "src/tab/names/mod.rs",
+  "line": 49,
+  "code": "    /// The name, and what follows it: the separator and the place, or\n    /// nothing. A row short of room cuts the name and keeps the rest.\n    pub(crate) fn parts(&self) -> (&str, &str) {\n        let parts = self.whole.split_at_checked(self.name_len);\n        parts.unwrap_or((&self.whole, \"\"))\n    }",
+  "diff": "sketch, not compiled\n- let parts = self.whole.split_at_checked(self.name_len);\n- parts.unwrap_or((&self.whole, \"\"))\n+ // with 27-F1: ShownName { whole: String, name: Range<usize>, place: Range<usize> }",
+  "size": "1 file, about 10 lines",
+  "guards": "src/tab/names/tests.rs; the coverage gate (the fallback region is not covered today).",
+  "repro": "read from the code only",
+  "needs": [
+   "27-F1"
+  ],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "27-F6",
+  "pr": 27,
+  "also": [],
+  "title": "A tabs test asserts around the temp folder's name",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "tabs_depth.rs:255-259 checks starts_with(\"tab:Long read · \") and ends_with(\"/long.md\") because the place between is the scratch folder. Putting both fixtures in a named folder makes the names exact ('Long read · docs/long.md').",
+  "observable": "none",
+  "file": "tests/reader/tabs_depth.rs",
+  "line": 255,
+  "code": "fn each_tab_keeps_its_own_place_on_the_page() {\n    let mut reader = Reader::with_docs(&[\n        (\"long.md\", &long_document(80)),\n        (\"other.md\", &long_document(40)),\n    ]);\n    reader.drop_file(\"other.md\");\n    // One heading twice, in one folder: each tab shows its file too.\n    let tabs = reader.tabs().into_iter().map(|tab| format!(\"tab:{tab}\"));\n    let [long, other] = [0, 1].map(|place| tabs.clone().nth(place).unwrap());\n    assert!(long.starts_with(\"tab:Long read · \") && long.ends_with(\"/long.md\"));\n    assert!(other.starts_with(\"tab:Long read · \") && other.ends_with(\"/other.md\"));\n    reader.click(&long);",
+  "diff": "sketch, not compiled\n- (\"long.md\", &long_document(80)),\n+ (\"docs/long.md\", &long_document(80)),\n- assert!(long.starts_with(\"tab:Long read · \") && long.ends_with(\"/long.md\"));\n+ assert_eq!(reader.tabs(), [\"Long read · docs/long.md\", \"Long read · docs/other.md\"]);",
+  "size": "1 test file, about 8 lines",
+  "guards": "Test-only; the exact names change if 27-F1 elides what the two places share.",
+  "repro": "read from the code only",
+  "needs": [
+   "27-F1"
+  ],
+  "conflicts": [],
+  "resolves": []
+ }
+]

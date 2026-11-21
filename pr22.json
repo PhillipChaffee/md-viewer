@@ -1,0 +1,156 @@
+[
+ {
+  "id": "22-F1",
+  "pr": 22,
+  "also": [],
+  "title": "The wheel zoom re-derives 'is a modal up' with its own non-exhaustive match",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "Scope::Document.covers(focus) is true for Popup, FindBar and Reading and false for Lightbox and Prompt (shortcuts/mod.rs:123-131), the same truth table as the quoted line. The TSV rows on covers and the two proofs replace other text and are untouched.",
+  "observable": "none",
+  "file": "src/app/shortcuts/mod.rs",
+  "line": 264,
+  "code": "    // The lightbox captures wheel input itself in raw_input_hook, and\n    // nothing zooms under the prompt, so this only runs for the document.\n    let wheel_zoom_factor = input.zoom_delta();\n    let zooms_document = !matches!(focus, Focus::Lightbox | Focus::Prompt);\n    if zooms_document && (wheel_zoom_factor - 1.0).abs() > f32::EPSILON {\n        actions.push(AppAction::ZoomBy(wheel_zoom_factor));\n    }",
+  "diff": "sketch, not compiled\n- let zooms_document = !matches!(focus, Focus::Lightbox | Focus::Prompt);\n+ let zooms_document = Scope::Document.covers(focus);",
+  "size": "1 file, 1 line",
+  "guards": "src/app/shortcuts/tests.rs a_pinch_zooms_the_document_but_not_under_a_lightbox and the_prompt_about_unsaved_edits_takes_every_key_and_the_wheel; proofs the_prompt_takes_every_key and the_lightbox_takes_the_keyboard. No test or TSV row changes.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "22-F2",
+  "pr": 22,
+  "also": [],
+  "title": "The modal module's doc claims more than modal() decides, and no test showed the wheel is held under the prompt",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "The doc says the prompt 'draws over everything' while close_prompt's ask says 'the lightbox draws over it' and closes it; and modal() is asked by the keyboard, the wheel zoom and drops only, while clicks and typing are egui::Modal's and the wheel scroll is Lightbox::capture_wheel's own check (lightbox/mod.rs:96). The unverified gap is not a bug: a wheel turn does not scroll the page under the prompt. The remedy is the doc fix plus the missing reader test.",
+  "observable": "none",
+  "file": "src/app/modal/mod.rs",
+  "line": 1,
+  "code": "//! The one answer to \"is the page taking input right now?\".\n//!\n//! Two things the app shows are modal: while either is up, nothing under\n//! it is clicked, typed into or scrolled, and none of the app's own\n//! shortcuts run but the few that are its own. The keyboard, the wheel\n//! that zooms and files dropped on the window all ask here, so an overlay\n//! that takes one of them takes all of them.\n//!\n//! The Colors and Fonts dialogs are not modal. They float over a page\n//! that goes on taking clicks, keys and drops.",
+  "diff": "sketch, not compiled\n- //! The one answer to \"is the page taking input right now?\".\n+ //! Which overlay has the window's keys, wheel zoom and dropped files.\n- /// comes first: it draws over everything and closes the lightbox when\n+ /// comes first: it closes the lightbox when\n  // tests/reader/unsaved.rs\n+ fn the_wheel_does_not_scroll_the_page_under_the_prompt() { .. }",
+  "size": "1 doc comment (about 10 lines) and one reader test of about 15 lines",
+  "guards": "The new test passes today. tests/reader/unsaved.rs is near 900 lines; put it in a new file if PR 23 lands first.",
+  "repro": "reproduced (no defect): a control test showed the wheel scrolls the page with no prompt, and `test unsaved::zz_throwaway_the_wheel_does_not_scroll_the_page_under_the_prompt ... ok` with the pointer on the sheet and beside it",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "22-F3",
+  "pr": 22,
+  "also": [],
+  "title": "Focus::Prompt and Focus::Lightbox mirror the two Modal variants",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "True as read (shortcuts/mod.rs:97-110, :281-287). Folding them into Focus::Modal(Modal) changes the exact text of two TSV rows ('(Self::Lightbox, Focus::Lightbox)' and '| (Self::Document, Focus::Popup)' sit in the same matches!) and six lines of shortcuts/proofs.rs (18-19, 99, 113, 117, 176). The reviewer would leave it and so would I.",
+  "observable": "none",
+  "file": "src/app/shortcuts/mod.rs",
+  "line": 97,
+  "code": "enum Focus {\n    /// The prompt about unsaved edits is asking; it suppresses every\n    /// binding, and its own keys are its buttons'.\n    Prompt,\n    /// The lightbox is open; it suppresses everything but its own zoom keys.\n    Lightbox,\n    /// A menu or popover is open; it takes the keys the find bar and the\n    /// document would, and Escape closes it alone.\n    Popup,\n    /// The find bar is open over the document.\n    FindBar,\n    /// The document, with no overlay taking keys.\n    Reading,\n}",
+  "diff": "sketch, not compiled\n- Prompt,\n- Lightbox,\n+ Modal(Modal),",
+  "size": "3 files (shortcuts/mod.rs, proofs.rs, scripts/proof-mutants.tsv), about 20 lines",
+  "guards": "Kani proofs the_prompt_takes_every_key, the_lightbox_takes_the_keyboard, a_popup_takes_the_find_bar_and_reading_keys; 3 TSV rows whose text must be rewritten and re-killed with scripts/kill-proof-mutants.sh.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Leave the two enums as they are",
+    "cost": "Nothing; one five-line match keeps mapping Modal to Focus.",
+    "suggested": true
+   },
+   {
+    "name": "Fold into Focus Modal",
+    "cost": "About 20 lines, three TSV rows and six proof lines rewritten and the proofs re-run; no behaviour change."
+   }
+  ]
+ },
+ {
+  "id": "22-F4",
+  "pr": 22,
+  "also": [],
+  "title": "Drops are also ignored while a picture is enlarged, which is wider than the item's 'while a prompt shows'",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "handle_dropped_files returns early for any modal (drop/mod.rs:24), and two reader tests pin the lightbox case. It is consistent (the lightbox takes every other input too) but it is a product choice beyond the item as worded.",
+  "observable": "A file dropped on an enlarged picture opens nothing and shows no hint; the reader must close the picture and drop again.",
+  "file": "src/app/drop/mod.rs",
+  "line": 24,
+  "code": "    pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) -> bool {\n        if self.modal().is_some() {\n            return false;\n        }",
+  "diff": "sketch, not compiled\n- if self.modal().is_some() {\n+ if matches!(self.modal(), Some(Modal::Prompt)) {",
+  "size": "1 line, and 2 reader tests in tests/reader/lightbox.rs to rewrite if narrowed",
+  "guards": "tests/reader/lightbox.rs a_file_dropped_on_the_enlarged_view_opens_nothing and a_file_dropped_once_the_enlarged_view_is_closed_opens; src/app/drop/tests.rs.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Keep ignoring drops under both overlays",
+    "cost": "Nothing to change; a drop on an enlarged picture is lost without a word.",
+    "suggested": true
+   },
+   {
+    "name": "Ignore drops under the prompt only",
+    "cost": "One line and two tests rewritten; a drop then opens a tab behind the enlarged picture, which stays up over it."
+   },
+   {
+    "name": "Close the picture and open the dropped file",
+    "cost": "About 10 lines and new tests; a third behaviour to describe in the README."
+   }
+  ]
+ },
+ {
+  "id": "22-F5",
+  "pr": 22,
+  "also": [],
+  "title": "The type name Modal collides with egui::Modal, and tests build LightboxState by hand in six places",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "close_prompt/mod.rs uses egui::Modal::new in the same crate as crate::app::modal::Modal. The literal count is six, not five: app/tests.rs:295, shortcuts/tests.rs:258, frame/tests.rs:68, lightbox/tests.rs:17, close_prompt/tests.rs:273 and the new modal/tests.rs:10.",
+  "observable": "none",
+  "file": "src/app/modal/mod.rs",
+  "line": 19,
+  "code": "/// What stands over the page and takes its input.\n#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub(crate) enum Modal {\n    /// The prompt about unsaved edits, until it is answered.\n    Prompt,\n    /// A picture enlarged in the lightbox, until it is closed.\n    Lightbox,\n}",
+  "diff": "sketch, not compiled\n- pub(crate) enum Modal {\n+ pub(crate) enum Overlay {\n  // src/app/ui_harness.rs\n+ pub(crate) fn enlarged() -> LightboxState { .. }",
+  "size": "rename: 4 files, about 12 mentions. Helper: 6 test files, about 40 lines removed",
+  "guards": "Unit tests only. Pick the name together with 21-F3 so that Prompt, Overlay and the prompt's state type do not collide again.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "21-F3"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "22-T1",
+  "pr": 22,
+  "also": [],
+  "title": "A modal unit test pins a state the app cannot reach",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "the_prompt_comes_before_a_picture_enlarged_under_it opens the lightbox after the prompt asks. Every path to the prompt goes through ask, which sets lightbox.open = None (close_prompt/mod.rs, 'The prompt has to be seen'), and while it asks egui's modal layer takes the click that would enlarge a picture. The branch order it pins is still covered by the other three tests.",
+  "observable": "none",
+  "file": "src/app/modal/tests.rs",
+  "line": 56,
+  "code": "#[test]\nfn the_prompt_comes_before_a_picture_enlarged_under_it() {\n    let mut harness = unsaved();\n    harness.app.request_close_tab(0);\n\n    harness.app.lightbox.open = Some(enlarged());\n\n    assert_eq!(harness.app.modal(), Some(Modal::Prompt));\n}",
+  "diff": "sketch, not compiled\n- #[test]\n- fn the_prompt_comes_before_a_picture_enlarged_under_it() { .. }",
+  "size": "1 test, 9 lines",
+  "guards": "Coverage of modal() is unchanged (both branches are hit by the two tests kept). The other two unit tests restate the function but are the only unit-level cover and stay.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ }
+]

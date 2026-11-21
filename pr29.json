@@ -1,0 +1,177 @@
+[
+ {
+  "id": "29-F1",
+  "pr": 29,
+  "also": [],
+  "title": "The source in edit mode drops to 13 px and stops following Text Size",
+  "severity": "high",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Run on both sides. The edit pane never sets the document's style (src/app/content/mod.rs:164-178; only preview_pane does, :222), and source::edit resolves FontSelection::Default, which is the context's Body (egui-0.33.3 src/style.rs:158-165). On main that Body is the text size class, 14 to 24 px (src/system_fonts/mod.rs:201-209). This PR takes Body out of apply_text_size_class, so the source is 13 px at every class. Nothing says the source is meant to be monospace or to have a setting of its own: there is no such field in DocumentLook or DocumentFonts, the README says only that the source is plain text with no highlighting, and on both sides it is painted in the Proportional family. The PR does not touch src/app/content/, and its changelog line names hover texts only. The two unit tests that witnessed the context's Body following the class were re-pointed at document_look.style by this PR (src/app/action/tests.rs:240-242, src/app/settings/tests.rs:195-197).",
+  "observable": "In edit mode the source is set at 13 px whatever Text Size says. On main it is 16 px at Normal and 24 px at Huge. A reader who chose a larger size to read at edits in text about half as large, and the Text Size control does nothing there.",
+  "file": "src/app/content/source/mod.rs",
+  "line": 79,
+  "code": "/// A multiline text field on `text`, `width` wide. Returns whether the text\n/// was edited this frame.\npub(super) fn edit(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {\n    let font = egui::FontSelection::Default.resolve(ui.style());",
+  "diff": "sketch, not compiled\n  // src/app/content/mod.rs, beside `settings`\n+ // The source follows Text Size, in the window's face, as before.\n+ let source_font = egui::FontId::proportional(self.fonts.size.px());\n- edit_pane(ui, tab, column)\n+ edit_pane(ui, tab, &source_font, column)\n- edited = source::edit(ui, &mut tab.content, column.width - 8.0);\n+ edited = source::edit(ui, &mut tab.content, font, column.width - 8.0);\n  // src/app/content/source/mod.rs\n- pub(super) fn edit(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {\n-     let font = egui::FontSelection::Default.resolve(ui.style());\n+ pub(super) fn edit(\n+     ui: &mut egui::Ui, text: &mut String, font: &egui::FontId, width: f32,\n+ ) -> bool {\n  // tests/reader/editing_depth.rs\n+ fn a_larger_text_size_enlarges_the_source_in_edit_mode() { .. }",
+  "size": "2 files (src/app/content/mod.rs, src/app/content/source/mod.rs), about 8 lines; source::edit has one caller; one new reader test of about 15 lines",
+  "guards": "No test reads the size of the source: none in tests/reader/editing.rs, editing_depth.rs, appearance.rs, popover.rs or src/app/content/source/tests.rs. The new reader test must fail on the branch as it stands (13 px at every class) and pass on main. tests/reader/editing*.rs and the unit tests of source stay as they are.",
+  "repro": "reproduced: painted size of the source in edit mode, in px, at Small, Normal, Large, Extra large, Huge: `main 14, 16, 18, 20, 24` and `branch 13, 13, 13, 13, 13`; the letter `e` is drawn `main 9, 10, 11, 13, 15 px` and `branch 9, 9, 9, 9, 9 px` tall; family Proportional on both. The preview is the same on both (18.4 at Normal)",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Set the source at the text size again, in the window's face",
+    "cost": "About 8 lines in 2 files and one reader test. Edit mode looks exactly as it does on main, 14 to 24 px, and hover texts stay at 13 px.",
+    "suggested": true
+   },
+   {
+    "name": "Set the source in the document's own face and size",
+    "cost": "About 3 lines and one test. The source changes from the window's sans face to the document's face, at the preset's scale (18.4 px at Normal in the Reader preset, where it was 16): a visible change of its own, to name in the changelog."
+   },
+   {
+    "name": "Keep the source at 13 px and say so in the changelog",
+    "cost": "One changelog line, no code. Text Size then does nothing in edit mode, and a reader who reads at 24 px edits at 13 px."
+   }
+  ]
+ },
+ {
+  "id": "29-F2",
+  "pr": 29,
+  "also": [],
+  "title": "The context's text styles are written in two places for three owners, and apply_text_size_class is left with dialog titles only",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "The table in the review holds at the head. Body is inserted in configure_context (src/app/startup/mod.rs:88-90) with egui's own default; Small is the literal 13.0 three lines above (:81-83) and reaches the document through DocumentLook, which copies the chrome's style and overwrites only Body, Heading and Monospace (src/app/content/look/mod.rs:65-69); Heading and Monospace are still written from the size class by apply_text_size_class (src/system_fonts/mod.rs:328-338), one caller (:360). No code in src/ outside look, welcome (which reads the document's style) and system_fonts names the context's Heading or Monospace, and the chrome has no ui.heading, ui.code or monospace call. The inferred visible effect was measured: the titles of the Colors and Fonts windows are 32 px at Normal and 48 px at Huge, on main and on the branch, over labels that are now 13 px. Removing the function is a structural change with a visible side effect, which .claude/rules/refactoring-rules.md keeps out of a fix PR.",
+  "observable": "none in this PR; the proposed removal would set the titles of the Colors and Fonts windows at egui's 18 px, where they are twice the text size today (32 px at Normal, 48 px at Huge)",
+  "file": "src/system_fonts/mod.rs",
+  "line": 324,
+  "code": "/// Apply the shared base text size class to the context styles: the sizes\n/// of its headings and its code. The body size is not among them: what the\n/// context sets in it is the window's own text, hover texts included, and\n/// that keeps the size of the chrome whatever the document is read at.\nfn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) {\n    let base = size.px();\n    ctx.style_mut(|style| {\n        style\n            .text_styles\n            .insert(TextStyle::Heading, FontId::proportional(base * 2.0));\n        style\n            .text_styles\n            .insert(TextStyle::Monospace, FontId::monospace(base - 2.0));\n    });\n}",
+  "diff": "sketch, not compiled\n  // src/system_fonts/mod.rs\n- fn apply_text_size_class(ctx: &egui::Context, size: TextSizeClass) { .. }   // and its call, and its unit assertions\n  // src/app/startup/mod.rs\n- // Heading and code sizes belong to the text-size class, which\n- // `setup_fonts` has already applied; setting them here would undo a\n- // restored class until the user next changed it.\n- style.text_styles.insert(TextStyle::Small, FontId::proportional(13.0));\n+ // The context's text is the chrome's. The document has its own (see `DocumentLook`).\n  style.text_styles.insert(TextStyle::Body, chrome::label_font());\n  // src/app/content/look/mod.rs (DocumentFonts gains `small`)\n  (TextStyle::Monospace, fonts.code.clone()),\n+ (TextStyle::Small, fonts.small.clone()),",
+  "size": "3 files (src/system_fonts/mod.rs, src/app/startup/mod.rs, src/app/content/look/mod.rs), about 25 lines; unit assertions on Heading and Monospace in src/system_fonts/tests.rs:202-203 and src/app/startup/tests.rs:331 change with it",
+  "guards": "src/app/content/look/tests.rs:36 pins that the document keeps the chrome's Small and Button; it changes if Small moves into DocumentFonts. No reader test reads a dialog title's size. tests/reader/dialogs.rs stays as it is.",
+  "repro": "reproduced: painted size of the window titles, `Fonts` and `Colors`: `32 px at Normal, 48 px at Huge` on main and on the branch; the labels under them are `16 and 24 px` on main and `13 and 13 px` on the branch",
+  "needs": [],
+  "conflicts": [
+   "29-F5"
+  ],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Do it as a refactor PR of its own, and correct the two comments now",
+    "cost": "Two comments and the PR description now. Later about 25 lines in 3 files, and the titles of the Colors and Fonts windows go from twice the text size to egui's 18 px.",
+    "suggested": true
+   },
+   {
+    "name": "Do it inside PR 29",
+    "cost": "About 25 lines in 3 files and the unit assertions, in a PR that is a fix: the project's rule keeps a refactor and a fix apart. The same change to the two titles."
+   },
+   {
+    "name": "Leave the function and correct only the comments",
+    "cost": "Two comments. The size class keeps reaching the screen by two routes, and a title at 32 to 48 px stays over labels at 13 px."
+   }
+  ]
+ },
+ {
+  "id": "29-F3",
+  "pr": 29,
+  "also": [],
+  "title": "The labels of the Colors and Fonts windows drop from the text size to 13 px, unannounced, and the small note is now as large as the labels",
+  "severity": "medium",
+  "verdict": "confirmed",
+  "pile": "needs-call",
+  "why": "Measured on both sides. The labels at src/app/settings/mod.rs:130, 169, 185, 208, 224 and 260 are bare ui.label calls in plain egui::Window bodies with no popup_style, so they take the context's Body: 16 px at Normal and 24 px at Huge on main, 13 px at every class on the branch. ui.small at :198 is TextStyle::Small, 13 px on both sides (src/app/startup/mod.rs:83), so the note under the presets is now the same size as the label above it. The buttons of both windows are 13 px on both sides. The outcome agrees with the chrome's rule of fixed sizes (src/app/chrome/mod.rs:4-6); what is missing is that the changelog line (CHANGELOG.md:44) names hover texts only and no test covers it.",
+  "observable": "The words Preset, Text Size, Family and Search: in the Fonts window, and Highlight Color: and Link Color: in the Colors window, are 13 px where they were 16 px (24 px at Huge). The note under the presets no longer reads as smaller than the labels.",
+  "file": "src/app/settings/mod.rs",
+  "line": 197,
+  "code": "        if self.fonts.family.is_some() {\n            ui.small(\n                \"A picked family leads the body chain; presets still \\\n                 set the code font and line heights.\",\n            );\n        }",
+  "diff": "sketch, not compiled\n  // src/app/settings/mod.rs\n  if self.fonts.family.is_some() {\n-     ui.small(\n+     chrome::small_label(\n+         ui,\n+         self.theme.palette(),\n          \"A picked family leads the body chain; presets still \\\n           set the code font and line heights.\",\n      );\n  }\n  // CHANGELOG.md, the hover text entry\n+ The labels of the Colors and Fonts windows are 13 px too, whatever the text size.",
+  "size": "1 file, about 4 lines, and one changelog sentence",
+  "guards": "No test reads the size of a label in either window. tests/reader/dialogs.rs asserts the words only and stays as it is. chrome::small_label is not selectable and is muted; the note has no test.",
+  "repro": "reproduced: painted size in px of `Preset`, `Text Size`, `Family`, `Search:`: `main 16 at Normal, 24 at Huge` and `branch 13 at Normal, 13 at Huge`; `Highlight Color:` and `Link Color:` `main 16, branch 13`; the small note `13 on both`; the preset buttons `13 on both`",
+  "needs": [],
+  "conflicts": [],
+  "resolves": [],
+  "options": [
+   {
+    "name": "Accept 13 px, name it in the changelog, and set the note in the chrome's small size",
+    "cost": "One changelog sentence and about 4 lines. The note becomes 11.5 px and muted, like the chrome's other secondary text.",
+    "suggested": true
+   },
+   {
+    "name": "Accept 13 px and name it in the changelog only",
+    "cost": "One changelog sentence. The note stays the same size as the labels above it."
+   },
+   {
+    "name": "Keep the labels of the two windows at the text size",
+    "cost": "About 6 lines: each window sets its own body size from the size class. The labels stay 14 to 24 px beside buttons that are 13 px, against the chrome's rule of fixed sizes."
+   }
+  ]
+ },
+ {
+  "id": "29-F4",
+  "pr": 29,
+  "also": [],
+  "title": "The new letter-height helper repeats an existing measurement and is a coarse ruler",
+  "severity": "low",
+  "verdict": "adjusted",
+  "pile": "will-do",
+  "why": "The duplication is as cited: Painted::height_of (tests/reader/support/paint.rs:165-170) and Reader::letter_heights (see.rs:467-478) return the height of a glyph's picture, which Reader::letter_of (figures.rs:93-108) already gives in pixels. The side claim is half right, by measurement: an `e` of the window's face is 8 px tall at 11 to 12.5 px, 9 px at 13 to 14 px, 10 px at 15 and 16 px, 11 px at 18, 13 px at 20 and 15 px at 24 (window scale 1). So 13 against 12 px IS told apart (9 against 8), and the test the reviewer doubted, the_place_of_a_recent_document_is_as_large_as_a_sidebar_row, fails on main's source with `left: 8 right: 9`. But 13 is not told from 13.5 or 14 px, nor 15 from 16, and the answer depends on the face and the zoom: in a picked family (C059) the `e` at 13 px is 8 px. Reading the size the text is set at, as proposed, is exact; a throwaway helper that reads section.format.font_id.size compiled and ran on both sides. 8 of the 9 tooltip tests fail on main's source; the ninth, the tab's, passes there because main set that hover text at 13 px by hand.",
+  "observable": "none",
+  "file": "tests/reader/support/see.rs",
+  "line": 467,
+  "code": "    /// How tall `letter` is drawn, in screen pixels, in every painted text\n    /// that reads exactly `text` and holds the letter, in the order\n    /// painted: a row of the sidebar, then the hover text that repeats it.\n    /// Two texts set in one face draw a letter equally tall only at one\n    /// size.\n    pub(crate) fn letter_heights(&self, text: &str, letter: char) -> Vec<u16> {\n        let painted = self.painted().into_iter();\n        painted\n            .filter(|painted| painted.text == text)\n            .filter_map(|painted| painted.height_of(letter))\n            .collect()\n    }",
+  "diff": "sketch, not compiled\n  // tests/reader/support/paint.rs, struct Painted\n+ /// The size its first words are set at, in points.\n+ pub(crate) size: f32,\n+ size: section.map_or(0.0, |section| section.format.font_id.size),\n- pub(crate) fn height_of(&self, character: char) -> Option<u16> { .. }\n  // tests/reader/support/see.rs\n- pub(crate) fn letter_heights(&self, text: &str, letter: char) -> Vec<u16> { .. }\n  // tests/reader/support/figures.rs\n+ /// The size, in pixels, of every painted text that reads exactly `text`, in the order painted.\n+ pub(crate) fn sizes_of(&self, text: &str) -> Vec<f32> { .. * self.scale() }\n  // tests/reader/tooltips.rs: LETTER goes; in_a_row, in_hover_text and the over_* helpers return f32\n  // tests/README.md: `letter_heights` becomes `sizes_of` in the driver's list",
+  "size": "4 test files and tests/README.md, about 30 lines; 9 mentions of letter_heights or height_of and 6 of LETTER",
+  "guards": "tests/reader/tooltips.rs, all 9 tests: they must still fail on main's source (8 of 9 do today) and pass on the branch. The zoom test compares pixels, so sizes_of multiplies by the window's scale.",
+  "repro": "reproduced: ruler `(11, 8) (11.5, 8) (12, 8) (12.5, 8) (13, 9) (13.5, 9) (14, 9) (15, 10) (16, 10) (18, 11) (20, 13) (24, 15)` as (size in px, height of `e` in px); on main's source the recent document's hover text is `12 px, e 8 px` against a sidebar row `13 px, e 9 px`, and tooltips.rs:147 fails with `left: 8 right: 9`",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ },
+ {
+  "id": "29-F5",
+  "pr": 29,
+  "also": [],
+  "title": "Comments and one literal still say the old thing, and the new Body insert writes egui's own default without saying so",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "All four items are as cited. egui 0.33.3's default is `(TextStyle::Body, FontId::new(13.0, Proportional))` (egui-0.33.3 src/style.rs:1313, in default_text_styles) and chrome::label_font() is FontId::proportional(13.0) (src/app/chrome/mod.rs:26, 52-54), so the insert at src/app/startup/mod.rs:88-90 writes the value already there: exactly 13, not near 13. Removing it changes nothing, so no test can fail without it and none should; it is a pin against an egui upgrade and its comment should say that. src/system_fonts/mod.rs:198 still says the size class is what the chrome is set in. The literal 13.0 for Small sits three lines above chrome::label_font() for Body. src/app/startup/tests.rs:330 (the review says :329) and src/system_fonts/tests.rs:196-201 assert the 13 px inside tests named for something else.",
+  "observable": "none",
+  "file": "src/app/startup/mod.rs",
+  "line": 78,
+  "code": "        // Heading and code sizes belong to the text-size class, which\n        // `setup_fonts` has already applied; setting them here would undo a\n        // restored class until the user next changed it.\n        style\n            .text_styles\n            .insert(TextStyle::Small, FontId::proportional(13.0));\n        // The body style of the context is the chrome's, not the\n        // document's: egui lays out every hover text in it, wherever the\n        // widget under the pointer stands, and a hover text belongs to the\n        // window. The document pane has its own (see `DocumentLook`).\n        style\n            .text_styles\n            .insert(TextStyle::Body, chrome::label_font());",
+  "diff": "sketch, not compiled\n  // src/app/startup/mod.rs\n  // The body style of the context is the chrome's, not the\n  // document's: ..\n+ // 13 px is also egui's own default: it is set here on purpose, so an\n+ // egui that changes its default does not resize the window's text.\n  // src/system_fonts/mod.rs:198\n- /// Base text size in px: what the chrome is set in. The document\n+ /// Base text size in px. The document\n  // src/app/startup/tests.rs\n+ fn the_windows_own_text_is_13_px_whatever_the_text_size() { .. }",
+  "size": "2 source files, about 6 comment lines; one unit test of about 8 lines that takes over the assertion at src/app/startup/tests.rs:330",
+  "guards": "The new unit test passes with or without the insert while egui's default is 13; it is there to name the promise. If 29-F2 is done, the Small literal and the ordering comment go with it and only the first two edits remain.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [
+   "29-F2"
+  ],
+  "resolves": []
+ },
+ {
+  "id": "29-F6",
+  "pr": 29,
+  "also": [],
+  "title": "A size test of the tab's hover text repeats an assertion two other tests already make",
+  "severity": "low",
+  "verdict": "confirmed",
+  "pile": "will-do",
+  "why": "tests/reader/tooltips.rs:136 asserts the Live line in a test about size; tests/reader/menu.rs:322-330 and tests/reader/tabs.rs:88-97 assert the same words after the same hover. desk() and LONG_NAME repeat the shape of tests/reader/files_new_tab.rs, which is this suite's convention, and in_hover_text is new and used six times: no change to either.",
+  "observable": "none",
+  "file": "tests/reader/tooltips.rs",
+  "line": 128,
+  "code": "#[test]\nfn the_place_of_a_tabs_file_is_as_large_as_a_sidebar_row() {\n    let mut reader = desk();\n    let place = reader.path(\"page.md\").display().to_string();\n\n    reader.hover(\"tab:Desk\");\n\n    assert_eq!(in_hover_text(&mut reader, &place), in_a_row(&reader));\n    reader.assert_sees(\"Live: reloads when the file changes\");\n}",
+  "diff": "sketch, not compiled\n  assert_eq!(in_hover_text(&mut reader, &place), in_a_row(&reader));\n- reader.assert_sees(\"Live: reloads when the file changes\");",
+  "size": "1 test file, 1 line",
+  "guards": "tests/reader/menu.rs the_tab_says_where_the_document_is_and_that_it_is_live and tests/reader/tabs.rs pointing_at_a_tab_shows_where_its_file_is keep the Live line covered.",
+  "repro": "read from the code only",
+  "needs": [],
+  "conflicts": [],
+  "resolves": []
+ }
+]
