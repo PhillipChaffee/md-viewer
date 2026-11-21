@@ -10,6 +10,7 @@ use eframe::egui::{self, accesskit};
 use eframe::App as _;
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
+use super::lightbox::{LightboxState, LightboxTexture};
 use super::settings::FontPicker;
 use super::tests::Harness;
 use super::MarkdownApp;
@@ -51,6 +52,18 @@ pub(crate) fn launch(storage: &MemoryStorage, file: Option<PathBuf>, watch: bool
     let mut creation = eframe::CreationContext::_new_kittest(egui::Context::default());
     creation.storage = Some(storage);
     MarkdownApp::new(&creation, file, watch)
+}
+
+/// A picture as the lightbox holds one that was just enlarged: 100 by
+/// 100, at its own size, not panned.
+pub(crate) fn enlarged() -> LightboxState {
+    LightboxState {
+        texture: LightboxTexture::Loaded(egui::TextureId::default()),
+        base_size: egui::vec2(100.0, 100.0),
+        zoom: 1.0,
+        open_id: 1,
+        scroll_offset: egui::Vec2::ZERO,
+    }
 }
 
 /// Run one frame of the key-driven harness on `input`, through the same

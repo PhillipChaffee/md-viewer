@@ -142,7 +142,7 @@ fn an_action_with_no_shortcut_has_an_empty_hint() {
 #[test]
 fn every_sign_a_mac_hint_uses_is_one_the_font_is_asked_about() {
     let hints = Hints::new(Notation::MacSigns);
-    let signs = hints.0.iter().flat_map(|(_, hint)| hint.chars());
+    let signs = hints.keys.iter().flat_map(|(_, hint)| hint.chars());
     for sign in signs.filter(|sign| !sign.is_ascii()) {
         assert!(MAC_SIGNS.contains(sign), "{sign} is not checked for");
     }
@@ -151,11 +151,11 @@ fn every_sign_a_mac_hint_uses_is_one_the_font_is_asked_about() {
 #[test]
 fn a_hint_never_names_a_key_the_platform_cannot_press() {
     let off_the_mac = Hints::new(Notation::Names);
-    assert!(off_the_mac.0.iter().all(|(_, hint)| !hint.contains('[')));
+    assert!(off_the_mac.keys.iter().all(|(_, hint)| !hint.contains('[')));
     let mac = Hints::new(Notation::MacNames);
-    assert!(mac.0.iter().all(|(_, hint)| !hint.contains("Alt")));
+    assert!(mac.keys.iter().all(|(_, hint)| !hint.contains("Alt")));
     let unmodified_arrow = |(_, hint): &(AppAction, String)| hint == "Option+Left";
-    assert!(!mac.0.iter().any(unmodified_arrow));
+    assert!(!mac.keys.iter().any(unmodified_arrow));
 }
 
 /// The app as a Mac, with its hints written again for that.
@@ -242,4 +242,12 @@ fn the_hints_are_written_again_once_new_fonts_are_in_force() {
     harness.idle();
 
     assert!(close(&harness).ends_with('W') && !close(&harness).contains("Ctrl"));
+}
+
+#[test]
+fn the_click_for_a_new_tab_is_named_after_the_command_key() {
+    let clicks = [Notation::Names, Notation::MacSigns, Notation::MacNames]
+        .map(|notation| Hints::new(notation).command_click().to_owned());
+
+    assert_eq!(clicks, ["Ctrl-click", "⌘-click", "Cmd-click"]);
 }

@@ -48,13 +48,15 @@ fn show_files(reader: &mut Reader) {
 }
 
 /// What the files sidebar lists, top to bottom: everything a screen reader
-/// reads between its header and the contents sidebar's.
+/// reads between its header and the contents sidebar's, but for the button
+/// each document has to open it in a new tab.
 fn listing(reader: &Reader) -> Vec<String> {
     let names = reader.names().into_iter();
     names
         .skip_while(|name| !name.starts_with("FILES"))
         .skip(1)
         .take_while(|name| name != "CONTENTS")
+        .filter(|name| !(name.starts_with("Open ") && name.ends_with(" in new tab")))
         .collect()
 }
 
@@ -340,28 +342,28 @@ fn a_folder_has_no_copy_menu() {
 }
 
 #[test]
-fn middle_clicking_an_open_document_in_the_list_closes_its_tab() {
+fn middle_clicking_an_open_document_in_the_list_shows_its_tab_and_closes_none() {
     let mut reader = shelf_with_files();
     reader.ctrl_click("changes.md");
-    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
+    reader.click("tab:Read me");
 
     reader.middle_click("changes.md");
 
-    assert_eq!(reader.tabs(), ["Read me"]);
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
     assert_eq!(reader.count("changes.md"), 1, "the row is left");
-    reader.assert_sees("Start here.");
-    assert_eq!(reader.title(), "readme.md - Markdown Viewer");
+    reader.assert_sees("What is new.");
+    assert_eq!(reader.title(), "changes.md - Markdown Viewer");
 }
 
 #[test]
-fn middle_clicking_a_document_that_is_not_open_does_nothing() {
+fn middle_clicking_a_document_that_is_not_open_gives_it_a_tab() {
     let mut reader = shelf_with_files();
 
     reader.middle_click("changes.md");
 
-    reader.assert_sees("Start here.");
-    assert_eq!(reader.count("changes.md"), 1);
-    assert_eq!(reader.title(), "readme.md - Markdown Viewer");
+    assert_eq!(reader.tabs(), ["Read me", "Changes"]);
+    reader.assert_sees("What is new.");
+    assert_eq!(reader.title(), "changes.md - Markdown Viewer");
 }
 
 #[test]

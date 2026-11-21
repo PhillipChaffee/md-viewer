@@ -1,6 +1,6 @@
 //! The opt-in block styling a reader view asks for: a rhythm of gaps
 //! between blocks, typeset tables, list markers that hang in a slot, and
-//! inline code on chips. Every test reads what a frame painted.
+//! inline code in an ink of its own. Every test reads what a frame painted.
 
 use egui::{Color32, Context, Pos2, Rect, Shape, Stroke, TextStyle};
 use egui_commonmark_extended::{
@@ -451,7 +451,6 @@ fn scrolled_frame(
         list: Some(list_style()),
         table: Some(table_style()),
         center_content: true,
-        inline_code_radius: Some(4.0),
         ..Default::default()
     };
     let mut frame = Frame::default();
@@ -1035,98 +1034,119 @@ fn every_level_of_a_nested_list_steps_in_by_one_slot() {
 
 // --- inline code ----------------------------------------------------------
 
-fn chips() -> BlockStyle {
+fn scaled() -> BlockStyle {
     BlockStyle {
-        inline_code_radius: Some(4.0),
+        inline_code_scale: Some(0.5),
         ..Default::default()
     }
 }
 
-#[test]
-fn inline_code_sits_on_a_rounded_chip_and_no_line_moves() {
-    let markdown = "Some text with `inline code` in the middle of a line.\n";
-    let ctx = context();
-    let plain = show_in(&ctx, markdown, &BlockStyle::default());
-    let chipped = show_in(&ctx, markdown, &chips());
-    let fill = ctx.style().visuals.code_bg_color;
-
-    // The same labels at the same places.
-    assert_eq!(plain.texts.len(), chipped.texts.len());
-    for (before, after) in plain.texts.iter().zip(&chipped.texts) {
-        assert_eq!((before.text.as_str(), before.rect), (after.text.as_str(), after.rect));
-    }
-    // The code's own square background makes way for the chip.
-    assert_eq!(plain.text("inline code").background, fill);
-    let code = chipped.text("inline code");
-    assert_eq!(code.background, Color32::TRANSPARENT);
-    let chip = chipped
-        .rects
-        .iter()
-        .find(|rect| rect.fill == fill)
-        .expect("a chip in the code background color");
-    assert_close(chip.radius, 4.0, "chip radius");
-    assert!(chip.rect.left() < code.left && chip.rect.right() > code.rect.right());
-    assert!(chip.rect.left() > code.left - 4.0, "the chip hugs the code");
-    assert!(
-        chip.rect.height() < code.rect.height() && chip.rect.height() > EM,
-        "shorter than the line, taller than the letters: {}",
-        chip.rect.height()
-    );
-    assert!(code.rect.y_range().contains(chip.rect.center().y));
-}
-
-#[test]
-fn code_that_wraps_gets_a_chip_on_every_line() {
-    let ctx = context();
-    let markdown = "Lead `fifty characters of code that will not fit a line` tail.\n";
+/// The frame of `markdown` with the bytes of `found` marked as a search
+/// match.
+fn show_found(
+    ctx: &Context,
+    markdown: &str,
+    found: std::ops::Range<usize>,
+    style: &BlockStyle,
+) -> Frame {
     let mut cache = CommonMarkCache::default();
-    let mut frame = Frame::default();
-    for _ in 0..3 {
-        ctx.begin_pass(egui::RawInput::default());
-        egui::CentralPanel::default().show(&ctx, |ui| {
-            ui.set_width(260.0);
-            CommonMarkViewer::new()
-                .default_width(Some(260))
-                .block_style(chips())
-                .show(ui, &mut cache, markdown);
-        });
-        frame = Frame::default();
-        for clipped in ctx.end_pass().shapes {
-            frame.collect(&clipped.shape, clipped.clip_rect);
-        }
-    }
-    let fill = ctx.style().visuals.code_bg_color;
-    let chips: Vec<&Filled> = frame.rects.iter().filter(|rect| rect.fill == fill).collect();
-
-    assert!(chips.len() >= 2, "one chip per line of code: {chips:#?}");
-    assert!(chips
-        .windows(2)
-        .all(|pair| pair[0].rect.bottom() <= pair[1].rect.top() + 0.6));
-    let code = frame.text("fifty characters").rect;
-    assert!(chips.iter().all(|chip| code.expand(4.0).contains_rect(chip.rect)));
-}
-
-#[test]
-fn code_in_a_table_cell_gets_a_chip_and_a_found_match_keeps_its_highlight() {
-    let ctx = context();
-    let fill = ctx.style().visuals.code_bg_color;
-    let table = "| a header |\n|---|\n| `code` |\n";
-    let frame = show_in(&ctx, table, &chips());
-    let cell_chips: Vec<&Filled> = frame.rects.iter().filter(|rect| rect.fill == fill).collect();
-    assert_eq!(cell_chips.len(), 1, "{cell_chips:#?}");
-
-    // A search match in inline code is painted in the match color instead.
-    let markdown = "Find `needle` here.\n";
-    let mut cache = CommonMarkCache::default();
-    cache.set_search_ranges(vec![6..12]);
+    cache.set_search_ranges(vec![found]);
     ctx.begin_pass(egui::RawInput::default());
-    egui::CentralPanel::default().show(&ctx, |ui| {
-        viewer(&chips()).show(ui, &mut cache, markdown);
+    egui::CentralPanel::default().show(ctx, |ui| {
+        viewer(style).show(ui, &mut cache, markdown);
     });
     let mut frame = Frame::default();
     for clipped in ctx.end_pass().shapes {
         frame.collect(&clipped.shape, clipped.clip_rect);
     }
-    assert!(frame.rects.iter().all(|rect| rect.fill != fill));
-    assert_ne!(frame.text("needle").background, Color32::TRANSPARENT);
+    frame
+}
+
+#[test]
+fn a_found_match_in_code_on_the_code_background_keeps_its_scale_and_bold_face() {
+    // Stand in a proportional face for the bold code one: its letters are
+    // not as wide as the code face's.
+    let ctx = context();
+    let mut fonts = egui::FontDefinitions::default();
+    let proportional = fonts.families[&egui::FontFamily::Proportional].clone();
+    let bold_code = egui::FontFamily::Name("CodeBold".into());
+    fonts.families.insert(bold_code.clone(), proportional);
+    ctx.set_fonts(fonts);
+    let style = BlockStyle {
+        strong_code_font_family: Some(bold_code),
+        ..scaled()
+    };
+    let fill = ctx.style().visuals.code_bg_color;
+    let (plain, strong) = ("Find `needle` here.\n", "**Find `needle` here.**\n");
+    let width_at_rest = |markdown| {
+        let frame = show_in(&ctx, markdown, &style);
+        assert_eq!(frame.text("needle").background, fill);
+        frame.text("needle").rect.width()
+    };
+    assert!((width_at_rest(plain) - width_at_rest(strong)).abs() > 1.0);
+
+    for (markdown, found) in [(plain, 6..12), (strong, 8..14)] {
+        let frame = show_found(&ctx, markdown, found, &style);
+        let code = frame.text("needle");
+        assert!(code.background != fill && code.background != Color32::TRANSPARENT);
+        assert_close(code.rect.width(), width_at_rest(markdown), markdown);
+    }
+}
+
+// --- inline code in an ink of its own -------------------------------------
+
+const CODE_INK: Color32 = Color32::from_rgb(122, 74, 34);
+
+fn tinted() -> BlockStyle {
+    BlockStyle {
+        inline_code_color: Some(CODE_INK),
+        ..scaled()
+    }
+}
+
+#[test]
+fn inline_code_in_an_ink_of_its_own_has_nothing_painted_behind_it() {
+    let markdown = "Some text with `inline code` in the middle of a line.\n";
+    let ctx = context();
+    let fill = ctx.style().visuals.code_bg_color;
+    let plain = show_in(&ctx, markdown, &scaled());
+    let frame = show_in(&ctx, markdown, &tinted());
+
+    assert_eq!(plain.text("inline code").background, fill);
+    assert_ne!(plain.text("inline code").color, CODE_INK);
+    let code = frame.text("inline code");
+    assert_eq!(code.color, CODE_INK);
+    assert_eq!(code.background, Color32::TRANSPARENT);
+    assert!(frame.rects.iter().all(|rect| rect.fill != fill), "{:#?}", frame.rects);
+    // The ink is all that changes: every label is where it was.
+    assert_eq!(plain.texts.len(), frame.texts.len());
+    for (before, after) in plain.texts.iter().zip(&frame.texts) {
+        assert_eq!((before.text.as_str(), before.rect), (after.text.as_str(), after.rect));
+    }
+    assert_ne!(frame.text("Some text").color, CODE_INK);
+}
+
+#[test]
+fn a_found_match_in_tinted_code_keeps_the_codes_ink_and_size() {
+    let markdown = "Find `needle` here.\n";
+    let ctx = context();
+    let at_rest = show_in(&ctx, markdown, &tinted());
+    let frame = show_found(&ctx, markdown, 6..12, &tinted());
+
+    let found = frame.text("needle");
+    assert_ne!(found.background, Color32::TRANSPARENT, "the match is marked");
+    assert_eq!(found.color, CODE_INK);
+    assert_close(
+        found.rect.width(),
+        at_rest.text("needle").rect.width(),
+        "the found code is the size it was",
+    );
+}
+
+#[test]
+fn tinted_code_in_a_link_is_in_the_links_color() {
+    let ctx = context();
+    let frame = show_in(&ctx, "See [`code`](https://example.com) there.\n", &tinted());
+
+    assert_eq!(frame.text("code").color, ctx.style().visuals.hyperlink_color);
 }

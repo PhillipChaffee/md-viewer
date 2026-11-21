@@ -26,6 +26,8 @@ mod editing_depth;
 #[cfg(test)]
 mod far_pictures;
 #[cfg(test)]
+mod files_new_tab;
+#[cfg(test)]
 mod files_sidebar;
 #[cfg(test)]
 mod find;
@@ -43,6 +45,8 @@ mod home;
 mod home_depth;
 #[cfg(test)]
 mod home_view;
+#[cfg(test)]
+mod inline_code;
 #[cfg(test)]
 mod keyboard;
 #[cfg(test)]

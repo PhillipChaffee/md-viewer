@@ -57,6 +57,12 @@ A file list on the left and a table of contents on the right. The contents
 list marks the heading you are reading. Both are hidden or shown with one
 click and can be resized.
 
+A click on a file shows it in the tab in front. To give it a tab of its
+own, click the button that appears at the end of its row while you point
+at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
+from its right-click menu. A file that already has a tab comes to the
+front instead. A dot after the name marks the files that have a tab.
+
 ![The files and contents sidebars](screenshots/reader/sidebars.png)
 
 ### A home page of what you read last
@@ -76,8 +82,13 @@ has one. The Home button again, Back, or a click on a tab leads back.
 - Four themes, a resizable centered column, three line spacings, five text
   sizes and 50% to 300% zoom.
 - Documents are set in the bundled
-  [Source Serif 4](https://github.com/adobe-fonts/source-serif). Other font
-  presets and any installed font family are under **Aa → Fonts…**.
+  [Source Serif 4](https://github.com/adobe-fonts/source-serif), and their
+  code in its companion,
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
+  font presets and any installed font family are under **Aa → Fonts…**.
+- Code in a line of prose has no box. It is a little smaller than the text
+  around it and in a warm tint of its own, which keeps the same 7:1 contrast
+  as body text on all four themes.
 - A `file-name · N min read` line above the title.
 
 **Rendering**
@@ -114,6 +125,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
   bar their desktop draws.
 - Find in document (`Ctrl+F`) with highlighted matches.
 - Links between Markdown files open in place; `Ctrl+Click` opens a new tab.
+- A file in the sidebar opens in place too; its row's button, `Ctrl+Click`,
+  a middle click or **Open in New Tab** in its menu opens a new tab.
 - Drag a file onto the window to open it.
 - Live reload when the file changes on disk. **Live Reload** in **⋯** (`F5`)
   is checked while the setting is on, also with nothing open to follow.
@@ -226,6 +239,16 @@ md-viewer notes.md
 | `Ctrl+S` | `⌘S` | Save the edits |
 | `F5` | `F5` | Live reload on or off |
 | `Ctrl+Q` | `⌘Q` | Quit |
+
+With the mouse:
+
+| Linux and Windows | Mac | Action |
+| --- | --- | --- |
+| Click a file in the sidebar | the same | Show it in the tab in front |
+| `Ctrl`-click a file or a link | ⌘-click | Open it in a new tab |
+| Middle-click a file in the sidebar | the same | Open it in a new tab |
+| Right-click a file in the sidebar | the same | **Open**, **Open in New Tab**, and what to copy |
+| Middle-click a tab | the same | Close the tab |
 
 On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘
 there: `⌘D`, `⌘F`, ⌘-click on a link. The one exception is the tab switch,
@@ -352,8 +375,9 @@ Two things to know before you rely on those gates:
   [mitex](https://github.com/mitex-rs/mitex) for math.
 - [merman](https://github.com/Latias94/merman) for Mermaid diagrams.
 - [syntect](https://github.com/trishume/syntect) for syntax highlighting.
-- [Source Serif 4](https://github.com/adobe-fonts/source-serif) by Adobe,
-  under the SIL Open Font License.
+- [Source Serif 4](https://github.com/adobe-fonts/source-serif) and
+  [Source Code Pro](https://github.com/adobe-fonts/source-code-pro) by
+  Adobe, under the SIL Open Font License.
 
 Third-party license texts are in `THIRD_PARTY_NOTICES`.
 

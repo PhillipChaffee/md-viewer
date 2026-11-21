@@ -70,6 +70,22 @@ fn body_text_and_headings_reach_seven_to_one_on_every_surface_of_every_theme() {
 }
 
 #[test]
+fn inline_code_is_a_tint_that_reads_as_well_as_body_text() {
+    for theme in ThemeId::ALL {
+        let palette = theme.palette();
+        let on_page = contrast(palette.inline_code, palette.page);
+        assert!(on_page >= 7.0, "{theme:?}: code on page is {on_page:.2}:1");
+        // Found or selected code has to stay text, as body text does.
+        let marked = contrast(palette.inline_code, palette.selection);
+        assert!(marked >= 4.5, "{theme:?}: marked code is {marked:.2}:1");
+        // The tint is the code's own. It need not be far from a link's
+        // color, and on Sepia it is not: a link is told by its underline
+        // and code by its face, which `tests/reader/inline_code.rs` reads.
+        assert_ne!(palette.inline_code, palette.text, "{theme:?}");
+    }
+}
+
+#[test]
 fn secondary_inks_stay_readable_on_the_page_of_every_theme() {
     for theme in ThemeId::ALL {
         let palette = theme.palette();

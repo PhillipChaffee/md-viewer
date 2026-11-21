@@ -1,5 +1,5 @@
 //! The document's blocks as the reader sees them: the rhythm between
-//! them, typeset tables, hanging list markers, code on chips, and diagrams
+//! them, typeset tables, hanging list markers, tinted code, and diagrams
 //! that may leave the text column.
 
 use std::time::Duration;
@@ -195,22 +195,18 @@ fn bullets_and_numbers_hang_in_the_muted_color() {
 }
 
 #[test]
-fn inline_code_sits_on_a_rounded_chip_in_the_raised_color() {
+fn inline_code_is_in_the_themes_code_tint_and_the_code_face() {
     let mut harness = reader("Some `inline code` in a line.\n");
     let output = harness.idle();
-    let raised = ThemeId::Sepia.palette().raised;
+    let palette = ThemeId::Sepia.palette();
 
-    let chip = painted_shapes(&output)
-        .into_iter()
-        .find_map(|shape| match shape {
-            Shape::Rect(rect) if rect.fill == raised && rect.rect.top() > BAR_HEIGHT => Some(rect),
-            _ => None,
-        })
-        .expect("a chip behind the code");
-    assert_eq!(chip.corner_radius, egui::CornerRadius::same(4));
-    let line = text_rect(&output, "inline code");
-    assert!(chip.rect.height() < line.height(), "shorter than the line");
-    assert!(line.y_range().contains(chip.rect.center().y));
+    let code = painted_text_starting(&output, "inline code");
+    let format = &code.galley.job.sections[0].format;
+    assert_eq!(format.color, palette.inline_code);
+    assert_eq!(format.background, egui::Color32::TRANSPARENT);
+    assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
+    let prose = painted_text_starting(&output, "Some ");
+    assert!(format.font_id.size < prose.galley.job.sections[0].format.font_id.size);
 }
 
 /// Four boxes in a row: wider than the default column, narrower than the
