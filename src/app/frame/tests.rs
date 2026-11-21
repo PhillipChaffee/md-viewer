@@ -558,3 +558,32 @@ fn changing_fonts_rebuilds_the_document_look_and_lays_documents_out_again() {
     assert_eq!(harness.app.document_look.blocks.emphasis_font_family, None);
     assert!(revision(&harness) > settled);
 }
+
+fn key(key: egui::Key, repeat: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat,
+        modifiers: Modifiers::NONE,
+    }
+}
+
+/// What the input hook lets into a frame that `events` arrive in.
+fn let_in(harness: &mut Harness, events: Vec<egui::Event>) -> Vec<egui::Event> {
+    let mut input = egui::RawInput {
+        events,
+        ..Default::default()
+    };
+    harness.app.raw_input_hook(&harness.ctx, &mut input);
+    input.events
+}
+
+#[test]
+fn the_repeats_of_a_held_arrow_all_reach_the_frame_they_arrive_in() {
+    let mut harness = Harness::with_docs(&[("a.md", "# A")]);
+    let repeats = vec![key(egui::Key::ArrowDown, true); 3];
+
+    assert_eq!(let_in(&mut harness, repeats.clone()), repeats);
+    assert_eq!(let_in(&mut harness, Vec::new()), []);
+}

@@ -133,6 +133,17 @@ fn the_arrow_keys_step_over_an_emoji_written_as_several_characters() {
 }
 
 #[test]
+fn a_held_arrow_moves_the_caret_by_every_repeat_of_a_slow_frame() {
+    let mut reader = editing("one\ntwo\nthree\nfour\nfive\nsix");
+    reader.press("Ctrl+Home");
+
+    reader.hold("Down", &[3]);
+    reader.type_text(">");
+
+    assert_eq!(saved(&mut reader), "one\ntwo\nthree\nfour\n>five\nsix");
+}
+
+#[test]
 fn backspace_and_delete_remove_all_of_an_emoji_written_as_several_characters() {
     let mut reader = editing(SOURCE);
     append(&mut reader, &format!(" {FAMILY}{FAMILY}!"));

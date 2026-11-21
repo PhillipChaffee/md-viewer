@@ -66,10 +66,19 @@ impl TypedAhead {
             events.splice(0..0, self.0.drain(..));
         }
         let moves_keyboard = |event: &egui::Event| {
-            let egui::Event::Key { key, pressed, .. } = event else {
+            let egui::Event::Key {
+                key,
+                pressed,
+                repeat,
+                ..
+            } = event
+            else {
                 return false;
             };
-            *pressed && MOVES_KEYBOARD.contains(key)
+            // A key held down is not typing ahead: its repeats all belong
+            // to the frame they arrive in, or they would run on after the
+            // key is let go.
+            *pressed && !*repeat && MOVES_KEYBOARD.contains(key)
         };
         if let Some(moved) = events.iter().position(moves_keyboard) {
             self.0 = events.split_off(moved + 1);
