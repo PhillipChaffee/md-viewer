@@ -66,6 +66,15 @@ fn over_the_cut_off_file(reader: &mut Reader) -> u16 {
     reader.letter_heights(LONG_NAME, LETTER)[1]
 }
 
+/// How tall the letter stands in the hover text of the button at the end
+/// of a file's row, which shows while the pointer is on the row.
+#[track_caller]
+fn over_the_row_button(reader: &mut Reader) -> u16 {
+    reader.hover("page.md");
+    reader.hover("Open page.md in new tab");
+    in_hover_text(reader, "Open in new tab (")
+}
+
 /// How tall the letter stands in the hover text of the page's picture.
 #[track_caller]
 fn over_the_picture(reader: &mut Reader) -> u16 {
@@ -93,6 +102,13 @@ fn the_whole_name_of_a_cut_off_file_is_as_large_as_its_row() {
     let mut reader = desk();
 
     assert_eq!(over_the_cut_off_file(&mut reader), in_a_row(&reader));
+}
+
+#[test]
+fn the_hover_text_of_a_rows_button_is_as_large_as_its_row() {
+    let mut reader = desk();
+
+    assert_eq!(over_the_row_button(&mut reader), in_a_row(&reader));
 }
 
 #[test]
@@ -155,6 +171,7 @@ fn zooming_scales_hover_texts_with_the_sidebar_rows() {
     assert!(row > at_full_size, "zooming in enlarges a row's letters");
     assert_eq!(over_the_home_button(&mut reader), row);
     assert_eq!(over_the_cut_off_file(&mut reader), row);
+    assert_eq!(over_the_row_button(&mut reader), row);
     assert_eq!(over_the_picture(&mut reader), row);
     assert_eq!(over_the_link(&mut reader), row);
 }
