@@ -351,8 +351,13 @@ impl Tab {
     /// Bring what is worked out from the text back in line with it after
     /// the editor changed it: the contents, the meta line and the links.
     /// Called once per edit, never per frame.
-    pub(crate) fn content_edited(&mut self) {
+    ///
+    /// Returns whether the edit renamed the tab, by changing the first
+    /// heading: the names of the other tabs can depend on this one's.
+    pub(crate) fn content_edited(&mut self) -> bool {
+        let title = self.document_title.take();
         self.index_content(true);
+        self.document_title != title
     }
 
     /// Work out everything that is read off `content`: its line count,

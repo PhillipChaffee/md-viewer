@@ -4,6 +4,7 @@
 //! to tell them apart.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
 #[cfg(test)]
@@ -53,52 +54,51 @@ impl ShownName {
 }
 
 /// One document while its name is worked out: what it shows now, and
-/// what it can show instead, each naming more of where it is kept.
+/// how to show more of where it is kept when another shows the same.
 struct Candidate<'a> {
+    name: &'a str,
     path: &'a Path,
+    /// The folders the document is in, from the root down.
+    folders: Vec<Component<'a>>,
+    /// The file, where the folders tell nothing apart without it.
+    file: Option<&'a OsStr>,
+    /// How many of the nearest folders `shown` names.
+    depth: usize,
     shown: ShownName,
-    longer: std::vec::IntoIter<ShownName>,
 }
 
 impl<'a> Candidate<'a> {
     /// `name` alone to start with. `beside_namesake` is whether a
     /// document of the same name is kept in the same folder: the folder
     /// then tells nothing apart without the file.
-    fn new(name: &str, path: &'a Path, beside_namesake: bool) -> Self {
-        let folders: Vec<Component<'_>> = path
-            .parent()
-            .map(|folder| folder.components().collect())
-            .unwrap_or_default();
-        let file = path.file_name().filter(|_| beside_namesake);
-        let mut longer: Vec<ShownName> = (1..=folders.len())
-            .map(|depth| {
-                let nearest = folders.iter().skip(folders.len() - depth);
-                let mut place: PathBuf = nearest.collect();
-                place.extend(file);
-                ShownName::placed(name, &place)
-            })
-            .collect();
-        // The whole path is the last there is to show, and no two
-        // documents share it.
-        let whole = ShownName::placed(name, path);
-        if longer.last() != Some(&whole) {
-            longer.push(whole);
-        }
+    fn new(name: &'a str, path: &'a Path, beside_namesake: bool) -> Self {
+        let folders = path.parent().map(Path::components);
         Self {
+            name,
             path,
+            folders: folders.into_iter().flatten().collect(),
+            file: path.file_name().filter(|_| beside_namesake),
+            depth: 0,
             shown: ShownName::plain(name),
-            longer: longer.into_iter(),
         }
     }
 
-    /// Show more of where the document is kept. Returns whether there
-    /// was more to show.
+    /// Show more of where the document is kept: one more folder, and
+    /// after the last of them the whole path, which no two documents
+    /// share. Returns whether there was more to show.
     fn lengthen(&mut self) -> bool {
-        let longer = self.longer.next();
-        longer.is_some_and(|longer| {
-            self.shown = longer;
-            true
-        })
+        let longer = if self.depth < self.folders.len() {
+            self.depth += 1;
+            let nearest = self.folders.iter().skip(self.folders.len() - self.depth);
+            let mut place: PathBuf = nearest.collect();
+            place.extend(self.file);
+            ShownName::placed(self.name, &place)
+        } else {
+            ShownName::placed(self.name, self.path)
+        };
+        let is_longer = longer != self.shown;
+        self.shown = longer;
+        is_longer
     }
 }
 

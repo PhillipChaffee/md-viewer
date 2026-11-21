@@ -88,7 +88,7 @@ impl MarkdownApp {
 
         // Content area (no inner CentralPanel needed - we're already in one)
         // Left margin for breathing room, right margin prevents scrollbar/resize-handle overlap jitter
-        let (pane_width, requested_width, edited) = egui::Frame::NONE
+        let (pane_width, requested_width, edit) = egui::Frame::NONE
             .inner_margin(egui::Margin {
                 left: 8,
                 right: CONTENT_RIGHT_RESIZE_GUTTER,
@@ -101,7 +101,7 @@ impl MarkdownApp {
                 let column = Column::in_pane(content_rect, reading_width);
 
                 // (the Preview|Edit toggle lives in the bars above)
-                let edited = if tab.is_editing {
+                let edit = if tab.is_editing {
                     edit_pane(ui, tab, column)
                 } else {
                     let mut scroll = preview_pane(ui, tab, &settings, column);
@@ -110,7 +110,7 @@ impl MarkdownApp {
                         tab.scroll_to(offset);
                     }
                     wheel_scroll_during_selection(ui, tab, &mut scroll, raw_scroll, content_rect);
-                    false
+                    Edit::None
                 };
                 // After the document, so the strips sit on top of it.
                 let requested_width = resize_strips(ui, column, column_drag_grab, palette);
@@ -119,18 +119,19 @@ impl MarkdownApp {
                 if ui.ctx().input(|i| i.smooth_scroll_delta.length_sq() > 0.0) {
                     ui.ctx().request_repaint();
                 }
-                (content_rect.width(), requested_width, edited)
+                (content_rect.width(), requested_width, edit)
             })
             .inner;
 
         let clicked_link = tab.check_link_hooks();
-        if edited {
+        if edit != Edit::None {
             // The find bar's matches are of the text before the edit. They
             // are found again next frame and counted in the one after.
             self.search.invalidate();
-            // The edit may have changed the first heading, which names the tab.
-            self.tab_names_changed();
             ui.ctx().request_repaint();
+        }
+        if edit == Edit::Renamed {
+            self.tab_names_changed();
         }
         self.document_pane_width = pane_width;
         if let Some(width) = requested_width {
@@ -159,11 +160,22 @@ fn push_search_ranges(tab: &mut Tab, search_is_open: bool, active_idx: usize) {
     }
 }
 
+/// What typing in the editor changed in one frame.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Edit {
+    /// Nothing was typed.
+    None,
+    /// The text changed and the tab is called what it was.
+    Text,
+    /// The text changed and with it the first heading, which names the
+    /// tab.
+    Renamed,
+}
+
 /// Edit mode: a scrollable `TextEdit` holding the raw markdown, as wide as
 /// the text column and centered like it. The `TextEdit`'s own `ScrollArea`
-/// handles the wheel natively. Returns whether the text was edited this
-/// frame.
-fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
+/// handles the wheel natively. Returns what was typed this frame.
+fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> Edit {
     let pending_edit = tab.pending_edit_scroll.take();
     let mut edited = false;
     let edit_out = egui::ScrollArea::vertical()
@@ -181,9 +193,11 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
                 });
             });
         });
-    if edited {
-        tab.content_edited();
-    }
+    let edit = match edited.then(|| tab.content_edited()) {
+        None => Edit::None,
+        Some(false) => Edit::Text,
+        Some(true) => Edit::Renamed,
+    };
     tab.measured(&edit_out);
     if let Some(ratio) = pending_edit {
         let mut state = edit_out.state;
@@ -191,7 +205,7 @@ fn edit_pane(ui: &mut egui::Ui, tab: &mut Tab, column: Column) -> bool {
         state.store(ui.ctx(), edit_out.id);
         ui.ctx().request_repaint();
     }
-    edited
+    edit
 }
 
 /// The meta line above the document. It is painted inside the renderer's
