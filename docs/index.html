@@ -67,7 +67,10 @@ code { font: 400 .86em var(--mono); color: var(--code); }
 
 /* A window: the screenshot in a thin frame with a soft shadow. */
 .frame { display: block; border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; background: var(--bgc, #F8F1E3); box-shadow: 0 1px 2px rgba(31,31,31,.05), 0 30px 70px -30px rgba(31,31,31,.30), 0 10px 24px -14px rgba(31,31,31,.12); }
-.frame img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: var(--pos, 50% 0); }
+.frame img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: 50% 0; }
+/* A picture is the app in a window of one of three sizes, and the page's width picks which:
+   480 by 720 on a phone, 960 by 600 up to 900 px, 1280 by 800 above that. */
+.frame picture { display: contents; }
 
 /* The seven views. Seven radio buttons, drawn as a row of words, each show one picture and
    one sentence. All seven pictures and sentences share one grid cell, so the cell is as tall
@@ -134,14 +137,32 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
   .faq div:nth-child(2) { padding-top: 16px; }
   .hide { display: none; }
 }
+/* Where a view shows something else in the narrow window, it has a picture and words for each:
+   .nar up to 600 px and .wid above. These outrank the rules that show the chosen view. */
+@media (min-width: 601px) { .nar { display: none !important; } }
+@media (max-width: 900px) {
+  /* Words to press with a finger are 40 px tall. */
+  .chips label { padding-top: 12px; padding-bottom: 10px; }
+}
+@media (max-width: 700px) {
+  /* The seven words stay on one row down to 601 px. */
+  .chips { gap: 0 2px; }
+  .chips label { padding-left: 9px; padding-right: 9px; letter-spacing: .06em; }
+}
 @media (max-width: 600px) {
+  .wid { display: none !important; }
   .idea p { font-size: 18px; }
   .brk { flex: 0 0 100%; height: 0; margin-top: -8px; }
-  .chips { gap: 0 2px; }
-  .chips label { padding: 11px 9px 9px; letter-spacing: .06em; }
-  /* A whole window is too small to read on a phone, so the frame shows the part that matters at twice the size. */
-  .views { width: 100%; margin-top: 16px; }
-  .views img { aspect-ratio: 8 / 9; }
+  /* The narrow window is whole, upright, and never drawn larger than the app draws it. */
+  .views { width: min(100%, 480px); margin-top: 16px; }
+  .frame img { aspect-ratio: 2 / 3; }
+  /* Each window steps right by less than its own left margin, so no word of the one behind is cut. */
+  .stack { max-width: 480px; aspect-ratio: 1000 / 1568; }
+  .stack .frame { width: 86.5%; }
+  .stack .frame:nth-child(2) { left: 4.5%; top: 5.74%; }
+  .stack .frame:nth-child(3) { left: 9%; top: 11.48%; }
+  .stack .frame:nth-child(4) { left: 13.5%; top: 17.22%; }
+  .names { gap: 8px 12px; letter-spacing: .06em; }
 }
 </style>
 </head>
@@ -188,18 +209,24 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
         <label for="v-edit">Edit mode</label>
       </div>
       <div class="views frame">
-        <img style="--pos:50% 0" class="i-reading" src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" fetchpriority="high" decoding="async" alt="md-viewer on the Sepia theme. An essay, What Maps Leave Out, is set in a centered column of serif text on warm paper, under a single row that holds one tab and a few buttons.">
-        <img style="--pos:50% 0" class="i-math" src="img/rendering-1280.webp" srcset="img/rendering-1280.webp 1280w, img/rendering.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="An essay, The Measure of a Line, showing a displayed formula, a table with right-aligned numbers and a Mermaid flowchart, all in the Sepia theme's colors.">
-        <img style="--pos:0 0" class="i-sidebars" src="img/sidebars-1280.webp" srcset="img/sidebars-1280.webp 1280w, img/sidebars.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with both sidebars open. A list of three Markdown files is on the left, the essay is in the middle, and the outline of its headings is on the right.">
-        <img style="--pos:0 0" class="i-tabs" src="img/tabs-1280.webp" srcset="img/tabs-1280.webp 1280w, img/tabs.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with four documents open as tabs in the top row, each named by its first heading. The last one, What Maps Leave Out, is in front.">
-        <img style="--pos:85% 0" class="i-aa" src="img/popover-1280.webp" srcset="img/popover-1280.webp 1280w, img/popover.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The Aa popover open over a document. It holds four theme swatches with Sepia chosen, the text size at Normal, a width slider at 680 px with Fit window and Reset, three line spacings with Comfortable chosen, and Fonts.">
-        <img style="--pos:50% 0" class="i-home" src="img/home-1280.webp" srcset="img/home-1280.webp 1280w, img/home.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The md-viewer home page. Under the heading Recently read are four documents, each with its title, folder, reading time and opening lines. Open File and Open Folder are at the top right.">
-        <img style="--pos:50% 0" class="i-edit" src="img/edit-1280.webp" srcset="img/edit-1280.webp 1280w, img/edit.webp 2560w" sizes="(min-width: 1120px) 1040px, (min-width: 601px) 94vw, 200vw" width="2560" height="1600" loading="lazy" decoding="async" alt="Edit mode. The essay's Markdown source is shown as plain text in the same column, with the Edit half of the Preview and Edit switch chosen.">
+        <picture><source media="(max-width: 600px)" srcset="img/sepia-narrow-960.webp 960w, img/sepia-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440"><source media="(max-width: 900px)" srcset="img/sepia-mid-960.webp 960w, img/sepia-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-reading" src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" fetchpriority="high" decoding="async" alt="md-viewer on the Sepia theme. An essay, What Maps Leave Out, is set in a centered column of serif text on warm paper, under a single row that holds one tab and a few buttons."></picture>
+        <img class="i-math nar" src="img/rendering-narrow-960.webp" srcset="img/rendering-narrow-960.webp 960w, img/rendering-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440" loading="lazy" decoding="async" alt="An essay, The Measure of a Line, in a narrow window. It shows a displayed formula, a table with right-aligned numbers and a Mermaid flowchart drawn from top to bottom, all in the Sepia theme's colors.">
+        <picture><source media="(max-width: 900px)" srcset="img/rendering-mid-960.webp 960w, img/rendering-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-math wid" src="img/rendering-1280.webp" srcset="img/rendering-1280.webp 1280w, img/rendering.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="An essay, The Measure of a Line, showing a displayed formula, a table with right-aligned numbers and a Mermaid flowchart, all in the Sepia theme's colors."></picture>
+        <img class="i-sidebars nar" src="img/sidebars-narrow-1120.webp" srcset="img/sidebars-narrow-1120.webp 1120w, img/sidebars-narrow-1680.webp 1680w" sizes="(max-width: 512px) calc(117vw - 37px), 560px" width="1120" height="1680" loading="lazy" decoding="async" alt="md-viewer in a narrow window with the contents sidebar open. The essay is on the left, and the outline of its four headings is on the right.">
+        <picture><source media="(max-width: 900px)" srcset="img/sidebars-mid-960.webp 960w, img/sidebars-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-sidebars wid" src="img/sidebars-1280.webp" srcset="img/sidebars-1280.webp 1280w, img/sidebars.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with both sidebars open. A list of three Markdown files is on the left, the essay is in the middle, and the outline of its headings is on the right."></picture>
+        <img class="i-tabs nar" src="img/tabs-narrow-960.webp" srcset="img/tabs-narrow-960.webp 960w, img/tabs-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440" loading="lazy" decoding="async" alt="md-viewer in a narrow window with two documents open as tabs in the top row, named Sleep and Maps after their first headings. Maps is in front.">
+        <picture><source media="(max-width: 900px)" srcset="img/tabs-mid-960.webp 960w, img/tabs-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-tabs wid" src="img/tabs-1280.webp" srcset="img/tabs-1280.webp 1280w, img/tabs.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="md-viewer with documents open as tabs in the top row, each named by its first heading. The last one, What Maps Leave Out, is in front."></picture>
+        <img class="i-aa nar" src="img/popover-narrow-960.webp" srcset="img/popover-narrow-960.webp 960w, img/popover-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440" loading="lazy" decoding="async" alt="The Aa popover open over a document in a narrow window. It holds four theme swatches with Sepia chosen, the text size at Normal, a width slider at 398 px with Fit window and Reset, three line spacings with Comfortable chosen, and Fonts.">
+        <picture><source media="(max-width: 900px)" srcset="img/popover-mid-960.webp 960w, img/popover-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-aa wid" src="img/popover-1280.webp" srcset="img/popover-1280.webp 1280w, img/popover.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The Aa popover open over a document. It holds four theme swatches with Sepia chosen, the text size at Normal, a width slider at 680 px with Fit window and Reset, three line spacings with Comfortable chosen, and Fonts."></picture>
+        <img class="i-home nar" src="img/home-narrow-960.webp" srcset="img/home-narrow-960.webp 960w, img/home-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440" loading="lazy" decoding="async" alt="The md-viewer home page in a narrow window. Under the heading Recently read are four documents, each with its title, folder, reading time and opening lines. Open File and Open Folder are at the top right.">
+        <picture><source media="(max-width: 900px)" srcset="img/home-mid-960.webp 960w, img/home-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-home wid" src="img/home-1280.webp" srcset="img/home-1280.webp 1280w, img/home.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The md-viewer home page. Under the heading Recently read are the documents opened last, each with its title, folder, reading time and opening lines. Open File and Open Folder are at the top right."></picture>
+        <img class="i-edit nar" src="img/edit-narrow-960.webp" srcset="img/edit-narrow-960.webp 960w, img/edit-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440" loading="lazy" decoding="async" alt="Edit mode in a narrow window. The essay's Markdown source is shown as plain text in the same column.">
+        <picture><source media="(max-width: 900px)" srcset="img/edit-mid-960.webp 960w, img/edit-mid-1920.webp 1920w" sizes="calc(100vw - 32px)" width="1920" height="1200"><img class="i-edit wid" src="img/edit-1280.webp" srcset="img/edit-1280.webp 1280w, img/edit.webp 2560w" sizes="(min-width: 1120px) 1040px, 94vw" width="2560" height="1600" loading="lazy" decoding="async" alt="Edit mode. The essay's Markdown source is shown as plain text in the same column, with the Edit half of the Preview and Edit switch chosen."></picture>
       </div>
       <div class="caps">
         <p class="c-reading" id="c-reading">A centered column of serif text on one sheet of paper, and nothing else on screen until you ask for it.</p>
         <p class="c-math" id="c-math">LaTeX formulas and Mermaid diagrams are drawn as ink on the page in the theme's own colors.</p>
-        <p class="c-sidebars" id="c-sidebars">A file list on the left and a table of contents on the right, which marks the heading you are reading.</p>
+        <p class="c-sidebars" id="c-sidebars"><span class="wid" id="c-sidebars-w">A file list on the left and a table of contents on the right, which marks the heading you are reading.</span><span class="nar" id="c-sidebars-n">A table of contents on the right marks the heading you are reading; a wider window adds a file list.</span></p>
         <p class="c-tabs" id="c-tabs">Tabs sit in the top row, each named by its document's first heading, with back and forward history in each.</p>
         <p class="c-aa" id="c-aa">The <b>Aa</b> button holds the theme swatches, the text size, a width slider and three line spacings.</p>
         <p class="c-home" id="c-home">The home page lists recent documents with their title, folder, reading time and opening lines.</p>
@@ -214,10 +241,10 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
         <p>Paper, Sepia, Dusk and Night. Each one is a single palette that every part of the window draws from, and body text keeps at least 7:1 contrast on all four.</p>
       </div>
       <div class="stack">
-        <a class="frame" href="img/night.webp" style="--bgc:#000000"><img src="img/night-1280.webp" srcset="img/night-1280.webp 1280w, img/night.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Night theme: gray text on black."></a>
-        <a class="frame" href="img/dusk.webp" style="--bgc:#2C2C2E"><img src="img/dusk-1280.webp" srcset="img/dusk-1280.webp 1280w, img/dusk.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Dusk theme: light text on dark gray."></a>
-        <a class="frame" href="img/paper.webp" style="--bgc:#FDFDFB"><img src="img/paper-1280.webp" srcset="img/paper-1280.webp 1280w, img/paper.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Paper theme: near-black ink on off-white."></a>
-        <a class="frame" href="img/sepia.webp" style="--bgc:#F8F1E3"><img src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Sepia theme: dark brown ink on warm paper."></a>
+        <a class="frame" href="img/night.webp" style="--bgc:#000000"><picture><source media="(max-width: 600px)" srcset="img/night-narrow-960.webp" width="960" height="1440"><img src="img/night-1280.webp" srcset="img/night-1280.webp 1280w, img/night.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Night theme: gray text on black."></picture></a>
+        <a class="frame" href="img/dusk.webp" style="--bgc:#2C2C2E"><picture><source media="(max-width: 600px)" srcset="img/dusk-narrow-960.webp" width="960" height="1440"><img src="img/dusk-1280.webp" srcset="img/dusk-1280.webp 1280w, img/dusk.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Dusk theme: light text on dark gray."></picture></a>
+        <a class="frame" href="img/paper.webp" style="--bgc:#FDFDFB"><picture><source media="(max-width: 600px)" srcset="img/paper-narrow-960.webp" width="960" height="1440"><img src="img/paper-1280.webp" srcset="img/paper-1280.webp 1280w, img/paper.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Paper theme: near-black ink on off-white."></picture></a>
+        <a class="frame" href="img/sepia.webp" style="--bgc:#F8F1E3"><picture><source media="(max-width: 600px)" srcset="img/sepia-narrow-960.webp 960w, img/sepia-narrow-1440.webp 1440w" sizes="(max-width: 512px) calc(100vw - 32px), 480px" width="960" height="1440"><img src="img/sepia-1280.webp" srcset="img/sepia-1280.webp 1280w, img/sepia.webp 2560w" sizes="(min-width: 1023px) 757px, 88vw" width="2560" height="1600" loading="lazy" decoding="async" alt="The same essay on the Sepia theme: dark brown ink on warm paper."></picture></a>
       </div>
       <ul class="names label" aria-label="The four themes"><li><i style="--p:#FDFDFB" aria-hidden="true"></i>Paper</li><li><i style="--p:#F8F1E3" aria-hidden="true"></i>Sepia</li><li><i style="--p:#2C2C2E" aria-hidden="true"></i>Dusk</li><li><i style="--p:#000000" aria-hidden="true"></i>Night</li></ul>
     </section>
@@ -257,11 +284,19 @@ pre i { font-style: normal; color: var(--muted); user-select: none; }
   </footer>
 </div>
 <script>
-// The page works without this. It fetches the other six views once the page has loaded, so that
-// a word swaps the window at once, unless the browser has been asked to save data.
+// The page works without this. Sidebars has a sentence for each width of window, and a sentence
+// that is not on screen is read out whole, so that word is pointed at the one for this width.
+var narrow = matchMedia("(max-width: 600px)");
+function describe() { document.getElementById("v-sidebars").setAttribute("aria-describedby", narrow.matches ? "c-sidebars-n" : "c-sidebars-w"); }
+describe();
+narrow.addEventListener("change", describe);
+// On a wide screen the other six views are fetched once the page has loaded, so that a word
+// swaps the window at once, unless the browser has been asked to save data. Up to 900 px, where
+// the reader is likely on a phone, a view is fetched when it is chosen.
 addEventListener("load", function () {
   if (navigator.connection && navigator.connection.saveData) return;
-  document.querySelectorAll(".views img[loading=lazy]").forEach(function (i) { i.loading = "eager"; });
+  if (!matchMedia("(min-width: 901px)").matches) return;
+  document.querySelectorAll(".views img.wid").forEach(function (i) { i.loading = "eager"; });
 });
 </script>
 </body>
