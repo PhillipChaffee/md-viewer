@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Says which CI jobs a change needs, from the paths it touches. Prints one
-# line for $GITHUB_OUTPUT:
-#   code=true|false    the Rust jobs: lint, test, proofs, doc-comments, renderer
+# Says which CI jobs a change needs, from the paths it touches. Prints two
+# lines for $GITHUB_OUTPUT:
+#   code=true|false    the Rust jobs: lint, test, doc-comments, renderer
 #                      and the cross-platform cargo check
+#   proofs=true|false  the Kani proofs
 # hygiene and version-sync are not on the list: they always run.
 #
 # Usage: ci-changes.sh <base> <head>   the paths that differ between two commits
@@ -15,11 +16,17 @@
 # the root license files, and Markdown outside the directories whose
 # Markdown the build or a test reads (tests/fixtures and the renderer's
 # examples are compiled into test binaries).
+#
+# proofs is true when a path is something `cargo kani` compiles (the crate,
+# the crates and forks it depends on, the fonts it embeds, the manifests
+# and the toolchain pin) or part of the proof machinery, this script and
+# the workflows included. Integration tests, lint configuration and the
+# other scripts are none of those: Kani never reads them.
 
 set -u -o pipefail
 
 everything() {
-	printf 'code=true\n'
+	printf 'code=true\nproofs=true\n'
 	exit 0
 }
 
@@ -34,13 +41,20 @@ esac
 [ -n "$paths" ] || everything
 
 code=false
+proofs=false
 while IFS= read -r path; do
 	case "$path" in
-	src/* | crates/* | vendor/* | assets/* | tests/* | data/* | scripts/* | .github/*) code=true ;;
+	src/* | crates/* | vendor/* | assets/* | .cargo/* | .github/workflows/* | \
+		Cargo.toml | Cargo.lock | build.rs | rust-toolchain.toml | \
+		run-proofs.sh | scripts/*proof* | scripts/ci-changes.sh)
+		code=true
+		proofs=true
+		;;
+	tests/* | data/* | scripts/* | .github/*) code=true ;;
 	docs/* | screenshots/* | LICENSE* | THIRD_PARTY_NOTICES | *.md) ;;
 	*) code=true ;;
 	esac
 done <<<"$paths"
 
-printf 'code=%s\n' "$code"
-echo "$(wc -l <<<"$paths") changed paths: code=$code" >&2
+printf 'code=%s\nproofs=%s\n' "$code" "$proofs"
+echo "$(wc -l <<<"$paths") changed paths: code=$code proofs=$proofs" >&2

@@ -15,15 +15,17 @@ jobs:
   # Which jobs this change needs. On a pull request it reads the paths the
   # merge commit changes against its first parent, the base branch; on a
   # push to main there is no such list and everything runs. A pull request
-  # that touches only documentation skips the Rust jobs: they report as
-  # skipped, which a required check accepts. scripts/ci-changes.sh holds the
-  # path rules. The jobs below run unless the answer is the word `false`,
-  # so a failure here runs everything.
+  # that touches only documentation skips the Rust jobs, and one that touches
+  # nothing Kani compiles skips the proofs: they report as skipped, which a
+  # required check accepts. scripts/ci-changes.sh holds the path rules. The
+  # jobs below run unless the answer is the word `false`, so a failure here
+  # runs everything.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5  # one shallow checkout and one git diff
     outputs:
       code: ${{ steps.paths.outputs.code }}
+      proofs: ${{ steps.paths.outputs.proofs }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
@@ -144,14 +146,32 @@ jobs:
   # hands every harness to the CBMC model checker. run-proofs.sh fails on a
   # harness that does not verify, on a cover check that is not reached, and
   # on a harness that was declared but did not run.
+  #
+  # The harnesses are spread over the matrix below: each runner takes one
+  # share (PROOF_SHARD in run-proofs.sh says how the files are dealt out)
+  # and holds its own share to the same three conditions. The number of
+  # shares is the length of the matrix, read from strategy.job-total, so
+  # the two cannot disagree and leave a share unrun. All shares restore one
+  # cache: they compile the same crate graph.
+  #
+  # The job runs when the change touches something Kani compiles or the
+  # proof machinery (scripts/ci-changes.sh has the list), and on every push
+  # to main.
   proofs:
+    name: proofs (share ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.proofs != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60  # a cold build of the dependency graph under Kani, then the harnesses
+    strategy:
+      fail-fast: false  # a failure in one share says nothing about the others
+      matrix:
+        shard: [1, 2, 3]
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-proofs
+      group: ${{ github.workflow }}-${{ github.ref }}-proofs-${{ matrix.shard }}
       cancel-in-progress: true
+    env:
+      PROOF_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       # Dependency build scripts probe the same system libraries under Kani.
@@ -170,8 +190,34 @@ jobs:
         run: |
           cargo install --locked --version 0.68.0 kani-verifier
           cargo kani setup
-      - name: Proofs (Kani 0.68.0, every harness and every cover check)
+      - name: Proofs (Kani 0.68.0, every harness and every cover check of this share)
+        env:
+          PROOF_LOG: ${{ runner.temp }}/proofs.log
         run: ./run-proofs.sh
+      # Not a gate: what each harness took, for whoever next changes the
+      # number of shares.
+      - name: Harness results and times
+        if: always()
+        env:
+          PROOF_LOG: ${{ runner.temp }}/proofs.log
+        run: grep -E 'Checking harness|VERIFICATION|Verification Time|cover properties|^Complete' "$PROOF_LOG" || true
+
+  # One check named `proofs` whatever the number of shares: green when
+  # every share verified, or when the change touches nothing they cover
+  # and they were skipped.
+  proofs-result:
+    name: proofs
+    needs: proofs
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every share verified, or none was needed
+        env:
+          RESULT: ${{ needs.proofs.result }}
+        run: |
+          echo "proofs: $RESULT"
+          [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
   doc-comments:
     needs: changes
