@@ -359,6 +359,35 @@ Two things to know before you rely on those gates:
 - **Each exception is listed.** [GATES.md](GATES.md) names every ignored
   advisory, skipped duplicate and allowed lint, with the reason.
 
+## Website
+
+The project's page is a static site in [`docs/`](docs/): one page, a page
+for a wrong address, three font files and three screenshots. Nothing builds
+it. GitHub Pages serves the folder as it is from `main`, at
+`https://phillipchaffee.github.io/md-viewer/`, once **Settings > Pages** is
+set to deploy from the `main` branch and its `/docs` folder. A merge to
+`main` that changes `docs/` republishes it.
+
+To see it on your own machine:
+
+```bash
+python3 -m http.server -d docs
+```
+
+Then open `http://localhost:8000`.
+
+Three things in `docs/` follow the rest of the repository by hand:
+
+- The version in the page's top strip, and the numbers and colors it
+  quotes, are written out. They were checked against `Cargo.toml`,
+  `src/theme/` and `src/layout/` when the page was made.
+- The screenshots in `docs/img/` are copies of three in
+  `screenshots/reader/`, saved as lossless WebP. Pages serves only what is
+  in `docs/`.
+- The social card tags in `docs/index.html` hold the site's whole address,
+  which a card needs. Every link to the site's own files is relative, so
+  the page works under any address.
+
 ## Known limits
 
 - Emoji are in color where Noto Color Emoji is installed, and in the ink of

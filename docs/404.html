@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found: md-viewer</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#FDFDFB">
+<script>
+/* GitHub Pages serves this file for a missing page at any depth, where a
+   relative link would point into the missing folder. This anchors the links
+   below to the site's root: the first folder on github.io, else "/". Without
+   JavaScript they are right for a miss one level down, and the styles are
+   inline so the page reads the same at any depth. */
+(function () {
+  var base = document.createElement("base");
+  base.href = /\.github\.io$/.test(location.hostname) ? "/" + location.pathname.split("/")[1] + "/" : "/";
+  document.head.appendChild(base);
+})();
+</script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+@font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceSerif4-Roman.woff2) format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-style: italic; font-weight: 200 900; font-display: swap; src: url(fonts/SourceSerif4-Italic.woff2) format("woff2"); }
+@font-face { font-family: "Source Code Pro"; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/SourceCodePro.woff2) format("woff2"); }
+:root {
+  --paper:#FDFDFB; --ink:#1F1F1F; --head:#111111; --muted:#6B6B68; --rule:#E3E3DE; --link:#1A5FB4;
+  --serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+  --mono: "Source Code Pro", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 18px/1.6 var(--serif); font-optical-sizing: auto; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.sheet { max-width: 1240px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 72px max(16px, env(safe-area-inset-left, 0px)); }
+@media (min-width: 900px) { .sheet { padding-left: 40px; padding-right: 40px; } }
+.strip { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 18px 0 14px; border-bottom: 1px solid var(--ink); font: 500 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.strip b { color: var(--head); font-weight: 600; }
+.strip .sp { flex: 1; }
+.strip a { color: var(--muted); text-decoration: none; }
+.strip a:hover, .strip a:focus-visible { color: var(--head); text-decoration: underline; }
+.hero { padding: clamp(36px, 7vw, 92px) 0 clamp(30px, 5vw, 60px); }
+h1 { margin: 0; font: italic 300 clamp(40px, 9.3vw, 124px)/.98 var(--serif); letter-spacing: -.028em; color: var(--head); text-wrap: balance; max-width: 12.5em; }
+h1 em { font-style: normal; font-weight: 700; letter-spacing: -.03em; }
+.intro { padding: 28px 0 56px; border-top: 1px solid var(--rule); }
+.intro p { margin: 0 0 1em; font-size: 21px; line-height: 1.52; max-width: 31em; }
+@media (max-width: 760px) { .intro p { font-size: 19px; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header class="strip">
+    <b>md-viewer</b>
+    <span class="sp"></span>
+    <span>404</span>
+    <a href="https://github.com/PhillipChaffee/md-viewer">GitHub</a>
+  </header>
+  <main>
+    <div class="hero">
+      <h1>This sheet is <em>blank</em>.</h1>
+    </div>
+    <div class="intro">
+      <p>There is no page at this address. The <a href="./">md-viewer page</a> has the reader, its four themes and how to install it, and the source is on <a href="https://github.com/PhillipChaffee/md-viewer">GitHub</a>.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>
