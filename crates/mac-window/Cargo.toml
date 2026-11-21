@@ -39,9 +39,11 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 
 # The workspace's lint table (the root Cargo.toml gives each entry its
 # reason), copied because a crate inherits that table whole or not at all,
-# and this crate differs from it in one entry.
+# and this crate differs from it in three entries: `unsafe_code` and
+# `undocumented_unsafe_blocks` below, and `unexpected_cfgs`, which is left
+# out because this crate has no proof harness to declare `cfg(kani)` for.
 [lints.rust]
-# The one difference. The workspace forbids unsafe code; this crate exists
+# The first difference. The workspace forbids unsafe code; this crate exists
 # to hold the two unsafe functions the window needs on a Mac, each behind
 # an `#[expect(unsafe_code, reason)]`. Anything else unsafe here is an
 # error. GATES.md records both exceptions.

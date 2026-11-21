@@ -26,7 +26,7 @@ const BUTTONS: [NSWindowButton; 3] = [
 /// thread.
 #[expect(
     unsafe_code,
-    reason = "the one audited exception in GATES.md: macOS hands out the view behind a raw window handle, and the view above another, only through unsafe calls"
+    reason = "the first audited exception in GATES.md: macOS hands out the view behind a raw window handle, and the view above another, only through unsafe calls"
 )]
 fn title_bar(
     handle: &impl HasWindowHandle,

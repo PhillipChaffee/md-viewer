@@ -73,9 +73,11 @@ comment. The owner accepted this exception.
 | No new dependency versions | It uses the `objc2` crates the window stack already resolves to on a Mac. |
 
 The crate's lint table is a copy of the workspace's, because a crate
-inherits that table whole or not at all. The copy differs in the two
-entries named above. A change to the workspace table has to be made in
-both.
+inherits that table whole or not at all. The copy differs in three
+entries: `unsafe_code` and `clippy::undocumented_unsafe_blocks`, named
+above, and `unexpected_cfgs`, which it leaves out, having no proof harness
+to declare `cfg(kani)` for. A change to the workspace table has to be
+made in both.
 
 ## The second unsafe function: macOS asks before it quits the app
 
