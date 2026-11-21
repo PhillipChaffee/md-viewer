@@ -246,17 +246,20 @@ impl MarkdownApp {
     fn ask_from(&mut self, goal: Goal, from: usize) -> Result<(), Goal> {
         let mut tabs = self.tabs.iter().enumerate().skip(from);
         let unsaved = tabs.find(|(index, tab)| tab.is_dirty() && goal.replaces(*index, tab));
-        let Some((asked, tab)) = unsaved else {
+        let Some((asked, _)) = unsaved else {
             return Err(goal);
         };
-        let question = Question::Unsaved.put_to(tab);
-        self.ask(goal, asked, Question::Unsaved, question);
+        self.ask(goal, asked, Question::Unsaved);
         Ok(())
     }
 
     /// Turn the prompt to the tab at `asked`, with what it asks `about`
-    /// that tab and the `question` as it is put.
-    fn ask(&mut self, goal: Goal, asked: usize, about: Question, question: String) {
+    /// that tab.
+    fn ask(&mut self, goal: Goal, asked: usize, about: Question) {
+        let Some(tab) = self.tabs.get(asked) else {
+            return;
+        };
+        let question = about.put_to(tab);
         // The prompt has to be seen, and the lightbox draws over it.
         self.lightbox.open = None;
         self.closing = CloseState::Asking(PendingClose {
@@ -273,14 +276,9 @@ impl MarkdownApp {
     /// asks about that, and nothing is written yet. Returns the goal once
     /// the tab has nothing unsaved and the way to it is free.
     fn save_for(&mut self, goal: Goal, asked: usize) -> Option<Goal> {
-        let about = Question::Overwrite;
         let tab = self.tabs.get_mut(asked);
-        let overwrites = tab.and_then(|tab| {
-            let overwrites = tab.save_would_overwrite();
-            overwrites.then(|| about.put_to(tab))
-        });
-        if let Some(question) = overwrites {
-            self.ask(goal, asked, about, question);
+        if tab.is_some_and(Tab::save_would_overwrite) {
+            self.ask(goal, asked, Question::Overwrite);
             return None;
         }
         self.save_tab(asked).then_some(goal)
