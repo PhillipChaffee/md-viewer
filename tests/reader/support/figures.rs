@@ -126,21 +126,8 @@ impl Reader {
     pub(crate) fn marks_in(&self, area: Area) -> Vec<Area> {
         let scale = self.scale();
         let drawn = marks(&self.shapes()).into_iter();
-        let mut inside: Vec<Area> = drawn
-            .map(|rect| rect * scale)
-            .map(|rect| Area {
-                left: rect.left(),
-                top: rect.top(),
-                width: rect.width(),
-                height: rect.height(),
-            })
-            .filter(|mark| {
-                mark.left >= area.left
-                    && mark.top >= area.top
-                    && mark.right() <= area.right()
-                    && mark.bottom() <= area.bottom()
-            })
-            .collect();
+        let mut inside: Vec<Area> = drawn.map(|rect| Area::of(rect * scale)).collect();
+        inside.retain(|mark| area.holds(*mark));
         inside.sort_by(|a, b| a.top.total_cmp(&b.top));
         inside
     }
@@ -151,23 +138,9 @@ impl Reader {
         let scale = self.scale();
         let drawn = dots(&self.shapes()).into_iter();
         let mut inside: Vec<(Area, Rgb)> = drawn
-            .map(|(rect, ink)| (rect * scale, ink))
-            .map(|(rect, ink)| {
-                let dot = Area {
-                    left: rect.left(),
-                    top: rect.top(),
-                    width: rect.width(),
-                    height: rect.height(),
-                };
-                (dot, ink)
-            })
-            .filter(|(dot, _)| {
-                dot.left >= area.left
-                    && dot.top >= area.top
-                    && dot.right() <= area.right()
-                    && dot.bottom() <= area.bottom()
-            })
+            .map(|(rect, ink)| (Area::of(rect * scale), ink))
             .collect();
+        inside.retain(|(dot, _)| area.holds(*dot));
         inside.sort_by(|(a, _), (b, _)| a.left.total_cmp(&b.left));
         inside
     }
