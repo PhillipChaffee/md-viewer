@@ -106,8 +106,7 @@ impl MarkdownApp {
         let sort_order = self.file_explorer.sort_order();
         let picked = more
             .and_then(|more| {
-                egui::Popup::menu(&more)
-                    .show(|ui| chrome::scrolled(ui, |ui| explorer_menu(ui, sort_order)))
+                chrome::show_popup(egui::Popup::menu(&more), |ui| explorer_menu(ui, sort_order))
             })
             .and_then(|menu| menu.inner);
         match picked {
@@ -226,9 +225,8 @@ impl MarkdownApp {
         } else {
             response.clicked().then_some(Place::Here)
         };
-        let menu = egui::Popup::context_menu(&response)
-            .style(chrome::popup_style(listing.palette))
-            .show(|ui| chrome::scrolled(ui, |ui| file_context_menu(ui, row.path, listing)));
+        let menu = egui::Popup::context_menu(&response).style(chrome::popup_style(listing.palette));
+        let menu = chrome::show_popup(menu, |ui| file_context_menu(ui, row.path, listing));
         if let Some(place) = menu.and_then(|menu| menu.inner).or(place) {
             clicks.file = Some((row.path.to_path_buf(), place));
         }

@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use crate::app::chrome;
 use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::headers::{Header, Outline};
@@ -160,7 +161,7 @@ fn outline_header(ui: &mut egui::Ui, tab: &Tab, outline: &mut OutlineUi<'_>) {
     let Some(more) = sidebar::header(ui, outline.palette, &header) else {
         return;
     };
-    let picked = egui::Popup::menu(&more).show(outline_menu);
+    let picked = chrome::show_popup(egui::Popup::menu(&more), outline_menu);
     if let Some(click) = picked.and_then(|menu| menu.inner) {
         outline.click = Some(click);
     }

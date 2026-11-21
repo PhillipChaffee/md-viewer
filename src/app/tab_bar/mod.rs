@@ -252,9 +252,10 @@ fn tab_label(
         tab_close_button(ui, &response, label, palette, actions);
     }
 
-    egui::Popup::context_menu(&response)
-        .style(chrome::popup_style(palette))
-        .show(|ui| chrome::scrolled(ui, |ui| tab_context_menu(ui, label, palette, actions)));
+    let menu = egui::Popup::context_menu(&response).style(chrome::popup_style(palette));
+    chrome::show_popup(menu, |ui| {
+        tab_context_menu(ui, label, palette, actions);
+    });
     response.on_hover_ui(|ui| tab_hover(ui, label, palette))
 }
 

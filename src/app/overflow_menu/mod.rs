@@ -29,15 +29,15 @@ impl MarkdownApp {
     /// the button opens and closes it.
     pub(crate) fn overflow_menu(&self, button: &egui::Response, picked: &mut Option<AppAction>) {
         let palette = self.theme.palette();
-        egui::Popup::menu(button)
+        let menu = egui::Popup::menu(button)
             .align(egui::RectAlign::BOTTOM_END)
             .gap(4.0)
             // The zoom row is pressed again and again; a picked row closes
             // the menu itself.
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .sense(chrome::POPUP_SENSE)
-            .style(chrome::popup_style(palette))
-            .show(|ui| chrome::scrolled(ui, |ui| self.rows(ui, picked)));
+            .style(chrome::popup_style(palette));
+        chrome::show_popup(menu, |ui| self.rows(ui, picked));
     }
 
     /// Every row of the menu, top to bottom.

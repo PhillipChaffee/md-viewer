@@ -101,6 +101,15 @@ fn popup_room(window: f32, frame: f32) -> f32 {
     2.0_f32.mul_add(-POPUP_CLEARANCE, window - frame)
 }
 
+/// Show `popup` with `contents` in it. Every menu and popover of the app
+/// is shown through here, so that one too tall for the window scrolls.
+pub(super) fn show_popup<R>(
+    popup: egui::Popup<'_>,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> Option<egui::InnerResponse<R>> {
+    popup.show(|ui| scrolled(ui, contents))
+}
+
 /// Lay out the contents of a menu or popover, behind a scroll bar while
 /// they are taller than the window. Contents that fit are laid out as if
 /// this were not here, and egui puts the sheet where it did.

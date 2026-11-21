@@ -103,13 +103,13 @@ impl MarkdownApp {
         picked: &mut Option<AppAction>,
     ) {
         let palette = self.theme.palette();
-        egui::Popup::from_toggle_button_response(button)
+        let popover = egui::Popup::from_toggle_button_response(button)
             .align(egui::RectAlign::BOTTOM_END)
             .gap(4.0)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .sense(chrome::POPUP_SENSE)
-            .style(chrome::popup_style(palette))
-            .show(|ui| chrome::scrolled(ui, |ui| self.sections(ui, picked)));
+            .style(chrome::popup_style(palette));
+        chrome::show_popup(popover, |ui| self.sections(ui, picked));
     }
 
     /// Everything in the popover, top to bottom.
