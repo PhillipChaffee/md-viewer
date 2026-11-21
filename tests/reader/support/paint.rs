@@ -171,6 +171,15 @@ pub(crate) struct Painted {
 }
 
 impl Painted {
+    /// The characters its first line is drawn with: its words, ending in
+    /// an ellipsis where they are cut short.
+    pub(crate) fn drawn(&self) -> String {
+        self.glyphs
+            .iter()
+            .map(|(character, _)| *character)
+            .collect()
+    }
+
     /// The drawing of the first `character` on its first line, cut from
     /// `sheet`. `None` when the line has no such character.
     pub(crate) fn drawing_of(&self, character: char, sheet: &ColorImage) -> Option<Drawing> {

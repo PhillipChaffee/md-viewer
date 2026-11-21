@@ -340,10 +340,11 @@ impl MarkdownApp {
     }
 
     /// What a launch does once the state is built: note which documents
-    /// are open, remember the ones that were read, and start watching for
-    /// changes.
+    /// are open, name their tabs, remember the ones that were read, and
+    /// start watching for changes.
     fn begin_session(&mut self, file: Option<PathBuf>, watch: bool) {
         self.refresh_open_tab_paths();
+        self.tab_names_changed();
 
         // A document that came back in a tab was read, whatever the list
         // says: a session saved before the list was kept has none, and

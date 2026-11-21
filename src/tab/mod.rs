@@ -13,8 +13,10 @@ use egui_commonmark_extended::CommonMarkCache;
 use crate::headers::{parse_headers, Outline};
 use crate::links::{parse_local_links, resolve_local_link_path, split_link_fragment};
 use crate::search::{find_matches, SearchMatch};
+use crate::tab::names::{shown_names, ShownName};
 use crate::tab::scroll::ScrollCorrections;
 
+pub(crate) mod names;
 #[cfg(kani)]
 mod proofs;
 pub(crate) mod scroll;
@@ -165,6 +167,24 @@ pub(crate) type LinkTarget = (PathBuf, Option<String>);
 /// The [`Tab::serial`] of the next tab to open.
 static NEXT_SERIAL: AtomicU64 = AtomicU64::new(0);
 
+/// Work out what each of `tabs` is called beside the others: by its
+/// document's name, and by its file. Called when a tab opens, closes or
+/// is renamed, never per frame.
+pub(crate) fn name_tabs(tabs: &mut [Tab]) {
+    let shown_by = |name: fn(&Tab) -> &str| {
+        let documents: Vec<(&str, &Path)> = tabs
+            .iter()
+            .map(|tab| (name(tab), tab.path.as_path()))
+            .collect();
+        shown_names(&documents)
+    };
+    let (names, files) = (shown_by(Tab::name), shown_by(Tab::title));
+    for ((tab, name), file) in tabs.iter_mut().zip(names).zip(files) {
+        tab.shown = name;
+        tab.shown_file = file.into_string();
+    }
+}
+
 /// Per-tab state for a document.
 pub(crate) struct Tab {
     /// The document this tab shows, by its path: egui keeps what it
@@ -181,6 +201,12 @@ pub(crate) struct Tab {
     pub(crate) content: String,
     pub(crate) cache: CommonMarkCache,
     pub(crate) document_title: Option<String>,
+    /// What the tab row calls this tab. `name_tabs` works it out from
+    /// every open tab when one opens, closes or is renamed.
+    shown: ShownName,
+    /// What the window and the unsaved-edits question call this tab's
+    /// file, worked out with `shown`.
+    shown_file: String,
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
@@ -254,6 +280,8 @@ impl Tab {
             cache: CommonMarkCache::default(),
             pictures_left: BTreeSet::new(),
             document_title: None,
+            shown: ShownName::default(),
+            shown_file: String::new(),
             kicker: String::new(),
             outline: Outline::default(),
             scroll_offset: 0.0,
@@ -273,6 +301,8 @@ impl Tab {
             pre_edit_view_content_height: 0.0,
         };
         tab.index_content(false);
+        tab.shown = ShownName::plain(tab.name());
+        tab.shown_file = tab.title().to_owned();
         Ok(tab)
     }
 
@@ -385,6 +415,17 @@ impl Tab {
         self.document_title.as_deref().unwrap_or(&self.title)
     }
 
+    /// What the tab row calls this tab, as `name_tabs` last worked it out.
+    pub(crate) const fn shown_name(&self) -> &ShownName {
+        &self.shown
+    }
+
+    /// The file's name, with its folder while another open tab's file
+    /// has the same name, as `name_tabs` last worked it out.
+    pub(crate) fn shown_file(&self) -> &str {
+        &self.shown_file
+    }
+
     pub(crate) fn reload(&mut self) -> io::Result<()> {
         let content = read_document(&self.path)?;
         self.apply_loaded_content(self.path.clone(), content);
@@ -481,13 +522,18 @@ impl Tab {
     /// Bring what is worked out from the text back in line with it after
     /// the editor changed it: the contents, the meta line and the links.
     /// Called once per edit, never per frame.
-    pub(crate) fn content_edited(&mut self) {
+    ///
+    /// Returns whether the edit renamed the tab, by changing the first
+    /// heading: the names of the other tabs can depend on this one's.
+    pub(crate) fn content_edited(&mut self) -> bool {
+        let title = self.document_title.take();
         self.index_content(true);
         if !self.is_dirty() {
             // The text is the file's again: there is nothing left to
             // reload or to save over.
             self.unfollowed = None;
         }
+        self.document_title != title
     }
 
     /// Work out everything that is read off `content`: its line count,

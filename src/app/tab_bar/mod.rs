@@ -5,6 +5,7 @@
 
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 use eframe::egui::{self, Rangef};
 
@@ -14,6 +15,7 @@ use crate::app::disk_notice;
 use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
+use crate::tab::names::ShownName;
 use crate::tab::DiskChange;
 use crate::theme::Palette;
 
@@ -36,6 +38,12 @@ const NAME_WIDTH: Rangef = Rangef {
     min: 26.0,
     max: 162.0,
 };
+/// The least of a tab's name that stays where its folder follows it. The
+/// folder takes the rest at most, so it cannot push the name out. It
+/// comes short enough to fit as a rule (`ShownName` leaves out what the
+/// folders of one name share), so the name is what gives way; only a
+/// folder set in unusually wide letters is cut here, as the last resort.
+const NAME_KEPT: f32 = 32.0;
 /// Diameter of the dot that stands for live reload in a tab's hover text.
 const LIVE_DOT: f32 = 6.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
@@ -58,7 +66,7 @@ struct TabLabel<'a> {
     index: usize,
     /// What its widgets are told apart by: see [`tab_id`].
     serial: u64,
-    title: &'a str,
+    title: &'a ShownName,
     path: &'a Path,
     is_active: bool,
     /// Whether the document is reloaded when its file changes.
@@ -138,7 +146,7 @@ impl MarkdownApp {
                     let label = TabLabel {
                         index,
                         serial: tab.serial,
-                        title: tab.name(),
+                        title: tab.shown_name(),
                         path: &tab.path,
                         is_active: self.front() == Some(index),
                         live,
@@ -238,6 +246,37 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
     }
 }
 
+/// `text` set on one line in the tabs' font, cut short with an ellipsis
+/// where it is wider than `width`.
+fn cut_short(ui: &egui::Ui, text: &str, width: f32) -> Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        text.to_owned(),
+        chrome::label_font(),
+        egui::Color32::PLACEHOLDER,
+    );
+    job.wrap = egui::text::TextWrapping::truncate_at_width(width);
+    ui.painter().layout_job(job)
+}
+
+/// A tab's name set for the row, no wider than a name may be: the name,
+/// and after it the folder that tells the tab from another of its name.
+/// Where the two do not fit, the name is cut short and not the folder,
+/// which is the part the reader tells the tabs apart by, unless the
+/// folder alone is wider than its share of the tab.
+fn title_galleys(
+    ui: &egui::Ui,
+    title: &ShownName,
+) -> (Arc<egui::Galley>, Option<Arc<egui::Galley>>) {
+    let (name, place) = title.parts();
+    let place = (!place.is_empty()).then(|| cut_short(ui, place, NAME_WIDTH.max - NAME_KEPT));
+    let taken = place.as_ref().map_or(0.0, |place| place.size().x);
+    // A text is laid out for the nearest whole width, and a folder is
+    // seldom a whole number wide: what is left for the name is rounded
+    // down here, so that it is not rounded up there, past the tab's width.
+    let left = (NAME_WIDTH.max - taken).floor();
+    (cut_short(ui, name, left), place)
+}
+
 /// Draws one tab: its name, the line under it while it is the active one,
 /// the focus ring while the keyboard is on it, the close button while the
 /// pointer is over the tab or the keyboard is on either, its hover text
@@ -248,14 +287,9 @@ fn tab_label(
     palette: &'static Palette,
     actions: &mut TabPicks,
 ) -> egui::Response {
-    let mut job = egui::text::LayoutJob::simple_singleline(
-        label.title.to_owned(),
-        chrome::label_font(),
-        egui::Color32::PLACEHOLDER,
-    );
-    job.wrap = egui::text::TextWrapping::truncate_at_width(NAME_WIDTH.max);
-    let galley = ui.painter().layout_job(job);
-    let name_width = galley.size().x.max(NAME_WIDTH.min);
+    let (name, place) = title_galleys(ui, label.title);
+    let place_width = place.as_ref().map_or(0.0, |place| place.size().x);
+    let name_width = (name.size().x + place_width).max(NAME_WIDTH.min);
     let width = 2.0_f32.mul_add(TAB_PADDING, name_width) + CLOSE_SIDE;
     let (_, rect) = ui.allocate_space(egui::vec2(width, BAR_HEIGHT));
     let response = ui.interact(rect, tab_id(label.serial), egui::Sense::click());
@@ -264,7 +298,7 @@ fn tab_label(
             egui::WidgetType::SelectableLabel,
             true,
             label.is_active,
-            label.title,
+            label.title.as_str(),
         )
     });
     // egui has no tab among its widget types: a tab is told apart from a
@@ -276,7 +310,7 @@ fn tab_label(
     // The close button is there whether or not it is drawn, so the Tab key
     // finds it right after its tab. A button made only once its tab had the
     // focus would come too late: egui has moved on to the next tab by then.
-    let close = QuietButton::icon_sized(Icon::Close, CLOSE_ICON, CloseName(label.title));
+    let close = QuietButton::icon_sized(Icon::Close, CLOSE_ICON, CloseName(label.title.as_str()));
     let button = close.place(ui, end_square(rect), response.id.with("close"));
 
     // The pointer counts as over the tab while it is over the close button
@@ -285,9 +319,13 @@ fn tab_label(
     let color = chrome::ink(palette, true, label.is_active || pointed);
     let title_corner = egui::pos2(
         rect.left() + TAB_PADDING,
-        rect.center().y - galley.size().y / 2.0,
+        rect.center().y - name.size().y / 2.0,
     );
-    ui.painter().galley(title_corner, galley, color);
+    let place_corner = title_corner + egui::vec2(name.size().x, 0.0);
+    ui.painter().galley(title_corner, name, color);
+    if let Some(place) = place {
+        ui.painter().galley(place_corner, place, color);
+    }
     if label.is_active {
         let line = egui::Rect::from_min_max(
             egui::pos2(rect.left() + TAB_PADDING, rect.bottom() - UNDERLINE),

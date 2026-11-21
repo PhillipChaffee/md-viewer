@@ -30,8 +30,12 @@ processes itself.
   restart, and questions such as `sees`, `is_on`, `page_color`, `column`.
   A tab of the top row is named `tab:` and then its words, as in
   `reader.click("tab:Notes")`: a tab carries its document's first heading,
-  which the page and the contents sidebar show too. `tabs()` lists them
-  and `tab_in_front()` names the one in front.
+  which the page and the contents sidebar show too. Where two open
+  documents share a name, each tab is named with its folder as well, as
+  the row shows it: `reader.click("tab:Notes · guides")`. `tabs()` lists
+  them, `tab_in_front()` names the one in front, and `tab_reads(...)` is
+  what a tab draws, with an ellipsis where its name is cut short or
+  its folder is drawn without what it shares with another's.
   It also reads what a frame painted: the ink and coverage of a picture
   (`picture_ink`, `picture_cover`), the lines and boxes in an area
   (`marks_in`), its dots and their colors (`dots_in`), where a painted

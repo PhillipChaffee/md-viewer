@@ -186,10 +186,11 @@ pub(crate) enum CloseAnswer {
 
 /// The document of `tab` as a question names it: as its tab does, by its
 /// first heading, and by its file, which tells two documents with one
-/// heading apart. A tab named by its file is named once.
+/// heading apart: the file comes with its folder while another open tab's
+/// file has the same name. A tab named by its file is named once.
 fn named(tab: &Tab) -> String {
-    let (name, file) = (tab.name(), tab.title());
-    if name == file {
+    let (name, file) = (tab.name(), tab.shown_file());
+    if name == tab.title() {
         file.to_owned()
     } else {
         format!("“{}” ({file})", shortened(name))

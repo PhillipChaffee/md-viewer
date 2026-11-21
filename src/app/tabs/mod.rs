@@ -7,7 +7,7 @@ use egui_commonmark_extended::animation;
 
 use crate::app::MarkdownApp;
 use crate::recent::{now_epoch_secs, push_recent, DocumentSummary};
-use crate::tab::{Route, Tab};
+use crate::tab::{name_tabs, Route, Tab};
 
 #[cfg(kani)]
 mod proofs;
@@ -250,17 +250,26 @@ impl MarkdownApp {
 
     /// Bring everything that mirrors which document each tab holds back in
     /// line, after a tab opened, closed, or moved to another document: the
-    /// window title, the find bar's matches, the explorer's open-file
-    /// highlight, and the watched paths.
+    /// names in the tab row, the window title, the find bar's matches, the
+    /// explorer's open-file highlight, and the watched paths.
     ///
     /// The find bar holds its matches by a tab's place in the strip. A
     /// place can hold another document after any of these, the first place
     /// included when a document opens into an empty strip.
     fn tab_documents_changed(&mut self) {
-        self.window_title.mark_stale();
+        self.tab_names_changed();
         self.search.invalidate();
         self.refresh_open_tab_paths();
         self.update_watched_paths();
+    }
+
+    /// Work the names of the tabs out again, after the set of tabs
+    /// changed or a tab's document did: on open, close, reload and edit.
+    /// The window is named after the document in front, so its title
+    /// follows.
+    pub(crate) fn tab_names_changed(&mut self) {
+        name_tabs(&mut self.tabs);
+        self.window_title.mark_stale();
     }
 
     /// Record a file in the recent list (most-recent first, deduped, capped),

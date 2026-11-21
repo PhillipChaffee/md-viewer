@@ -26,7 +26,7 @@ fn three_tabs() -> Reader {
 }
 
 /// Two documents called `same.md` in two folders, both headed `Notes`,
-/// each in a tab, the one from `two/` in front.
+/// each in a tab that shows its folder, the one from `two/` in front.
 fn two_of_one_name() -> Reader {
     let mut reader = Reader::with_docs(&[
         ("one/same.md", "# Notes\n\nFirst folder."),
@@ -126,21 +126,21 @@ fn ctrl_and_a_digit_reaches_the_first_nine_of_many() {
 #[test]
 fn two_documents_with_one_name_get_a_tab_each() {
     let mut reader = two_of_one_name();
-    assert_eq!(reader.tabs(), ["Notes", "Notes"]);
+    assert_eq!(reader.tabs(), ["Notes · one", "Notes · two"]);
     reader.assert_sees("Second folder.");
 
-    reader.click_nth("tab:Notes", 0);
+    reader.click("tab:Notes · one");
 
     reader.assert_sees("First folder.");
     reader.assert_hides("Second folder.");
-    assert_eq!(reader.title(), "same.md - Markdown Viewer");
+    assert_eq!(reader.title(), "same.md · one - Markdown Viewer");
 }
 
 #[test]
 fn closing_one_of_two_tabs_with_one_name_leaves_the_other() {
     let mut reader = two_of_one_name();
 
-    reader.middle_click_nth("tab:Notes", 0);
+    reader.middle_click("tab:Notes · one");
 
     reader.assert_sees("Second folder.");
     reader.assert_hides("First folder.");
@@ -248,26 +248,30 @@ fn the_tab_keys_do_nothing_with_one_document_or_none() {
 #[test]
 fn each_tab_keeps_its_own_place_on_the_page() {
     let mut reader = Reader::with_docs(&[
-        ("long.md", &long_document(80)),
-        ("other.md", &long_document(40)),
+        ("reads/long.md", &long_document(80)),
+        ("reads/other.md", &long_document(40)),
     ]);
-    reader.drop_file("other.md");
+    reader.drop_file("reads/other.md");
+    // One heading twice, in one folder: each tab shows its file too.
+    let (long, other) = (
+        "tab:Long read · reads/long.md",
+        "tab:Long read · reads/other.md",
+    );
     assert_eq!(
         reader.tabs(),
-        ["Long read", "Long read"],
-        "one heading twice"
+        ["Long read · reads/long.md", "Long read · reads/other.md"]
     );
-    reader.click_nth("tab:Long read", 0);
+    reader.click(long);
     reader.scroll_down(3000.0);
     let place = reader.text_area("Section 30");
 
-    reader.click_nth("tab:Long read", 1);
+    reader.click(other);
     assert!(reader.in_view("Section 1"), "the other tab is at its start");
     reader.scroll_down(1000.0);
-    reader.click_nth("tab:Long read", 0);
+    reader.click(long);
 
     assert_eq!(reader.text_area("Section 30"), place);
-    reader.click_nth("tab:Long read", 1);
+    reader.click(other);
     assert!(!reader.in_view("Section 1"), "and it kept its own place");
 }
 

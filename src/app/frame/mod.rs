@@ -250,7 +250,7 @@ impl MarkdownApp {
         }
         let title = self.front_tab().map_or_else(
             || "Markdown Viewer".to_string(),
-            |tab| format!("{} - Markdown Viewer", tab.title()),
+            |tab| format!("{} - Markdown Viewer", tab.shown_file()),
         );
         if title != self.window_title.shown {
             self.window_title.shown.clone_from(&title);

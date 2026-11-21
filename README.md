@@ -123,6 +123,14 @@ tab leads back.
 - Tabs in the top row, each named by its document's first heading, with
   back and forward history in each tab. The row is the same with one
   document or many, and tabs that do not fit scroll inside it.
+- Tabs whose documents share a name show their folders too, as
+  `Notes · guides` and `Notes · drafts`, with the folder above where
+  the folders share a name as well (`Notes · a/guides`). A name too long
+  for its tab is cut short before the folder, and a long folder is drawn
+  without what it shares with the other one (`Notes · …-board-1998`). The window's title and the
+  questions about unsaved edits and about overwriting a changed file name
+  a file with its folder in the same way while two open files share a
+  name.
 - On a Mac that row is the window's title bar: the close, minimize and
   zoom buttons sit in it, on its centre line, and the row starts after
   them. Drag an empty part of the row to move the window; double-click
