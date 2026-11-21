@@ -34,7 +34,8 @@ processes itself.
   documents share a name, each tab is named with its folder as well, as
   the row shows it: `reader.click("tab:Notes · guides")`. `tabs()` lists
   them, `tab_in_front()` names the one in front, and `tab_reads(...)` is
-  what a tab draws, with an ellipsis where its name is cut short.
+  what a tab draws, with an ellipsis where its name is cut short or
+  its folder is drawn without what it shares with another's.
   It also reads what a frame painted: the ink and coverage of a picture
   (`picture_ink`, `picture_cover`), the lines and boxes in an area
   (`marks_in`), and what the app asked of the desktop (`opened_in_browser`,

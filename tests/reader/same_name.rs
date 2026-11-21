@@ -224,20 +224,73 @@ fn a_long_name_is_cut_short_before_its_folder() {
     }
 }
 
+/// What each tab reads as on screen, having checked that none is wider
+/// than a tab may be.
+#[track_caller]
+fn tabs_read(reader: &Reader) -> Vec<String> {
+    let tabs = reader.tabs().into_iter();
+    tabs.map(|tab| {
+        let label = format!("tab:{tab}");
+        let width = reader.area_of(&label).width;
+        assert!(width <= WIDEST_TAB, "{tab} is {width} wide");
+        reader.tab_reads(&label)
+    })
+    .collect()
+}
+
 #[test]
-fn a_long_folder_leaves_the_start_of_the_name_in_view() {
+fn long_folders_that_differ_at_their_end_read_differently() {
+    let folders = [
+        "correspondence-with-the-harbour-board-1998",
+        "correspondence-with-the-harbour-board-2004",
+    ];
+    let reader = notes_open(
+        &folders
+            .map(|folder| format!("{folder}/notes.md"))
+            .each_ref()
+            .map(String::as_str),
+    );
+
+    let reads = tabs_read(&reader);
+
+    assert_ne!(reads[0], reads[1], "both tabs paint the same words");
+    for (reads, year) in reads.iter().zip(["1998", "2004"]) {
+        assert!(reads.starts_with("Notes · …"), "{reads}");
+        assert!(reads.ends_with(&format!("board-{year}")), "{reads}");
+    }
+    // A screen reader is told the whole folder.
+    assert_eq!(
+        reader.tabs(),
+        folders.map(|folder| format!("Notes · {folder}"))
+    );
+}
+
+#[test]
+fn namesakes_in_one_long_folder_read_differently() {
     let reader = notes_open(&[
-        "correspondence-with-the-harbour-board-1998/notes.md",
-        "correspondence-with-the-harbour-board-2004/notes.md",
+        "correspondence-with-the-harbour-board/monday.md",
+        "correspondence-with-the-harbour-board/tuesday.md",
     ]);
 
-    for tab in reader.tabs() {
-        let label = format!("tab:{tab}");
-        let reads = reader.tab_reads(&label);
-        assert!(reads.starts_with("Notes · corr"), "{reads}");
-        assert!(reads.ends_with('…'), "{reads}");
-        assert!(reader.area_of(&label).width <= WIDEST_TAB, "{tab}");
-    }
+    let reads = tabs_read(&reader);
+
+    assert_ne!(reads[0], reads[1], "both tabs paint the same words");
+    assert!(reads[0].ends_with("/monday.md"), "{reads:?}");
+    assert!(reads[1].ends_with("/tuesday.md"), "{reads:?}");
+}
+
+#[test]
+fn folders_of_one_name_under_long_folders_read_differently() {
+    let reader = notes_open(&[
+        "papers-of-the-harbour-board-east/guides/notes.md",
+        "papers-of-the-harbour-board-west/guides/notes.md",
+    ]);
+
+    let reads = tabs_read(&reader);
+
+    assert_ne!(reads[0], reads[1], "both tabs paint the same words");
+    assert!(reads[0].ends_with("east/guides"), "{reads:?}");
+    assert!(reads[1].ends_with("west/guides"), "{reads:?}");
 }
 
 #[test]

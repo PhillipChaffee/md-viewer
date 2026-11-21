@@ -159,11 +159,110 @@ fn a_shown_name_is_its_name_and_what_follows_it() {
     assert_eq!(ShownName::default().parts(), ("", ""));
 }
 
+/// What the tab row draws after the name of each of `documents`.
+fn drawn_after(documents: &[(&str, &str)]) -> Vec<String> {
+    let documents: Vec<(&str, &Path)> = documents
+        .iter()
+        .map(|(name, path)| (*name, Path::new(path)))
+        .collect();
+    let names = shown_names(&documents).into_iter();
+    names.map(|name| name.parts().1.to_owned()).collect()
+}
+
+#[test]
+fn long_places_are_drawn_without_what_they_share() {
+    let years = [
+        (
+            "Notes",
+            "/x/correspondence-with-the-harbour-board-1998/notes.md",
+        ),
+        (
+            "Notes",
+            "/x/correspondence-with-the-harbour-board-2004/notes.md",
+        ),
+    ];
+    assert_eq!(drawn_after(&years), [" · …-board-1998", " · …-board-2004"]);
+    assert_eq!(
+        shown(&years),
+        [
+            "Notes · correspondence-with-the-harbour-board-1998",
+            "Notes · correspondence-with-the-harbour-board-2004"
+        ],
+        "a screen reader is told the whole place"
+    );
+
+    let days = [
+        ("Notes", "/x/the-harbour-board/monday.md"),
+        ("Notes", "/x/the-harbour-board/tuesday.md"),
+    ];
+    assert_eq!(drawn_after(&days), [" · …d/monday.md", " · …/tuesday.md"]);
+
+    let sides = [
+        ("Notes", "/papers-of-the-harbour-board-east/guides/notes.md"),
+        ("Notes", "/papers-of-the-harbour-board-west/guides/notes.md"),
+    ];
+    assert_eq!(drawn_after(&sides), [" · …east/guides", " · …west/guides"]);
+}
+
+#[test]
+fn a_long_place_keeps_its_end_where_it_shares_all_of_itself() {
+    // The first document's name reads as the second's with its folder,
+    // so it shows a folder too, and is the only one of its name.
+    let names = drawn_after(&[
+        ("A · b", "/q/a-folder-with-a-long-name-indeed/x.md"),
+        ("A", "/w/b/y.md"),
+        ("A", "/w/c/z.md"),
+    ]);
+
+    assert_eq!(names, [" · …name-indeed", " · w/b", " · c"]);
+}
+
+#[test]
+fn a_place_that_differs_for_longer_than_a_tab_draws_is_left_whole() {
+    let names = drawn_after(&[
+        ("Notes", "/x/aaaaaaaaaaaaaaaaaaaaaaaa/notes.md"),
+        ("Notes", "/x/bbbbbbbbbbbbbbbbbbbbbbbb/notes.md"),
+    ]);
+
+    assert_eq!(
+        names,
+        [" · aaaaaaaaaaaaaaaaaaaaaaaa", " · bbbbbbbbbbbbbbbbbbbbbbbb"]
+    );
+}
+
+#[test]
+fn a_short_place_that_another_tab_already_reads_as_is_not_used() {
+    let names = drawn_after(&[
+        (
+            "Notes",
+            "/x/correspondence-with-the-harbour-board-1998/notes.md",
+        ),
+        (
+            "Notes",
+            "/x/correspondence-with-the-harbour-board-2004/notes.md",
+        ),
+        ("Notes · …-board-1998", "/x/odd.md"),
+    ]);
+
+    assert_eq!(
+        names,
+        [
+            " · correspondence-with-the-harbour-board-1998",
+            " · …-board-2004",
+            ""
+        ]
+    );
+}
+
 /// The names and paths the property below draws its documents from:
 /// namesakes, folders of one name at several depths, files in one folder,
-/// a path that is a prefix of another, and names that hold the separator.
+/// a path that is a prefix of another, folders too long for a tab, and
+/// names that hold the separator.
 const NAMES: [&str; 4] = ["Notes", "Plan", "Notes · guides", "Notes · a/guides"];
-const PATHS: [&str; 12] = [
+const PATHS: [&str; 15] = [
+    "/x/correspondence-with-the-harbour-board-1998/notes.md",
+    "/x/correspondence-with-the-harbour-board-2004/notes.md",
+    "/x/correspondence-with-the-harbour-board-2004/plan.md",
     "/a/guides/notes.md",
     "/b/guides/notes.md",
     "/a/guides/plan.md",
@@ -216,6 +315,8 @@ fn documents_at_different_paths_are_never_shown_the_same() {
             for ((other, at), other_as) in shown.clone() {
                 let told_apart = shown_as != other_as;
                 assert!(told_apart || path == at, "{documents:?} as {names:?}");
+                let drawn_apart = shown_as.parts() != other_as.parts();
+                assert!(drawn_apart || path == at, "{documents:?} as {names:?}");
                 assert!(!told_apart || (name, path) != (other, at), "{documents:?}");
             }
         }

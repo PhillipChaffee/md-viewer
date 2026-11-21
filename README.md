@@ -109,7 +109,8 @@ has one. The Home button again, Back, or a click on a tab leads back.
 - Tabs whose documents share a name show their folders too, as
   `Notes · guides` and `Notes · drafts`, with the folder above where
   the folders share a name as well (`Notes · a/guides`). A name too long
-  for its tab is cut short before the folder. The window's title and the
+  for its tab is cut short before the folder, and a long folder is drawn
+  without what it shares with the other one (`Notes · …-board-1998`). The window's title and the
   question about unsaved edits name a file with its folder in the same
   way while two open files share a name.
 - On a Mac that row is the window's title bar: the close, minimize and

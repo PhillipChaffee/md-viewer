@@ -34,9 +34,11 @@ const NAME_WIDTH: Rangef = Rangef {
     max: 162.0,
 };
 /// The least of a tab's name that stays where its folder follows it. The
-/// folder takes the rest at most, so a long folder cannot push the name
-/// out, and the name is what gives way to a short one.
-const NAME_KEPT: f32 = 44.0;
+/// folder takes the rest at most, so it cannot push the name out. It
+/// comes short enough to fit as a rule (`ShownName` leaves out what the
+/// folders of one name share), so the name is what gives way; only a
+/// folder set in unusually wide letters is cut here, as the last resort.
+const NAME_KEPT: f32 = 32.0;
 /// Diameter of the dot that stands for live reload in a tab's hover text.
 const LIVE_DOT: f32 = 6.0;
 const CONTEXT_MENU_WIDTH: f32 = 140.0;
@@ -211,7 +213,8 @@ fn cut_short(ui: &egui::Ui, text: &str, width: f32) -> Arc<egui::Galley> {
 /// A tab's name set for the row, no wider than a name may be: the name,
 /// and after it the folder that tells the tab from another of its name.
 /// Where the two do not fit, the name is cut short and not the folder,
-/// which is the part the reader tells the tabs apart by.
+/// which is the part the reader tells the tabs apart by, unless the
+/// folder alone is wider than its share of the tab.
 fn title_galleys(
     ui: &egui::Ui,
     title: &ShownName,
