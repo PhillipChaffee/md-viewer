@@ -19,6 +19,10 @@ const UNSAVED_DOT: (u32, u32) = (911, 20);
 /// its side. The page is blank there without the notice.
 const NOTICE_SIGN: (u32, u32, u32) = (14, 47, 20);
 
+/// The middle of the window, which a prompt lays its sheet in: left, top,
+/// width and height.
+const SHEET: (u32, u32, u32, u32) = (342, 175, 500, 400);
+
 /// Start `md-viewer <args>` on `screen`, attached to the test.
 fn show(home: &Home, screen: &Screen, args: &[&str]) -> Running {
     let mut command = home.md_viewer(args);
@@ -149,6 +153,26 @@ fn quit_with_an_unsaved_edit<'screen>(
     (app, window)
 }
 
+/// Press `key` at a prompt to move the keyboard to another answer, and
+/// wait until the ring around the answer it is on is seen somewhere else:
+/// until the sheet, once it has faded in, looks different.
+fn move_to_another_answer(home: &Home, window: &Window<'_>, key: &str) {
+    let sheet = || window.picture(home.root(), SHEET);
+    let mut before = sheet();
+    let at_rest = wait_for(|| {
+        let now = sheet();
+        let unchanged = now == before;
+        before = now;
+        unchanged.then_some(())
+    });
+    assert!(at_rest.is_some(), "the prompt never stopped changing");
+
+    window.press(key);
+
+    let moved = wait_for(|| (sheet() != before).then_some(()));
+    assert!(moved.is_some(), "{key} moved the keyboard nowhere");
+}
+
 #[test]
 fn ctrl_q_with_unsaved_edits_asks_and_save_writes_them_before_the_window_closes() {
     let Some(screen) = Screen::start() else {
@@ -174,7 +198,7 @@ fn discard_at_the_quit_prompt_closes_the_window_and_writes_nothing() {
     let home = Home::new();
     let (mut app, window) = quit_with_an_unsaved_edit(&home, &screen);
 
-    window.press("Tab");
+    move_to_another_answer(&home, &window, "Tab");
     window.press("Return");
 
     assert_eq!(app.exit_code(), Some(0), "Discard did not go on to quit");
@@ -217,7 +241,7 @@ fn a_file_changed_under_unsaved_edits_is_announced_and_a_save_asks_before_it_wri
 
     let asked = window.press_ctrl("s", || window.pixel(home.root(), x, y) != SEPIA);
     assert!(asked, "Ctrl+S asked nothing the second time");
-    window.press("shift+Tab");
+    move_to_another_answer(&home, &window, "shift+Tab");
     window.press("Return");
     let written = wait_for(|| on_disk().contains("Mine. ").then_some(()));
     assert!(written.is_some(), "Overwrite wrote {:?}", on_disk());
