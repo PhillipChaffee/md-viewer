@@ -2,15 +2,19 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use eframe::egui;
 
-use crate::app::sidebar::{self, Chevron, Row, Side};
+use crate::app::chrome::{self, MenuRow};
+use crate::app::shortcuts::hints::Hints;
+use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
 use crate::explorer::{FileTreeNode, SortOrder};
+use crate::icons::Icon;
 use crate::layout::EXPLORER_RIGHT_RESIZE_GUTTER;
 use crate::theme::Palette;
 
@@ -19,21 +23,26 @@ mod proofs;
 #[cfg(test)]
 mod tests;
 
-/// What the reader's clicks on the listing ask of the app.
-#[derive(Default)]
-struct ExplorerAction {
-    /// File selected with the primary mouse button. Whether it replaces
-    /// the active document or opens a tab is the Ctrl modifier's say.
-    file_to_open: Option<PathBuf>,
-    /// File to close (middle-click on open file).
-    file_to_close: Option<PathBuf>,
+/// Width of a file's menu: room for its longest row and the hint beside it.
+const FILE_MENU_WIDTH: f32 = 200.0;
+/// What the button at the end of a file's row does, as its tooltip says it.
+const NEW_TAB_BUTTON: &str = "Open in new tab";
+
+/// Where a file picked from the listing is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Place {
+    /// In the tab in front, in place of what it shows.
+    Here,
+    /// In a tab of its own, or the tab it already has.
+    NewTab,
 }
 
 /// What one frame's rows were clicked for. A later row's click replaces an
 /// earlier one of its kind.
 #[derive(Default)]
 struct TreeClicks {
-    files: ExplorerAction,
+    /// The file to show, and where.
+    file: Option<(PathBuf, Place)>,
     /// The folder to open or close, once the rows are drawn.
     dir_to_toggle: Option<PathBuf>,
 }
@@ -48,9 +57,9 @@ enum MenuPick {
 }
 
 impl MarkdownApp {
-    /// Render the file explorer sidebar, then open or close the files its
-    /// rows were clicked for. `in_new_tab` is whether a clicked file gets a
-    /// tab of its own.
+    /// Render the file explorer sidebar, then show the file its rows were
+    /// clicked for. With `in_new_tab`, the command key held, the file gets
+    /// a tab of its own whatever was clicked.
     pub(crate) fn render_file_explorer(&mut self, ctx: &egui::Context, in_new_tab: bool) {
         if !self.show_explorer {
             return;
@@ -67,32 +76,18 @@ impl MarkdownApp {
                 bottom: 8,
             },
         };
-        let (action, width) = panel.show(ctx, palette, self.explorer_width, |ui| {
+        let (picked, width) = panel.show(ctx, palette, self.explorer_width, |ui| {
             // The header stays outside the ScrollArea.
             self.explorer_header(ui, palette);
             self.explorer_tree(ui, palette)
         });
         self.explorer_width = width;
-        self.apply_file_clicks(action, in_new_tab);
-    }
-
-    /// Open and close what the file rows were clicked for.
-    fn apply_file_clicks(&mut self, action: ExplorerAction, in_new_tab: bool) {
         // Explorer matches document links: primary click replaces the active
         // document, while Ctrl/Cmd+click opens (or focuses) a separate tab.
-        if let Some(path) = action.file_to_open {
-            if in_new_tab {
-                self.open_in_new_tab(path);
-            } else {
-                self.navigate_active_tab_to(&path);
-            }
-        }
-
-        // Close tab from explorer (middle-click on open file)
-        if let Some(path) = action.file_to_close {
-            if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-                self.request_close_tab(idx);
-            }
+        match picked {
+            Some((path, Place::Here)) if !in_new_tab => self.navigate_active_tab_to(&path),
+            Some((path, _)) => self.open_in_new_tab(path),
+            None => {}
         }
     }
 
@@ -128,13 +123,18 @@ impl MarkdownApp {
     }
 
     /// The scrollable file tree. Applies a directory toggle itself and
-    /// returns any file click.
-    fn explorer_tree(&mut self, ui: &mut egui::Ui, palette: &Palette) -> ExplorerAction {
+    /// returns the file a row was clicked for, with where to show it.
+    fn explorer_tree(
+        &mut self,
+        ui: &mut egui::Ui,
+        palette: &'static Palette,
+    ) -> Option<(PathBuf, Place)> {
         let active_tab = self.front_tab();
         let listing = Listing {
             palette,
             open_paths: &self.open_tab_paths,
             current: active_tab.map(|tab| tab.path.as_path()),
+            hints: &self.hints,
         };
 
         let mut clicks = TreeClicks::default();
@@ -156,7 +156,7 @@ impl MarkdownApp {
             // newly expanded/collapsed directory.
             self.reconcile_explorer_watches();
         }
-        clicks.files
+        clicks.file
     }
 
     /// Render a single node in the file tree (recursive). Clicks are
@@ -199,24 +199,36 @@ impl MarkdownApp {
         listing: &Listing<'_>,
         clicks: &mut TreeClicks,
     ) {
-        let is_open = listing.open_paths.contains(row.path);
+        let new_tab = NewTabName(row.name);
         let shown = Row {
             text: row.name,
             indent: row.indent(),
             current: listing.current == Some(row.path),
             // A file's name lines up with the names of the folders beside it.
             chevron: Chevron::Blank,
+            // The dot of a file that has a tab gives way to the button.
+            end: End::Button {
+                icon: Icon::NewTab,
+                label: &new_tab,
+                marked: listing.open_paths.contains(row.path),
+            },
         };
-        let response = sidebar::row(ui, listing.palette, &shown).response;
+        let drawn = sidebar::row(ui, listing.palette, &shown);
+        let response = drawn.response;
 
-        if response.clicked() {
-            clicks.files.file_to_open = Some(row.path.to_path_buf());
+        // A middle click opens a tab, as a browser's does on a link.
+        let on_button = new_tab_button(drawn.button, listing);
+        let place = if on_button || response.middle_clicked() {
+            Some(Place::NewTab)
+        } else {
+            response.clicked().then_some(Place::Here)
+        };
+        let menu = egui::Popup::context_menu(&response)
+            .style(chrome::popup_style(listing.palette))
+            .show(|ui| file_context_menu(ui, row.path, listing));
+        if let Some(place) = menu.and_then(|menu| menu.inner).or(place) {
+            clicks.file = Some((row.path.to_path_buf(), place));
         }
-        // Middle-click to close tab (only if file is open)
-        if response.middle_clicked() && is_open {
-            clicks.files.file_to_close = Some(row.path.to_path_buf());
-        }
-        response.context_menu(|ui| file_context_menu(ui, row.path));
         self.paint_flash(ui, row.path, response.rect);
     }
 
@@ -237,6 +249,7 @@ impl MarkdownApp {
             } else {
                 Chevron::Closed
             },
+            end: End::Nothing,
         };
         let response = sidebar::row(ui, palette, &shown).response;
 
@@ -266,11 +279,13 @@ impl MarkdownApp {
 
 /// What every row of one frame's listing is drawn with.
 struct Listing<'a> {
-    palette: &'a Palette,
+    palette: &'static Palette,
     /// The documents open in a tab.
     open_paths: &'a HashSet<PathBuf>,
     /// The document the active tab shows.
     current: Option<&'a Path>,
+    /// How the click that opens a file in a tab of its own is written.
+    hints: &'a Hints,
 }
 
 /// One explorer row: the node it shows and how deep it sits in the tree.
@@ -319,20 +334,54 @@ fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
     picked
 }
 
-fn file_context_menu(ui: &mut egui::Ui, path: &Path) {
-    if ui.button("Copy Contents").clicked() {
+/// What a screen reader calls the button at the end of the row of the file
+/// named: every file in view has one, so each says whose it is. The words
+/// are put together when they are asked for, and a frame nothing listens to
+/// asks for none.
+struct NewTabName<'a>(&'a str);
+
+impl fmt::Display for NewTabName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Open {} in new tab", self.0)
+    }
+}
+
+/// Whether the button at the end of a file's row was clicked. Its tooltip
+/// names the click that does the same on the row.
+fn new_tab_button(button: Option<egui::Response>, listing: &Listing<'_>) -> bool {
+    button.is_some_and(|button| {
+        let clicked = button.clicked();
+        listing.hints.click_tooltip(button, NEW_TAB_BUTTON);
+        clicked
+    })
+}
+
+/// A file's menu: the two ways to open it, then what can be copied from
+/// it. Returns where the reader asked for the file to be shown.
+fn file_context_menu(ui: &mut egui::Ui, path: &Path, listing: &Listing<'_>) -> Option<Place> {
+    let palette = listing.palette;
+    ui.set_width(FILE_MENU_WIDTH);
+    let here = MenuRow::new("Open").flush().show(ui, palette).clicked();
+    let new_tab = MenuRow::new("Open in New Tab").shortcut(listing.hints.command_click());
+    let new_tab = new_tab.flush().show(ui, palette).clicked();
+    chrome::hairline(ui, palette);
+
+    let copy = |ui: &mut egui::Ui, what| MenuRow::new(what).flush().show(ui, palette).clicked();
+    if copy(ui, "Copy Contents") {
         if let Ok(contents) = fs::read_to_string(path) {
             ui.ctx().copy_text(contents);
         }
-        ui.close();
     }
-    if ui.button("Copy Path").clicked() {
+    if copy(ui, "Copy Path") {
         ui.ctx().copy_text(path.display().to_string());
-        ui.close();
     }
-    if ui.button("Copy File URI").clicked() {
+    if copy(ui, "Copy File URI") {
         ui.ctx().copy_text(format!("file://{}", path.display()));
-        ui.close();
+    }
+    if new_tab {
+        Some(Place::NewTab)
+    } else {
+        here.then_some(Place::Here)
     }
 }
 

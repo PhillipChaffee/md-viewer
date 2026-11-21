@@ -346,20 +346,18 @@ fn an_explorer_click_replaces_the_document_and_ctrl_click_adds_a_tab() {
 }
 
 #[test]
-fn a_middle_click_on_an_open_file_in_the_explorer_closes_its_tab() {
+fn a_middle_click_on_a_file_in_the_explorer_opens_a_tab_and_closes_none() {
     let mut harness = with_explorer_listed();
-    let c = harness.path("c.md");
-    harness.app_mut().open_in_new_tab(c);
-    harness.settle();
 
-    let closed_file = explorer_row(&harness, "b.md");
-    harness.click_with(closed_file, PointerButton::Middle, Modifiers::NONE);
-    assert_eq!(harness.app().tabs.len(), 2, "b.md has no tab to close");
+    let unopened = explorer_row(&harness, "b.md");
+    harness.click_with(unopened, PointerButton::Middle, Modifiers::NONE);
+    assert_eq!(harness.app().tabs.len(), 2);
+    assert_eq!(harness.active_path(), harness.path("b.md"));
 
     let open_file = explorer_row(&harness, "a.md");
     harness.click_with(open_file, PointerButton::Middle, Modifiers::NONE);
-    assert_eq!(harness.app().tabs.len(), 1);
-    assert_eq!(harness.active_path(), harness.path("c.md"));
+    assert_eq!(harness.app().tabs.len(), 2, "a.md keeps the tab it has");
+    assert_eq!(harness.active_path(), harness.path("a.md"));
 }
 
 const LINKING_DOCUMENT: &str = "# A\n\n[to b](b.md)\n\n[to details](b.md#details)\n";
