@@ -9,7 +9,7 @@ use eframe::egui::{self, Event, Key, Modifiers, PointerButton};
 use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::{CLOSE_SIDE, NAME_WIDTH, TAB_PADDING, UNDERLINE};
-use crate::app::chrome::BAR_HEIGHT;
+use crate::app::chrome::{BAR_HEIGHT, BUTTON_SIDE};
 use crate::app::content::tests::label_harness::LabelHarness;
 use crate::test_support::{assert_close, painted_shapes};
 
@@ -225,6 +225,40 @@ fn enter_on_a_close_button_the_keyboard_is_on_closes_its_tab() {
         [harness.path("a.md"), harness.path("c.md")]
     );
     assert_eq!(active_path(&harness), harness.path("c.md"));
+}
+
+#[test]
+fn the_ring_of_a_tab_the_keyboard_is_on_is_as_tall_as_a_button_and_clear_of_the_underline() {
+    let rings = |harness: &LabelHarness| -> Vec<egui::Rect> {
+        let accent = harness.state().theme.palette().accent;
+        let shapes = painted_shapes(harness.output()).into_iter();
+        let outlines = shapes.filter_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if rect.fill == egui::Color32::TRANSPARENT && rect.stroke.color == accent =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        });
+        outlines.collect()
+    };
+    let mut harness = three_tabs();
+    assert!(rings(&harness).is_empty(), "nothing has the keyboard");
+    harness.get_by_label("c.md").hover();
+    harness.frames(2);
+    assert!(rings(&harness).is_empty(), "the pointer draws no ring");
+
+    tab_to(&mut harness, "c.md");
+
+    let [ring] = rings(&harness)[..] else {
+        panic!("one ring: {:?}", rings(&harness));
+    };
+    let tab = harness.get_by_label("c.md").rect();
+    assert_close(ring.height(), BUTTON_SIDE);
+    assert_close(ring.center().y, tab.center().y);
+    assert_close(ring.left(), tab.left());
+    assert_close(ring.right(), tab.right());
+    assert!(ring.bottom() < tab.bottom() - UNDERLINE, "above the line");
 }
 
 #[test]

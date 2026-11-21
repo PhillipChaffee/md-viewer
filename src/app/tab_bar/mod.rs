@@ -9,7 +9,7 @@ use std::path::Path;
 use eframe::egui::{self, Rangef};
 
 use crate::app::action::AppAction;
-use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT};
+use crate::app::chrome::{self, MenuRow, QuietButton, BAR_HEIGHT, BUTTON_SIDE};
 use crate::app::top_bar::{new_tab_span, part, pick, tabs_width};
 use crate::app::MarkdownApp;
 use crate::icons::Icon;
@@ -194,9 +194,9 @@ fn tab_hover(ui: &mut egui::Ui, label: &TabLabel<'_>, palette: &Palette) {
 }
 
 /// Draws one tab: its name, the line under it while it is the active one,
-/// the close button while the pointer is over the tab or the keyboard is
-/// on either, its hover text and its context menu. Returns the tab's
-/// response.
+/// the focus ring while the keyboard is on it, the close button while the
+/// pointer is over the tab or the keyboard is on either, its hover text
+/// and its context menu. Returns the tab's response.
 fn tab_label(
     ui: &mut egui::Ui,
     label: &TabLabel<'_>,
@@ -250,6 +250,10 @@ fn tab_label(
         );
         ui.painter().rect_filled(line, 0.0, palette.accent);
     }
+    // As tall as the ring of the buttons beside the tabs, so it clears the
+    // line under the active tab and the edge of the bar.
+    let ring = rect.shrink2(egui::vec2(0.0, (BAR_HEIGHT - BUTTON_SIDE) / 2.0));
+    chrome::focus_ring(ui, palette, &response, ring);
     if pointed || button.has_focus() {
         close.paint(ui, palette, &button);
     }

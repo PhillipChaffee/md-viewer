@@ -92,6 +92,33 @@ fn the_menu_button_of_each_sidebar_has_the_ring_while_the_keyboard_is_on_it() {
 }
 
 #[test]
+fn a_tab_the_keyboard_is_on_has_the_ring_of_a_top_row_button() {
+    let mut reader = three_tabs();
+
+    assert_ring_follows_the_keyboard(&mut reader, "tab:Beta");
+    assert_ring_follows_the_keyboard(&mut reader, "tab:Gamma");
+}
+
+#[test]
+fn the_ring_is_in_the_accent_of_each_theme() {
+    let mut reader = desk();
+    let mut seen = Vec::new();
+
+    for _ in 0..4 {
+        let ring = button_ring(&mut reader);
+        for label in ["changes.md", "Explorer options", "tab:Read me"] {
+            reader.tab_to(label);
+            assert_eq!(reader.ring_around(label), Some(ring), "{label}");
+        }
+        seen.push(ring);
+        reader.press("Ctrl+D");
+    }
+
+    seen.dedup();
+    assert!(seen.len() > 1, "the ring follows the theme: {seen:?}");
+}
+
+#[test]
 fn the_tab_key_goes_from_each_tab_to_its_close_button_and_then_on() {
     let mut reader = three_tabs();
     point_away(&mut reader);
