@@ -55,6 +55,15 @@ impl LiveReload {
     }
 }
 
+/// What reloading the tabs that show one file replaced.
+#[derive(Clone, Copy)]
+struct Reloaded {
+    /// Whether any tab took the file's new text.
+    any: bool,
+    /// Whether the tab in front did.
+    in_front: bool,
+}
+
 impl MarkdownApp {
     /// Turns the setting off when it is on and on when it is off, whether
     /// or not there is anything to watch. Turned on with nothing to watch,
@@ -225,6 +234,7 @@ impl MarkdownApp {
     pub(crate) fn reload_changed_tabs(&mut self, changed_paths: Vec<PathBuf>) {
         let now = Instant::now();
         let mut refresh_directories = HashSet::new();
+        let mut any_reloaded = false;
 
         for path in changed_paths {
             self.flash_changed_path(&path, now);
@@ -238,14 +248,18 @@ impl MarkdownApp {
             // If the active tab gets reloaded while the find bar is open, its
             // `search_matches` will be cleared by `Tab::reload`. Force a rebuild
             // on the next frame by invalidating the cache-validity shadow state.
-            if self.reload_tabs_showing(&path) && self.search.is_open {
+            let reloaded = self.reload_tabs_showing(&path);
+            any_reloaded |= reloaded.any;
+            if reloaded.in_front && self.search.is_open {
                 self.search.invalidate();
             }
         }
 
         // A reloaded document may have another first heading, which names
         // its tab.
-        self.tab_names_changed();
+        if any_reloaded {
+            self.tab_names_changed();
+        }
 
         // Refresh only affected parents instead of rebuilding the entire tree.
         for directory in refresh_directories {
@@ -267,9 +281,9 @@ impl MarkdownApp {
         }
     }
 
-    /// Reloads every tab showing `path` from disk. Returns whether a reload
-    /// replaced the document the active tab shows.
-    fn reload_tabs_showing(&mut self, path: &Path) -> bool {
+    /// Reloads every tab showing `path` from disk, and says what that
+    /// replaced.
+    fn reload_tabs_showing(&mut self, path: &Path) -> Reloaded {
         let active_shows_path = self.front_tab().is_some_and(|tab| tab.path == path);
         let mut reloaded = false;
         for tab in self.tabs.iter_mut().filter(|tab| tab.path == path) {
@@ -290,6 +304,9 @@ impl MarkdownApp {
                 }
             }
         }
-        reloaded && active_shows_path
+        Reloaded {
+            any: reloaded,
+            in_front: reloaded && active_shows_path,
+        }
     }
 }
