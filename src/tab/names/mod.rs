@@ -45,6 +45,11 @@ impl ShownName {
         &self.whole
     }
 
+    /// The whole of it, to keep where only the whole is read.
+    pub(crate) fn into_string(self) -> String {
+        self.whole
+    }
+
     /// The name, and what follows it: the separator and the place, or
     /// nothing. A row short of room cuts the name and keeps the rest.
     pub(crate) fn parts(&self) -> (&str, &str) {

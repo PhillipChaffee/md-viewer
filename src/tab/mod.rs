@@ -112,7 +112,7 @@ pub(crate) fn name_tabs(tabs: &mut [Tab]) {
     let (names, files) = (shown_by(Tab::name), shown_by(Tab::title));
     for ((tab, name), file) in tabs.iter_mut().zip(names).zip(files) {
         tab.shown = name;
-        tab.shown_file = file;
+        tab.shown_file = file.into_string();
     }
 }
 
@@ -130,7 +130,7 @@ pub(crate) struct Tab {
     shown: ShownName,
     /// What the window and the unsaved-edits question call this tab's
     /// file, worked out with `shown`.
-    shown_file: ShownName,
+    shown_file: String,
     /// The meta line above the document (`file-name · N min read`),
     /// worked out when the content is loaded.
     pub(crate) kicker: String,
@@ -198,7 +198,7 @@ impl Tab {
             pictures_left: BTreeSet::new(),
             document_title: None,
             shown: ShownName::default(),
-            shown_file: ShownName::default(),
+            shown_file: String::new(),
             kicker: String::new(),
             outline: Outline::default(),
             scroll_offset: 0.0,
@@ -219,7 +219,7 @@ impl Tab {
         };
         tab.index_content(false);
         tab.shown = ShownName::plain(tab.name());
-        tab.shown_file = ShownName::plain(tab.title());
+        tab.shown_file = tab.title().to_owned();
         Ok(tab)
     }
 
@@ -270,7 +270,7 @@ impl Tab {
     /// The file's name, with its folder while another open tab's file
     /// has the same name, as `name_tabs` last worked it out.
     pub(crate) fn shown_file(&self) -> &str {
-        self.shown_file.as_str()
+        &self.shown_file
     }
 
     pub(crate) fn reload(&mut self) -> io::Result<()> {
