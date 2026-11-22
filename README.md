@@ -69,6 +69,11 @@ and honor the column alignment the Markdown asks for.
 
 ![A table, a code block, lists and a sequence diagram](screenshots/reader/sepia-table-code-lists.png)
 
+Code in a line of prose is set at the size of the text around it and
+stands on the same baseline, in a tint of its own and with no box.
+
+![Inline code in a paragraph, at the size of the prose and on its baseline](screenshots/reader/inline-code.png)
+
 ### Sidebars when you need them
 
 A file list on the left and a table of contents on the right. The contents
@@ -116,8 +121,9 @@ tab leads back.
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
   font presets and any installed font family are under **Aa → Fonts…**.
 - Code in a line of prose has no box. It is the size of the text around
-  it, on the same baseline, and in a tint of its own, warm or on Sepia a muted olive,
-  which keeps the same 7:1 contrast as body text on all four themes.
+  it, on the same baseline, and in a tint of its own, warm or on Sepia a
+  muted olive, which keeps the same 7:1 contrast as body text on all four
+  themes.
 - A line ends only where prose can break. A bracket, a comma, a full stop
   or a letter written against a piece of code, a link or bold text stays
   on the line with it.
