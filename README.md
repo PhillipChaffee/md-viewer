@@ -107,8 +107,8 @@ tab leads back.
   code in its companion,
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
   font presets and any installed font family are under **Aa → Fonts…**.
-- Code in a line of prose has no box. It is a little smaller than the text
-  around it and in a tint of its own, warm or on Sepia a muted olive,
+- Code in a line of prose has no box. It is the size of the text around
+  it, on the same baseline, and in a tint of its own, warm or on Sepia a muted olive,
   which keeps the same 7:1 contrast as body text on all four themes.
 - A line ends only where prose can break. A bracket, a comma, a full stop
   or a letter written against a piece of code, a link or bold text stays

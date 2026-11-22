@@ -155,30 +155,55 @@ fn each_bundled_face_is_the_source_serif_cut_its_family_asks_for() {
 }
 
 #[test]
-fn code_set_smaller_than_the_serif_is_shifted_onto_its_baseline() {
+fn inline_code_at_the_serifs_size_is_shifted_onto_its_baseline() {
     let mut definitions = chrome_definitions();
     install_document_families(&mut definitions, true);
 
-    let code_faces = ["ReaderCode", "ReaderCodeSemibold"];
-    for key in code_faces {
+    for key in ["ReaderInlineCode", "ReaderCodeSemibold"] {
         let code = &definitions.font_data[key];
         let shift = code.tweak.y_offset_factor;
         assert!(shift > 0.0, "{key} moves down, got {shift}");
 
         // egui hangs a face from the top of its line by its ascent. With
-        // the shift, code at `INLINE_CODE_SCALE` of the body size has its
-        // baseline at the same height as the serif's.
+        // the shift, code at the body size has its baseline at the same
+        // height as the serif's.
         let body_size = 20.0;
         let serif_baseline = ascent_em(READER_REGULAR.bytes, 0) * body_size;
         let code_ascent = ascent_em(&code.font, code.index);
-        let code_baseline = (code_ascent + shift) * body_size * INLINE_CODE_SCALE;
+        let code_baseline = (code_ascent + shift) * body_size;
         assert!(
             (code_baseline - serif_baseline).abs() < 1e-3,
             "{key}: code baseline {code_baseline}, serif baseline {serif_baseline}"
         );
     }
+}
 
-    // Only the code faces move.
+#[test]
+fn the_letters_of_a_code_block_sit_in_the_middle_of_their_line() {
+    let mut definitions = chrome_definitions();
+    install_document_families(&mut definitions, true);
+    let code = &definitions.font_data["ReaderCode"];
+    let face = ttf_parser::Face::parse(&code.font, code.index).unwrap();
+    let em = f32::from(face.units_per_em());
+    let own_line = f32::from(face.ascender() - face.descender()) / em;
+    let line = FontPreset::Reader.code_line_height() * own_line;
+
+    let shift = code.tweak.y_offset_factor;
+    let room_below = line - shift - own_line;
+
+    assert!(shift > 0.0, "the letters move down, got {shift}");
+    assert!(
+        (shift - room_below).abs() < 1e-3,
+        "{shift} above, {room_below} below"
+    );
+}
+
+#[test]
+fn only_the_code_faces_are_shifted() {
+    let mut definitions = chrome_definitions();
+    install_document_families(&mut definitions, true);
+    let code_faces = ["ReaderCode", "ReaderInlineCode", "ReaderCodeSemibold"];
+
     for (other, data) in &definitions.font_data {
         if !code_faces.contains(&other.as_str()) {
             assert_eq!(

@@ -204,9 +204,17 @@ fn inline_code_is_in_the_themes_code_tint_and_the_code_face() {
     let format = &code.galley.job.sections[0].format;
     assert_eq!(format.color, palette.inline_code);
     assert_eq!(format.background, egui::Color32::TRANSPARENT);
-    assert_eq!(format.font_id.family, egui::FontFamily::Monospace);
+    assert_eq!(
+        format.font_id.family,
+        egui::FontFamily::Name("MarkdownCode".into())
+    );
+    // The size of the prose around it, not smaller.
     let prose = painted_text_starting(&output, "Some ");
-    assert!(format.font_id.size < prose.galley.job.sections[0].format.font_id.size);
+    assert_about(
+        format.font_id.size,
+        prose.galley.job.sections[0].format.font_id.size,
+        "inline code",
+    );
 }
 
 /// Four boxes in a row: wider than the default column, narrower than the

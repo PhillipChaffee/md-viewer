@@ -1473,7 +1473,11 @@ impl TableLook {
                 .map(|family| egui::FontId::new(size, family)),
             code: egui::FontId::new(
                 size * options.block_style.inline_code_scale.unwrap_or(1.0),
-                egui::FontFamily::Monospace,
+                options
+                    .block_style
+                    .code_font_family
+                    .clone()
+                    .unwrap_or(egui::FontFamily::Monospace),
             ),
             all_strong: is_header,
         }

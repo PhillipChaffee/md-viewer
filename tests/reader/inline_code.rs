@@ -1,5 +1,5 @@
-//! Inline code: told from the prose around it by its face, its size and a
-//! tint of its own, with no box behind it.
+//! Inline code: told from the prose around it by its face and a tint of
+//! its own, with no box behind it.
 
 use super::pages::{page, read_on, NEAR};
 use super::support::Reader;
@@ -121,23 +121,21 @@ fn code_in_bold_text_is_set_in_a_bolder_cut_of_the_code_face() {
 }
 
 #[test]
-fn inline_code_is_smaller_than_the_text_around_it_and_stands_on_its_line() {
+fn inline_code_is_as_large_as_the_text_around_it_and_stands_on_its_line() {
     let reader = page("# Size\n\nHxk in prose and `Hxq` in code.");
 
-    let (prose, code) = (
-        reader.letter_of("Hxk in prose", 'H'),
-        reader.letter_of("Hxq", 'H'),
-    );
-    assert!(
-        code.height < prose.height,
-        "a capital in code is {} px tall, one in prose {}",
-        code.height,
-        prose.height
-    );
-    // Letters without a curve at the foot stand on the line itself.
+    // A capital and a small letter of code are as tall as the prose's, and
+    // letters without a curve at the foot stand on the line itself.
     for letter in ['H', 'x'] {
-        let prose = reader.letter_of("Hxk in prose", letter).bottom();
-        let code = reader.letter_of("Hxq", letter).bottom();
+        let prose = reader.letter_of("Hxk in prose", letter);
+        let code = reader.letter_of("Hxq", letter);
+        assert!(
+            (prose.height - code.height).abs() <= NEAR,
+            "{letter}: {} px tall in prose, {} in code",
+            prose.height,
+            code.height
+        );
+        let (prose, code) = (prose.bottom(), code.bottom());
         assert!((prose - code).abs() <= NEAR, "{letter}: {prose} and {code}");
     }
 }
@@ -206,10 +204,10 @@ fn a_block_of_code_keeps_its_panel_and_its_own_ink() {
     let panel = reader.color_at(block.left + 4.0, block.top - 3.0);
     assert_ne!(panel, reader.page_color(), "the block sits on a panel");
     assert_ne!(reader.ink_of("plain block"), reader.ink_of("cargo test"));
-    // A block is set a little larger than code in a line of prose.
+    // A block is set a little smaller than code in a line of prose.
     assert!(
-        reader.width_of("plain block") / 11.0 > reader.width_of("cargo test") / 10.0,
-        "a letter of the block is wider than one of the code in the line"
+        reader.width_of("plain block") / 11.0 < reader.width_of("cargo test") / 10.0,
+        "a letter of the block is narrower than one of the code in the line"
     );
 }
 

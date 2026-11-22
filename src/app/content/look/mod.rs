@@ -73,7 +73,7 @@ impl DocumentLook {
                 heading_font_family: Some(fonts.heading.family.clone()),
                 emphasis_font_family: fonts.emphasis.clone(),
                 heading_line_height: Some(HEADING_LINE_HEIGHT),
-                inline_code_scale: fonts.inline_code_scale,
+                inline_code_scale: None,
                 task_marker: Some(palette.muted),
                 code_block: Some(CodeBlockStyle {
                     fill: palette.raised,
@@ -106,6 +106,7 @@ impl DocumentLook {
                 figure_max_width: None,
                 inline_code_color: Some(palette.inline_code),
                 strong_code_font_family: Some(fonts.strong_code.clone()),
+                code_font_family: Some(fonts.inline_code.clone()),
             },
             syntax_theme: palette.syntax_theme,
             muted: palette.muted,

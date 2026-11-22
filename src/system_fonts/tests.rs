@@ -453,8 +453,7 @@ fn the_reader_sets_the_document_larger_than_the_chrome_with_code_a_step_smaller(
         fonts.emphasis,
         Some(FontFamily::Name("MarkdownEmphasis".into()))
     );
-    // Inline code is a little smaller again than a block of code.
-    assert_eq!(fonts.inline_code_scale, Some(0.86));
+    assert_eq!(fonts.inline_code, FontFamily::Name("MarkdownCode".into()));
     assert_eq!(
         fonts.strong_code,
         FontFamily::Name("MarkdownStrongCode".into())
@@ -476,7 +475,6 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
         assert_eq!(fonts.body.family, FontFamily::Name("MarkdownBody".into()));
         assert_close(fonts.code.size, 18.0 * 0.875);
         assert_eq!(fonts.emphasis, None, "{preset:?}");
-        assert_eq!(fonts.inline_code_scale, None, "{preset:?}");
 
         // Each keeps its own code stack: the bundled code face is the
         // Reader's alone, and code in bold text is in that same stack.
@@ -484,6 +482,7 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
         let code = chain(&definitions, &FontFamily::Monospace);
         assert!(!code.contains(&"ReaderCode".to_owned()), "{preset:?}");
         assert_eq!(chain(&definitions, &fonts.strong_code), code, "{preset:?}");
+        assert_eq!(chain(&definitions, &fonts.inline_code), code, "{preset:?}");
     }
 }
 
@@ -496,7 +495,6 @@ fn a_picked_family_outranks_the_readers_serif() {
     ));
     // The serif's scale stays with the preset; its faces do not lead.
     assert_eq!(fonts.emphasis, None);
-    assert_eq!(fonts.inline_code_scale, None);
 
     let mut system = Fonts::with_sans();
     let picked = system.definitions(Some("Fixture Sans"), FontPreset::Reader);
