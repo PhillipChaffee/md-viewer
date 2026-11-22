@@ -655,7 +655,7 @@ fn the_apps_shortcuts_wait_while_the_prompt_asks() {
 
     assert_eq!(reader.page_color(), page, "Ctrl+D changed no theme");
     assert_eq!(reader.typed(), [EDITED], "no find bar, still editing");
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
 }
 
 #[test]

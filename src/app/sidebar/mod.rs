@@ -258,6 +258,103 @@ fn more_button(
     response
 }
 
+/// One of several groups a sidebar lists, headed by a caption that folds
+/// the rows below it.
+pub(super) struct Section<'a> {
+    /// What the group is called. It is painted in capitals and read as it
+    /// is written.
+    pub(super) name: &'a str,
+    pub(super) open: bool,
+    /// What a screen reader calls the button that takes the group away. It
+    /// names the group, so it is put together only when asked for.
+    pub(super) remove: &'a dyn fmt::Display,
+    /// The sidebar's own buttons, which the first section carries.
+    pub(super) tools: Option<SectionTools<'a>>,
+}
+
+/// What a screen reader calls the sidebar's own buttons on a section.
+#[derive(Clone, Copy)]
+pub(super) struct SectionTools<'a> {
+    pub(super) add: &'a str,
+    pub(super) menu: &'a str,
+}
+
+/// A section header as laid out.
+pub(super) struct SectionResponse {
+    /// The whole header, which takes clicks to fold the group.
+    pub(super) response: egui::Response,
+    /// The button that takes the group away, drawn or not.
+    pub(super) remove: egui::Response,
+    /// The sidebar's "add" and "more" buttons, on the section that has them.
+    pub(super) add: Option<egui::Response>,
+    pub(super) more: Option<egui::Response>,
+}
+
+/// Lay a section header across the sidebar and paint it: a chevron and the
+/// caption, muted like a sidebar's header until it is pointed at. The
+/// button that takes the group away shows while the header is pointed at or
+/// the keyboard is on it; the sidebar's own buttons always show.
+pub(super) fn section(
+    ui: &mut egui::Ui,
+    palette: &Palette,
+    section: &Section<'_>,
+) -> SectionResponse {
+    let size = egui::vec2(ui.available_width(), HEADER_HEIGHT);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+    let name = section.name;
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name));
+    let lit = response.contains_pointer();
+    if lit {
+        ui.painter().rect_filled(rect, RADIUS, palette.raised);
+    }
+    chrome::focus_ring(ui, palette, &response, rect);
+
+    let mut right = rect.right();
+    let (add, more) = section.tools.map_or((None, None), |tools| {
+        let more = more_button(ui, palette, rect, tools.menu);
+        let slot = square_left_of(more.rect.left(), rect.center().y, MORE_BUTTON);
+        let quiet = QuietButton::icon_sized(Icon::Plus, END_ICON, tools.add);
+        let add = quiet.place(ui, slot, response.id.with("add"));
+        quiet.paint(ui, palette, &add);
+        right = slot.left();
+        (Some(add), Some(more))
+    });
+    let slot = square_left_of(right - END_INSET, rect.center().y, END_SLOT);
+    let quiet = QuietButton::icon_sized(Icon::Close, END_ICON, section.remove);
+    let remove = quiet.place(ui, slot, response.id.with("remove"));
+    if lit || response.has_focus() || remove.has_focus() {
+        quiet.paint(ui, palette, &remove);
+        right = slot.left();
+    }
+
+    let ink = if lit { palette.text } else { palette.muted };
+    let left = rect.left() + ROW_INSET;
+    let chevron = if section.open {
+        Chevron::Open
+    } else {
+        Chevron::Closed
+    };
+    let center = egui::pos2(left + CHEVRON_SLOT / 2.0, rect.center().y);
+    paint_chevron(ui.painter(), center, chevron, ink);
+    let text_left = left + CHEVRON_SLOT + CHEVRON_GAP;
+    let mut job = caption(&section.name.to_uppercase(), ink);
+    job.wrap = one_line(right - CHEVRON_GAP - text_left);
+    let galley = ui.painter().layout_job(job);
+    let origin = egui::pos2(text_left, rect.center().y - galley.size().y / 2.0);
+    ui.painter().galley(origin, galley, ink);
+    SectionResponse {
+        response,
+        remove,
+        add,
+        more,
+    }
+}
+
+/// The square of `side` whose right edge is at `right`, centered on `y`.
+fn square_left_of(right: f32, y: f32, side: f32) -> egui::Rect {
+    egui::Rect::from_center_size(egui::pos2(right - side / 2.0, y), egui::Vec2::splat(side))
+}
+
 /// Set what a sidebar's menu holds in the size of the sidebar's rows.
 pub(super) fn menu_text(ui: &mut egui::Ui) {
     ui.style_mut().override_font_id = Some(egui::FontId::proportional(ROW_TEXT_SIZE));
@@ -303,9 +400,6 @@ pub(super) struct Row<'a> {
     pub(super) indent: f32,
     /// The row is where the reader is: the open file, the heading in view.
     pub(super) current: bool,
-    /// The row heads a group of rows, as a folder listed in the explorer
-    /// heads what is in it. It is inked like body text.
-    pub(super) title: bool,
     pub(super) chevron: Chevron,
     pub(super) end: End<'a>,
 }
@@ -322,8 +416,8 @@ pub(super) struct RowResponse {
     pub(super) button: Option<egui::Response>,
 }
 
-/// Lay one row across the sidebar and paint it. The current row and a
-/// title are inked like body text and the others muted; the row under the pointer gets the
+/// Lay one row across the sidebar and paint it. The current row is inked
+/// like body text and the others muted; the row under the pointer gets the
 /// raised wash, and the row the keyboard is on the focus ring.
 pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowResponse {
     let size = egui::vec2(ui.available_width(), ROW_HEIGHT);
@@ -345,7 +439,7 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     }
     chrome::focus_ring(ui, palette, &response, rect);
     let (button, text_right) = end(ui, palette, &response, row.end);
-    let ink = if lit || row.current || row.title {
+    let ink = if lit || row.current {
         palette.text
     } else {
         palette.muted

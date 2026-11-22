@@ -1,6 +1,5 @@
 //! The file explorer sidebar.
 
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
 use std::fs;
@@ -12,9 +11,9 @@ use eframe::egui;
 use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow};
 use crate::app::shortcuts::hints::Hints;
-use crate::app::sidebar::{self, Chevron, End, Row, Side};
+use crate::app::sidebar::{self, Chevron, End, Row, SectionTools, Side};
 use crate::app::MarkdownApp;
-use crate::explorer::{folder_name, FileTreeNode, SortOrder};
+use crate::explorer::{FileTreeNode, SortOrder};
 use crate::icons::Icon;
 use crate::layout::EXPLORER_RIGHT_RESIZE_GUTTER;
 use crate::theme::Palette;
@@ -28,10 +27,11 @@ mod tests;
 const FILE_MENU_WIDTH: f32 = 200.0;
 /// What the button at the end of a file's row does, as its tooltip says it.
 const NEW_TAB_BUTTON: &str = "Open in new tab";
-/// Room left above each listed folder after the first, so that each reads
-/// as a group of its own.
-const ROOT_GAP: f32 = 8.0;
-/// What the button at the end of a listed folder's row does.
+/// What the explorer's menu is called, on whichever header carries it.
+const MENU_LABEL: &str = "Explorer options";
+/// What the "+" on the first folder's header is called.
+const ADD_FOLDER: &str = "Add folder";
+/// What the button on a listed folder's header does.
 const REMOVE_BUTTON: &str = "Remove from sidebar";
 
 /// Where a file picked from the listing is shown.
@@ -54,6 +54,8 @@ struct TreeClicks {
     /// The listed folder to take out of the sidebar, once the rows are
     /// drawn.
     root_to_remove: Option<PathBuf>,
+    /// What was picked from the explorer's menu, or its "+".
+    menu: Option<MenuPick>,
 }
 
 /// What a pick from the explorer's menu asks for.
@@ -87,8 +89,11 @@ impl MarkdownApp {
             },
         };
         let (picked, width) = panel.show(ctx, palette, self.explorer_width, |ui| {
-            // The header stays outside the ScrollArea.
-            self.explorer_header(ui, palette);
+            // With folders listed, each heads its own section, and the first
+            // carries the explorer's buttons. With none, the header does.
+            if self.file_explorer.roots().is_empty() {
+                self.explorer_header(ui, palette);
+            }
             self.explorer_tree(ui, palette)
         });
         self.explorer_width = width;
@@ -101,40 +106,35 @@ impl MarkdownApp {
         }
     }
 
-    /// "FILES", the folder they are in, or how many folders there are, and
-    /// the menu that holds what the explorer can do to its listing.
+    /// "FILES" with no folder listed, and the menu that holds what the
+    /// explorer can do.
     fn explorer_header(&mut self, ui: &mut egui::Ui, palette: &Palette) {
-        let folder = match self.file_explorer.roots() {
-            [] => Cow::Borrowed("No folder"),
-            [root] => folder_name(root),
-            roots => Cow::Owned(format!("{} folders", roots.len())),
-        };
         let header = sidebar::Header {
             caption: "FILES",
-            detail: Some(&folder),
-            menu: Some("Explorer options"),
+            detail: Some("No folder"),
+            menu: Some(MENU_LABEL),
         };
         let more = sidebar::header(ui, palette, &header);
-
         let sort_order = self.file_explorer.sort_order();
-        let picked = more
-            .and_then(|more| {
-                chrome::show_popup(egui::Popup::menu(&more), |ui| explorer_menu(ui, sort_order))
-            })
-            .and_then(|menu| menu.inner);
+        if let Some(pick) = more.and_then(|more| show_explorer_menu(&more, sort_order)) {
+            self.apply_menu_pick(ui.ctx(), pick);
+        }
+    }
+
+    /// Do what was picked from the explorer's menu.
+    fn apply_menu_pick(&mut self, ctx: &egui::Context, picked: MenuPick) {
         match picked {
-            Some(MenuPick::AddFolder) => self.apply_action(ui.ctx(), AppAction::OpenFolder),
-            Some(MenuPick::ExpandAll) => {
+            MenuPick::AddFolder => self.apply_action(ctx, AppAction::OpenFolder),
+            MenuPick::ExpandAll => {
                 self.file_explorer.expand_all();
                 self.reconcile_explorer_watches();
             }
-            Some(MenuPick::CollapseAll) => {
+            MenuPick::CollapseAll => {
                 self.file_explorer.collapse_all();
                 self.reconcile_explorer_watches();
             }
-            Some(MenuPick::Refresh) => self.file_explorer.refresh(),
-            Some(MenuPick::Sort(order)) => self.file_explorer.set_sort_order(order),
-            None => {}
+            MenuPick::Refresh => self.file_explorer.refresh(),
+            MenuPick::Sort(order) => self.file_explorer.set_sort_order(order),
         }
     }
 
@@ -151,6 +151,7 @@ impl MarkdownApp {
             open_paths: &self.open_tab_paths,
             current: active_tab.map(|tab| tab.path.as_path()),
             hints: &self.hints,
+            sort_order: self.file_explorer.sort_order(),
         };
 
         let mut clicks = TreeClicks::default();
@@ -161,14 +162,17 @@ impl MarkdownApp {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for (index, root) in self.file_explorer.tree().iter().enumerate() {
                     if index > 0 {
-                        ui.add_space(ROOT_GAP);
+                        chrome::hairline(ui, palette);
                     }
-                    self.render_tree_node(ui, root, 0, &listing, &mut clicks);
+                    self.root_section(ui, root, index == 0, &listing, &mut clicks);
                 }
             });
 
-        // The rows only read the tree; the toggle and the removal are
-        // applied once they are drawn.
+        // The rows only read the tree; the toggle, the removal and the
+        // menu's pick are applied once they are drawn.
+        if let Some(pick) = clicks.menu {
+            self.apply_menu_pick(ui.ctx(), pick);
+        }
         if let Some(root) = &clicks.root_to_remove {
             self.file_explorer.remove_root(root);
             self.reconcile_explorer_watches();
@@ -205,11 +209,7 @@ impl MarkdownApp {
             } => {
                 let row = TreeRow { path, name, depth };
                 let is_expanded = self.file_explorer.is_expanded(path);
-                if depth == 0 {
-                    self.root_row(ui, &row, is_expanded, listing, clicks);
-                } else {
-                    self.directory_row(ui, &row, is_expanded, listing.palette, clicks);
-                }
+                self.directory_row(ui, &row, is_expanded, listing.palette, clicks);
                 if is_expanded {
                     for child in children.iter().flatten() {
                         self.render_tree_node(ui, child, depth + 1, listing, clicks);
@@ -231,7 +231,6 @@ impl MarkdownApp {
             text: row.name,
             indent: row.indent(),
             current: listing.current == Some(row.path),
-            title: false,
             // A file's name lines up with the names of the folders beside it.
             chevron: Chevron::Blank,
             // The dot of a file that has a tab gives way to the button.
@@ -271,7 +270,6 @@ impl MarkdownApp {
             text: row.name,
             indent: row.indent(),
             current: false,
-            title: false,
             chevron: if is_expanded {
                 Chevron::Open
             } else {
@@ -288,51 +286,71 @@ impl MarkdownApp {
         self.paint_flash(ui, row.path, response.rect);
     }
 
-    /// The row of a listed folder: it opens and closes as any folder's
-    /// does, and its button, or its menu, takes it out of the sidebar.
-    fn root_row(
+    /// A listed folder: a section header that folds it, then, while it is
+    /// open, what it lists, flush with the header. The header's button, or
+    /// its menu, takes the folder out of the sidebar; the first header also
+    /// carries the explorer's "+" and menu.
+    fn root_section(
         &self,
         ui: &mut egui::Ui,
-        row: &TreeRow<'_>,
-        is_expanded: bool,
+        root: &FileTreeNode,
+        first: bool,
         listing: &Listing<'_>,
         clicks: &mut TreeClicks,
     ) {
-        let remove = RemoveName(row.name);
-        let shown = Row {
-            text: row.name,
-            indent: row.indent(),
-            current: false,
-            title: true,
-            chevron: if is_expanded {
-                Chevron::Open
-            } else {
-                Chevron::Closed
-            },
-            end: End::Button {
-                icon: Icon::Close,
-                label: &remove,
-                marked: false,
-            },
+        let FileTreeNode::Directory {
+            path,
+            name,
+            children,
+            ..
+        } = root
+        else {
+            return;
         };
-        let drawn = sidebar::row(ui, listing.palette, &shown);
-        let response = drawn.response;
-        let on_button = drawn.button.is_some_and(|button| {
-            let clicked = button.clicked();
-            button.on_hover_text(REMOVE_BUTTON);
-            clicked
-        });
+        let open = self.file_explorer.is_expanded(path);
+        let remove = RemoveName(name);
+        let section = sidebar::Section {
+            name,
+            open,
+            remove: &remove,
+            tools: first.then_some(SectionTools {
+                add: ADD_FOLDER,
+                menu: MENU_LABEL,
+            }),
+        };
         let palette = listing.palette;
+        let drawn = sidebar::section(ui, palette, &section);
+        let response = drawn.response;
+
+        let removed = drawn.remove.clicked();
+        drawn.remove.on_hover_text(REMOVE_BUTTON);
+        if drawn
+            .add
+            .is_some_and(|add| add.on_hover_text(ADD_FOLDER).clicked())
+        {
+            clicks.menu = Some(MenuPick::AddFolder);
+        }
+        if let Some(pick) = drawn
+            .more
+            .and_then(|more| show_explorer_menu(&more, listing.sort_order))
+        {
+            clicks.menu = Some(pick);
+        }
         let menu = egui::Popup::context_menu(&response).style(chrome::popup_style(palette));
-        let from_menu = chrome::show_popup(menu, |ui| root_context_menu(ui, row.path, palette))
+        let from_menu = chrome::show_popup(menu, |ui| root_context_menu(ui, path, palette))
             .is_some_and(|menu| menu.inner);
 
-        if on_button || from_menu {
-            clicks.root_to_remove = Some(row.path.to_path_buf());
+        if removed || from_menu {
+            clicks.root_to_remove = Some(path.clone());
         } else if response.clicked() {
-            clicks.dir_to_toggle = Some(row.path.to_path_buf());
+            clicks.dir_to_toggle = Some(path.clone());
         }
-        self.paint_flash(ui, row.path, response.rect);
+        self.paint_flash(ui, path, response.rect);
+        if open {
+            for child in children.iter().flatten() {
+                self.render_tree_node(ui, child, 0, listing, clicks);
+            }
+        }
     }
 
     /// Paints the change highlight over a row whose path changed on disk
@@ -361,6 +379,8 @@ struct Listing<'a> {
     current: Option<&'a Path>,
     /// How the click that opens a file in a tab of its own is written.
     hints: &'a Hints,
+    /// The order the explorer's menu marks.
+    sort_order: SortOrder,
 }
 
 /// One explorer row: the node it shows and how deep it sits in the tree.
@@ -374,6 +394,13 @@ impl TreeRow<'_> {
     fn indent(&self) -> f32 {
         f32::from(self.depth) * sidebar::INDENT
     }
+}
+
+/// Show the explorer's menu below `more` while it is open. Returns what was
+/// picked this frame.
+fn show_explorer_menu(more: &egui::Response, sort_order: SortOrder) -> Option<MenuPick> {
+    chrome::show_popup(egui::Popup::menu(more), |ui| explorer_menu(ui, sort_order))
+        .and_then(|menu| menu.inner)
 }
 
 /// The explorer's menu: what it can do to its listing, and the order the

@@ -81,11 +81,12 @@ at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
 from its right-click menu. A file that already has a tab comes to the
 front instead. A dot after the name marks the files that have a tab.
 
-The file list can hold several folders, one below the other. **Open
-Folder…** in **⋯**, or **Add Folder…** in the file list's own menu, adds
-one. A click on a folder's name folds it away or opens it again, and the
-button at the end of its row, or **Remove from Sidebar** in its
-right-click menu, takes it out of the list. The folders, and which of them
+The file list can hold several folders, each in a section of its own
+headed by the folder's name in small capitals. **Open Folder…** in **⋯**,
+or the **+** on the first section's header, adds one. A click on a
+section's header folds it away or opens it again, and the button that
+shows at its end while you point at it, or **Remove from Sidebar** in its
+right-click menu, takes the folder out of the list. The folders, and which of them
 are open, are remembered with the session.
 
 ![The files and contents sidebars](screenshots/reader/sidebars.png)

@@ -43,22 +43,23 @@ fn shelf_with_files() -> Reader {
 fn show_files(reader: &mut Reader) {
     reader.press("Ctrl+Shift+E");
     reader.wait_for("the folder to be listed", |reader| {
-        reader.sees("FILES") && listing(reader).len() > 1
+        reader.sees("Explorer options") && listing(reader).len() > 1
     });
 }
 
 /// What the one folder in the files sidebar lists, top to bottom:
-/// everything a screen reader reads between the folder's own row and the
-/// contents sidebar's header, but for the buttons each row has.
+/// everything a screen reader reads after the sidebar's own buttons on the
+/// folder's header and before the contents sidebar's header, but for the
+/// button each document has to open it in a new tab.
 fn listing(reader: &Reader) -> Vec<String> {
     let names = reader.names().into_iter();
     names
-        .skip_while(|name| !name.starts_with("FILES"))
-        // The header, then the folder's row.
-        .skip(2)
+        .skip_while(|name| name != "Explorer options")
+        .skip(1)
         .take_while(|name| name != "CONTENTS")
         .filter(|name| !(name.starts_with("Open ") && name.ends_with(" in new tab")))
         .filter(|name| !(name.starts_with("Remove ") && name.ends_with(" from sidebar")))
+        .filter(|name| name != "Add folder")
         .collect()
 }
 
@@ -387,7 +388,7 @@ fn the_list_is_of_the_folder_the_opened_document_is_in() {
 
     show_files(&mut reader);
 
-    reader.assert_sees("FILES guides");
+    reader.assert_sees("GUIDES");
     assert_eq!(listing(&reader), ["deep", "advanced.md", "setup.md"]);
 }
 
@@ -488,7 +489,7 @@ fn hiding_and_showing_the_sidebar_keeps_folders_open() {
     reader.click("guides");
 
     reader.press("Ctrl+Shift+E");
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
     reader.press("Ctrl+Shift+E");
 
     assert_eq!(reader.count("setup.md"), 1);

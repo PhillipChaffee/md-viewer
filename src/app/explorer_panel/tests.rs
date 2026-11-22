@@ -6,6 +6,7 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 
 use super::*;
 use crate::app::content::tests::label_harness::LabelHarness;
+use crate::explorer::folder_name;
 use crate::platform::Platform;
 use crate::test_support::{assert_close, painted_shapes, ScratchDir};
 use crate::theme::ThemeId;
@@ -89,22 +90,52 @@ fn is_highlighted(harness: &LabelHarness, name: &str) -> bool {
     })
 }
 
+/// The ink of the painted text `text` inside the row named `row`.
+fn ink_in(harness: &LabelHarness, row: &str, text: &str) -> Option<egui::Color32> {
+    let rect = explorer_row(harness, row).rect();
+    painted_shapes(harness.output())
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(painted)
+                if painted.galley.text() == text && rect.contains(painted.pos) =>
+            {
+                Some(painted.galley.job.sections[0].format.color)
+            }
+            _ => None,
+        })
+}
+
 #[test]
-fn the_explorer_is_titled_with_its_folder() {
+fn a_folder_heads_its_section_in_capitals_and_with_no_folder_the_title_says_so() {
     let mut harness = explorer();
-    let folder = harness
-        .dir
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
-    assert!(is_listed(&harness, &format!("FILES {folder}")));
+    let folder = folder_name(&harness.dir).into_owned();
+    let palette = harness.state().theme.palette();
+
+    assert!(is_listed(&harness, &folder), "read as it is written");
+    assert_eq!(
+        ink_in(&harness, &folder, &folder.to_uppercase()),
+        Some(palette.muted)
+    );
+    assert!(!harness.query_all_by_label("FILES").any(|_| true));
 
     harness.state_mut().file_explorer = crate::explorer::FileExplorer::default();
     harness.frames(1);
 
     assert!(is_listed(&harness, "FILES No folder"));
+}
+
+#[test]
+fn a_folders_header_is_inked_while_it_is_pointed_at() {
+    let mut harness = explorer();
+    let folder = folder_name(&harness.dir).into_owned();
+    let palette = harness.state().theme.palette();
+
+    point_at(&mut harness, &folder);
+
+    assert_eq!(
+        ink_in(&harness, &folder, &folder.to_uppercase()),
+        Some(palette.text)
+    );
 }
 
 #[test]
@@ -634,10 +665,15 @@ fn two_folders() -> (LabelHarness, ScratchDir, String) {
 }
 
 #[test]
-fn several_folders_are_listed_one_below_the_other_and_counted_in_the_title() {
+fn several_folders_are_listed_one_below_the_other_and_only_the_first_has_the_tools() {
     let (harness, other, name) = two_folders();
 
-    assert!(is_listed(&harness, "FILES 2 folders"));
+    assert_eq!(harness.query_all_by_label("Add folder").count(), 1);
+    assert_eq!(harness.query_all_by_label("Explorer options").count(), 1);
+    assert!(
+        harness.get_by_label("Add folder").rect().top()
+            < explorer_row(&harness, &name).rect().top()
+    );
     assert!(is_listed(&harness, "b.md"));
     assert!(is_listed(&harness, "elsewhere.md"));
     let first = explorer_row(&harness, &folder_name(&harness.dir)).rect();
@@ -673,8 +709,22 @@ fn the_button_on_a_listed_folder_takes_it_out_of_the_sidebar() {
     assert!(!is_listed(&harness, "elsewhere.md"));
     assert!(is_listed(&harness, "b.md"));
     assert_eq!(harness.state().file_explorer.roots(), [harness.dir.clone()]);
-    let folder = folder_name(&harness.dir).into_owned();
-    assert!(is_listed(&harness, &format!("FILES {folder}")));
+}
+
+#[test]
+fn the_plus_on_the_first_folder_adds_a_folder() {
+    let mut harness = explorer();
+    let other = ScratchDir::new();
+    let picked = other.path().to_path_buf();
+    harness.state_mut().folder_picker = Box::new(move |_| Ok(Some(picked.clone())));
+
+    harness.click("Add folder");
+    harness.wait_for_explorer_scan();
+
+    assert_eq!(
+        harness.state().file_explorer.roots(),
+        [harness.dir.clone(), other.path().to_path_buf()]
+    );
 }
 
 #[test]
@@ -685,15 +735,6 @@ fn a_listed_folders_menu_takes_it_out_of_the_sidebar() {
 
     assert!(!is_listed(&harness, "elsewhere.md"));
     assert_eq!(harness.state().file_explorer.roots(), [harness.dir.clone()]);
-}
-
-#[test]
-fn a_listed_folder_is_inked_like_text_and_a_folder_in_it_is_muted() {
-    let harness = explorer();
-    let palette = harness.state().theme.palette();
-
-    assert_eq!(ink(&harness, &folder_name(&harness.dir)), palette.text);
-    assert_eq!(ink(&harness, "sub"), palette.muted);
 }
 
 #[test]

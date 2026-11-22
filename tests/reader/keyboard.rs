@@ -42,7 +42,7 @@ fn seen(reader: &Reader) -> Seen {
         switches: [
             reader.count("Close find bar") == 1,
             reader.typed().iter().any(|text| text.starts_with("# ")),
-            reader.sees("FILES"),
+            reader.sees("Explorer options"),
             reader.count("CONTENTS") == 1,
             reader.has_quit(),
         ],
@@ -250,7 +250,7 @@ fn the_shortcuts_that_need_no_document_work_on_the_home_page() {
     assert!(reader.area_of("More").width > button);
 
     reader.press("Ctrl+Shift+E");
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
 
     reader.press("Ctrl+Q");
     assert!(reader.has_quit());
