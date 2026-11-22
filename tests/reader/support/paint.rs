@@ -284,57 +284,64 @@ fn first_line(text: &TextShape) -> Pos2 {
     })
 }
 
+/// The distinct inks of a text's sections, in order; a section with no
+/// color of its own is drawn in `ink`.
+fn section_inks(sections: &[egui::text::LayoutSection], ink: Color32) -> Vec<Rgb> {
+    let mut inks: Vec<Rgb> = Vec::new();
+    for color in sections.iter().map(|section| section.format.color) {
+        let ink = Rgb::of(if color == Color32::PLACEHOLDER {
+            ink
+        } else {
+            color
+        });
+        if !inks.contains(&ink) {
+            inks.push(ink);
+        }
+    }
+    inks
+}
+
+/// One painted text, read off its shape.
+fn painted(text: &TextShape) -> Painted {
+    let section = text.galley.job.sections.first();
+    let own = section.map_or(Color32::PLACEHOLDER, |section| section.format.color);
+    let ink = text
+        .override_text_color
+        .unwrap_or(if own == Color32::PLACEHOLDER {
+            text.fallback_color
+        } else {
+            own
+        });
+    let sections = &text.galley.job.sections;
+    let struck =
+        |section: &egui::text::LayoutSection| section.format.strikethrough != egui::Stroke::NONE;
+    let underlined =
+        |section: &egui::text::LayoutSection| section.format.underline != egui::Stroke::NONE;
+    let marker = section
+        .map(|section| section.format.background)
+        .filter(|behind| *behind != Color32::TRANSPARENT);
+    Painted {
+        text: text.galley.text().to_owned(),
+        ink: Rgb::of(ink),
+        inks: section_inks(sections, ink),
+        struck_out: sections.iter().any(struck),
+        underlined: sections.iter().any(underlined),
+        marker: marker.map(Rgb::of),
+        size: section.map_or(0.0, |section| section.format.font_id.size),
+        first_line: first_line(text),
+        first_line_width: first_line_width(text),
+        glyphs: glyphs(text),
+        letters: letters(text),
+    }
+}
+
 /// Every text the frame painted, in paint order.
 pub(crate) fn painted_text(shapes: &[Shape]) -> Vec<Painted> {
     let mut texts = Vec::new();
     for shape in shapes {
         match shape {
             Shape::Vec(members) => texts.extend(painted_text(members)),
-            Shape::Text(text) => {
-                let section = text.galley.job.sections.first();
-                let own = section.map_or(Color32::PLACEHOLDER, |section| section.format.color);
-                let ink = text
-                    .override_text_color
-                    .unwrap_or(if own == Color32::PLACEHOLDER {
-                        text.fallback_color
-                    } else {
-                        own
-                    });
-                let sections = &text.galley.job.sections;
-                let mut inks: Vec<Rgb> = Vec::new();
-                for color in sections.iter().map(|section| section.format.color) {
-                    let ink = Rgb::of(if color == Color32::PLACEHOLDER {
-                        ink
-                    } else {
-                        color
-                    });
-                    if !inks.contains(&ink) {
-                        inks.push(ink);
-                    }
-                }
-                let struck = |section: &egui::text::LayoutSection| {
-                    section.format.strikethrough != egui::Stroke::NONE
-                };
-                let underlined = |section: &egui::text::LayoutSection| {
-                    section.format.underline != egui::Stroke::NONE
-                };
-                let marker = section
-                    .map(|section| section.format.background)
-                    .filter(|behind| *behind != Color32::TRANSPARENT);
-                texts.push(Painted {
-                    text: text.galley.text().to_owned(),
-                    ink: Rgb::of(ink),
-                    inks,
-                    struck_out: sections.iter().any(struck),
-                    underlined: sections.iter().any(underlined),
-                    marker: marker.map(Rgb::of),
-                    size: section.map_or(0.0, |section| section.format.font_id.size),
-                    first_line: first_line(text),
-                    first_line_width: first_line_width(text),
-                    glyphs: glyphs(text),
-                    letters: letters(text),
-                });
-            }
+            Shape::Text(text) => texts.push(painted(text)),
             _ => {}
         }
     }
