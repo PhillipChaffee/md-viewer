@@ -81,6 +81,13 @@ at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
 from its right-click menu. A file that already has a tab comes to the
 front instead. A dot after the name marks the files that have a tab.
 
+The file list can hold several folders, one below the other. **Open
+Folder…** in **⋯**, or **Add Folder…** in the file list's own menu, adds
+one. A click on a folder's name folds it away or opens it again, and the
+button at the end of its row, or **Remove from Sidebar** in its
+right-click menu, takes it out of the list. The folders, and which of them
+are open, are remembered with the session.
+
 ![The files and contents sidebars](screenshots/reader/sidebars.png)
 
 ### A home page of what you read last
@@ -290,6 +297,8 @@ With the mouse:
 | `Ctrl`-click a file or a link | ⌘-click | Open it in a new tab |
 | Middle-click a file in the sidebar | the same | Open it in a new tab |
 | Right-click a file in the sidebar | the same | **Open**, **Open in New Tab**, and what to copy |
+| Click a listed folder's name | the same | Fold it away or open it again |
+| Right-click a listed folder | the same | **Remove from Sidebar** or **Copy Path** |
 | Middle-click a tab | the same | Close the tab |
 
 On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘

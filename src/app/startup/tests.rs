@@ -59,8 +59,8 @@ fn a_first_launch_without_a_file_shows_the_welcome_page_with_default_settings() 
     assert_eq!(app.fonts.size, TextSizeClass::Normal);
     assert!(!app.live_reload.is_live());
     assert_eq!(
-        app.file_explorer.root(),
-        std::env::current_dir().ok().as_deref(),
+        app.file_explorer.roots(),
+        [std::env::current_dir().unwrap()],
         "with nothing else to go on, the explorer shows the working directory"
     );
 }
@@ -73,7 +73,7 @@ fn a_file_on_the_command_line_wins_over_the_last_session() {
     let persisted = PersistedState {
         open_tabs: Some(vec![elsewhere.file("old.md", "# Old")]),
         active_tab: Some(3),
-        explorer_root: Some(elsewhere.path().to_path_buf()),
+        explorer_roots: Some(vec![elsewhere.path().to_path_buf()]),
         ..PersistedState::default()
     };
 
@@ -81,7 +81,12 @@ fn a_file_on_the_command_line_wins_over_the_last_session() {
 
     assert_eq!(tab_paths(&app), std::slice::from_ref(&a));
     assert_eq!(app.active_tab, 0);
-    assert_eq!(app.file_explorer.root(), Some(dir.path()));
+    assert_eq!(
+        app.file_explorer.roots(),
+        [elsewhere.path(), dir.path()],
+        "the file's folder is listed below the saved one, open"
+    );
+    assert!(app.file_explorer.is_expanded(&dir.path().to_path_buf()));
     assert_eq!(recent_paths(&app), [a], "an explicit open is a recent file");
     assert!(app.error_message.is_none());
 }
@@ -130,7 +135,7 @@ fn the_last_session_tabs_return_without_the_ones_that_no_longer_open() {
         [a, c],
         "what came back in a tab was read, and nothing else was"
     );
-    assert_eq!(app.file_explorer.root(), Some(dir.path()));
+    assert_eq!(app.file_explorer.roots(), [dir.path()]);
 }
 
 #[test]
@@ -163,30 +168,58 @@ fn a_restored_tab_the_recent_list_knows_keeps_its_place_and_time() {
 }
 
 #[test]
-fn the_saved_explorer_root_is_used_while_it_exists() {
+fn a_folder_saved_before_several_could_be_listed_comes_back_open() {
     let docs = ScratchDir::new();
     let saved_root = ScratchDir::new();
     let a = docs.file("a.md", "# A");
     let expanded = saved_root.dir("guides");
-    let session = |root: PathBuf| PersistedState {
-        open_tabs: Some(vec![a.clone()]),
-        explorer_root: Some(root),
-        expanded_dirs: Some(vec![expanded.clone()]),
-        explorer_sort_order: Some(SortOrder::DateDesc),
-        ..PersistedState::default()
+    // What a version with one folder saved; the field is never written now.
+    let session = |root: PathBuf| {
+        launch_on_saved(&format!(
+            "(open_tabs: Some([{a:?}]), explorer_root: Some({root:?}), \
+             expanded_dirs: Some([{expanded:?}]), explorer_sort_order: Some(DateDesc))"
+        ))
     };
 
-    let app = relaunch(&session(saved_root.path().to_path_buf()), None);
-    assert_eq!(app.file_explorer.root(), Some(saved_root.path()));
+    let app = session(saved_root.path().to_path_buf());
+    assert_eq!(app.file_explorer.roots(), [saved_root.path()]);
+    assert!(app
+        .file_explorer
+        .is_expanded(&saved_root.path().to_path_buf()));
     assert!(app.file_explorer.expanded_dirs().contains(&expanded));
     assert!(app.file_explorer.sort_order() == SortOrder::DateDesc);
 
-    let app = relaunch(&session(saved_root.path().join("gone")), None);
+    let app = session(saved_root.path().join("gone"));
     assert_eq!(
-        app.file_explorer.root(),
-        Some(docs.path()),
+        app.file_explorer.roots(),
+        [docs.path()],
         "a root that vanished gives way to the first tab's folder"
     );
+}
+
+#[test]
+fn the_saved_folders_come_back_in_order_each_open_or_closed_as_it_was_left() {
+    let (first, second) = (ScratchDir::new(), ScratchDir::new());
+    let a = first.file("a.md", "# A");
+    let session = PersistedState {
+        open_tabs: Some(vec![a.clone()]),
+        explorer_roots: Some(vec![
+            second.path().to_path_buf(),
+            first.path().join("gone"),
+            first.path().to_path_buf(),
+        ]),
+        expanded_dirs: Some(vec![first.path().to_path_buf()]),
+        ..PersistedState::default()
+    };
+
+    let app = relaunch(&session, None);
+    assert_eq!(app.file_explorer.roots(), [second.path(), first.path()]);
+    assert!(!app.file_explorer.is_expanded(&second.path().to_path_buf()));
+    assert!(app.file_explorer.is_expanded(&first.path().to_path_buf()));
+
+    // A file in a listed folder adds no folder of its own.
+    let app = relaunch(&session, Some(a));
+    assert_eq!(app.file_explorer.roots(), [second.path(), first.path()]);
 }
 
 #[test]

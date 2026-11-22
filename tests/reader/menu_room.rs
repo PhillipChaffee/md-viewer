@@ -236,7 +236,8 @@ const POPUPS: [Popup; 5] = [
     },
     Popup {
         name: "a file's menu",
-        window: 300.0,
+        // Room for the file's row below its folder's, not for its menu.
+        window: 400.0,
         open: |reader| {
             reader.press("Ctrl+Shift+E");
             reader.right_click("notes.md");

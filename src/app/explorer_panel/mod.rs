@@ -9,11 +9,12 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::app::action::AppAction;
 use crate::app::chrome::{self, MenuRow};
 use crate::app::shortcuts::hints::Hints;
 use crate::app::sidebar::{self, Chevron, End, Row, Side};
 use crate::app::MarkdownApp;
-use crate::explorer::{FileTreeNode, SortOrder};
+use crate::explorer::{folder_name, FileTreeNode, SortOrder};
 use crate::icons::Icon;
 use crate::layout::EXPLORER_RIGHT_RESIZE_GUTTER;
 use crate::theme::Palette;
@@ -27,6 +28,11 @@ mod tests;
 const FILE_MENU_WIDTH: f32 = 200.0;
 /// What the button at the end of a file's row does, as its tooltip says it.
 const NEW_TAB_BUTTON: &str = "Open in new tab";
+/// Room left above each listed folder after the first, so that each reads
+/// as a group of its own.
+const ROOT_GAP: f32 = 8.0;
+/// What the button at the end of a listed folder's row does.
+const REMOVE_BUTTON: &str = "Remove from sidebar";
 
 /// Where a file picked from the listing is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,11 +51,15 @@ struct TreeClicks {
     file: Option<(PathBuf, Place)>,
     /// The folder to open or close, once the rows are drawn.
     dir_to_toggle: Option<PathBuf>,
+    /// The listed folder to take out of the sidebar, once the rows are
+    /// drawn.
+    root_to_remove: Option<PathBuf>,
 }
 
 /// What a pick from the explorer's menu asks for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MenuPick {
+    AddFolder,
     ExpandAll,
     CollapseAll,
     Refresh,
@@ -91,11 +101,14 @@ impl MarkdownApp {
         }
     }
 
-    /// "FILES", the folder they are in, and the menu that holds what the
-    /// explorer can do to its listing.
+    /// "FILES", the folder they are in, or how many folders there are, and
+    /// the menu that holds what the explorer can do to its listing.
     fn explorer_header(&mut self, ui: &mut egui::Ui, palette: &Palette) {
-        let root = self.file_explorer.root();
-        let folder = root.map_or(Cow::Borrowed("No folder"), folder_name);
+        let folder = match self.file_explorer.roots() {
+            [] => Cow::Borrowed("No folder"),
+            [root] => folder_name(root),
+            roots => Cow::Owned(format!("{} folders", roots.len())),
+        };
         let header = sidebar::Header {
             caption: "FILES",
             detail: Some(&folder),
@@ -110,6 +123,7 @@ impl MarkdownApp {
             })
             .and_then(|menu| menu.inner);
         match picked {
+            Some(MenuPick::AddFolder) => self.apply_action(ui.ctx(), AppAction::OpenFolder),
             Some(MenuPick::ExpandAll) => {
                 self.file_explorer.expand_all();
                 self.reconcile_explorer_watches();
@@ -145,13 +159,20 @@ impl MarkdownApp {
             .id_salt("file_explorer")
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                for node in self.file_explorer.tree() {
-                    self.render_tree_node(ui, node, 0, &listing, &mut clicks);
+                for (index, root) in self.file_explorer.tree().iter().enumerate() {
+                    if index > 0 {
+                        ui.add_space(ROOT_GAP);
+                    }
+                    self.render_tree_node(ui, root, 0, &listing, &mut clicks);
                 }
             });
 
-        // The rows only read the tree; the toggle is applied once they are
-        // drawn.
+        // The rows only read the tree; the toggle and the removal are
+        // applied once they are drawn.
+        if let Some(root) = &clicks.root_to_remove {
+            self.file_explorer.remove_root(root);
+            self.reconcile_explorer_watches();
+        }
         if let Some(dir_path) = &clicks.dir_to_toggle {
             self.file_explorer.toggle_expanded(dir_path);
             // Keep the non-recursive explorer watches in sync with the
@@ -184,7 +205,11 @@ impl MarkdownApp {
             } => {
                 let row = TreeRow { path, name, depth };
                 let is_expanded = self.file_explorer.is_expanded(path);
-                self.directory_row(ui, &row, is_expanded, listing.palette, clicks);
+                if depth == 0 {
+                    self.root_row(ui, &row, is_expanded, listing, clicks);
+                } else {
+                    self.directory_row(ui, &row, is_expanded, listing.palette, clicks);
+                }
                 if is_expanded {
                     for child in children.iter().flatten() {
                         self.render_tree_node(ui, child, depth + 1, listing, clicks);
@@ -206,6 +231,7 @@ impl MarkdownApp {
             text: row.name,
             indent: row.indent(),
             current: listing.current == Some(row.path),
+            title: false,
             // A file's name lines up with the names of the folders beside it.
             chevron: Chevron::Blank,
             // The dot of a file that has a tab gives way to the button.
@@ -245,6 +271,7 @@ impl MarkdownApp {
             text: row.name,
             indent: row.indent(),
             current: false,
+            title: false,
             chevron: if is_expanded {
                 Chevron::Open
             } else {
@@ -256,6 +283,53 @@ impl MarkdownApp {
 
         // The toggle is applied after the rows are drawn.
         if response.clicked() {
+            clicks.dir_to_toggle = Some(row.path.to_path_buf());
+        }
+        self.paint_flash(ui, row.path, response.rect);
+    }
+
+    /// The row of a listed folder: it opens and closes as any folder's
+    /// does, and its button, or its menu, takes it out of the sidebar.
+    fn root_row(
+        &self,
+        ui: &mut egui::Ui,
+        row: &TreeRow<'_>,
+        is_expanded: bool,
+        listing: &Listing<'_>,
+        clicks: &mut TreeClicks,
+    ) {
+        let remove = RemoveName(row.name);
+        let shown = Row {
+            text: row.name,
+            indent: row.indent(),
+            current: false,
+            title: true,
+            chevron: if is_expanded {
+                Chevron::Open
+            } else {
+                Chevron::Closed
+            },
+            end: End::Button {
+                icon: Icon::Close,
+                label: &remove,
+                marked: false,
+            },
+        };
+        let drawn = sidebar::row(ui, listing.palette, &shown);
+        let response = drawn.response;
+        let on_button = drawn.button.is_some_and(|button| {
+            let clicked = button.clicked();
+            button.on_hover_text(REMOVE_BUTTON);
+            clicked
+        });
+        let palette = listing.palette;
+        let menu = egui::Popup::context_menu(&response).style(chrome::popup_style(palette));
+        let from_menu = chrome::show_popup(menu, |ui| root_context_menu(ui, row.path, palette))
+            .is_some_and(|menu| menu.inner);
+
+        if on_button || from_menu {
+            clicks.root_to_remove = Some(row.path.to_path_buf());
+        } else if response.clicked() {
             clicks.dir_to_toggle = Some(row.path.to_path_buf());
         }
         self.paint_flash(ui, row.path, response.rect);
@@ -302,16 +376,11 @@ impl TreeRow<'_> {
     }
 }
 
-/// The folder's own name, or the whole path for a root such as `/`.
-fn folder_name(root: &Path) -> Cow<'_, str> {
-    root.file_name()
-        .map_or_else(|| root.to_string_lossy(), |name| name.to_string_lossy())
-}
-
 /// The explorer's menu: what it can do to its listing, and the order the
 /// listing is in. Returns what was picked this frame.
 fn explorer_menu(ui: &mut egui::Ui, sort_order: SortOrder) -> Option<MenuPick> {
     let actions = [
+        ("Add Folder…", MenuPick::AddFolder),
         ("Expand All Folders", MenuPick::ExpandAll),
         ("Collapse All Folders", MenuPick::CollapseAll),
         ("Refresh", MenuPick::Refresh),
@@ -345,6 +414,35 @@ impl fmt::Display for NewTabName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Open {} in new tab", self.0)
     }
+}
+
+/// What a screen reader calls the button at the end of a listed folder's
+/// row, which names the folder.
+struct RemoveName<'a>(&'a str);
+
+impl fmt::Display for RemoveName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Remove {} from sidebar", self.0)
+    }
+}
+
+/// A listed folder's menu. Returns whether the reader asked for the folder
+/// to be taken out of the sidebar.
+fn root_context_menu(ui: &mut egui::Ui, path: &Path, palette: &Palette) -> bool {
+    ui.set_width(FILE_MENU_WIDTH);
+    let remove = MenuRow::new("Remove from Sidebar")
+        .flush()
+        .show(ui, palette)
+        .clicked();
+    chrome::hairline(ui, palette);
+    if MenuRow::new("Copy Path")
+        .flush()
+        .show(ui, palette)
+        .clicked()
+    {
+        ui.ctx().copy_text(path.display().to_string());
+    }
+    remove
 }
 
 /// Whether the button at the end of a file's row was clicked. Its tooltip

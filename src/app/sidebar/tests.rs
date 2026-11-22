@@ -282,6 +282,7 @@ fn plain_row(text: &str, current: bool) -> Row<'_> {
         text,
         indent: 0.0,
         current,
+        title: false,
         chevron: Chevron::None,
         end: End::Nothing,
     }

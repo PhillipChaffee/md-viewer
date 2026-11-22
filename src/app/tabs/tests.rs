@@ -300,8 +300,8 @@ fn without_a_tab_the_file_dialog_starts_in_the_explorer_root() {
     );
     assert!(harness.app.error_message.is_none());
     assert_eq!(
-        started_in.borrow().as_deref(),
-        harness.app.file_explorer.root()
+        started_in.borrow().as_ref(),
+        harness.app.file_explorer.roots().first()
     );
     assert!(started_in.borrow().is_some());
 }
@@ -309,7 +309,7 @@ fn without_a_tab_the_file_dialog_starts_in_the_explorer_root() {
 #[test]
 fn a_dialog_that_fails_to_open_is_reported() {
     let mut harness = Harness::with_three_docs();
-    let root = harness.app.file_explorer.root().map(PathBuf::from);
+    let roots = harness.app.file_explorer.roots().to_vec();
     harness.app.file_picker = answer_with(Err("no portal".to_owned())).0;
     harness.app.folder_picker = answer_with(Err("no display".to_owned())).0;
 
@@ -321,11 +321,11 @@ fn a_dialog_that_fails_to_open_is_reported() {
     let folder_error = harness.app.error_message.take().unwrap();
     assert!(folder_error.contains("no display"));
     assert_eq!(harness.app.tabs.len(), 1);
-    assert_eq!(harness.app.file_explorer.root(), root.as_deref());
+    assert_eq!(harness.app.file_explorer.roots(), roots);
 }
 
 #[test]
-fn the_folder_dialog_starts_in_the_explorer_root_and_repoints_it() {
+fn the_folder_dialog_starts_in_the_last_folder_and_adds_the_picked_one() {
     let mut harness = Harness::with_three_docs();
     let folder = harness.path("notes");
     fs::create_dir(&folder).unwrap();
@@ -337,12 +337,21 @@ fn the_folder_dialog_starts_in_the_explorer_root_and_repoints_it() {
     harness.apply(AppAction::OpenFolder);
 
     assert_eq!(*started_in.borrow(), Some(harness.dir.clone()));
-    assert_eq!(harness.app.file_explorer.root(), Some(folder.as_path()));
+    assert_eq!(
+        harness.app.file_explorer.roots(),
+        [harness.dir.clone(), folder.clone()]
+    );
     assert!(harness.app.show_explorer);
     assert!(
         harness.app.watched_explorer_dirs().contains(&folder),
         "live reload follows the explorer to its new root"
     );
+
+    // A second folder dialog starts in the folder added last.
+    let (picker, started_in) = answer_with(Ok(None));
+    harness.app.folder_picker = picker;
+    harness.apply(AppAction::OpenFolder);
+    assert_eq!(*started_in.borrow(), Some(folder));
 }
 
 #[test]
@@ -353,10 +362,7 @@ fn a_cancelled_folder_dialog_leaves_the_explorer_alone() {
 
     harness.apply(AppAction::OpenFolder);
 
-    assert_eq!(
-        harness.app.file_explorer.root(),
-        Some(harness.dir.as_path())
-    );
+    assert_eq!(harness.app.file_explorer.roots(), [harness.dir.clone()]);
     assert!(!harness.app.show_explorer);
     assert!(harness.app.error_message.is_none());
 }

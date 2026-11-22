@@ -82,13 +82,15 @@ fn the_settings_the_reader_replaced_are_read_but_never_written() {
     let legacy: PersistedState = eframe::get_value(
         &MemoryStorage(HashMap::from([(
             APP_KEY.to_owned(),
-            "(dark_mode: Some(true), full_width_content: Some(true))".to_owned(),
+            "(dark_mode: Some(true), full_width_content: Some(true), explorer_root: Some(\"/notes\"))"
+                .to_owned(),
         )])),
         APP_KEY,
     )
     .expect("legacy state decodes");
     assert_eq!(legacy.dark_mode, Some(true));
     assert_eq!(legacy.full_width_content, Some(true));
+    assert_eq!(legacy.explorer_root, Some(PathBuf::from("/notes")));
     assert_eq!(legacy.theme, None);
     assert_eq!(legacy.reading_width, None);
     assert_eq!(legacy.line_spacing, None);
@@ -98,6 +100,7 @@ fn the_settings_the_reader_replaced_are_read_but_never_written() {
     let written = &storage.0[APP_KEY];
     assert!(!written.contains("dark_mode"), "{written}");
     assert!(!written.contains("full_width_content"), "{written}");
+    assert!(!written.contains("explorer_root:"), "{written}");
     assert!(written.contains("theme"), "{written}");
 }
 

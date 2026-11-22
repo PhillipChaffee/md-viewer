@@ -74,6 +74,10 @@ pub(crate) struct PersistedState {
     // File explorer state
     /// `None` on a fresh install, where the explorer starts hidden.
     pub(crate) show_explorer: Option<bool>,
+    /// The folders the explorer lists, in order.
+    pub(crate) explorer_roots: Option<Vec<PathBuf>>,
+    /// Read only: the one folder versions before `explorer_roots` listed.
+    #[serde(default, skip_serializing)]
     pub(crate) explorer_root: Option<PathBuf>,
     pub(crate) expanded_dirs: Option<Vec<PathBuf>>,
     pub(crate) explorer_sort_order: Option<SortOrder>,

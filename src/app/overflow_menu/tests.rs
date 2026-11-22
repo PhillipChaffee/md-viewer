@@ -233,7 +233,7 @@ fn open_file_opens_what_the_picker_returns_in_a_new_tab() {
 }
 
 #[test]
-fn open_folder_points_the_explorer_at_the_picked_folder() {
+fn open_folder_lists_the_picked_folder_in_the_explorer() {
     let mut harness = UiHarness::with_three_docs();
     let folder = harness.path("notes");
     std::fs::create_dir(&folder).unwrap();
@@ -243,7 +243,8 @@ fn open_folder_points_the_explorer_at_the_picked_folder() {
 
     harness.pick("Open Folder");
 
-    assert_eq!(harness.app().file_explorer.root(), Some(folder.as_path()));
+    let roots = harness.app().file_explorer.roots();
+    assert_eq!(roots.last(), Some(&folder));
     assert!(harness.app().show_explorer, "the new root is put on screen");
 }
 

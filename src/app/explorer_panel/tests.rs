@@ -7,7 +7,7 @@ use egui_kittest::kittest::{NodeT as _, Queryable as _};
 use super::*;
 use crate::app::content::tests::label_harness::LabelHarness;
 use crate::platform::Platform;
-use crate::test_support::{assert_close, painted_shapes};
+use crate::test_support::{assert_close, painted_shapes, ScratchDir};
 use crate::theme::ThemeId;
 
 /// `a.md` open in the only tab, beside `b.md` and a folder `sub` that holds
@@ -392,8 +392,8 @@ fn a_folder_left_open_in_the_last_session_lists_its_files() {
 
     let last_session = crate::explorer::FileExplorer::restored(
         SortOrder::default(),
-        HashSet::from([sub]),
-        Some(harness.dir.clone()),
+        HashSet::from([harness.dir.clone(), sub]),
+        vec![harness.dir.clone()],
     );
     harness.state_mut().file_explorer = last_session;
     harness.wait_for_explorer_scan();
@@ -615,4 +615,103 @@ fn the_explorer_title_is_the_folder_name() {
 #[test]
 fn a_root_without_a_name_is_titled_by_its_path() {
     assert_eq!(folder_name(Path::new("/")), "/");
+}
+
+/// The explorer of `explorer()` with a second folder, `other`, listed
+/// below the first. Returns the second folder and its name.
+fn two_folders() -> (LabelHarness, ScratchDir, String) {
+    let mut harness = explorer();
+    let other = ScratchDir::new();
+    other.file("elsewhere.md", "# Elsewhere");
+    harness
+        .state_mut()
+        .file_explorer
+        .add_root(other.path().to_path_buf());
+    harness.wait_for_explorer_scan();
+    harness.frames(2);
+    let name = folder_name(other.path()).into_owned();
+    (harness, other, name)
+}
+
+#[test]
+fn several_folders_are_listed_one_below_the_other_and_counted_in_the_title() {
+    let (harness, other, name) = two_folders();
+
+    assert!(is_listed(&harness, "FILES 2 folders"));
+    assert!(is_listed(&harness, "b.md"));
+    assert!(is_listed(&harness, "elsewhere.md"));
+    let first = explorer_row(&harness, &folder_name(&harness.dir)).rect();
+    let second = explorer_row(&harness, &name).rect();
+    assert!(first.top() < second.top());
+    assert_eq!(
+        harness.state().file_explorer.roots(),
+        [harness.dir.clone(), other.path().to_path_buf()]
+    );
+}
+
+#[test]
+fn a_listed_folder_closes_and_opens_from_its_row() {
+    let (mut harness, _other, name) = two_folders();
+
+    harness.click(&name);
+    assert!(!is_listed(&harness, "elsewhere.md"));
+    assert!(is_listed(&harness, "b.md"), "the other folder stays open");
+
+    harness.click(&name);
+    assert!(is_listed(&harness, "elsewhere.md"));
+}
+
+#[test]
+fn the_button_on_a_listed_folder_takes_it_out_of_the_sidebar() {
+    let (mut harness, _other, name) = two_folders();
+    let remove = RemoveName(&name).to_string();
+
+    point_at(&mut harness, &name);
+    harness.click(&remove);
+
+    assert!(!is_listed(&harness, &name));
+    assert!(!is_listed(&harness, "elsewhere.md"));
+    assert!(is_listed(&harness, "b.md"));
+    assert_eq!(harness.state().file_explorer.roots(), [harness.dir.clone()]);
+    let folder = folder_name(&harness.dir).into_owned();
+    assert!(is_listed(&harness, &format!("FILES {folder}")));
+}
+
+#[test]
+fn a_listed_folders_menu_takes_it_out_of_the_sidebar() {
+    let (mut harness, _other, name) = two_folders();
+
+    pick_from_context_menu(&mut harness, &name, "Remove from Sidebar");
+
+    assert!(!is_listed(&harness, "elsewhere.md"));
+    assert_eq!(harness.state().file_explorer.roots(), [harness.dir.clone()]);
+}
+
+#[test]
+fn a_listed_folder_is_inked_like_text_and_a_folder_in_it_is_muted() {
+    let harness = explorer();
+    let palette = harness.state().theme.palette();
+
+    assert_eq!(ink(&harness, &folder_name(&harness.dir)), palette.text);
+    assert_eq!(ink(&harness, "sub"), palette.muted);
+}
+
+#[test]
+fn add_folder_lists_the_picked_folder_below_the_others() {
+    let mut harness = explorer();
+    let other = ScratchDir::new();
+    other.file("elsewhere.md", "# Elsewhere");
+    let picked = other.path().to_path_buf();
+    harness.state_mut().folder_picker = Box::new(move |_| Ok(Some(picked.clone())));
+
+    pick(&mut harness, "Add Folder…");
+    harness.wait_for_explorer_scan();
+    harness.frames(2);
+
+    assert!(is_listed(&harness, "elsewhere.md"));
+    assert!(is_listed(&harness, "b.md"));
+    assert_eq!(
+        harness.state().file_explorer.roots(),
+        [harness.dir.clone(), other.path().to_path_buf()]
+    );
 }

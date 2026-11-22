@@ -236,6 +236,7 @@ fn outline_row(ui: &mut egui::Ui, row: &OutlineRow<'_>, outline: &mut OutlineUi<
         // Indent based on header level (h2 = 0, h3 = 1 indent, etc.)
         indent: f32::from(row.header.level.saturating_sub(2)) * sidebar::INDENT,
         current: outline.current == Some(row.index),
+        title: false,
         chevron: row.chevron,
         end: End::Nothing,
     };

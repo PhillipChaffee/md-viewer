@@ -303,6 +303,9 @@ pub(super) struct Row<'a> {
     pub(super) indent: f32,
     /// The row is where the reader is: the open file, the heading in view.
     pub(super) current: bool,
+    /// The row heads a group of rows, as a folder listed in the explorer
+    /// heads what is in it. It is inked like body text.
+    pub(super) title: bool,
     pub(super) chevron: Chevron,
     pub(super) end: End<'a>,
 }
@@ -319,8 +322,8 @@ pub(super) struct RowResponse {
     pub(super) button: Option<egui::Response>,
 }
 
-/// Lay one row across the sidebar and paint it. The current row is inked
-/// like body text and the others muted; the row under the pointer gets the
+/// Lay one row across the sidebar and paint it. The current row and a
+/// title are inked like body text and the others muted; the row under the pointer gets the
 /// raised wash, and the row the keyboard is on the focus ring.
 pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowResponse {
     let size = egui::vec2(ui.available_width(), ROW_HEIGHT);
@@ -342,7 +345,7 @@ pub(super) fn row(ui: &mut egui::Ui, palette: &Palette, row: &Row<'_>) -> RowRes
     }
     chrome::focus_ring(ui, palette, &response, rect);
     let (button, text_right) = end(ui, palette, &response, row.end);
-    let ink = if lit || row.current {
+    let ink = if lit || row.current || row.title {
         palette.text
     } else {
         palette.muted

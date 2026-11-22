@@ -346,7 +346,7 @@ fn watch_plan_starts_only_the_backends_it_has_paths_for() {
 fn explorer_watches_cover_the_root_and_its_expanded_directories() {
     let expanded = path_set(["/home/me/docs", "/home/me/docs/api"]);
 
-    let dirs = explorer_watch_dirs(Some(Path::new("/home/me")), &expanded, |_| true);
+    let dirs = explorer_watch_dirs(&[PathBuf::from("/home/me")], &expanded, |_| true);
 
     assert_eq!(
         dirs,
@@ -362,7 +362,7 @@ fn explorer_watches_skip_vanished_and_remote_directories() {
         "/run/user/1000/gvfs/sftp:host=example/notes",
     ]);
 
-    let dirs = explorer_watch_dirs(Some(Path::new("/home/me")), &expanded, |dir| {
+    let dirs = explorer_watch_dirs(&[PathBuf::from("/home/me")], &expanded, |dir| {
         dir != Path::new("/home/me/deleted")
     });
 
@@ -374,8 +374,25 @@ fn explorer_watches_are_empty_without_a_local_root() {
     let expanded = path_set(["/home/me/docs"]);
     let gvfs_root = Path::new("/run/user/1000/gvfs/sftp:host=example/notes");
 
-    assert!(explorer_watch_dirs(None, &expanded, |_| true).is_empty());
-    assert!(explorer_watch_dirs(Some(gvfs_root), &expanded, |_| true).is_empty());
+    assert!(explorer_watch_dirs(&[], &expanded, |_| true).is_empty());
+    assert!(explorer_watch_dirs(&[gvfs_root.to_path_buf()], &expanded, |_| true).is_empty());
+}
+
+#[test]
+fn explorer_watches_cover_every_local_root() {
+    let roots = [
+        PathBuf::from("/home/me/notes"),
+        PathBuf::from("/run/user/1000/gvfs/sftp:host=example/notes"),
+        PathBuf::from("/srv/recipes"),
+    ];
+    let expanded = path_set(["/srv/recipes/soups"]);
+
+    let dirs = explorer_watch_dirs(&roots, &expanded, |_| true);
+
+    assert_eq!(
+        dirs,
+        path_set(["/home/me/notes", "/srv/recipes", "/srv/recipes/soups"])
+    );
 }
 
 #[test]

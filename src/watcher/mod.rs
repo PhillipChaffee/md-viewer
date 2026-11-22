@@ -87,27 +87,29 @@ impl WatchPlan {
     }
 }
 
-/// The explorer directories to watch: a local root plus each expanded local
-/// directory that `is_dir` still finds.
+/// The explorer directories to watch: each local root plus each expanded
+/// local directory that `is_dir` still finds.
 ///
 /// The set mirrors the lazy explorer tree. Watching the root recursively walks
 /// its whole subtree on the main thread at startup (a ~6s hang on a home
 /// directory of ~455k directories), and only the directories the user can see
 /// need change events. A GVFS root stays unwatched: polling a remote tree
 /// costs an SFTP round trip per entry, and the explorer has a manual refresh.
+/// With no local root, nothing is watched.
 pub(crate) fn explorer_watch_dirs(
-    root: Option<&Path>,
+    roots: &[PathBuf],
     expanded: &HashSet<PathBuf>,
     is_dir: impl Fn(&Path) -> bool,
 ) -> HashSet<PathBuf> {
-    let Some(root) = root.filter(|root| !is_gvfs_path(root)) else {
+    let local_roots: Vec<&PathBuf> = roots.iter().filter(|root| !is_gvfs_path(root)).collect();
+    if local_roots.is_empty() {
         return HashSet::new();
-    };
+    }
     expanded
         .iter()
         .filter(|dir| !is_gvfs_path(dir) && is_dir(dir))
+        .chain(local_roots)
         .cloned()
-        .chain(std::iter::once(root.to_path_buf()))
         .collect()
 }
 
