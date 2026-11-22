@@ -13,7 +13,7 @@ use crate::app::lightbox::LightboxTexture;
 use crate::app::tests::Harness;
 use crate::app::ui_harness::{enlarged, frame_on, frames_until, launch, MemoryStorage, UiHarness};
 use crate::app::MarkdownApp;
-use crate::explorer::SortOrder;
+use crate::explorer::{FileTreeNode, SortOrder};
 use crate::layout::{LineSpacing, ReadingWidth};
 use crate::system_fonts::{FontPreset, TextSizeClass};
 use crate::test_support::{assert_close, ScratchDir};
@@ -125,7 +125,7 @@ fn settings_of(app: &MarkdownApp) -> impl PartialEq + std::fmt::Debug {
         (app.fonts.family.clone(), app.fonts.preset, app.fonts.size),
         (app.get_open_tab_paths(), app.active_tab),
         (
-            app.file_explorer.root().map(ToOwned::to_owned),
+            app.file_explorer.roots().to_vec(),
             app.file_explorer.expanded_dirs().clone(),
             app.file_explorer.sort_order() == SortOrder::NameDesc,
         ),
@@ -233,7 +233,7 @@ fn a_scan_still_running_keeps_the_frames_coming() {
         !app.file_explorer.is_scanning()
     });
     assert!(repaint_delay(&harness.idle()) > POLL_INTERVAL);
-    assert_eq!(harness.app.file_explorer.tree().len(), 3);
+    assert_eq!(listed_in_first_folder(&harness.app), 3);
 }
 
 #[test]
@@ -265,7 +265,18 @@ fn the_explorer_lists_the_folder_once_its_scan_lands() {
         !app.file_explorer.is_scanning()
     });
 
-    assert_eq!(harness.app.file_explorer.tree().len(), 3);
+    assert_eq!(listed_in_first_folder(&harness.app), 3);
+}
+
+/// How many entries the explorer's first folder lists.
+fn listed_in_first_folder(app: &MarkdownApp) -> usize {
+    match app.file_explorer.tree().first() {
+        Some(FileTreeNode::Directory {
+            children: Some(listed),
+            ..
+        }) => listed.len(),
+        _ => 0,
+    }
 }
 
 #[test]

@@ -133,7 +133,7 @@ fn everything_comes_back_together() {
     assert_eq!(reader.title(), "guide.md - Markdown Viewer");
     assert_eq!(reader.page_color(), Rgb::hex("#000000"));
     assert!((reader.column().width - column).abs() < 1.0);
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.assert_hides("CONTENTS");
     assert_eq!(zoom(&mut reader), "125%");
     reader.click("Appearance");
@@ -161,7 +161,7 @@ fn a_first_run_starts_from_the_defaults() {
 
     assert_eq!(reader.page_color(), Rgb::hex(DEFAULT_PAPER));
     assert!((reader.column().width - 680.0).abs() < 1.0);
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
     reader.assert_sees("CONTENTS");
     assert_eq!(zoom(&mut reader), "100%");
     assert!(menu_is_on(&mut reader, "Live Reload"));
@@ -230,7 +230,7 @@ fn an_old_session_keeps_its_tabs_zoom_and_sidebars() {
     let mut reader = launch.remembering(&saved).open();
 
     assert_eq!(reader.title(), "b.md - Markdown Viewer");
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.assert_hides("CONTENTS");
     assert_eq!(reader.page_color(), Rgb::hex("#2C2C2E"));
     assert_eq!(zoom(&mut reader), "125%");
@@ -285,7 +285,7 @@ fn a_session_with_one_thing_in_it_restores_that_and_defaults_the_rest() {
     assert!((reader.column().width - 680.0).abs() < 1.0);
     assert_eq!(zoom(&mut reader), "100%");
     reader.assert_sees("CONTENTS");
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
 }
 
 #[test]
@@ -325,7 +325,7 @@ fn sidebars_saved_too_narrow_come_back_wide_enough_to_use() {
 
     let reader = sink_remembering(saved).open();
 
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     assert!(reader.area_of("CONTENTS").width >= 40.0);
     assert!(reader.column().left >= 60.0, "{:?}", reader.column());
 }

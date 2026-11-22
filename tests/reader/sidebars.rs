@@ -149,19 +149,19 @@ fn a_reader_who_asked_for_the_contents_keeps_them_in_a_narrow_window() {
 #[test]
 fn the_files_sidebar_is_hidden_until_asked_for() {
     let mut reader = library();
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
 
     reader.press("Ctrl+Shift+E");
     reader.wait_for("the folder to be listed", |reader| {
         reader.count("changes.md") == 1
     });
 
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     assert_eq!(reader.count("readme.md"), 1);
     assert_eq!(reader.count("guides"), 1);
 
     reader.click("Files sidebar");
-    reader.assert_hides("FILES");
+    reader.assert_hides("Explorer options");
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn the_menu_shows_and_switches_the_files_sidebar() {
 
     reader.click("Show Explorer");
 
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.click("More");
     assert!(reader.is_on("Show Explorer"));
 }
@@ -258,7 +258,8 @@ fn the_files_sidebar_names_the_folder_it_lists() {
 
     reader.press("Ctrl+Shift+E");
 
-    reader.assert_sees(&format!("FILES {folder}"));
+    // Its section header, painted in capitals.
+    reader.assert_sees(&folder.to_uppercase());
 }
 
 #[test]

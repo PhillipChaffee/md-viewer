@@ -69,6 +69,11 @@ and honor the column alignment the Markdown asks for.
 
 ![A table, a code block, lists and a sequence diagram](screenshots/reader/sepia-table-code-lists.png)
 
+Code in a line of prose is set at the size of the text around it and
+stands on the same baseline, in a tint of its own and with no box.
+
+![Inline code in a paragraph, at the size of the prose and on its baseline](screenshots/reader/inline-code.png)
+
 ### Sidebars when you need them
 
 A file list on the left and a table of contents on the right. The contents
@@ -80,6 +85,14 @@ own, click the button that appears at the end of its row while you point
 at it, `Ctrl`-click or middle-click the row, or pick **Open in New Tab**
 from its right-click menu. A file that already has a tab comes to the
 front instead. A dot after the name marks the files that have a tab.
+
+The file list can hold several folders, each in a section of its own
+headed by the folder's name in small capitals. **Open Folder…** in **⋯**,
+or the **+** on the first section's header, adds one. A click on a
+section's header folds it away or opens it again, and the button that
+shows at its end while you point at it, or **Remove from Sidebar** in its
+right-click menu, takes the folder out of the list. The folders, and which of them
+are open, are remembered with the session.
 
 ![The files and contents sidebars](screenshots/reader/sidebars.png)
 
@@ -107,9 +120,10 @@ tab leads back.
   code in its companion,
   [Source Code Pro](https://github.com/adobe-fonts/source-code-pro). Other
   font presets and any installed font family are under **Aa → Fonts…**.
-- Code in a line of prose has no box. It is a little smaller than the text
-  around it and in a tint of its own, warm or on Sepia a muted olive,
-  which keeps the same 7:1 contrast as body text on all four themes.
+- Code in a line of prose has no box. It is the size of the text around
+  it, on the same baseline, and in a tint of its own, warm or on Sepia a
+  muted olive, which keeps the same 7:1 contrast as body text on all four
+  themes.
 - A line ends only where prose can break. A bracket, a comma, a full stop
   or a letter written against a piece of code, a link or bold text stays
   on the line with it.
@@ -290,6 +304,8 @@ With the mouse:
 | `Ctrl`-click a file or a link | ⌘-click | Open it in a new tab |
 | Middle-click a file in the sidebar | the same | Open it in a new tab |
 | Right-click a file in the sidebar | the same | **Open**, **Open in New Tab**, and what to copy |
+| Click a listed folder's name | the same | Fold it away or open it again |
+| Right-click a listed folder | the same | **Remove from Sidebar** or **Copy Path** |
 | Middle-click a tab | the same | Close the tab |
 
 On a Mac the command key is ⌘, and wherever this file says `Ctrl` read ⌘

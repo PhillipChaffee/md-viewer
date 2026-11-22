@@ -58,12 +58,12 @@ fn the_sidebars_come_back_as_they_were_left() {
     let mut reader = kitchen_sink();
     reader.press("Ctrl+Shift+E");
     reader.press("Ctrl+Shift+O");
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.assert_hides("CONTENTS");
 
     let mut reader = reader.restart(&["sink.md"]);
 
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.assert_hides("CONTENTS");
     reader.click("More");
     assert!(reader.is_on("Show Explorer"));

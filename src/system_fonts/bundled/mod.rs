@@ -4,6 +4,8 @@
 use egui::{FontData, FontDefinitions, FontFamily};
 use egui_commonmark_extended::STRONG_FONT_FAMILY;
 
+use super::FontPreset;
+
 #[cfg(test)]
 mod tests;
 
@@ -14,6 +16,8 @@ pub(crate) const DOCUMENT_HEADING_FAMILY: &str = "MarkdownHeading";
 /// Family of emphasized text when the document's faces include a true
 /// italic.
 pub(crate) const DOCUMENT_EMPHASIS_FAMILY: &str = "MarkdownEmphasis";
+/// Family of inline code: the code face set on the body's baseline.
+pub(crate) const DOCUMENT_CODE_FAMILY: &str = "MarkdownCode";
 /// Family of inline code in bold text: a bold code face where there is one.
 pub(crate) const DOCUMENT_STRONG_CODE_FAMILY: &str = "MarkdownStrongCode";
 
@@ -64,49 +68,57 @@ const READER_BOLD: BundledFace = BundledFace {
 };
 
 /// Source Code Pro, the serif's companion code face (SIL Open Font License
-/// 1.1; see `assets/fonts/SourceCodePro-LICENSE.txt`).
+/// 1.1; see `assets/fonts/SourceCodePro-LICENSE.txt`). Code blocks and
+/// inline code are set in it with different shifts, so each is registered
+/// under a key of its own.
 const READER_CODE: BundledFace = BundledFace {
     key: "ReaderCode",
     bytes: bundled_face!("SourceCodePro-Regular.ttf"),
-    baseline_shift: CODE_BASELINE_SHIFT,
+    baseline_shift: CODE_BLOCK_SHIFT,
+};
+const READER_INLINE_CODE: BundledFace = BundledFace {
+    key: "ReaderInlineCode",
+    bytes: bundled_face!("SourceCodePro-Regular.ttf"),
+    baseline_shift: INLINE_CODE_SHIFT,
 };
 const READER_CODE_SEMIBOLD: BundledFace = BundledFace {
     key: "ReaderCodeSemibold",
     bytes: bundled_face!("SourceCodePro-Semibold.ttf"),
-    baseline_shift: CODE_BASELINE_SHIFT,
+    baseline_shift: INLINE_CODE_SHIFT,
 };
-
-/// Inline code in the bundled faces is set this much smaller than the text
-/// around it, so that a line dense with code still reads as prose.
-pub(crate) const INLINE_CODE_SCALE: f32 = 0.86;
 
 /// Distance from the baseline to the top of the line in every cut of
 /// Source Serif 4, in ems: its ascender is 1036 of 1000 units.
 const SERIF_ASCENT_EM: f32 = 1.036;
 /// The same in both cuts of Source Code Pro: 984 of 1000 units.
 const CODE_ASCENT_EM: f32 = 0.984;
+/// Distance from the baseline to the bottom of the line in Source Code
+/// Pro: 273 of 1000 units.
+const CODE_DESCENT_EM: f32 = 0.273;
 
-/// How far down a bundled code face is shifted, as a fraction of its size,
-/// so that code set [`INLINE_CODE_SCALE`] the size of the serif around it
-/// sits on the serif's baseline.
+/// How far down inline code is shifted, as a fraction of its size, so that
+/// it sits on the baseline of the serif around it.
 ///
 /// egui hangs every face from the top of the line by its own ascent, so a
-/// smaller face with a lower ascent floats above the text beside it. The
-/// shift is a visual tweak of the face: it moves no line.
-///
-/// A code block is set in the same face at another size, so its letters
-/// move down by the same fraction of that size. The number is not worked
-/// out for a block: there it only takes the letters off the top of their
-/// line, to near its middle.
-const CODE_BASELINE_SHIFT: f32 = SERIF_ASCENT_EM / INLINE_CODE_SCALE - CODE_ASCENT_EM;
+/// face with a lower ascent floats above the text beside it. Inline code
+/// is set at the size of that text, where Source Code Pro's x-height (486
+/// units) matches Source Serif 4's (475). The shift is a visual tweak of
+/// the face: it moves no line.
+const INLINE_CODE_SHIFT: f32 = SERIF_ASCENT_EM - CODE_ASCENT_EM;
+
+/// How far down the letters of a code block are shifted, as a fraction of
+/// their size: half the room the block's line has over the face's own, so
+/// that each line of code sits in the middle of its line.
+const CODE_BLOCK_SHIFT: f32 =
+    (FontPreset::Reader.code_line_height() - 1.0) * (CODE_ASCENT_EM + CODE_DESCENT_EM) / 2.0;
 
 /// Register the families the document pane names: body, strong, heading,
-/// emphasis and strong code. Every font configuration gets all of them,
+/// emphasis, code and strong code. Every font configuration gets all of them,
 /// because egui panics on a family nobody registered.
 ///
 /// With `bundled`, each family leads with its Source Serif 4 face, and the
-/// monospace family and the strong code family with their Source Code Pro
-/// face. The rest of every chain is what the chrome uses, so a glyph the
+/// monospace family and the two inline code families with their Source
+/// Code Pro face. The rest of every chain is what the chrome uses, so a glyph the
 /// bundled face lacks (CJK, emoji) still resolves. Without it, the families
 /// are the chrome's own regular, bold and monospace chains.
 pub(crate) fn install_document_families(definitions: &mut FontDefinitions, bundled: bool) {
@@ -130,6 +142,7 @@ pub(crate) fn install_document_families(definitions: &mut FontDefinitions, bundl
     install(named(DOCUMENT_HEADING_FAMILY), &READER_BOLD, &bold);
     install(named(DOCUMENT_EMPHASIS_FAMILY), &READER_ITALIC, &regular);
     install(FontFamily::Monospace, &READER_CODE, &code);
+    install(named(DOCUMENT_CODE_FAMILY), &READER_INLINE_CODE, &code);
     install(
         named(DOCUMENT_STRONG_CODE_FAMILY),
         &READER_CODE_SEMIBOLD,

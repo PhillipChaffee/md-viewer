@@ -87,9 +87,14 @@ fn fail_watcher(harness: &mut Harness) {
     harness.app.live_reload.running.as_mut().unwrap().events = receiver;
 }
 
-/// An explorer with nothing open, pointed at `root`.
+/// An explorer listing `root`, open, with nothing open in it.
 fn explorer_on(root: impl Into<PathBuf>) -> FileExplorer {
-    FileExplorer::restored(SortOrder::default(), HashSet::new(), Some(root.into()))
+    let root = root.into();
+    FileExplorer::restored(
+        SortOrder::default(),
+        HashSet::from([root.clone()]),
+        vec![root],
+    )
 }
 
 fn explorer_root_names(harness: &Harness) -> Vec<&str> {
@@ -98,7 +103,14 @@ fn explorer_root_names(harness: &Harness) -> Vec<&str> {
             FileTreeNode::File { name, .. } | FileTreeNode::Directory { name, .. } => name,
         }
     }
-    harness.app.file_explorer.tree().iter().map(name).collect()
+    let Some(FileTreeNode::Directory {
+        children: Some(listed),
+        ..
+    }) = harness.app.file_explorer.tree().first()
+    else {
+        return Vec::new();
+    };
+    listed.iter().map(name).collect()
 }
 
 #[test]

@@ -115,7 +115,7 @@ impl MarkdownApp {
     /// root.
     fn watch_plan(&self) -> Option<WatchPlan> {
         let explorer_dirs = explorer_watch_dirs(
-            self.file_explorer.root(),
+            self.file_explorer.roots(),
             self.file_explorer.expanded_dirs(),
             Path::is_dir,
         );
@@ -167,7 +167,7 @@ impl MarkdownApp {
         }
     }
 
-    /// Reconcile the non-recursive explorer-directory watches (root + expanded
+    /// Reconcile the non-recursive explorer-directory watches (roots + expanded
     /// dirs) against the live watcher after the expanded set changes. Mirrors
     /// `update_watched_paths`'s incremental diff so expand/collapse doesn't tear
     /// down and rebuild the debouncer + bridge thread.
@@ -177,7 +177,7 @@ impl MarkdownApp {
         }
 
         let desired = explorer_watch_dirs(
-            self.file_explorer.root(),
+            self.file_explorer.roots(),
             self.file_explorer.expanded_dirs(),
             Path::is_dir,
         );
@@ -245,7 +245,7 @@ impl MarkdownApp {
 
         for path in changed_paths {
             self.flash_changed_path(&path, now);
-            if let Some(root) = self.file_explorer.root() {
+            if let Some(root) = self.file_explorer.root_holding(&path) {
                 // The change can alter one listing: that of the directory
                 // holding the path, when it is inside the explorer.
                 let listing = ancestors_within(&path, root).next();
@@ -276,12 +276,12 @@ impl MarkdownApp {
     }
 
     /// Starts the explorer highlight for a changed file and for each
-    /// directory between it and the explorer root.
+    /// directory between it and the explorer root that holds it.
     fn flash_changed_path(&mut self, path: &Path, now: Instant) {
         // The explorer looks rows up by canonical path.
         let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         self.flashing_paths.insert(canonical(path), now);
-        if let Some(root) = self.file_explorer.root() {
+        if let Some(root) = self.file_explorer.root_holding(path) {
             for dir in ancestors_within(path, root) {
                 self.flashing_paths.insert(canonical(dir), now);
             }

@@ -359,6 +359,9 @@ impl Style {
             rich_text = rich_text
                 .text_style(TextStyle::Monospace)
                 .size(selected_font_size * scale);
+            if let Some(family) = block_style.and_then(|style| style.code_font_family.as_ref()) {
+                rich_text = rich_text.family(family.clone());
+            }
             // md-viewer patch: never `RichText::code()`, whose background
             // no caller can replace: a search highlight sets its own over
             // this one. A link colors its text after this, so its color

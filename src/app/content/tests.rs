@@ -515,8 +515,8 @@ fn the_reader_sets_body_headings_emphasis_and_code_each_in_its_own_face() {
     assert!(!emphasis.italics);
 
     let code = text_format(&output, "mono");
-    assert_eq!(code.font_id.family, egui::FontFamily::Monospace);
-    assert_close(code.font_id.size, body.font_id.size * 0.86);
+    assert_eq!(code.font_id.family, family("MarkdownCode"));
+    assert_close(code.font_id.size, body.font_id.size);
 }
 
 #[test]

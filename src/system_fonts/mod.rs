@@ -5,8 +5,8 @@ use fontique::{Collection, CollectionOptions, FamilyId, SourceCache};
 use serde::{Deserialize, Serialize};
 
 use crate::system_fonts::bundled::{
-    install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_EMPHASIS_FAMILY,
-    DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY, INLINE_CODE_SCALE,
+    install_document_families, DOCUMENT_BODY_FAMILY, DOCUMENT_CODE_FAMILY,
+    DOCUMENT_EMPHASIS_FAMILY, DOCUMENT_HEADING_FAMILY, DOCUMENT_STRONG_CODE_FAMILY,
 };
 use crate::system_fonts::emoji::install_emoji_fonts;
 use crate::system_fonts::install::{
@@ -279,10 +279,9 @@ pub(crate) struct DocumentFonts {
     pub(crate) heading: FontId,
     /// The font of code blocks.
     pub(crate) code: FontId,
-    /// Size of inline code as a multiple of the text around it, where the
-    /// code face is aligned to the body face's baseline at that size.
-    /// `None` sets inline code at the size of the text around it.
-    pub(crate) inline_code_scale: Option<f32>,
+    /// The family of inline code, which is set at the size of the text
+    /// around it.
+    pub(crate) inline_code: FontFamily,
     /// A true italic family, where the document's faces have one. `None`
     /// means emphasis is the body face slanted.
     pub(crate) emphasis: Option<FontFamily>,
@@ -316,7 +315,7 @@ pub(crate) fn document_fonts(config: &FontConfig) -> DocumentFonts {
         body: FontId::new(body, FontFamily::Name(DOCUMENT_BODY_FAMILY.into())),
         heading: FontId::new(body * 2.0, FontFamily::Name(DOCUMENT_HEADING_FAMILY.into())),
         code: FontId::monospace(body * CODE_SCALE),
-        inline_code_scale: bundled.then_some(INLINE_CODE_SCALE),
+        inline_code: FontFamily::Name(DOCUMENT_CODE_FAMILY.into()),
         emphasis: bundled.then(|| FontFamily::Name(DOCUMENT_EMPHASIS_FAMILY.into())),
         strong_code: FontFamily::Name(DOCUMENT_STRONG_CODE_FAMILY.into()),
     }

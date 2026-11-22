@@ -135,28 +135,53 @@ fn initial_tabs(
     (tabs, None)
 }
 
-/// The file explorer for this launch. Its root is the first of: the command
-/// line file's folder, the persisted root if it still exists, the first open
-/// tab's folder, and the working directory.
+/// The explorer folders a session saved.
+struct SavedRoots {
+    roots: Option<Vec<PathBuf>>,
+    /// The one folder a version before several folders saved. It was
+    /// always open, so it comes back open.
+    legacy_root: Option<PathBuf>,
+}
+
+/// The file explorer for this launch. It lists the saved folders that
+/// still exist, then the command line file's folder unless one of them
+/// already holds it. With neither, it lists the first open tab's folder,
+/// or else the working directory. A folder added here is open.
 fn initial_explorer(
     file: Option<&Path>,
     first_tab: Option<&Tab>,
     sort_order: Option<SortOrder>,
-    persisted_root: Option<PathBuf>,
+    saved: SavedRoots,
     expanded_dirs: Option<Vec<PathBuf>>,
 ) -> FileExplorer {
-    let root = file
+    let mut expanded: HashSet<PathBuf> = expanded_dirs.into_iter().flatten().collect();
+    let legacy = saved.roots.is_none();
+    let mut roots: Vec<PathBuf> = saved
+        .roots
+        .or_else(|| saved.legacy_root.map(|root| vec![root]))
+        .into_iter()
+        .flatten()
+        .filter(|root| root.exists())
+        .collect();
+    if legacy {
+        expanded.extend(roots.iter().cloned());
+    }
+    let file_folder = file
         .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .or_else(|| persisted_root.filter(|root| root.exists()))
-        .or_else(|| {
+        .filter(|folder| !roots.iter().any(|root| folder.starts_with(root)));
+    let added = file_folder.map(Path::to_path_buf).or_else(|| {
+        roots.is_empty().then(|| {
             first_tab
                 .and_then(|tab| tab.path.parent())
                 .map(Path::to_path_buf)
-        })
-        .or_else(|| std::env::current_dir().ok());
-    let expanded_dirs = expanded_dirs.into_iter().flatten().collect();
-    FileExplorer::restored(sort_order.unwrap_or_default(), expanded_dirs, root)
+                .or_else(|| std::env::current_dir().ok())
+        })?
+    });
+    if let Some(added) = added {
+        expanded.insert(added.clone());
+        roots.push(added);
+    }
+    FileExplorer::restored(sort_order.unwrap_or_default(), expanded, roots)
 }
 
 /// Whether `display`, the value of `DISPLAY`, names a virtual display (e.g.,
@@ -248,7 +273,10 @@ impl MarkdownApp {
             file.as_deref(),
             tabs.first(),
             persisted.explorer_sort_order,
-            persisted.explorer_root,
+            SavedRoots {
+                roots: persisted.explorer_roots,
+                legacy_root: persisted.explorer_root,
+            },
             persisted.expanded_dirs,
         );
 
@@ -331,7 +359,8 @@ impl MarkdownApp {
             open_tabs: Some(self.get_open_tab_paths()),
             active_tab: Some(self.active_tab),
             show_explorer: Some(self.show_explorer),
-            explorer_root: self.file_explorer.root().map(Path::to_path_buf),
+            explorer_roots: Some(self.file_explorer.roots().to_vec()),
+            explorer_root: None,
             expanded_dirs: Some(self.file_explorer.expanded_dirs().iter().cloned().collect()),
             explorer_sort_order: Some(self.file_explorer.sort_order()),
             explorer_width: Some(self.explorer_width),

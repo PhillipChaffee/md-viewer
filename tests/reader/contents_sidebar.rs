@@ -82,7 +82,7 @@ fn contents_edge(reader: &Reader) -> f32 {
     edge_from(reader, reader.area_of("CONTENTS").left, -1.0)
 }
 
-/// The files sidebar's right edge. Its header reads `FILES <folder>`.
+/// The files sidebar's right edge.
 fn files_edge(reader: &Reader) -> f32 {
     edge_from(reader, 100.0, 1.0)
 }
@@ -363,7 +363,7 @@ fn the_files_sidebar_stays_in_a_narrow_window_while_the_contents_make_way() {
 
     reader.resize_window(700.0, 800.0);
 
-    reader.assert_sees("FILES");
+    reader.assert_sees("Explorer options");
     reader.assert_hides("CONTENTS");
     reader.assert_sees("Welcome.");
 }

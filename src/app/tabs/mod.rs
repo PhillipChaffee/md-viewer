@@ -95,7 +95,7 @@ impl MarkdownApp {
             .tabs
             .get(self.active_tab)
             .and_then(|tab| tab.path.parent())
-            .or_else(|| self.file_explorer.root());
+            .or_else(|| self.file_explorer.roots().first().map(PathBuf::as_path));
 
         match (self.file_picker)(initial_dir) {
             Ok(Some(path)) => self.open_in_new_tab(path),
@@ -107,16 +107,19 @@ impl MarkdownApp {
         }
     }
 
-    /// Open a native folder picker and point the file explorer at the chosen
-    /// directory (issue #28). The chosen root is persisted via `save()`.
+    /// Open a native folder picker and list the chosen directory in the
+    /// file explorer, below the folders already there (issue #28). The
+    /// picker starts in the folder added last. The roots are persisted via
+    /// `save()`.
     pub(crate) fn open_folder_dialog(&mut self) {
-        match (self.folder_picker)(self.file_explorer.root()) {
+        let last = self.file_explorer.roots().last().map(PathBuf::as_path);
+        match (self.folder_picker)(last) {
             Ok(Some(path)) => {
-                self.file_explorer.set_root(path);
+                self.file_explorer.add_root(path);
                 // Make sure the explorer is visible so the result is seen.
                 self.show_explorer = true;
-                // Rebuild the watcher so the new root is watched recursively
-                // (`update_watched_paths` only reconciles tab paths, not the root).
+                // Rebuild the watcher so the new root is watched
+                // (`update_watched_paths` only reconciles tab paths, not roots).
                 if self.live_reload.is_enabled() {
                     self.start_watching();
                 }

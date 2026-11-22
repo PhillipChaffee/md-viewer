@@ -304,6 +304,11 @@ pub struct BlockStyle {
     /// before setting it. `None` keeps the regular code face there.
     /// md-viewer patch.
     pub strong_code_font_family: Option<egui::FontFamily>,
+    /// The face of inline code, which a code block does not share. Callers
+    /// must register the family with egui before setting it. `None` keeps
+    /// the monospace family of code blocks.
+    /// md-viewer patch.
+    pub code_font_family: Option<egui::FontFamily>,
 }
 
 #[cfg(test)]
