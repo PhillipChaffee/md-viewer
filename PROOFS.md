@@ -56,7 +56,7 @@ about, and the harness in its place takes 25 s; the other is
 `run-proofs.sh` fails when a harness does not verify, when a
 `kani::cover!` check is not reached, or when the number of harnesses
 verified differs from the number of `#[kani::proof]` attributes in `src/`.
-It is not in `run-gates.sh`: it needs a second build of the dependency
+It is not in `./gates`: it needs a second build of the dependency
 graph and several minutes of solver time, which is more than the other
 gates together.
 

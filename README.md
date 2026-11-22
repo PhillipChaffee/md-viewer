@@ -332,11 +332,13 @@ flowchart LR
 ## Development
 
 The application crate runs under the Rust baseline from
-[full-lint](https://github.com/PhillipChaffee/full-lint). One command runs
-every check:
+[full-lint](https://github.com/PhillipChaffee/full-lint), at the commit CI
+pins. One command runs every check, after one that installs the pinned
+tools:
 
 ```bash
-./run-gates.sh
+./gates tools
+./gates
 ```
 
 | Gate | Rule |
@@ -405,7 +407,7 @@ mutant.
 | Mutated | All of `src/` and `crates/mac-window/src/lib.rs`: 2282 mutants |
 | Not mutated | `src/**/proofs.rs`, which only `cargo kani` compiles; `crates/mac-window/src/mac.rs`, which only a Mac compiles; `vendor/`, which is outside the workspace |
 | Tests run against each mutant | The unit tests of both crates and `tests/reader` |
-| Tests not run against each mutant | `tests/e2e`. Its window tests need a virtual display and run on every pull request in the `test` job |
+| Tests not run against each mutant | `tests/e2e`. Its window tests need a virtual display and run on every pull request in the `full-lint-code` job |
 | Shards | 48 runners, each with `--shard k/48`. Mutant `i` goes to shard `i % 48`, so each shard gets part of every file |
 | Result | A last job named `mutation` merges the shards and applies the floor |
 
