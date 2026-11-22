@@ -54,7 +54,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-full-lint-code
       cancel-in-progress: true
-    uses: PhillipChaffee/full-lint/.github/workflows/rust.yml@0d729517671704e2c69ddaa9c61bff67b023fe75  # phillip/vibrant-volta-ykqzuy, not yet on main
+    uses: PhillipChaffee/full-lint/.github/workflows/rust.yml@79e3c72edebff8f4f119bef780b7effebf80490b  # phillip/vibrant-volta-ykqzuy, not yet on main
     with:
       hygiene: false
       # Every code gate builds eframe, typst and merman, and the coverage
@@ -76,7 +76,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-full-lint-hygiene
       cancel-in-progress: true
-    uses: PhillipChaffee/full-lint/.github/workflows/rust.yml@0d729517671704e2c69ddaa9c61bff67b023fe75  # phillip/vibrant-volta-ykqzuy, not yet on main
+    uses: PhillipChaffee/full-lint/.github/workflows/rust.yml@79e3c72edebff8f4f119bef780b7effebf80490b  # phillip/vibrant-volta-ykqzuy, not yet on main
     with:
       code: false
 
