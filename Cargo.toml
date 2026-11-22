@@ -83,9 +83,6 @@ ignored = ["image"]
 [features]
 default = []
 
-# The lint tables below are the full-lint Rust baseline
-# (github.com/PhillipChaffee/full-lint, rust/Cargo.toml.example). CI turns
-# every warn level into an error through -D warnings.
 [workspace]
 # `crates/mac-window` holds the AppKit calls the window needs on a Mac,
 # two of them unsafe: this crate forbids unsafe code, so they cannot
@@ -95,55 +92,38 @@ members = ["crates/mac-window"]
 # are upstream code this repository patches in, reviewed against upstream.
 exclude = ["vendor"]
 
+# >>> full-lint managed (./gates sync rewrites this block; add a line with "# exception: <reason>" to extend it)
 [workspace.lints.rust]
-unsafe_code = "forbid"                # this binary needs no unsafe; a use of it is a design change to review
-missing_docs = "deny"                 # an undocumented public item is an error to fix, not a taste
+unsafe_code = "forbid"
+missing_docs = "deny"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 trivial_casts = "warn"
 trivial_numeric_casts = "warn"
 unused_qualifications = "warn"
-# `kani` is set only by `cargo kani`, which compiles the proof harnesses in
-# each module's `proofs.rs`; no other build sees them (see PROOFS.md).
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }  # exception: `kani` is set only by `cargo kani`, which compiles the proof harnesses in each module's proofs.rs (PROOFS.md)
 
 [workspace.lints.rustdoc]
-# The whole stable group in one entry, so lints rustdoc gains stay owned by
-# the group by default.
 all = "deny"
 
 [workspace.lints.clippy]
-# Individual entries at priority 0 override these groups because the groups
-# sit at priority -1.
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }   # experimental; the toolchain pin makes its emission deterministic
-cargo = { level = "warn", priority = -1 }     # lints the manifest itself
-
-# --- group exceptions, one reason each
-# nursery's redundant_pub_crate contradicts rustc's unreachable_pub: one
-# wants `pub` inside a private module, the other forbids it. The rustc lint
-# wins; `pub(crate)` states the real reach of an item.
-redundant_pub_crate = "allow"
-# The eframe/winit/wayland graph pins several generations of the same
-# foundational crates; this manifest cannot converge versions it does not
-# choose. cargo-deny's bans check owns the duplicate list, with reasons.
-multiple_crate_versions = "allow"
-
-# --- restriction picks, one reason each
-unwrap_used = "warn"                  # a panic in a desktop viewer loses the user's open tabs and unsaved edits
-expect_used = "warn"                  # same failure as unwrap, with a message nobody sees in a detached GUI
-panic = "warn"                        # same: the window vanishes with no dialog
-todo = "warn"                         # unfinished code must not ship
-unimplemented = "warn"                # same
-dbg_macro = "warn"                    # debug output left behind
-print_stdout = "warn"                 # the app detaches from the terminal; output goes through `log`
-print_stderr = "warn"                 # same
-# An allow without a why outlives its reason. The suppression path is
-# `#[expect(..., reason = "...")]`, which fails the build once it stops firing.
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
 allow_attributes_without_reason = "warn"
-# Each paragraph of a doc comment ends in punctuation.
 doc_paragraphs_missing_punctuation = "warn"
+redundant_pub_crate = "allow"  # exception: nursery's redundant_pub_crate contradicts rustc's unreachable_pub; the rustc lint wins, `pub(crate)` states the real reach
+multiple_crate_versions = "allow"  # exception: the eframe, typst and merman stacks pin generations of shared crates this manifest does not choose; deny.toml's bans list owns the duplicates
+# <<< full-lint managed
 
 [lints]
 workspace = true
