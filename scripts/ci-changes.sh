@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Says which CI jobs a change needs, from the paths it touches. Prints two
 # lines for $GITHUB_OUTPUT:
-#   code=true|false    the Rust jobs: lint, test, doc-comments, renderer
-#                      and the cross-platform cargo check
+#   code=true|false    the Rust jobs: full-lint-code, renderer and the
+#                      cross-platform cargo check
 #   proofs=true|false  the Kani proofs
-# hygiene and version-sync are not on the list: they always run.
+# full-lint-hygiene, site-facts and version-sync are not on the list: they
+# always run.
 #
 # Usage: ci-changes.sh <base> <head>   the paths that differ between two commits
 #        ci-changes.sh -               the paths on standard input, one per line

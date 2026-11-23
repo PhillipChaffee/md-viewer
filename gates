@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Runs full-lint's gates at the commit this repo's CI pins. Copied verbatim
+# from full-lint's consumer/gates; `./gates sync` keeps it current.
+# FULL_LINT_DIR=<checkout> runs that checkout instead of the pinned commit.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+ci_files=()
+for f in .github/workflows/*.yml .gitlab-ci.yml; do [[ -f "$f" ]] && ci_files+=("$f"); done
+pins="$( ((${#ci_files[@]})) && grep -ohE 'PhillipChaffee/full-lint/\.github/workflows/[a-z]+(-mutation)?\.yml@[0-9a-f]{40}.*|raw\.githubusercontent\.com/PhillipChaffee/full-lint/[0-9a-f]{40}/gitlab/[a-z]+\.yml.*' "${ci_files[@]}")" || true
+pairs="$(sed -E 's#.*/workflows/([a-z]+)(-mutation)?\.yml@([0-9a-f]{40}).*#\1 \3#; s#.*/full-lint/([0-9a-f]{40})/gitlab/([a-z]+)\.yml.*#\2 \1#' <<<"$pins" | sort -u)"
+if [[ -z "$pins" || "$(wc -l <<<"$pairs")" -ne 1 ]]; then
+	echo "gates: need exactly one full-lint pin (one language, one 40-hex commit) in .github/workflows/*.yml or .gitlab-ci.yml; found: $(tr '\n' ' ' <<<"${pairs:-none}")" >&2
+	exit 2
+fi
+read -r lang sha <<<"$pairs"
+FULL_LINT_TAG="$(grep -oE '#[[:space:]]*v[0-9][^[:space:]]*' <<<"$pins" | head -n 1 | tr -d '# ')" || true
+export FULL_LINT_TAG FULL_LINT_SHA="$sha"
+if [[ -n "${FULL_LINT_DIR:-}" ]]; then
+	dir="$FULL_LINT_DIR" FULL_LINT_SHA=local
+else
+	dir="${XDG_CACHE_HOME:-$HOME/.cache}/full-lint/$sha"
+fi
+if [[ ! -d "$dir" && -z "${FULL_LINT_DIR:-}" ]]; then
+	# Fetch beside the cache entry, then rename: an interrupted fetch never
+	# leaves a half-written cache, and a concurrent fetch that lost the race
+	# just discards its copy.
+	mkdir -p "${dir%/*}"
+	tmp="$(mktemp -d "$dir.fetch.XXXXXX")"
+	trap 'rm -rf "$tmp"' EXIT
+	git -C "$tmp" init -q
+	git -C "$tmp" fetch -q --depth 1 https://github.com/PhillipChaffee/full-lint "$sha"
+	git -C "$tmp" -c advice.detachedHead=false checkout -q FETCH_HEAD
+	mv -T "$tmp" "$dir" 2>/dev/null || rm -rf "$tmp"
+fi
+if [[ ! -x "$dir/bin/full-lint" ]]; then
+	echo "gates: $dir has no bin/full-lint; pin a full-lint commit that ships it" >&2
+	exit 2
+fi
+exec "$dir/bin/full-lint" "$lang" "$@"

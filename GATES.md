@@ -1,8 +1,18 @@
 # Gates
 
 The application crate (`src/`) runs under the Rust baseline from
-[full-lint](https://github.com/PhillipChaffee/full-lint). `./run-gates.sh`
-runs every gate; `.github/workflows/ci.yml` runs the same commands.
+[full-lint](https://github.com/PhillipChaffee/full-lint), by reference: the
+repository copies none of full-lint's scripts or default configs. `./gates`
+runs every full-lint gate at the commit the two `uses:` lines in
+`.github/workflows/ci.yml` pin, and CI's `full-lint-code` and
+`full-lint-hygiene` jobs run the same `./gates code` and `./gates hygiene`
+through full-lint's reusable workflow. `./gates tools` installs the pinned
+tools; `./gates list` prints each gate's command and every local config that
+overrides full-lint's copy.
+
+To move to a newer full-lint, change the SHA on both `uses:` lines, then run
+`./gates sync` (it rewrites the managed lint block in `Cargo.toml` and
+`rust-toolchain.toml`, and `./gates` itself) and `./gates`.
 
 One house rule sits on top: a test never lives in the file it tests. Each
 module's tests are in a sibling `tests.rs`, and its proofs, where it has
@@ -16,7 +26,7 @@ Every gate runs on every change that could affect it, and on every push to
 can reach that job. `scripts/ci-changes.sh` holds the rule and can be run
 by hand: `scripts/ci-changes.sh <base> <head>`.
 
-| The pull request changes | `hygiene`, `version-sync` | `lint`, `test`, `doc-comments`, `renderer`, cross-platform `cargo check` | `proofs` |
+| The pull request changes | `full-lint-hygiene`, `site-facts`, `version-sync` | `full-lint-code`, `renderer`, cross-platform `cargo check` | `proofs` |
 | --- | --- | --- | --- |
 | Something Kani compiles or the proof machinery: `src/`, `crates/`, `vendor/`, `assets/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, a workflow, `run-proofs.sh`, `scripts/*proof*`, `scripts/ci-changes.sh` | Run | Run | Run |
 | Other code and configuration only: `tests/`, `data/`, the other scripts, lint and tool configuration, and any path not named in this table | Run | Run | Skipped |
@@ -30,9 +40,9 @@ cross-platform job always starts and skips its steps, and a last job named
 
 Four things keep this from hiding a failure:
 
-- **Documentation is still checked.** `hygiene` holds the spelling,
-  Markdown, link, secret and duplication gates and the site-facts check,
-  and it has no condition.
+- **Documentation is still checked.** `full-lint-hygiene` holds the
+  spelling, Markdown, link, secret and duplication gates, and neither it
+  nor `site-facts` has a condition.
 - **Markdown a test reads is code.** `tests/fixtures/` and the renderer's
   examples are compiled into test binaries, so a change there runs
   everything.
@@ -44,13 +54,14 @@ Four things keep this from hiding a failure:
 
 Four more facts about how the jobs are laid out:
 
-- **The tests run once.** `test` runs the suite under `cargo llvm-cov`,
-  which is both the test run and the coverage gate. It builds the same five
-  test binaries as `cargo test --workspace`. It does not run doctests, and
-  the workspace has none; the first one needs `cargo test --workspace
-  --doc` added beside it.
-- **`lint` is its own job.** `cargo fmt --check` and clippy run beside the
-  tests, not before them.
+- **The tests run twice.** full-lint's `tests` gate runs `cargo test
+  --workspace`, doctests included, and its `coverage` gate runs the suite
+  again under `cargo llvm-cov`. Before this repository took full-lint by
+  reference, the coverage run was the only test run.
+- **The code gates share one runner.** `full-lint-code` runs format,
+  clippy, rustdoc, tests, coverage, cognitive complexity and file length in
+  parallel on one machine, in one job with a 60-minute limit. A clippy
+  failure is reported when the job ends, not ahead of the tests.
 - **The proofs run in three shares,** one runner each, and a job named
   `proofs` reports the three as one result. [PROOFS.md](PROOFS.md) says how
   the harnesses are dealt out and why none can be missed.
@@ -74,8 +85,9 @@ edit, save and theme shortcuts from the binding table in
 headings and package lists the page links to. Each fact on a page carries
 a `data-fact` attribute naming it. The counts ("four themes", "three line
 spacings") and the GitHub and Pages addresses are found without one. It
-runs in `hygiene` and in `./run-gates.sh`, and by hand as
-`scripts/check-site-facts.sh`. What it cannot see is a new fact written
+runs in CI's `site-facts` job, and by hand as
+`scripts/check-site-facts.sh`. `./gates` does not run it: full-lint has no
+place for a repository's own gate. What it cannot see is a new fact written
 into the page without a `data-fact`.
 
 ## Where the retrofit left the crate
@@ -95,21 +107,19 @@ Everything below narrows a gate. Each carries its reason in the file named.
 | Where | What it narrows |
 | --- | --- |
 | `Cargo.toml` `[workspace] exclude` | `vendor/` is outside clippy, rustdoc, tests and coverage. See the caveat below. |
-| `run-gates.sh`, `ci.yml` | The cognitive gate reads `src` and `crates` (arborist has no exclude switch). The TODO grep skips `vendor`. osv-scanner reads the root `Cargo.lock` only. |
+| full-lint itself | The cognitive gate, the file-length gate, the TODO grep and both osv-scanner scans skip `vendor/`, so osv-scanner reads the root `Cargo.lock` only. The cognitive gate reads `tests/` too, which the copied runner did not. |
 | `crates/mac-window/Cargo.toml` lint table | `unsafe_code` is `deny` where the workspace says `forbid`, for three functions, each behind an `#[expect(unsafe_code, reason)]`. See the three sections below. |
 | `crates/mac-window/src/mac.rs` | Compiled for macOS only, so on Linux, where the gates run, clippy, the tests, the coverage gate and mutation testing never see it. See the section below. |
 | `clippy.toml` | `unwrap`, `expect` and `panic` are allowed inside tests. |
-| `Cargo.toml` lint table | `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed. The `unexpected_cfgs` entry declares one cfg, `cfg(kani)`, which the proof harnesses are compiled under. |
-| `src/**/proofs.rs` | The proof harnesses are compiled only by `cargo kani`, so clippy, rustdoc, the tests and the coverage gate never see them. rustfmt, the complexity cap and the file-length cap do. `./run-proofs.sh` and the `proofs` CI job are their gate; it is not part of `run-gates.sh`. See [PROOFS.md](PROOFS.md). |
+| `Cargo.toml` managed lint block | Three lines marked `# exception:`, which `./gates` reports as warnings on every run: `redundant_pub_crate` (contradicts `unreachable_pub`) and `multiple_crate_versions` (cargo-deny owns it) are allowed, and `unexpected_cfgs` declares one cfg, `cfg(kani)`, which the proof harnesses are compiled under. |
+| `src/**/proofs.rs` | The proof harnesses are compiled only by `cargo kani`, so clippy, rustdoc, the tests and the coverage gate never see them. rustfmt, the complexity cap and the file-length cap do. `./run-proofs.sh` and the `proofs` CI job are their gate; it is not part of `./gates`. See [PROOFS.md](PROOFS.md). |
 | `src/app/system_quit/mod.rs` | "Nothing computed per frame" is narrowed for one comparison of each tab's text with its saved text. See the section below. |
 | `src/` | Seven `#[expect(..., reason)]`: five float casts on pixel math, one percentage cast, one `struct_excessive_bools` on `MarkdownApp`. No `#[allow]`. |
 | `deny.toml` | Four advisories ignored with review dates. 66 duplicate crates skipped by name, plus the template's `windows-sys` tree. Five licenses added to the allow-list. `unmaintained` and `unsound` fail for direct dependencies only (the template's setting). |
-| `osv-scanner.toml` | Fourteen advisories ignored: the same four, and ten "unmaintained" notices on transitive crates. Two license overrides: one for a `WITH LLVM-exception` expression, and one naming this repository's own unpublished `mac-window` crate as MIT, which the registry cannot answer for. |
-| `ci.yml`, `run-gates.sh` license list | The shared full-lint list, unchanged, plus `Zlib`, `BSL-1.0`, `CDLA-Permissive-2.0`, `OFL-1.1`, `Ubuntu-font-1.0`. |
+| `osv-scanner.toml` | Fourteen advisories ignored: the same four, and ten "unmaintained" notices on transitive crates. Two license overrides: one for a `WITH LLVM-exception` expression, and one naming this repository's own unpublished `mac-window` crate as MIT, which the registry cannot answer for. Six packages whose licenses deny.toml allows and full-lint's shared osv-scanner list does not (`Zlib`, `BSL-1.0`, `CDLA-Permissive-2.0`, `OFL-1.1`, `Ubuntu-font-1.0`) have their license check skipped by name, because the list cannot be extended. |
 | `Cargo.toml` cargo-shear | `image` is ignored: used for its features only. |
-| `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc` | `vendor/` and build output are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. |
+| `.typos.toml`, `.jscpd.json`, `lychee.toml`, `.markdownlint-cli2.jsonc`, `clippy.toml`, `deny.toml` | Each replaces full-lint's copy whole, and `./gates` prints `override: <file> (bundled copy not used)` for each on every run. `vendor/` and build output are skipped. markdownlint turns off MD013, MD025, MD033, MD036, MD041, MD060 and relaxes MD010 and MD024. A change full-lint makes to its own copy of one of these files does not reach this repository until it is made here too. |
 | `lychee.toml` | The two font license files, `assets/fonts/SourceSerif4-LICENSE.txt` and `assets/fonts/SourceCodePro-LICENSE.txt`, are skipped too. They are legal text kept verbatim, and their one URL (adobe.com) answers 403 to automated clients. |
-| `.gitleaks.toml` | `target/` is skipped in the working-tree scan. |
 | `.cargo/mutants.toml` | The nightly mutation run mutates neither `src/**/proofs.rs` (only `cargo kani` compiles them) nor `crates/mac-window/src/mac.rs` (only a Mac compiles it). Each mutant runs the unit tests and `tests/reader`, not `tests/e2e`, whose window tests run on every pull request instead. The score leaves out unviable mutants, which no test runs against. See the README's "Mutation testing" section. |
 
 ## Caveat: the renderer fork is first-party code outside the gates
@@ -124,7 +134,7 @@ lines. Bringing the fork under the gates is the largest piece of retrofit
 work left, and it is not done.
 
 `vendor/epaint` is a patched copy of egui's painter. The same CI job, and
-nothing in `run-gates.sh`, runs its text tests (`cargo test --manifest-path
+nothing in `./gates`, runs its text tests (`cargo test --manifest-path
 vendor/epaint/Cargo.toml --lib text::`, 23 pass): they pin the row rule
 that the renderer's line breaking rests on. The rest of the copy is
 upstream's code and is neither linted nor tested here.
@@ -154,7 +164,8 @@ inherits that table whole or not at all. The copy differs in three
 entries: `unsafe_code` and `clippy::undocumented_unsafe_blocks`, named
 above, and `unexpected_cfgs`, which it leaves out, having no proof harness
 to declare `cfg(kani)` for. A change to the workspace table has to be
-made in both.
+made in both, and nothing checks that it was: full-lint's `sync-check`
+reads the managed block in the root `Cargo.toml` only.
 
 ## The second unsafe function: macOS asks before it quits the app
 

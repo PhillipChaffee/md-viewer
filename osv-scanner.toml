@@ -78,3 +78,44 @@ name = "mac-window"
 ecosystem = "crates.io"
 license.override = ["MIT"]
 reason = "first-party workspace crate, MIT per crates/mac-window/Cargo.toml; unpublished, so the registry cannot answer for it."
+
+# full-lint's license-check gate runs osv-scanner against full-lint's shared
+# allow-list, which a repository cannot extend. deny.toml allows five more
+# licenses, each with its reason there; these packages carry one of them and
+# nothing outside the shared list but those five. Each is named, so a new
+# package under one of the five still fails until it is reviewed here.
+[[PackageOverrides]]
+name = "clipboard-win"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "BSL-1.0, allowed in deny.toml: permissive, no attribution needed for binaries."
+
+[[PackageOverrides]]
+name = "error-code"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "BSL-1.0, allowed in deny.toml: permissive, no attribution needed for binaries."
+
+[[PackageOverrides]]
+name = "foldhash"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "Zlib, allowed in deny.toml's template list: permissive."
+
+[[PackageOverrides]]
+name = "slotmap"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "Zlib, allowed in deny.toml's template list: permissive."
+
+[[PackageOverrides]]
+name = "webpki-roots"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "CDLA-Permissive-2.0, allowed in deny.toml: the Mozilla root-certificate data ships under this permissive data license."
+
+[[PackageOverrides]]
+name = "epaint_default_fonts"
+ecosystem = "crates.io"
+license.ignore = true
+reason = "OFL-1.1 AND Ubuntu-font-1.0 AND (Apache-2.0 OR MIT), allowed in deny.toml: egui's built-in fonts, free to embed and redistribute with the license text."

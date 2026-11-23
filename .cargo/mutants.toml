@@ -16,7 +16,7 @@ sharding = "round-robin"
 # packages (`--workspace`) and tests/reader, which drives the whole app
 # without a window. tests/e2e is left out: its window tests need a virtual
 # display and take a real window per test, and they run on every pull
-# request in ci.yml's `test` job. `--workspace` here selects the tests;
+# request in ci.yml's `full-lint-code` job. `--workspace` here selects the tests;
 # the workflow's `--workspace` flag selects the mutants.
 test_workspace = true
 additional_cargo_test_args = ["--lib", "--bins", "--test", "reader"]
