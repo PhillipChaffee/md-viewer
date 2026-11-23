@@ -1,7 +1,6 @@
 //! Regression tests for inline-code wrapping. The renderer used to lay out a
 //! long inline-code token as a single overflowing widget, which clipped or
-//! overlapped surrounding text at narrow widths. See pulldown.rs
-//! `inline_code_wrap_segments`.
+//! overlapped surrounding text at narrow widths.
 
 use egui::{Context, Rect, Shape, TextStyle};
 use egui_commonmark_extended::{CommonMarkCache, CommonMarkViewer};
