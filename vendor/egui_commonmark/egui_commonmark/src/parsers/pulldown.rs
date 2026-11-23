@@ -341,35 +341,9 @@ fn render_frontmatter_table(
     });
 }
 
-fn inline_code_wrap_segments(text: &str) -> Vec<String> {
-    const MAX_SEGMENT_CHARS: usize = 56;
-
-    if text.chars().count() <= MAX_SEGMENT_CHARS {
-        return vec![text.to_owned()];
-    }
-
-    let mut segments = Vec::new();
-    let mut current = String::with_capacity(MAX_SEGMENT_CHARS * 4);
-    let mut current_len = 0;
-
-    for ch in text.chars() {
-        current.push(ch);
-        current_len += 1;
-        if current_len >= MAX_SEGMENT_CHARS {
-            segments.push(std::mem::take(&mut current));
-            current_len = 0;
-        }
-    }
-    if !current.is_empty() {
-        segments.push(current);
-    }
-    segments
-}
-
 /// Measure a table cell's visible labels in their rendering order. The cell
 /// uses a wrapping horizontal layout: every label continues the current row,
-/// then uses the full column width for subsequent rows. Long code chunks call
-/// `ui.end_row()` in production, so they also finish a measurement row here.
+/// then uses the full column width for subsequent rows.
 #[cfg(test)]
 fn cell_visual_lines(
     cell: &[(pulldown_cmark::Event, Range<usize>)],
@@ -437,20 +411,7 @@ fn cell_visual_lines_in(
                 add_label(text, &body_font, &mut remaining_width, &mut completed_lines);
             }
             pulldown_cmark::Event::Code(code) => {
-                let segments = inline_code_wrap_segments(code);
-                let force_rows = segments.len() > 1;
-                for segment in segments {
-                    add_label(
-                        &segment,
-                        &code_font,
-                        &mut remaining_width,
-                        &mut completed_lines,
-                    );
-                    if force_rows {
-                        completed_lines += 1;
-                        remaining_width = wrap_width;
-                    }
-                }
+                add_label(code, &code_font, &mut remaining_width, &mut completed_lines);
             }
             pulldown_cmark::Event::SoftBreak | pulldown_cmark::Event::HardBreak => {
                 add_label(" ", &body_font, &mut remaining_width, &mut completed_lines);
@@ -1675,8 +1636,7 @@ fn cell_alignment_offset(
     for (event, _) in cell {
         let (text, font) = match event {
             Event::Text(text) => (text, fonts.text(strong, emphasis)),
-            // Longer code is cut into lines of its own.
-            Event::Code(code) if inline_code_wrap_segments(code).len() == 1 => (code, &fonts.code),
+            Event::Code(code) => (code, &fonts.code),
             Event::Start(Tag::Strong) | Event::End(TagEnd::Strong) => {
                 strong = fonts.all_strong || matches!(event, Event::Start(_));
                 continue;
@@ -3460,12 +3420,9 @@ impl CommonMarkViewerInternal {
                     .then(|| registered_exact_auto_link(&text, cache.link_hooks()))
                     .flatten();
                 self.text_style.code = true;
-                let segments = inline_code_wrap_segments(&text);
-                let wrap = segments.len() > 1;
-                // For non-wrapped inline code, derive an interior span (strip equal
-                // backticks on each side) so search highlights line up with the visible
-                // code text. Wrapped (>56 char) code skips highlighting in v1.
-                let interior_span = if !wrap && src_span.len() >= text.len() {
+                // Derive an interior span (strip equal backticks on each side)
+                // so search highlights line up with the visible code text.
+                let interior_span = if src_span.len() >= text.len() {
                     let delim_total = src_span.len() - text.len();
                     if delim_total > 0 && delim_total % 2 == 0 {
                         let bt = delim_total / 2;
@@ -3476,33 +3433,28 @@ impl CommonMarkViewerInternal {
                 } else {
                     None
                 };
-                for segment in segments {
-                    if let Some(destination) = auto_link.as_ref() {
-                        self.link = Some(crate::Link {
-                            destination: destination.clone(),
-                            text: Vec::new(),
-                        });
-                    }
-                    if let Some(ref span) = interior_span {
-                        // Inline code stays source-literal while retaining byte-range highlights.
-                        self.event_literal_text_with_highlights(
-                            segment.into(),
-                            span,
-                            cache,
-                            ui,
-                            options,
-                        );
-                    } else {
-                        self.event_text(segment.into(), ui, options);
-                    }
-                    if auto_link.is_some() {
-                        if let Some(link) = self.link.take() {
-                            self.end_link(link, ui, cache);
-                        }
-                    }
-                    if wrap {
-                        self.set_runs(ui, cache);
-                        ui.end_row();
+                let has_auto_link = auto_link.is_some();
+                if let Some(destination) = auto_link {
+                    self.link = Some(crate::Link {
+                        destination,
+                        text: Vec::new(),
+                    });
+                }
+                if let Some(ref span) = interior_span {
+                    // Inline code stays source-literal while retaining byte-range highlights.
+                    self.event_literal_text_with_highlights(
+                        text,
+                        span,
+                        cache,
+                        ui,
+                        options,
+                    );
+                } else {
+                    self.event_text(text, ui, options);
+                }
+                if has_auto_link {
+                    if let Some(link) = self.link.take() {
+                        self.end_link(link, ui, cache);
                     }
                 }
                 self.text_style.code = false;
@@ -4832,8 +4784,10 @@ mod tests {
     }
 
     #[test]
-    fn table_cells_accumulate_rows_from_multiple_chunked_code_events() {
-        egui::__run_test_ui(|ui| {
+    fn table_cells_keep_long_inline_code_on_one_line_when_it_fits_and_wrap_when_narrow() {
+        let ctx = egui::Context::default();
+        ctx.begin_pass(Default::default());
+        egui::CentralPanel::default().show(&ctx, |ui| {
             let first = "a".repeat(60);
             let second = "b".repeat(60);
             let cell = vec![
@@ -4842,8 +4796,10 @@ mod tests {
                 (Event::Code(second.into()), 69..129),
             ];
 
-            assert_eq!(cell_visual_lines(&cell, ui, 2_000.0), 4);
+            assert_eq!(cell_visual_lines(&cell, ui, 2_000.0), 1);
+            assert!(cell_visual_lines(&cell, ui, 200.0) > 2);
         });
+        let _ = ctx.end_pass();
     }
 
     #[test]

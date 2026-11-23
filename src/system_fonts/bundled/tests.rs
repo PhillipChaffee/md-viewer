@@ -23,12 +23,6 @@ fn led_by(lead: &str, fallbacks: &[String]) -> Vec<String> {
     chain
 }
 
-/// Distance from a face's baseline to the top of its line, in ems.
-fn ascent_em(data: &[u8], index: u32) -> f32 {
-    let face = ttf_parser::Face::parse(data, index).unwrap();
-    f32::from(face.ascender()) / f32::from(face.units_per_em())
-}
-
 /// A registered face, parsed.
 fn face<'a>(definitions: &'a FontDefinitions, key: &str) -> ttf_parser::Face<'a> {
     let data = &definitions.font_data[key];
@@ -50,9 +44,17 @@ fn without_the_bundled_faces_the_document_is_set_in_the_chromes_own_chains() {
     assert_eq!(&family(&definitions, STRONG_FONT_FAMILY), bold);
     let code = &before.families[&FontFamily::Monospace];
     assert_eq!(&definitions.families[&FontFamily::Monospace], code);
-    assert_eq!(&family(&definitions, DOCUMENT_STRONG_CODE_FAMILY), code);
-    // No face is added and none is touched.
-    assert_eq!(definitions.font_data, before.font_data);
+    // Inline code leads with an aligned copy of the monospace face so code
+    // blocks keep their untouched chain while inline code matches the body.
+    let aligned_code = led_by(DOCUMENT_INLINE_CODE_KEY, &code[1..]);
+    assert_eq!(family(&definitions, DOCUMENT_CODE_FAMILY), aligned_code);
+    assert_eq!(
+        family(&definitions, DOCUMENT_STRONG_CODE_FAMILY),
+        aligned_code
+    );
+    // Only the aligned inline-code copy is added to font_data.
+    assert_eq!(definitions.font_data.len(), before.font_data.len() + 1);
+    assert!(definitions.font_data.contains_key(DOCUMENT_INLINE_CODE_KEY));
 }
 
 #[test]
@@ -155,26 +157,46 @@ fn each_bundled_face_is_the_source_serif_cut_its_family_asks_for() {
 }
 
 #[test]
-fn inline_code_at_the_serifs_size_is_shifted_onto_its_baseline() {
-    let mut definitions = chrome_definitions();
-    install_document_families(&mut definitions, true);
+fn inline_code_is_scaled_to_the_body_x_height_and_shifted_onto_its_baseline() {
+    for bundled in [true, false] {
+        let mut definitions = chrome_definitions();
+        install_document_families(&mut definitions, bundled);
 
-    for key in ["ReaderInlineCode", "ReaderCodeSemibold"] {
-        let code = &definitions.font_data[key];
-        let shift = code.tweak.y_offset_factor;
-        assert!(shift > 0.0, "{key} moves down, got {shift}");
+        let body_key = &family(&definitions, DOCUMENT_BODY_FAMILY)[0];
+        let body = &definitions.font_data[body_key];
+        let body_metrics = face_metrics(body).expect("body face metrics");
 
-        // egui hangs a face from the top of its line by its ascent. With
-        // the shift, code at the body size has its baseline at the same
-        // height as the serif's.
-        let body_size = 20.0;
-        let serif_baseline = ascent_em(READER_REGULAR.bytes, 0) * body_size;
-        let code_ascent = ascent_em(&code.font, code.index);
-        let code_baseline = (code_ascent + shift) * body_size;
-        assert!(
-            (code_baseline - serif_baseline).abs() < 1e-3,
-            "{key}: code baseline {code_baseline}, serif baseline {serif_baseline}"
-        );
+        let code_keys: &[&str] = if bundled {
+            &["ReaderInlineCode", "ReaderCodeSemibold"]
+        } else {
+            &[DOCUMENT_INLINE_CODE_KEY]
+        };
+        for key in code_keys {
+            let code = &definitions.font_data[*key];
+            let code_metrics = face_metrics(code).expect("code face metrics");
+
+            // egui hangs a face from the top of its line by `ascent * size *
+            // scale` and shifts it by `y_offset_factor * size * scale`.
+            let body_size = 20.0;
+            let body_baseline = (body_metrics.ascent_em + body.tweak.y_offset_factor)
+                * body.tweak.scale
+                * body_size;
+            let code_baseline = (code_metrics.ascent_em + code.tweak.y_offset_factor)
+                * code.tweak.scale
+                * body_size;
+            assert!(
+                (code_baseline - body_baseline).abs() < 1e-3,
+                "bundled={bundled} {key}: code baseline {code_baseline}, body baseline {body_baseline}"
+            );
+
+            // Lowercase x-height matches the body face's x-height.
+            let body_x = body_metrics.x_height_em.unwrap() * body.tweak.scale * body_size;
+            let code_x = code_metrics.x_height_em.unwrap() * code.tweak.scale * body_size;
+            assert!(
+                (code_x - body_x).abs() < 1e-3,
+                "bundled={bundled} {key}: code x-height {code_x}, body x-height {body_x}"
+            );
+        }
     }
 }
 

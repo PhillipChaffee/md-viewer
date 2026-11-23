@@ -259,6 +259,35 @@ fn a_chain_of_code_wider_than_the_column_fills_its_lines() {
     );
 }
 
+/// Long inline code wraps at word boundaries to the column's width rather
+/// than cutting mid-word at a fixed character count, and what follows it
+/// stays on its last line.
+#[test]
+fn long_inline_code_wraps_at_word_boundaries_and_keeps_trailing_punctuation() {
+    let body = concat!(
+        "- Produces:\n",
+        "  - `build_data.main(argv: Sequence[str] | None = None) -> int`, ",
+        "for `python -m inkling_decision.build_data <filtered_full_dir> <default_dir>`.\n",
+        "  - `overlap.matches(name: str, patterns: Sequence[str]) -> list[str]` ",
+        "and `overlap.main(argv: Sequence[str] | None = None) -> int`.\n",
+    );
+    let reader = document(body);
+    let lines = set_lines(&reader);
+
+    for whole in ["int,", "<filtered_full_dir>", "list[str]", "int."] {
+        assert!(
+            lines.iter().any(|line| line.contains(whole)),
+            "`{whole}` was broken across lines:\n{}",
+            lines.join("\n")
+        );
+    }
+    assert!(
+        lines.iter().any(|line| line.contains("int, for")),
+        "a forced newline followed the inline code:\n{}",
+        lines.join("\n")
+    );
+}
+
 /// A link that wraps is one link on each of its lines, with the bracket
 /// after it kept on its last.
 #[test]
