@@ -477,12 +477,26 @@ fn the_other_presets_set_the_document_at_the_chromes_size_without_an_italic_face
         assert_eq!(fonts.emphasis, None, "{preset:?}");
 
         // Each keeps its own code stack: the bundled code face is the
-        // Reader's alone, and code in bold text is in that same stack.
+        // Reader's alone, and inline code leads with an aligned copy of
+        // that stack's first face.
         let definitions = Fonts::with_sans().definitions(None, preset);
         let code = chain(&definitions, &FontFamily::Monospace);
         assert!(!code.contains(&"ReaderCode".to_owned()), "{preset:?}");
-        assert_eq!(chain(&definitions, &fonts.strong_code), code, "{preset:?}");
-        assert_eq!(chain(&definitions, &fonts.inline_code), code, "{preset:?}");
+        let aligned = [
+            vec![bundled::DOCUMENT_INLINE_CODE_KEY.to_owned()],
+            code[1..].to_vec(),
+        ]
+        .concat();
+        assert_eq!(
+            chain(&definitions, &fonts.strong_code),
+            aligned,
+            "{preset:?}"
+        );
+        assert_eq!(
+            chain(&definitions, &fonts.inline_code),
+            aligned,
+            "{preset:?}"
+        );
     }
 }
 
@@ -501,10 +515,12 @@ fn a_picked_family_outranks_the_readers_serif() {
     let body = chain(&picked, &FontFamily::Name("MarkdownBody".into()));
     assert_eq!(body, chain(&picked, &FontFamily::Proportional));
     assert!(!picked.font_data.contains_key("ReaderRegular"));
+    let code = chain(&picked, &FontFamily::Monospace);
     assert_eq!(
-        chain(&picked, &fonts.strong_code),
-        chain(&picked, &FontFamily::Monospace)
+        chain(&picked, &fonts.strong_code)[0],
+        bundled::DOCUMENT_INLINE_CODE_KEY
     );
+    assert_eq!(chain(&picked, &fonts.strong_code)[1..], code[1..]);
 }
 
 #[test]

@@ -122,21 +122,32 @@ fn code_in_bold_text_is_set_in_a_bolder_cut_of_the_code_face() {
 
 #[test]
 fn inline_code_is_as_large_as_the_text_around_it_and_stands_on_its_line() {
-    let reader = page("# Size\n\nHxk in prose and `Hxq` in code.");
+    let mut reader = page("# Size\n\nHxk in prose and `Hxq` in code.");
 
-    // A capital and a small letter of code are as tall as the prose's, and
-    // letters without a curve at the foot stand on the line itself.
-    for letter in ['H', 'x'] {
-        let prose = reader.letter_of("Hxk in prose", letter);
-        let code = reader.letter_of("Hxq", letter);
-        assert!(
-            (prose.height - code.height).abs() <= NEAR,
-            "{letter}: {} px tall in prose, {} in code",
-            prose.height,
-            code.height
-        );
-        let (prose, code) = (prose.bottom(), code.bottom());
-        assert!((prose - code).abs() <= NEAR, "{letter}: {prose} and {code}");
+    for preset in ["Reader", "System", "GitHub", "VS Code"] {
+        if preset != "Reader" {
+            reader.click("Appearance");
+            reader.click("Fonts\u{2026}");
+            reader.click(preset);
+            reader.press("Escape");
+        }
+        // A capital and a small letter of code are as tall as the prose's, and
+        // letters without a curve at the foot stand on the line itself.
+        for letter in ['H', 'x'] {
+            let prose = reader.letter_of("Hxk in prose", letter);
+            let code = reader.letter_of("Hxq", letter);
+            assert!(
+                (prose.height - code.height).abs() <= NEAR,
+                "{preset} {letter}: {} px tall in prose, {} in code",
+                prose.height,
+                code.height
+            );
+            let (prose, code) = (prose.bottom(), code.bottom());
+            assert!(
+                (prose - code).abs() <= NEAR,
+                "{preset} {letter}: {prose} and {code}"
+            );
+        }
     }
 }
 

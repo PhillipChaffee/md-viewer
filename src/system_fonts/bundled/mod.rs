@@ -67,6 +67,10 @@ const READER_BOLD: BundledFace = BundledFace {
     baseline_shift: 0.0,
 };
 
+/// Key of the aligned inline-code face when the document uses a system or
+/// preset monospace face rather than the bundled one.
+pub(crate) const DOCUMENT_INLINE_CODE_KEY: &str = "DocumentInlineCode";
+
 /// Source Code Pro, the serif's companion code face (SIL Open Font License
 /// 1.1; see `assets/fonts/SourceCodePro-LICENSE.txt`). Code blocks and
 /// inline code are set in it with different shifts, so each is registered
@@ -79,38 +83,88 @@ const READER_CODE: BundledFace = BundledFace {
 const READER_INLINE_CODE: BundledFace = BundledFace {
     key: "ReaderInlineCode",
     bytes: bundled_face!("SourceCodePro-Regular.ttf"),
-    baseline_shift: INLINE_CODE_SHIFT,
+    baseline_shift: 0.0,
 };
 const READER_CODE_SEMIBOLD: BundledFace = BundledFace {
     key: "ReaderCodeSemibold",
     bytes: bundled_face!("SourceCodePro-Semibold.ttf"),
-    baseline_shift: INLINE_CODE_SHIFT,
+    baseline_shift: 0.0,
 };
 
-/// Distance from the baseline to the top of the line in every cut of
-/// Source Serif 4, in ems: its ascender is 1036 of 1000 units.
-const SERIF_ASCENT_EM: f32 = 1.036;
-/// The same in both cuts of Source Code Pro: 984 of 1000 units.
+/// Distance from the baseline to the top of the line in Source Code Pro:
+/// 984 of 1000 units.
 const CODE_ASCENT_EM: f32 = 0.984;
 /// Distance from the baseline to the bottom of the line in Source Code
 /// Pro: 273 of 1000 units.
 const CODE_DESCENT_EM: f32 = 0.273;
-
-/// How far down inline code is shifted, as a fraction of its size, so that
-/// it sits on the baseline of the serif around it.
-///
-/// egui hangs every face from the top of the line by its own ascent, so a
-/// face with a lower ascent floats above the text beside it. Inline code
-/// is set at the size of that text, where Source Code Pro's x-height (486
-/// units) matches Source Serif 4's (475). The shift is a visual tweak of
-/// the face: it moves no line.
-const INLINE_CODE_SHIFT: f32 = SERIF_ASCENT_EM - CODE_ASCENT_EM;
 
 /// How far down the letters of a code block are shifted, as a fraction of
 /// their size: half the room the block's line has over the face's own, so
 /// that each line of code sits in the middle of its line.
 const CODE_BLOCK_SHIFT: f32 =
     (FontPreset::Reader.code_line_height() - 1.0) * (CODE_ASCENT_EM + CODE_DESCENT_EM) / 2.0;
+
+/// Bounds for scaling an inline code face to match the body face's x-height,
+/// so an unusual font with a tiny or huge `x` never produces unreadable code.
+const INLINE_CODE_SCALE_MIN: f32 = 0.75;
+const INLINE_CODE_SCALE_MAX: f32 = 1.15;
+
+/// Vertical metrics read from a font face, in fractions of its em square.
+struct FaceMetrics {
+    ascent_em: f32,
+    x_height_em: Option<f32>,
+}
+
+/// Read the ascender and x-height of `data` in ems. Uses the actual `'x'`
+/// glyph's bounding box first because some system fonts (such as macOS's
+/// Iowan Old Style) omit `OS/2.sxHeight`.
+fn face_metrics(data: &FontData) -> Option<FaceMetrics> {
+    let face = ttf_parser::Face::parse(&data.font, data.index).ok()?;
+    let em = f32::from(face.units_per_em());
+    if em <= 0.0 {
+        return None;
+    }
+    let ascent_em = f32::from(face.ascender()) / em;
+    let x_height_em = face
+        .glyph_index('x')
+        .and_then(|id| face.glyph_bounding_box(id))
+        .filter(|bb| bb.y_max > 0)
+        .map(|bb| f32::from(bb.y_max) / em)
+        .or_else(|| {
+            face.x_height()
+                .filter(|&x| x > 0)
+                .map(|x| f32::from(x) / em)
+        });
+    Some(FaceMetrics {
+        ascent_em,
+        x_height_em,
+    })
+}
+
+/// Compute the `FontTweak` that makes `code` match `body`'s x-height and
+/// stand on `body`'s baseline.
+///
+/// egui hangs every face from the top of its line by `ascent_em * font_size *
+/// tweak.scale` and then shifts it down by `y_offset_factor * font_size *
+/// tweak.scale`. Matching `(ascent_em + y_offset_factor) * scale` to `body`'s
+/// baseline keeps inline code on the prose baseline at every text size, zoom
+/// level, and heading level.
+fn inline_code_tweak(body: &FontData, code: &FontData) -> Option<egui::FontTweak> {
+    let body_metrics = face_metrics(body)?;
+    let code_metrics = face_metrics(code)?;
+    let scale = match (body_metrics.x_height_em, code_metrics.x_height_em) {
+        (Some(body_x), Some(code_x)) => ((body_x * body.tweak.scale) / code_x)
+            .clamp(INLINE_CODE_SCALE_MIN, INLINE_CODE_SCALE_MAX),
+        _ => 1.0,
+    };
+    let body_baseline = (body_metrics.ascent_em + body.tweak.y_offset_factor) * body.tweak.scale;
+    let y_offset_factor = body_baseline / scale - code_metrics.ascent_em;
+    Some(egui::FontTweak {
+        scale,
+        y_offset_factor,
+        ..code.tweak
+    })
+}
 
 /// Register the families the document pane names: body, strong, heading,
 /// emphasis, code and strong code. Every font configuration gets all of them,
@@ -120,7 +174,9 @@ const CODE_BLOCK_SHIFT: f32 =
 /// monospace family and the two inline code families with their Source
 /// Code Pro face. The rest of every chain is what the chrome uses, so a glyph the
 /// bundled face lacks (CJK, emoji) still resolves. Without it, the families
-/// are the chrome's own regular, bold and monospace chains.
+/// are the chrome's own regular, bold and monospace chains. In both cases,
+/// the inline code faces are tweaked to match the body face's x-height and
+/// baseline without changing `FontFamily::Monospace` (code blocks).
 pub(crate) fn install_document_families(definitions: &mut FontDefinitions, bundled: bool) {
     let named = |family: &str| FontFamily::Name(family.into());
     let regular = chain(definitions, &FontFamily::Proportional);
@@ -148,6 +204,67 @@ pub(crate) fn install_document_families(definitions: &mut FontDefinitions, bundl
         &READER_CODE_SEMIBOLD,
         &code,
     );
+    align_inline_code_faces(definitions, bundled);
+}
+
+/// Scale and shift the lead faces of the inline-code families so they match
+/// the document body face's x-height and baseline.
+fn align_inline_code_faces(definitions: &mut FontDefinitions, bundled: bool) {
+    let named = |family: &str| FontFamily::Name(family.into());
+    let Some(body_key) = definitions
+        .families
+        .get(&named(DOCUMENT_BODY_FAMILY))
+        .and_then(|faces| faces.first())
+        .cloned()
+    else {
+        return;
+    };
+    let Some(body_data) = definitions.font_data.get(&body_key).cloned() else {
+        return;
+    };
+
+    if bundled {
+        for key in [READER_INLINE_CODE.key, READER_CODE_SEMIBOLD.key] {
+            if let Some(code_data) = definitions.font_data.get(key) {
+                if let Some(tweak) = inline_code_tweak(&body_data, code_data) {
+                    let mut adjusted = FontData::clone(code_data);
+                    adjusted.tweak = tweak;
+                    definitions
+                        .font_data
+                        .insert(key.to_owned(), adjusted.into());
+                }
+            }
+        }
+        return;
+    }
+
+    let Some(code_key) = definitions
+        .families
+        .get(&named(DOCUMENT_CODE_FAMILY))
+        .and_then(|faces| faces.first())
+        .cloned()
+    else {
+        return;
+    };
+    let Some(code_data) = definitions.font_data.get(&code_key) else {
+        return;
+    };
+    let Some(tweak) = inline_code_tweak(&body_data, code_data) else {
+        return;
+    };
+    let mut adjusted = FontData::clone(code_data);
+    adjusted.tweak = tweak;
+    definitions
+        .font_data
+        .insert(DOCUMENT_INLINE_CODE_KEY.to_owned(), adjusted.into());
+
+    for family in [DOCUMENT_CODE_FAMILY, DOCUMENT_STRONG_CODE_FAMILY] {
+        if let Some(faces) = definitions.families.get_mut(&named(family)) {
+            if let Some(first) = faces.first_mut().filter(|first| **first == code_key) {
+                DOCUMENT_INLINE_CODE_KEY.clone_into(first);
+            }
+        }
+    }
 }
 
 /// The faces `family` resolves through, in order; none when it is not
