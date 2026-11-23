@@ -211,29 +211,29 @@ pub(crate) fn install_document_families(definitions: &mut FontDefinitions, bundl
 /// the document body face's x-height and baseline.
 fn align_inline_code_faces(definitions: &mut FontDefinitions, bundled: bool) {
     let named = |family: &str| FontFamily::Name(family.into());
-    let Some(body_key) = definitions
+    let Some(body_data) = definitions
         .families
         .get(&named(DOCUMENT_BODY_FAMILY))
         .and_then(|faces| faces.first())
+        .and_then(|key| definitions.font_data.get(key))
         .cloned()
     else {
-        return;
-    };
-    let Some(body_data) = definitions.font_data.get(&body_key).cloned() else {
         return;
     };
 
     if bundled {
         for key in [READER_INLINE_CODE.key, READER_CODE_SEMIBOLD.key] {
-            if let Some(code_data) = definitions.font_data.get(key) {
-                if let Some(tweak) = inline_code_tweak(&body_data, code_data) {
-                    let mut adjusted = FontData::clone(code_data);
-                    adjusted.tweak = tweak;
-                    definitions
-                        .font_data
-                        .insert(key.to_owned(), adjusted.into());
-                }
-            }
+            let Some(code_data) = definitions.font_data.get(key) else {
+                continue;
+            };
+            let Some(tweak) = inline_code_tweak(&body_data, code_data) else {
+                continue;
+            };
+            let mut adjusted = FontData::clone(code_data);
+            adjusted.tweak = tweak;
+            definitions
+                .font_data
+                .insert(key.to_owned(), adjusted.into());
         }
         return;
     }
